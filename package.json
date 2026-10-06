@@ -9,7 +9,12 @@
   "scripts": {
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "test:chain": "pnpm -r --if-present test:chain"
+    "test:chain": "pnpm -r --if-present test:chain",
+    "dev": "pnpm --filter @payrun/server dev",
+    "start": "pnpm --filter @payrun/server start",
+    "register-commands": "pnpm --filter @payrun/server register-commands",
+    "dev:treasury": "pnpm --filter @payrun/server dev:treasury",
+    "dev:authorize-key": "pnpm --filter @payrun/server dev:authorize-key"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
