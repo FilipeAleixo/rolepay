@@ -57,6 +57,12 @@ describe('parseServerConfig', () => {
     expect(c.discord.devGuildId).toBe('1094309218049937418')
   })
 
+  it('AI proposals: off without ANTHROPIC_API_KEY (blank is unset), Opus 5.5 by default, PAYRUN_AI_MODEL overrides', () => {
+    expect(parseServerConfig(env()).core.ai).toEqual({ apiKey: null, model: 'claude-opus-5-5' })
+    expect(parseServerConfig(env({ ANTHROPIC_API_KEY: '', PAYRUN_AI_MODEL: '' })).core.ai).toEqual({ apiKey: null, model: 'claude-opus-5-5' })
+    expect(parseServerConfig(env({ ANTHROPIC_API_KEY: 'sk-ant-api03-SECRET', PAYRUN_AI_MODEL: 'claude-sonnet-5-5' })).core.ai).toEqual({ apiKey: 'sk-ant-api03-SECRET', model: 'claude-sonnet-5-5' })
+  })
+
   it('treats blank values (copied from .env.example) as unset', () => {
     const c = parseServerConfig(env({ DISCORD_DEV_GUILD_ID: '', PAYRUN_PAYOUT_TOKEN: '', PORT: '', PAYRUN_RPC_URL: '' }))
     expect(c.discord.devGuildId).toBeNull()
