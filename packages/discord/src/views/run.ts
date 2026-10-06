@@ -18,6 +18,11 @@ export type RunViewContext = {
   receipts?: 'sending' | { sent: number; total: number }
   /** On an executing run: the transaction is out but not confirmed yet. */
   stillConfirming?: boolean
+  /**
+   * Show the node's or sponsor's own error text on a failure. Only for replies just to the caller
+   * (`/payrun status run:`): a public message shows the reason code alone (L2).
+   */
+  showDetail?: boolean
 }
 
 /**
@@ -75,10 +80,14 @@ export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; 
  * payrun actually checked, never "nothing was paid": Retry waits until the last transaction can
  * no longer land and checks the chain for this run's payments before it sends anything.
  */
-export function explainFailure(failure: Failure): string {
+export function explainFailure(failure: Failure, opts: { showDetail?: boolean } = {}): string {
   switch (failure.reason) {
-    case 'rejected':
-      return `The network or the fee sponsor refused the transaction (${failure.detail}). Retry is safe: it waits until that transaction can no longer land and checks the chain first.`
+    case 'rejected': {
+      // The detail starts with payrun's reason code ("insufficient_balance: ..."); the rest is the
+      // node's or sponsor's own text, which can carry URLs and HTML. Public messages get the code.
+      const code = /^([a-z_]+):/.exec(failure.detail)?.[1] ?? 'other'
+      return `The network or the fee sponsor refused the transaction (${opts.showDetail ? failure.detail : code}). Retry is safe: it waits until that transaction can no longer land and checks the chain first.`
+    }
     case 'reverted':
       return 'The transaction reverted on chain, so none of its transfers happened. Retry once the cause is fixed: it checks the chain first.'
     case 'not_landed':
@@ -115,7 +124,7 @@ function header(run: Run, ctx: RunViewContext): { title: string; color: number; 
       return { title: 'Paid', color: COLORS.paid, status: `Paid in one transaction${when}. Approved by ${approvedBy}.${tx}` }
     }
     case 'failed':
-      return { title: 'Payment failed', color: COLORS.failed, status: run.failure ? explainFailure(run.failure) : 'The payment failed.' }
+      return { title: 'Payment failed', color: COLORS.failed, status: run.failure ? explainFailure(run.failure, { showDetail: ctx.showDetail ?? false }) : 'The payment failed.' }
     case 'cancelled':
       return { title: 'Cancelled', color: COLORS.muted, status: `Cancelled by ${run.cancelledBy ? mention(run.cancelledBy) : 'an admin'}.` }
   }

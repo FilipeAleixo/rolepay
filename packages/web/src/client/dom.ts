@@ -67,5 +67,6 @@ export function explainPasskeyError(error: unknown): string {
   const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
   if (/NotAllowedError|cancel|abort|timed out/i.test(text)) return 'The passkey prompt was closed before it finished. Try again.'
   if (/InvalidStateError|already registered|excludeCredentials/i.test(text)) return 'This device already has a payrun passkey. Use "sign in" instead.'
-  return `Something went wrong: ${text}`
+  // The details (which can carry RPC URLs and request bodies) are in the console, not on the page.
+  return `Something went wrong${error instanceof Error && error.name !== 'Error' ? ` (${error.name})` : ''}. The details are in the browser console; try again in a moment.`
 }

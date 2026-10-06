@@ -135,6 +135,16 @@ describe('runMessage', () => {
     expect(actions(m)).toEqual([])
   })
 
+  it("a refused transaction shows only the reason code in public; the node's own error text appears only where details are asked for (L2)", () => {
+    const r = failed('rejected')
+    const withNodeText = { ...r, failure: r.failure && { ...r.failure, detail: 'insufficient_balance: HTTP request failed. URL: https://rpc.example/key-abc <html>' } }
+    const pub = text(runMessage(withNodeText, ctx))
+    expect(pub).toContain('insufficient_balance')
+    expect(pub).not.toContain('rpc.example')
+    expect(pub).not.toContain('HTTP request failed')
+    expect(text(runMessage(withNodeText, { ...ctx, showDetail: true }))).toContain('HTTP request failed')
+  })
+
   it('a failure where money may have moved offers no Retry and says a human must look', () => {
     const m = runMessage(failed('partial_match'), ctx)
     expect(text(m)).toMatch(/do not retry/i)

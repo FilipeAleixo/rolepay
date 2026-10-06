@@ -25,7 +25,8 @@ export const statusCommand: CommandHandler = async ({ options, ctx }, { payrun, 
     return {
       kind: 'reply',
       ephemeral: true,
-      message: runMessage(run.value, { network: config.network, approverRoleId: guard.community.approverRoleId, ...(problem ? { problem } : {}) }),
+      // Only the caller sees this reply, so it may carry the node's own error text.
+      message: runMessage(run.value, { network: config.network, approverRoleId: guard.community.approverRoleId, showDetail: true, ...(problem ? { problem } : {}) }),
     }
   }
 

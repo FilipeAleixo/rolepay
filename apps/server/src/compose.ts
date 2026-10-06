@@ -13,6 +13,7 @@ import {
 import { type Assets, type PasskeySessions, type RateLimiter, TokenBucketLimiter, createWebApp } from '@payrun/web'
 import { Hono } from 'hono'
 import type { ServerConfig } from './config.js'
+import { errorFields } from './logging.js'
 import { startRecovery } from './recovery.js'
 
 export type Log = (event: string, fields?: Record<string, unknown>) => void
@@ -55,7 +56,6 @@ export const defaultRateLimits = () => ({
  */
 export function composeServer(deps: ServerDeps) {
   const log: Log = deps.log ?? ((event, fields) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ...fields })))
-  const errorFields = (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) })
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const { config, payrun, rest } = deps
   const notices = new KvRunNotices(deps.kv)
