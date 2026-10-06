@@ -1,0 +1,57 @@
+// A whole server on in-memory adapters and a fake Discord, driven through real HTTP requests
+// (Hono's app.request), with Discord-style Ed25519 signatures.
+import { randomBytes } from 'node:crypto'
+import { TESTNET_TOKENS, createPayrun, parseAmount } from '@payrun/core'
+import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
+import { FakeDiscordRest, createTestSigner } from '@payrun/discord/testing'
+import { parseServerConfig } from '../src/config.js'
+import { composeServer } from '../src/compose.js'
+
+export const GUILD = '1094309218049937418'
+export const TREASURY = '0x9999999999999999999999999999999999999999'
+export const TOKEN = TESTNET_TOKENS.alpha_usd
+export const usd = (s: string) => {
+  const r = parseAmount(s)
+  if (!r.ok) throw new Error(s)
+  return r.value
+}
+
+export async function testServer(opts: { devClaim?: boolean } = {}) {
+  const signer = await createTestSigner()
+  const config = parseServerConfig({
+    PAYRUN_MASTER_KEY: randomBytes(32).toString('hex'),
+    DISCORD_APP_ID: '500000000000000001',
+    DISCORD_PUBLIC_KEY: signer.publicKeyHex,
+    DISCORD_BOT_TOKEN: 'test-bot-token',
+    CLAIM_BASE_URL: 'http://payrun.test/claim',
+    PAYRUN_DEV_CLAIM: opts.devClaim ? 'true' : 'false',
+  })
+  const clock = new ManualClock(new Date())
+  const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
+  chain.fund(TOKEN, TREASURY, usd('1000'))
+  const payrun = createPayrun({ chain, repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' })
+  const rest = new FakeDiscordRest()
+  const logs: { event: string; fields?: Record<string, unknown> }[] = []
+  const server = composeServer({
+    config,
+    payrun,
+    rest,
+    clock,
+    sleep: async (ms) => {
+      clock.advance(ms / 1000)
+      chain.advance(Math.ceil(ms / 1000))
+    },
+    log: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }),
+  })
+
+  /** POSTs a signed interaction, like Discord does. */
+  async function interact(interaction: unknown, sign = true) {
+    const body = JSON.stringify(interaction)
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const headers: Record<string, string> = { 'content-type': 'application/json', 'x-signature-timestamp': timestamp }
+    if (sign) headers['x-signature-ed25519'] = await signer.sign(timestamp + body)
+    return server.app.request('/discord/interactions', { method: 'POST', headers, body })
+  }
+
+  return { ...server, config, clock, chain, payrun, rest, logs, interact }
+}
