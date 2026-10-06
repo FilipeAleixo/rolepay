@@ -13,3 +13,6 @@ coverage/
 *.sqlite-wal
 *.sqlite-shm
 .DS_Store
+
+# Chain test evidence (public tx hashes, regenerated per run)
+.chain-results/
