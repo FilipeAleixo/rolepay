@@ -1,0 +1,664 @@
+# Viem
+
+Build reliable Ethereum apps & libraries with lightweight, composable, & type-safe modules from viem.
+
+- [Why Viem](/docs/introduction): A brief preamble on why we built Viem
+- [Installation](/docs/installation)
+- [Getting Started](/docs/getting-started): Get started with viem in just a few lines of code.
+- [Platform Compatibility](/docs/compatibility): Platforms compatible with Viem
+- [Frequently Asked Questions](/docs/faq)
+- [Migration Guide](/docs/migration-guide)
+- [Ethers v5 → viem Migration Guide](/docs/ethers-migration): Migrate from Ethers v5 to viem
+- [TypeScript](/docs/typescript): TypeScript support for Viem
+- [Error Handling](/docs/error-handling)
+- [EIP-7702 Overview](/docs/eip7702): An Overview of EIP-7702
+- [Contract Writes with EIP-7702](/docs/eip7702/contract-writes)
+- [Sending Transactions with EIP-7702](/docs/eip7702/sending-transactions)
+- [Blob Transactions](/docs/guides/blob-transactions): Sending your first Blob Transaction with Viem.
+- [Introduction to Clients & Transports](/docs/clients/intro): A brief introduction to Clients & Transports.
+- [Public Client](/docs/clients/public): A function to create a Public Client
+- [Wallet Client](/docs/clients/wallet): A function to create a Wallet Client.
+- [Test Client](/docs/clients/test): A function to create a Test Client
+- [Build your own Client](/docs/clients/custom)
+- [Resolving Clients](/docs/clients/resolve)
+- [HTTP Transport](/docs/clients/transports/http): A function to create a HTTP Transport for a Client
+- [WebSocket Transport](/docs/clients/transports/websocket): A function to create a WebSocket Transport for a Client
+- [Custom Transport](/docs/clients/transports/custom): A function to create a Custom Transport for a Client
+- [IPC Transport](/docs/clients/transports/ipc): A function to create an IPC Transport for a Client
+- [Fallback Transport](/docs/clients/transports/fallback): A function to create a Fallback Transport for a Client
+- [Introduction to Public Actions](/docs/actions/public/introduction): A brief introduction on what Public Actions are in viem.
+- [createAccessList](/docs/actions/public/createAccessList)
+- [getBalance](/docs/actions/public/getBalance): Returns the balance of an address in wei.
+- [getTransactionCount](/docs/actions/public/getTransactionCount): Returns the number of Transactions an Account has sent.
+- [getBlock](/docs/actions/public/getBlock): Returns information about a block at a block number, hash or tag.
+- [getBlockReceipts](/docs/actions/public/getBlockReceipts): Returns the transaction receipts of a block at a block number, hash or tag.
+- [getBlockNumber](/docs/actions/public/getBlockNumber): Returns the number of the most recent block seen.
+- [getBlockTransactionCount](/docs/actions/public/getBlockTransactionCount): Returns the number of Transactions at a block number, hash or tag.
+- [simulateBlocks](/docs/actions/public/simulateBlocks): Simulates a set of calls on block(s).
+- [watchBlockNumber](/docs/actions/public/watchBlockNumber): Watches and returns incoming block numbers.
+- [watchBlockHeaders](/docs/actions/public/watchBlockHeaders): Watches and returns incoming block headers.
+- [watchBlocks](/docs/actions/public/watchBlocks): Watches and returns information for incoming blocks.
+- [call](/docs/actions/public/call): An Action for executing a new message call.
+- [simulateCalls](/docs/actions/public/simulateCalls): Simulates a set of calls on block(s).
+- [getChainId](/docs/actions/public/getChainId): Returns the chain ID associated with the current network
+- [getEip712Domain](/docs/actions/public/getEip712Domain): Reads the EIP-712 domain from a contract.
+- [estimateFeesPerGas](/docs/actions/public/estimateFeesPerGas): Returns an estimate for the fees per gas (in wei) for a transaction to be likely included in the next block.
+- [estimateGas](/docs/actions/public/estimateGas): An Action for estimating gas for a transaction.
+- [estimateMaxPriorityFeePerGas](/docs/actions/public/estimateMaxPriorityFeePerGas): Returns an estimate for the max priority fee per gas (in wei) for a transaction to be likely included in the next block.
+- [getBlobBaseFee](/docs/actions/public/getBlobBaseFee): Returns the current blob base fee (in wei).
+- [getFeeHistory](/docs/actions/public/getFeeHistory): Returns a collection of historical gas information.
+- [getGasPrice](/docs/actions/public/getGasPrice): Returns the current price of gas (in wei).
+- [createBlockFilter](/docs/actions/public/createBlockFilter): An Action for creating a new Block Filter.
+- [createEventFilter](/docs/actions/public/createEventFilter): An Action for creating a new Event Filter.
+- [createPendingTransactionFilter](/docs/actions/public/createPendingTransactionFilter): An Action for creating a new pending transaction filter.
+- [getFilterChanges](/docs/actions/public/getFilterChanges): Returns a list of logs or hashes based on a Filter.
+- [getFilterLogs](/docs/actions/public/getFilterLogs): Returns a list of event logs since the filter was created.
+- [getLogs](/docs/actions/public/getLogs): Returns a list of event logs matching the provided parameters.
+- [watchEvent](/docs/actions/public/watchEvent): Watches and returns emitted Event Logs.
+- [uninstallFilter](/docs/actions/public/uninstallFilter): Destroys a Filter.
+- [getStorageValues](/docs/actions/public/getStorageValues): Returns storage values for multiple slots and multple addresses in one request.
+- [getProof](/docs/actions/public/getProof): Returns the account and storage values of the specified account including the Merkle-proof.
+- [verifyMessage](/docs/actions/public/verifyMessage): Verifies if a signed message was generated by the provided address.
+- [verifyTypedData](/docs/actions/public/verifyTypedData): Verifies a typed data signature
+- [token.getAllowance](/tokens/actions/getAllowance): Read token allowances.
+- [token.getBalance](/tokens/actions/getBalance): Read token balances.
+- [token.getMetadata](/tokens/actions/getMetadata): Read token metadata.
+- [token.getTotalSupply](/tokens/actions/getTotalSupply): Read token total supply.
+- [prepareTransactionRequest](/docs/actions/wallet/prepareTransactionRequest): Prepares a transaction request for signing.
+- [fillTransaction](/docs/actions/public/fillTransaction): Fills a transaction request with the fields required for signing via eth_fillTransaction.
+- [getRawTransaction](/docs/actions/public/getRawTransaction): Returns the raw, serialized transaction given a hash.
+- [getTransaction](/docs/actions/public/getTransaction): Returns information about a transaction given a hash or block identifier.
+- [getTransactionConfirmations](/docs/actions/public/getTransactionConfirmations): Returns the number of blocks passed (confirmations) since the transaction was processed on a block.
+- [getTransactionReceipt](/docs/actions/public/getTransactionReceipt): Returns the transaction receipt given a transaction hash.
+- [sendRawTransaction](/docs/actions/wallet/sendRawTransaction): Sends a signed transaction to the network
+- [waitForTransactionReceipt](/docs/actions/public/waitForTransactionReceipt): Retrieves a Transaction Receipt for a given Transaction hash.
+- [watchPendingTransactions](/docs/actions/public/watchPendingTransactions): Watches and returns pending transaction hashes.
+- [Introduction to Wallet Actions](/docs/actions/wallet/introduction): A brief introduction to Wallet Actions in viem.
+- [getAddresses](/docs/actions/wallet/getAddresses): Returns a list of addresses owned by the wallet or client.
+- [requestAddresses](/docs/actions/wallet/requestAddresses): Requests a list of accounts managed by a wallet.
+- [watchAsset](/docs/actions/wallet/watchAsset): Requests that the user tracks the token in their wallet.
+- [getCallsStatus](/docs/actions/wallet/getCallsStatus): Returns the status of a call batch.
+- [getCapabilities](/docs/actions/wallet/getCapabilities): Extract capabilities that a connected wallet supports.
+- [sendCalls](/docs/actions/wallet/sendCalls): Sign and broadcast a batch of calls to the network.
+- [sendCallsSync](/docs/actions/wallet/sendCallsSync): Sign and broadcast a batch of calls to the network, and waits for the calls to be included in a block.
+- [showCallsStatus](/docs/actions/wallet/showCallsStatus): Requests for the wallet to show information about a call batch.
+- [waitForCallsStatus](/docs/actions/wallet/waitForCallsStatus): Waits for a call batch to be confirmed & included on a Block.
+- [addChain](/docs/actions/wallet/addChain): Adds an EVM chain to the wallet.
+- [switchChain](/docs/actions/wallet/switchChain): Switch the target chain in a wallet.
+- [signMessage](/docs/actions/wallet/signMessage): Signs a message with the Account's private key.
+- [signTypedData](/docs/actions/wallet/signTypedData): Signs typed data with the Account's private key.
+- [getPermissions](/docs/actions/wallet/getPermissions): Gets the wallets current permissions.
+- [requestPermissions](/docs/actions/wallet/requestPermissions): Requests permissions for a wallet.
+- [token.approve](/tokens/actions/approve): Approve token spending.
+- [token.transfer](/tokens/actions/transfer): Transfer tokens.
+- [sendRawTransactionSync](/docs/actions/wallet/sendRawTransactionSync): Sends a signed transaction to the network synchronously
+- [sendTransaction](/docs/actions/wallet/sendTransaction): Creates, signs, and sends a new transaction to the network.
+- [sendTransactionSync](/docs/actions/wallet/sendTransactionSync): Creates, signs, and sends a new transaction to the network synchronously.
+- [signTransaction](/docs/actions/wallet/signTransaction): Signs a transaction.
+- [Introduction to Test Actions](/docs/actions/test/introduction): A brief introduction on what Test Actions are in viem.
+- [impersonateAccount](/docs/actions/test/impersonateAccount): Impersonate an account or contract address.
+- [setBalance](/docs/actions/test/setBalance): Modifies the balance of an account.
+- [setCode](/docs/actions/test/setCode): Modifies the bytecode stored at an account's address.
+- [setNonce](/docs/actions/test/setNonce): Modifies (overrides) the nonce of an account.
+- [setStorageAt](/docs/actions/test/setStorageAt): Writes to a slot of an account's storage.
+- [stopImpersonatingAccount](/docs/actions/test/stopImpersonatingAccount): Stop impersonating an account after having previously used impersonateAccount.
+- [getAutomine](/docs/actions/test/getAutomine): Returns the automatic mining status of the node.
+- [increaseTime](/docs/actions/test/increaseTime): Jump forward in time by the given amount of time, in seconds.
+- [mine](/docs/actions/test/mine): Mine a specified number of blocks.
+- [removeBlockTimestampInterval](/docs/actions/test/removeBlockTimestampInterval): Removes setBlockTimestampInterval if it exists.
+- [setAutomine](/docs/actions/test/setAutomine): Enables or disables the automatic mining of new blocks with each new transaction submitted to the network.
+- [setIntervalMining](/docs/actions/test/setIntervalMining): Sets the automatic mining interval (in seconds) of blocks.
+- [setBlockTimestampInterval](/docs/actions/test/setBlockTimestampInterval): Sets the block's timestamp interval.
+- [setBlockGasLimit](/docs/actions/test/setBlockGasLimit): Sets the block's gas limit.
+- [setNextBlockBaseFeePerGas](/docs/actions/test/setNextBlockBaseFeePerGas): Sets the next block's base fee per gas.
+- [setNextBlockTimestamp](/docs/actions/test/setNextBlockTimestamp): Sets the next block's timestamp.
+- [setCoinbase](/docs/actions/test/setCoinbase): Sets the coinbase address to be used in new blocks.
+- [setMinGasPrice](/docs/actions/test/setMinGasPrice): Change the minimum gas price accepted by the network (in wei).
+- [reset](/docs/actions/test/reset): Resets the fork back to its original state.
+- [setLoggingEnabled](/docs/actions/test/setLoggingEnabled): Enable or disable logging on the test node network.
+- [setRpcUrl](/docs/actions/test/setRpcUrl): Sets the backend RPC URL.
+- [dumpState](/docs/actions/test/dumpState): Serializes the current state into a savable data blob.
+- [loadState](/docs/actions/test/loadState): Adds state previously dumped to the current chain.
+- [revert](/docs/actions/test/revert): Revert the state of the blockchain at the current block.
+- [snapshot](/docs/actions/test/snapshot): Snapshot the state of the blockchain at the current block.
+- [dropTransaction](/docs/actions/test/dropTransaction): Removes a transaction from the mempool.
+- [getTxpoolContent](/docs/actions/test/getTxpoolContent): Returns the details of all transactions currently pending for inclusion in the next block(s).
+- [getTxpoolStatus](/docs/actions/test/getTxpoolStatus): Returns a summary of all the transactions currently pending for inclusion in the next block(s).
+- [inspectTxpool](/docs/actions/test/inspectTxpool): Returns a summary of all the transactions currently pending for inclusion in the next block(s).
+- [sendUnsignedTransaction](/docs/actions/test/sendUnsignedTransaction): Executes a transaction regardless of the signature.
+- [JSON-RPC Account](/docs/accounts/jsonRpc): A function to create a JSON-RPC Account.
+- [Local Accounts (Private Key, Mnemonic, etc)](/docs/accounts/local)
+- [privateKeyToAccount](/docs/accounts/local/privateKeyToAccount): A function to create a Private Key Account.
+- [mnemonicToAccount](/docs/accounts/local/mnemonicToAccount): A function to create a Mnemonic Account.
+- [hdKeyToAccount](/docs/accounts/local/hdKeyToAccount): A function to create a Hierarchical Deterministic (HD) Account.
+- [toAccount](/docs/accounts/local/toAccount): A function to create a Custom Account.
+- [createNonceManager](/docs/accounts/local/createNonceManager): Creates a Nonce Manager for automatic nonce generation
+- [signMessage (Local Account)](/docs/accounts/local/signMessage): Signs a message with the Account's private key.
+- [signTransaction (Local Account)](/docs/accounts/local/signTransaction): Signs a transaction with the Account's private key.
+- [signTypedData (Local Account)](/docs/accounts/local/signTypedData): Signs typed data with the Account's private key.
+- [Chains](/docs/chains/introduction)
+- [Fees](/docs/chains/fees): Configure chain-based fee data in Viem
+- [Formatters](/docs/chains/formatters): Configure chain-based formatters in Viem
+- [Serializers](/docs/chains/serializers): Configure chain-based serializers in Viem
+- [Celo](/docs/chains/celo): Integrating with Celo in Viem
+- [Getting Started with OP Stack](/op-stack): Getting started with the OP Stack in Viem
+- [Contract Instances](/docs/contract/getContract): A Contract Instance is a type-safe interface for performing contract-related actions with a specific ABI and address, created by the getContract function.
+- [createContractEventFilter](/docs/contract/createContractEventFilter): Creates a Filter to retrieve contract event logs.
+- [deployContract](/docs/contract/deployContract): Deploys a contract to the network, given bytecode & constructor arguments.
+- [estimateContractGas](/docs/contract/estimateContractGas): Estimates the gas required to successfully execute a contract write function call.
+- [getCode](/docs/contract/getCode): Retrieves the bytecode at an address.
+- [getContractEvents](/docs/contract/getContractEvents): Returns a list of event logs matching the provided parameters.
+- [getStorageAt](/docs/contract/getStorageAt): Returns the value from a storage slot at a given address.
+- [multicall](/docs/contract/multicall): Batches up multiple functions on a contract in a single call.
+- [readContract](/docs/contract/readContract): Calls a read-only function on a contract, and returns the response.
+- [simulateContract](/docs/contract/simulateContract): Simulates & validates a contract interaction.
+- [writeContract](/docs/contract/writeContract): Executes a write function on a contract.
+- [writeContractSync](/docs/contract/writeContractSync): Executes a write function on a contract synchronously.
+- [watchContractEvent](/docs/contract/watchContractEvent): Watches and returns emitted contract event logs.
+- [decodeDeployData](/docs/contract/decodeDeployData): Decodes ABI encoded deploy data (bytecode & arguments).
+- [decodeErrorResult](/docs/contract/decodeErrorResult): Decodes reverted error from a contract function call.
+- [decodeEventLog](/docs/contract/decodeEventLog): Decodes ABI encoded event topics & data.
+- [decodeFunctionData](/docs/contract/decodeFunctionData): Decodes ABI encoded data (4 byte selector & arguments) into a function name and arguments.
+- [decodeFunctionResult](/docs/contract/decodeFunctionResult): Decodes the result of a function call on a contract.
+- [encodeDeployData](/docs/contract/encodeDeployData): Encodes deploy data (bytecode & constructor args) into an ABI encoded value.
+- [encodeErrorResult](/docs/contract/encodeErrorResult): Encodes a reverted error from a function call.
+- [encodeEventTopics](/docs/contract/encodeEventTopics): Encodes an event (with optional arguments) into filter topics.
+- [encodeFunctionData](/docs/contract/encodeFunctionData): Encodes the function name and parameters into an ABI encoded value (4 byte selector & arguments).
+- [encodeFunctionResult](/docs/contract/encodeFunctionResult): Encodes structured return data into ABI encoded data.
+- [parseEventLogs](/docs/contract/parseEventLogs): Extracts & decodes logs from a set of opaque logs.
+- [getEnsAddress](/docs/ens/actions/getEnsAddress): Gets address for ENS name.
+- [getEnsAvatar](/docs/ens/actions/getEnsAvatar): Gets the avatar of an ENS name.
+- [getEnsName](/docs/ens/actions/getEnsName): Gets primary name for specified address.
+- [getEnsResolver](/docs/ens/actions/getEnsResolver): Gets resolver for ENS name.
+- [getEnsText](/docs/ens/actions/getEnsText): Gets a text record for specified ENS name.
+- [labelhash](/docs/ens/utilities/labelhash): Hashes ENS label.
+- [namehash](/docs/ens/utilities/namehash): Hashes ENS name.
+- [normalize](/docs/ens/utilities/normalize): Normalizes ENS name to UTS46.
+- [verifySiweMessage](/docs/siwe/actions/verifySiweMessage): Verifies EIP-4361 formatted message was signed.
+- [createSiweMessage](/docs/siwe/utilities/createSiweMessage): Creates EIP-4361 formatted message.
+- [generateSiweNonce](/docs/siwe/utilities/generateSiweNonce): Generates random EIP-4361 nonce.
+- [parseSiweMessage](/docs/siwe/utilities/parseSiweMessage): Parses EIP-4361 formatted message into message fields object.
+- [validateSiweMessage](/docs/siwe/utilities/validateSiweMessage): Validates EIP-4361 message.
+- [decodeAbiParameters](/docs/abi/decodeAbiParameters): Decodes ABI encoded data.
+- [encodeAbiParameters](/docs/abi/encodeAbiParameters): Generates ABI encoded data.
+- [encodePacked](/docs/abi/encodePacked): Generates ABI encoded data.
+- [getAbiItem](/docs/abi/getAbiItem): Retrieves an item from the ABI array.
+- [parseAbi](/docs/abi/parseAbi): Parses human-readable ABI into JSON.
+- [parseAbiItem](/docs/abi/parseAbiItem): Parses human-readable ABI item (e.g. error, event, function) into ABI item.
+- [parseAbiParameter](/docs/abi/parseAbiParameter): Parses human-readable ABI parameter into ABI parameter.
+- [parseAbiParameters](/docs/abi/parseAbiParameters): Parses human-readable ABI parameters into ABI parameters.
+- [getDelegation](/docs/eip7702/getDelegation): Returns the address an account has delegated to via EIP-7702.
+- [prepareAuthorization](/docs/eip7702/prepareAuthorization): Prepares an EIP-7702 Authorization for signing.
+- [signAuthorization](/docs/eip7702/signAuthorization): Signs an EIP-7702 Authorization object.
+- [hashAuthorization](/docs/eip7702/hashAuthorization): Calculates an Authorization object hash in EIP-7702 format.
+- [recoverAuthorizationAddress](/docs/eip7702/recoverAuthorizationAddress): Recovers the original signing address from a signed Authorization object.
+- [verifyAuthorization](/docs/eip7702/verifyAuthorization): Verifies that an Authorization object was signed by the provided address.
+- [getAddress](/docs/utilities/getAddress): Converts an address into an address that is checksum encoded.
+- [getContractAddress](/docs/utilities/getContractAddress): Retrieves a contract address.
+- [isAddress](/docs/utilities/isAddress): Checks if the address is valid.
+- [isAddressEqual](/docs/utilities/isAddressEqual): Checks if the given addresses (checksummed) are equal.
+- [blobsToProofs](/docs/utilities/blobsToProofs): Compute the proofs for a list of blobs and their commitments.
+- [blobsToCommitments](/docs/utilities/blobsToCommitments): Compute commitments from a list of blobs.
+- [commitmentsToVersionedHashes](/docs/utilities/commitmentsToVersionedHashes): Transform a list of commitments to their versioned hashes.
+- [commitmentToVersionedHash](/docs/utilities/commitmentToVersionedHash): Transform a commitment to it's versioned hash.
+- [fromBlobs](/docs/utilities/fromBlobs): Transforms blobs into the originating data.
+- [sidecarsToVersionedHashes](/docs/utilities/sidecarsToVersionedHashes): Transforms a list of sidecars to their versioned hashes.
+- [toBlobs](/docs/utilities/toBlobs): Transforms arbitrary data into blobs.
+- [toBlobSidecars](/docs/utilities/toBlobSidecars): Transforms arbitrary data into blob sidecars.
+- [extractChain](/docs/utilities/extractChain)
+- [filterChains](/docs/utilities/filterChains): Filters chain definitions by structured criteria.
+- [concat](/docs/utilities/concat): Concatenates a set of hex values or byte arrays.
+- [isBytes](/docs/utilities/isBytes): Checks whether the value is a byte array or not.
+- [isHex](/docs/utilities/isHex): Checks whether the value is a hex value or not.
+- [pad](/docs/utilities/pad): Pads a hex value or byte array with leading or trailing zeros.
+- [slice](/docs/utilities/slice): Returns a section of the hex or byte array given a start/end bytes offset.
+- [size](/docs/utilities/size): Retrieves the size of the value (in bytes).
+- [trim](/docs/utilities/trim): Trims the leading or trailing zero byte data from a hex value or byte array.
+- [fromBytes](/docs/utilities/fromBytes): Decodes a byte array to a string, hex value, boolean or number.
+- [fromHex](/docs/utilities/fromHex): Decodes a hex value to a string, number or byte array.
+- [fromRlp](/docs/utilities/fromRlp): Decodes a RLP value into a decoded hex value or byte array.
+- [toBytes](/docs/utilities/toBytes): Encodes a string, hex value, number or boolean to a byte array.
+- [toHex](/docs/utilities/toHex): Encodes a string, number, boolean or byte array to a hex value.
+- [toRlp](/docs/utilities/toRlp): Encodes a hex value or byte array into a RLP encoded value.
+- [isHash](/docs/utilities/isHash): Checks if a string is a valid 32-byte hex hash.
+- [keccak256](/docs/utilities/keccak256): Calculates the Keccak256 hash of a byte array.
+- [ripemd160](/docs/utilities/ripemd160): Calculates the Ripemd160 hash of a byte array.
+- [sha256](/docs/utilities/sha256): Calculates the Sha256 hash of a byte array.
+- [toEventHash](/docs/utilities/toEventHash): Returns the hash (of the event signature) for a given event definition.
+- [toEventSelector](/docs/utilities/toEventSelector): Returns the event selector for a given event definition.
+- [toEventSignature](/docs/utilities/toEventSignature): Returns the signature for a given event or event definition.
+- [toFunctionHash](/docs/utilities/toFunctionHash): Returns the hash (of the function signature) for a given function definition.
+- [toFunctionSelector](/docs/utilities/toFunctionSelector): Returns the function selector (4 byte encoding) for a given function definition.
+- [toFunctionSignature](/docs/utilities/toFunctionSignature): Returns the signature for a given function definition.
+- [setupKzg](/docs/utilities/setupKzg): Sets up and returns a KZG interface.
+- [compactSignatureToSignature](/docs/utilities/compactSignatureToSignature): Parses a compact signature into signature format.
+- [hashMessage](/docs/utilities/hashMessage): Hashes a message in EIP-191 format.
+- [hashTypedData](/docs/utilities/hashTypedData): Hashes EIP-712 typed data.
+- [isErc6492Signature](/docs/utilities/isErc6492Signature): Checks whether the signature is in ERC-6492 format.
+- [parseCompactSignature](/docs/utilities/parseCompactSignature): Parses a hex formatted compact signature into a structured compact signature.
+- [parseErc6492Signature](/docs/utilities/parseErc6492Signature): Parses a hex-formatted ERC-6492 flavoured signature.
+- [parseSignature](/docs/utilities/parseSignature): Parses a hex formatted signature into a structured signature.
+- [recoverAddress](/docs/utilities/recoverAddress): Recovers the signing address from a hash & signature.
+- [recoverMessageAddress](/docs/utilities/recoverMessageAddress): Recovers the signing address from a message & signature.
+- [recoverPublicKey](/docs/utilities/recoverPublicKey): Recovers the signing public key from a hash & signature.
+- [recoverTransactionAddress](/docs/utilities/recoverTransactionAddress): Recovers the signing address from a transaction & signature.
+- [recoverTypedDataAddress](/docs/utilities/recoverTypedDataAddress): Recovers the signing address from EIP-712 typed data & signature.
+- [serializeCompactSignature](/docs/utilities/serializeCompactSignature): Serializes a compact signature into hex format.
+- [serializeErc6492Signature](/docs/utilities/serializeErc6492Signature): Serializes a ERC-6492 flavoured signature into hex format.
+- [serializeSignature](/docs/utilities/serializeSignature): Serializes a structured signature into hex format.
+- [signatureToCompactSignature](/docs/utilities/signatureToCompactSignature): Parses a signature into a compact signature.
+- [verifyMessage](/docs/utilities/verifyMessage): Verifies if a signed message was generated by the provided address.
+- [verifyTypedData](/docs/utilities/verifyTypedData): Verifies a typed data signature
+- [parseTransaction](/docs/utilities/parseTransaction): Converts a serialized transaction to a structured transaction.
+- [serializeTransaction](/docs/utilities/serializeTransaction): Serializes a transaction object.
+- [formatEther](/docs/utilities/formatEther): Converts numerical wei to a string representation of ether.
+- [formatGwei](/docs/utilities/formatGwei): Converts numerical wei to a string representation of gwei.
+- [formatUnits](/docs/utilities/formatUnits): Divides a number by a given exponent of base 10, and formats it into a string representation of the number.
+- [parseEther](/docs/utilities/parseEther): Converts a string representation of ether to numerical wei.
+- [parseGwei](/docs/utilities/parseGwei): Converts a string representation of gwei to numerical wei.
+- [parseUnits](/docs/utilities/parseUnits): Multiplies a string representation of a number by a given exponent of base 10.
+- [Terms](/docs/glossary/terms): Glossary of Terms in viem.
+- [Types](/docs/glossary/types): Glossary of Types in viem.
+- [Errors](/docs/glossary/errors): Glossary of Errors in viem.
+- [Getting Started with Account Abstraction](/account-abstraction): Getting Started with Account Abstraction in Viem
+- [Sending User Operations](/account-abstraction/guides/sending-user-operations)
+- [Bundler Client](/account-abstraction/clients/bundler): A function to create a Bundler Client.
+- [Paymaster Client](/account-abstraction/clients/paymaster): A function to create a Paymaster Client.
+- [Smart Accounts](/account-abstraction/accounts/smart)
+- [Coinbase Smart Wallet](/account-abstraction/accounts/smart/toCoinbaseSmartAccount)
+- [MetaMask Smart Account](/account-abstraction/accounts/smart/toMetaMaskSmartAccount)
+- [Thirdweb Smart Account](/account-abstraction/accounts/smart/toThirdwebSmartAccount)
+- [Nexus Smart Account](/account-abstraction/accounts/smart/toNexusSmartAccount)
+- [Light Smart Account](/account-abstraction/accounts/smart/toLightSmartAccount)
+- [Kernel (ZeroDev) Smart Account](/account-abstraction/accounts/smart/toEcdsaKernelSmartAccount)
+- [Safe Smart Account](/account-abstraction/accounts/smart/toSafeSmartAccount)
+- [Simple Smart Account](/account-abstraction/accounts/smart/toSimpleSmartAccount)
+- [Solady Smart Account](/account-abstraction/accounts/smart/toSoladySmartAccount)
+- [Trust Smart Account](/account-abstraction/accounts/smart/toTrustSmartAccount)
+- [toSmartAccount](/account-abstraction/accounts/smart/toSmartAccount): Creates a Smart Account with a provided Account Implementation.
+- [signMessage (Smart Account)](/account-abstraction/accounts/smart/signMessage)
+- [signTypedData (Smart Account)](/account-abstraction/accounts/smart/signTypedData)
+- [signUserOperation (Smart Account)](/account-abstraction/accounts/smart/signUserOperation)
+- [WebAuthn Account](/account-abstraction/accounts/webauthn)
+- [toWebAuthnAccount](/account-abstraction/accounts/webauthn/toWebAuthnAccount)
+- [createWebAuthnCredential](/account-abstraction/accounts/webauthn/createWebAuthnCredential)
+- [estimateUserOperationGas](/account-abstraction/actions/bundler/estimateUserOperationGas): Estimates the gas values for a User Operation to be executed successfully.
+- [getChainId](/account-abstraction/actions/bundler/getChainId): Returns the chain ID associated with the bundler
+- [getSupportedEntryPoints](/account-abstraction/actions/bundler/getSupportedEntryPoints): Returns the EntryPoints that the bundler supports.
+- [getUserOperation](/account-abstraction/actions/bundler/getUserOperation): Retrieves information about a User Operation given a hash.
+- [getUserOperationReceipt](/account-abstraction/actions/bundler/getUserOperationReceipt): Returns the User Operation receipt given a User Operation hash.
+- [prepareUserOperation](/account-abstraction/actions/bundler/prepareUserOperation): Prepares a User Operation for execution and fills in missing properties.
+- [sendUserOperation](/account-abstraction/actions/bundler/sendUserOperation): Broadcasts a User Operation to the Bundler.
+- [waitForUserOperationReceipt](/account-abstraction/actions/bundler/waitForUserOperationReceipt): Waits for the User Operation to be included on a Block, and then returns the User Operation receipt.
+- [getPaymasterData](/account-abstraction/actions/paymaster/getPaymasterData): Retrieves paymaster-related properties to be used for the User Operation.
+- [getPaymasterStubData](/account-abstraction/actions/paymaster/getPaymasterStubData): Retrieves paymaster-related properties to be used for the User Operation.
+- [Getting Started](/experimental): Getting started with experimental features in Viem
+- [Extending Client with ERC-7715](/experimental/erc7715/client): Setting up your Viem Client
+- [grantPermissions](/experimental/erc7715/grantPermissions): Request permissions from a wallet to perform actions on behalf of a user.
+- [Extending Client with ERC-7739 Actions](/experimental/erc7739/client): Setting up your Viem Client
+- [signMessage](/experimental/erc7739/signMessage): Signs a personal sign message via Solady's ERC-1271 format.
+- [signTypedData](/experimental/erc7739/signTypedData): Signs typed data via Solady's ERC-1271 format.
+- [hashMessage](/experimental/erc7739/hashMessage): Hashes an EIP-191 message via ERC-7739 format.
+- [hashTypedData](/experimental/erc7739/hashTypedData): Hashes EIP-712 typed data via Solady's ERC-1271 format.
+- [wrapTypedDataSignature](/experimental/erc7739/wrapTypedDataSignature)
+- [Extending Client with ERC-7811 Actions](/experimental/erc7811/client): Setting up your Viem Client
+- [getAssets](/experimental/erc7811/getAssets): Requests to get assets for an account from a Wallet.
+- [Extending Client with ERC-7821 Actions](/experimental/erc7821/client): Setting up your Viem Client
+- [execute](/experimental/erc7821/execute): Executes call(s) using the `execute` function on an ERC-7821-compatible contract.
+- [executeBatches](/experimental/erc7821/executeBatches): Executes batches of call(s) on an ERC-7821-compatible contract.
+- [supportsExecutionMode](/experimental/erc7821/supportsExecutionMode): Checks if the contract supports the ERC-7821 execution mode.
+- [Extending Client with ERC-7846 Actions](/experimental/erc7846/client): Setting up your Viem Client
+- [connect](/experimental/erc7846/connect): Requests to connect Account(s).
+- [disconnect](/experimental/erc7846/disconnect): Requests to disconnect account(s).
+- [Extending Client with ERC-7895 Actions](/experimental/erc7895/client): Setting up your Viem Client
+- [addSubAccount](/experimental/erc7895/addSubAccount): Requests to add a Sub Account.
+- [Client](/op-stack/client): Setting up your Viem Client with the OP Stack
+- [Chains](/op-stack/chains)
+- [Deposits](/op-stack/guides/deposits)
+- [Withdrawals](/op-stack/guides/withdrawals)
+- [buildDepositTransaction](/op-stack/actions/buildDepositTransaction): Builds & prepares parameters for a deposit transaction to be initiated on an L1 and executed on the L2.
+- [buildProveWithdrawal](/op-stack/actions/buildProveWithdrawal): Builds the transaction that proves a withdrawal was initiated on an L2.
+- [estimateContractL1Fee](/op-stack/actions/estimateContractL1Fee): Estimates the L1 fee to execute an L2 contract write.
+- [estimateContractL1Gas](/op-stack/actions/estimateContractL1Gas): Estimates the L1 gas to execute an L2 contract write.
+- [estimateContractTotalFee](/op-stack/actions/estimateContractTotalFee): Estimates the total (L1 + L2) fee to execute an L2 contract write.
+- [estimateContractTotalGas](/op-stack/actions/estimateContractTotalGas): Estimates the total (L1 + L2) gas to execute an L2 contract write.
+- [estimateInitiateWithdrawalGas](/op-stack/actions/estimateInitiateWithdrawalGas): Estimates gas required to initiate a withdrawal on an L2 to the L1.
+- [estimateL1Fee](/op-stack/actions/estimateL1Fee): Estimates the L1 fee to execute an L2 transaction.
+- [estimateL1Gas](/op-stack/actions/estimateL1Gas): Estimates the amount of L1 gas required to execute an L2 transaction
+- [estimateOperatorFee](/op-stack/actions/estimateOperatorFee): Estimates the operator fee to execute an L2 transaction.
+- [estimateTotalFee](/op-stack/actions/estimateTotalFee): Estimates the L1 + L2 + operator fee to execute an L2 transaction.
+- [estimateTotalGas](/op-stack/actions/estimateTotalGas): Estimates the amount of L1 + L2 gas required to execute an L2 transaction
+- [initiateWithdrawal](/op-stack/actions/initiateWithdrawal): Initiates a withdrawal on an L2 to the L1.
+- [buildInitiateWithdrawal](/op-stack/actions/buildInitiateWithdrawal): Builds & prepares parameters for a withdrawal to be initiated on an L2.
+- [estimateDepositTransactionGas](/op-stack/actions/estimateDepositTransactionGas): Estimates gas to initiate a deposit transaction on an L1, which executes a transaction on an L2.
+- [estimateFinalizeWithdrawalGas](/op-stack/actions/estimateFinalizeWithdrawalGas): Estimates gas required to finalize a withdrawal that occurred on an L2.
+- [estimateProveWithdrawalGas](/op-stack/actions/estimateProveWithdrawalGas): Estimates gas required to prove a withdrawal that occurred on an L2.
+- [getGame](/op-stack/actions/getGame): Retrieves a valid dispute game on an L2 that occurred after a provided L2 block number.
+- [getGames](/op-stack/actions/getGames): Retrieves dispute games for an L2.
+- [getL2Output](/op-stack/actions/getL2Output): Retrieves the first L2 output proposal that occurred after a provided block number.
+- [getTimeToFinalize](/op-stack/actions/getTimeToFinalize): Returns the time until the withdrawal transaction can be finalized.
+- [getTimeToNextGame](/op-stack/actions/getTimeToNextGame): Returns the time until the next L2 dispute game is submitted.
+- [getTimeToNextL2Output](/op-stack/actions/getTimeToNextL2Output): Builds & prepares parameters for a withdrawal to be initiated on an L2.
+- [getTimeToProve](/op-stack/actions/getTimeToProve): Gets time until the L2 withdrawal transaction is ready to be proved.
+- [getWithdrawalStatus](/op-stack/actions/getWithdrawalStatus): Returns the current status of a withdrawal.
+- [waitForNextGame](/op-stack/actions/waitForNextGame): Waits for the next dispute game to be submitted.
+- [waitForNextL2Output](/op-stack/actions/waitForNextL2Output): Waits for the next L2 output (after the provided block number) to be submitted.
+- [waitToFinalize](/op-stack/actions/waitToFinalize): Waits until the withdrawal transaction can be finalized.
+- [waitToProve](/op-stack/actions/waitToProve): Waits until the L2 withdrawal transaction is ready to be proved.
+- [depositTransaction](/op-stack/actions/depositTransaction): Initiates a deposit transaction on an L1, which executes a transaction on an L2.
+- [finalizeWithdrawal](/op-stack/actions/finalizeWithdrawal): Finalizes a withdrawal that occurred on an L2.
+- [proveWithdrawal](/op-stack/actions/proveWithdrawal): Proves a withdrawal that occurred on an L2.
+- [extractTransactionDepositedLogs](/op-stack/utilities/extractTransactionDepositedLogs): Extracts "TransactionDeposited" logs from an opaque array of logs.
+- [extractWithdrawalMessageLogs](/op-stack/utilities/extractWithdrawalMessageLogs): Extracts "MessagePassed" logs from a withdrawal initialization from an opaque array of logs.
+- [getL2TransactionHash](/op-stack/utilities/getL2TransactionHash): Computes the L2 transaction hash from an L1 "TransactionDeposited" log.
+- [getL2TransactionHashes](/op-stack/utilities/getL2TransactionHashes): Computes the L2 transaction hashes from an array of L1 "TransactionDeposited" logs.
+- [getWithdrawals](/op-stack/utilities/getWithdrawals): Gets the messages from a withdrawal initialization.
+- [getSourceHash](/op-stack/utilities/getSourceHash): Computes source hash of a deposit transaction.
+- [opaqueDataToDepositData](/op-stack/utilities/opaqueDataToDepositData): Converts opaque data into a structured deposit data format.
+- [getWithdrawalHashStorageSlot](/op-stack/utilities/getWithdrawalHashStorageSlot): Computes the withdrawal hash storage slot to be used when proving a withdrawal.
+- [parseTransaction (OP Stack)](/op-stack/utilities/parseTransaction): Converts a serialized transaction to a structured transaction, with support for OP Stack.
+- [serializeTransaction (OP Stack)](/op-stack/utilities/serializeTransaction): Serializes a transaction object, with support for OP Stack.
+- [USDC (Circle)](/circle-usdc)
+- [Integrating USDC into Your Application](/circle-usdc/guides/integrating)
+- [Cross-Chain USDC Transfers](/circle-usdc/guides/cross-chain)
+- [Cross Chain USDC Transfers with Bridge Kit](/circle-usdc/guides/bridge-kit)
+- [Cross Chain USDC Transfers (CCTP Integration)](/circle-usdc/guides/manual-cctp)
+- [Gasless USDC Transfers with Circle Paymaster](/circle-usdc/guides/paymaster)
+- [Circle Smart Account](/circle-usdc/guides/smart-account)
+- [Getting Started](/tokens/): Set up Viem token utilities.
+- [Tokens](/tokens/list): Select and import tokens in Viem.
+- [Open USD (OUSD)](/tokens/ousd): Use Open USD (OUSD) with Viem.
+- [Guides](/tokens/guides/): Task-oriented guides for working with tokens in Viem.
+- [Importing Tokens](/tokens/guides/importing-tokens): Import built-in token definitions from Viem.
+- [Defining Tokens](/tokens/guides/defining-tokens): Define reusable tokens for Clients.
+- [Get Balances](/tokens/guides/get-balances): Read token balances and supply with Viem.
+- [Transfer Tokens](/tokens/guides/transfer-tokens): Transfer tokens to a recipient with Viem.
+- [Approve Spending](/tokens/guides/approve-spending): Approve a spender and manage token allowances with Viem.
+- [Create a TIP-20 Token](/tokens/guides/tempo/create-token): Create TIP-20 tokens on Tempo.
+- [Mint & Burn Tokens](/tokens/guides/tempo/manage-token-balances): Mint and burn TIP-20 tokens.
+- [Transfer Tokens](/tokens/guides/tempo/transfer-tokens): Transfer TIP-20 tokens on Tempo.
+- [Manage Token Roles & Supply](/tokens/guides/tempo/manage-token-roles): Manage TIP-20 token roles and supply.
+- [Configure Transfer Policies](/tokens/guides/tempo/transfer-policies): Configure TIP-20 transfer policies.
+- [Overview](/tokens/actions/): Reference for Viem's Token Actions.
+- [token.burn](/tokens/tempo/burn): Burn TIP-20 tokens.
+- [token.burnBlocked](/tokens/tempo/burnBlocked): Burn blocked TIP-20 balances.
+- [token.changeTransferPolicy](/tokens/tempo/changeTransferPolicy): Change TIP-20 transfer policies.
+- [token.create](/tokens/tempo/create): Create TIP-20 tokens.
+- [token.grantRoles](/tokens/tempo/grantRoles): Grant TIP-20 token roles.
+- [token.hasRole](/tokens/tempo/hasRole): Check TIP-20 token roles.
+- [token.mint](/tokens/tempo/mint): Mint TIP-20 tokens.
+- [token.pause](/tokens/tempo/pause): Pause TIP-20 tokens.
+- [token.renounceRoles](/tokens/tempo/renounceRoles): Renounce TIP-20 token roles.
+- [token.revokeRoles](/tokens/tempo/revokeRoles): Revoke TIP-20 token roles.
+- [token.setRoleAdmin](/tokens/tempo/setRoleAdmin): Set TIP-20 role admins.
+- [token.setSupplyCap](/tokens/tempo/setSupplyCap): Set TIP-20 supply caps.
+- [token.unpause](/tokens/tempo/unpause): Unpause TIP-20 tokens.
+- [Getting Started](/tempo/)
+- [Chains](/tempo/chains)
+- [Guides](/tempo/guides/): Task-oriented guides for building common Tempo features with Viem.
+- [Create an Account](/tempo/guides/accounts/create): Create a Tempo Account from a private key, passkey, or device-bound key, and use it with a Viem client.
+- [Sign In with a Passkey](/tempo/guides/accounts/passkeys): Create and restore WebAuthn passkey accounts for non-custodial browser sign-in on Tempo.
+- [Use the Tempo Accounts SDK](/tempo/guides/accounts/accounts-sdk): Connect a Tempo account with the Tempo Accounts SDK and drive it with Viem and Tempo Actions.
+- [Tempo Transactions](/tempo/transactions): Send your first Tempo Transaction with Viem, and discover the payment-native features they unlock.
+- [Batch Calls](/tempo/guides/batch-calls): Bundle multiple operations into a single atomic Tempo Transaction.
+- [Concurrent Transactions](/tempo/guides/concurrent-transactions): Send multiple Tempo Transactions in parallel using concurrent nonces.
+- [Scheduled Transactions](/tempo/guides/scheduled-transactions): Sign a Tempo Transaction now and define when it can execute onchain.
+- [Pay Fees in a Stablecoin](/tempo/guides/pay-fees): Pay Tempo transaction fees in any USD-denominated TIP-20 stablecoin.
+- [Sponsor User Fees](/tempo/guides/sponsor-fees): Sponsor transaction fees on behalf of your users for a gasless experience on Tempo.
+- [Create a TIP-20 Token](/tempo/guides/create-token): Deploy a TIP-20 stablecoin on Tempo and read its onchain metadata.
+- [Mint & Burn Tokens](/tempo/guides/manage-token-balances): Mint and burn TIP-20 token supply on Tempo.
+- [Transfer Tokens](/tempo/guides/transfer-tokens): Transfer TIP-20 tokens, authorize spenders, and read balances on Tempo.
+- [Manage Token Roles & Supply](/tempo/guides/manage-token-roles): Grant and revoke TIP-20 roles, cap supply, and pause transfers on Tempo.
+- [Configure Transfer Policies](/tempo/guides/transfer-policies): Restrict which accounts can send or receive a TIP-20 token with a transfer policy.
+- [Distribute Token Rewards](/tempo/guides/token-rewards): Distribute rewards to TIP-20 holders and let them claim their share on Tempo.
+- [Access Keys](/tempo/guides/access-keys/): Delegate signing to a secondary key with access keys, with spending limits, scopes, admin keys, and signature verification.
+- [Authorize Access Keys](/tempo/guides/access-keys/authorize): Authorize an access key to sign transactions on behalf of an account, and defer authorization to a transaction.
+- [Set Permissions & Limits](/tempo/guides/access-keys/permissions): Restrict an access key with an expiry, per-token spending limits, recurring limits, and call scopes.
+- [Manage Access Keys](/tempo/guides/access-keys/manage): Update spending limits, revoke access keys, and inspect their onchain metadata and remaining limits.
+- [Admin Access Keys](/tempo/guides/access-keys/admin): Authorize unrestricted admin access keys that can manage an account's other keys, and check admin status.
+- [Witnesses](/tempo/guides/access-keys/witnesses): Bind a witness to a key authorization and burn it to revoke signed-but-not-yet-submitted authorizations.
+- [Verify Signatures](/tempo/guides/access-keys/verify): Verify that a keychain signature was produced by an active access key for the expected account.
+- [Stablecoin Exchange](/tempo/guides/stablecoin-exchange/): Trade stablecoins on Tempo's enshrined DEX, manage orders and balances, create trading pairs, and provide Fee AMM liquidity.
+- [Swap Stablecoins](/tempo/guides/stablecoin-exchange/swap): Quote and swap one USD-denominated TIP-20 stablecoin for another on Tempo's enshrined DEX.
+- [Place & Manage Orders](/tempo/guides/stablecoin-exchange/orders): Place limit and flip orders on Tempo's Stablecoin DEX, then read, inspect, and cancel them.
+- [Manage Exchange Balances](/tempo/guides/stablecoin-exchange/balances): Read your internal Stablecoin DEX balances and withdraw them back to your Tempo wallet.
+- [Create a Trading Pair](/tempo/guides/stablecoin-exchange/create-pair): Create a new trading pair on Tempo's Stablecoin DEX and configure a token's quote token.
+- [Provide Fee AMM Liquidity](/tempo/guides/stablecoin-exchange/fee-amm-liquidity): Add and remove liquidity in Tempo's Fee AMM so stablecoin fee conversions can settle.
+- [Earn](/tempo/guides/earn/): Deposit assets into Tempo Earn vaults, track Earn shares, and withdraw accrued value.
+- [Deploy an Earn Stack](/tempo/guides/earn/deploy): Deploy and bind an experimental ERC-4626 Tempo Earn stack.
+- [Deposit and Withdraw](/tempo/guides/earn/deposit-withdraw): Deposit assets or venue shares into an Earn vault and exit by shares or an exact asset amount.
+- [Protect an Earn Vault](/tempo/guides/earn/protected-vaults): Restrict who can enter an Earn vault while preserving existing holders' ability to exit.
+- [Earn from a Private Zone](/tempo/guides/earn/zones): Deposit into and redeem from Earn vaults while keeping assets and shares inside a private Tempo Zone.
+- [Virtual Addresses](/tempo/guides/virtual-addresses/): Register a master address and accept TIP-20 deposits at unlimited virtual addresses that forward to you without sweeps.
+- [Register a Master Address](/tempo/guides/virtual-addresses/register): Mine a TIP-1022 proof-of-work salt and register a master address for virtual-address deposit forwarding.
+- [Resolve & Accept Payments](/tempo/guides/virtual-addresses/resolve): Derive per-customer virtual deposit addresses offchain and resolve them to your master wallet.
+- [Receive Policies](/tempo/guides/receive-policies/): Control who can pay you on Tempo with receive policies, validate inbound transfers, and recover blocked funds.
+- [Set a Receive Policy](/tempo/guides/receive-policies/set): Set and read an account's receive policy to control which senders and tokens it accepts.
+- [Validate Transfers](/tempo/guides/receive-policies/validate): Check whether a TIP-20 transfer would be accepted by a recipient's receive policy before sending it.
+- [Handle Blocked Funds](/tempo/guides/receive-policies/blocked): Read, claim, and burn TIP-20 funds that a receive policy blocked from being credited.
+- [Payment Channels](/tempo/guides/payment-channels/): Open funded TIP-20 channels on Tempo, stream off-chain vouchers, and settle or close to move funds onchain.
+- [Open & Fund a Channel](/tempo/guides/payment-channels/open): Open and fund a TIP-20 payment channel on Tempo, top it up, and read its onchain state.
+- [Send & Settle Vouchers](/tempo/guides/payment-channels/vouchers): Sign off-chain TIP-20 channel vouchers as the payer and settle them onchain as the payee.
+- [Close & Withdraw](/tempo/guides/payment-channels/close): Close a TIP-20 payment channel from either side and withdraw the remaining deposit on Tempo.
+- [Private Zones](/tempo/guides/zones/): Connect to private Tempo Zones, deposit funds into them, and withdraw back to Tempo Mainnet.
+- [Connect to a Zone](/tempo/guides/zones/connect): Connect a Viem client to a private Tempo Zone and authenticate with an authorization token.
+- [Deposit to a Zone](/tempo/guides/zones/deposit): Deposit TIP-20 stablecoins from Tempo Mainnet into a private Tempo Zone.
+- [Withdraw from a Zone](/tempo/guides/zones/withdraw): Withdraw TIP-20 stablecoins from a private Tempo Zone back to Tempo Mainnet.
+- [Relay](/tempo/guides/relay/): Extend the Tempo (Execution) RPC with offchain transaction services and coordination.
+- [Connect to a Relay](/tempo/guides/relay/connect)
+- [Run a Relay](/tempo/guides/relay/run)
+- [PropAMM](/tempo/guides/propamm/): Quote and swap a fixed token pair through an approved PropAMM pool on Tempo.
+- [Swap with a PropAMM Pool](/tempo/guides/propamm/swap): Quote and swap a fixed token pair through a PropAMM pool, with approval batched into the transaction.
+- [Multisig](/tempo/guides/multisig/): Build common native multisig workflows on Tempo with Viem.
+- [Send Multisig Transactions](/tempo/guides/multisig/send): Initialize a native multisig and coordinate independent owner approvals.
+- [Weighted Owners](/tempo/guides/multisig/weighted-owners): Configure M-of-N and weighted approval thresholds for a native multisig account.
+- [Passkeys & Other Keys](/tempo/guides/multisig/key-types): Combine different owner signature schemes in one native multisig account.
+- [Authorize an Access Key](/tempo/guides/multisig/access-keys): Authorize and use an access key from a native multisig account.
+- [Sponsor Multisig Fees](/tempo/guides/multisig/sponsor-fees): Pay fees for a coordinated multisig transaction with a separate fee payer.
+- [Rotate Multisig Owners](/tempo/guides/multisig/rotate-owners): Replace native multisig owners or thresholds without changing the account address.
+- [Accounts](/tempo/accounts/)
+- [Account.fromSecp256k1](/tempo/accounts/account.fromSecp256k1)
+- [Account.fromP256](/tempo/accounts/account.fromP256)
+- [Account.fromWebAuthnP256](/tempo/accounts/account.fromWebAuthnP256)
+- [Account.fromWebCryptoP256](/tempo/accounts/account.fromWebCryptoP256)
+- [Account.fromMultisig](/tempo/accounts/account.fromMultisig): Instantiates a native multisig account from an initial or current config.
+- [Overview](/tempo/actions/)
+- [accessKey.authorize](/tempo/actions/accessKey.authorize)
+- [accessKey.burnWitness](/tempo/actions/accessKey.burnWitness)
+- [accessKey.getMetadata](/tempo/actions/accessKey.getMetadata)
+- [accessKey.getRemainingLimit](/tempo/actions/accessKey.getRemainingLimit)
+- [accessKey.isAdmin](/tempo/actions/accessKey.isAdmin)
+- [accessKey.isWitnessBurned](/tempo/actions/accessKey.isWitnessBurned)
+- [accessKey.revoke](/tempo/actions/accessKey.revoke)
+- [accessKey.signAuthorization](/tempo/actions/accessKey.signAuthorization)
+- [accessKey.updateLimit](/tempo/actions/accessKey.updateLimit)
+- [accessKey.verifyHash](/tempo/actions/accessKey.verifyHash)
+- [accessKey.watchAdminAuthorized](/tempo/actions/accessKey.watchAdminAuthorized)
+- [accessKey.watchWitness](/tempo/actions/accessKey.watchWitness)
+- [accessKey.watchWitnessBurned](/tempo/actions/accessKey.watchWitnessBurned)
+- [amm.burn](/tempo/actions/amm.burn)
+- [amm.getLiquidityBalance](/tempo/actions/amm.getLiquidityBalance)
+- [amm.getPool](/tempo/actions/amm.getPool)
+- [amm.mint](/tempo/actions/amm.mint)
+- [amm.rebalanceSwap](/tempo/actions/amm.rebalanceSwap)
+- [amm.watchBurn](/tempo/actions/amm.watchBurn)
+- [amm.watchMint](/tempo/actions/amm.watchMint)
+- [amm.watchRebalanceSwap](/tempo/actions/amm.watchRebalanceSwap)
+- [channel.close](/tempo/actions/channel.close)
+- [channel.getStates](/tempo/actions/channel.getStates)
+- [channel.open](/tempo/actions/channel.open)
+- [channel.requestClose](/tempo/actions/channel.requestClose)
+- [channel.settle](/tempo/actions/channel.settle)
+- [channel.signVoucher](/tempo/actions/channel.signVoucher)
+- [channel.topUp](/tempo/actions/channel.topUp)
+- [channel.withdraw](/tempo/actions/channel.withdraw)
+- [earn.bindEngine](/tempo/actions/earn.bindEngine)
+- [earn.configureExitSafePolicy](/tempo/actions/earn.configureExitSafePolicy)
+- [earn.createErc4626Engine](/tempo/actions/earn.createErc4626Engine)
+- [earn.createStack](/tempo/actions/earn.createStack)
+- [earn.deposit](/tempo/actions/earn.deposit)
+- [earn.depositShares](/tempo/actions/earn.depositShares)
+- [earn.deployErc4626StackSync](/tempo/actions/earn.deployErc4626StackSync)
+- [earn.getFeeState](/tempo/actions/earn.getFeeState)
+- [earn.getPosition](/tempo/actions/earn.getPosition)
+- [earn.getRedeemQuote](/tempo/actions/earn.getRedeemQuote)
+- [earn.getVault](/tempo/actions/earn.getVault)
+- [earn.getWithdrawQuote](/tempo/actions/earn.getWithdrawQuote)
+- [earn.privateDeposit](/tempo/actions/earn.privateDeposit)
+- [earn.privateRedeem](/tempo/actions/earn.privateRedeem)
+- [earn.redeem](/tempo/actions/earn.redeem)
+- [earn.validateExitSafePolicy](/tempo/actions/earn.validateExitSafePolicy)
+- [earn.waitForPrivateDeposit](/tempo/actions/earn.waitForPrivateDeposit)
+- [earn.waitForPrivateRedeem](/tempo/actions/earn.waitForPrivateRedeem)
+- [earn.withdrawExact](/tempo/actions/earn.withdrawExact)
+- [fee.getUserToken](/tempo/actions/fee.getUserToken)
+- [fee.setUserToken](/tempo/actions/fee.setUserToken)
+- [fee.validateToken](/tempo/actions/fee.validateToken)
+- [fee.watchSetUserToken](/tempo/actions/fee.watchSetUserToken)
+- [propAmm.baseToken](/tempo/actions/propAmm.baseToken)
+- [propAmm.getSwapQuote](/tempo/actions/propAmm.getSwapQuote)
+- [propAmm.paused](/tempo/actions/propAmm.paused)
+- [propAmm.quoteToken](/tempo/actions/propAmm.quoteToken)
+- [propAmm.recipientAllowed](/tempo/actions/propAmm.recipientAllowed)
+- [propAmm.resolveRecipient](/tempo/actions/propAmm.resolveRecipient)
+- [propAmm.swap](/tempo/actions/propAmm.swap)
+- [propAmm.takerAllowed](/tempo/actions/propAmm.takerAllowed)
+- [multisig.getConfig](/tempo/actions/multisig.getConfig): Gets the cached config selected by current chain state.
+- [multisig.getOperation](/tempo/actions/multisig.getOperation): Gets a coordinated multisig operation by its operation hash.
+- [multisig.updateConfig](/tempo/actions/multisig.updateConfig): Replaces the current owners and threshold for a native multisig account.
+- [multisig.updateConfigSync](/tempo/actions/multisig.updateConfigSync): Replaces a native multisig configuration and waits for transaction confirmation.
+- [nonce.getNonce](/tempo/actions/nonce.getNonce)
+- [nonce.watchNonceIncremented](/tempo/actions/nonce.watchNonceIncremented)
+- [policy.create](/tempo/actions/policy.create)
+- [policy.getData](/tempo/actions/policy.getData)
+- [policy.isAuthorized](/tempo/actions/policy.isAuthorized)
+- [policy.modifyBlacklist](/tempo/actions/policy.modifyBlacklist)
+- [policy.modifyWhitelist](/tempo/actions/policy.modifyWhitelist)
+- [policy.setAdmin](/tempo/actions/policy.setAdmin)
+- [policy.watchAdminUpdated](/tempo/actions/policy.watchAdminUpdated)
+- [policy.watchBlacklistUpdated](/tempo/actions/policy.watchBlacklistUpdated)
+- [policy.watchCreate](/tempo/actions/policy.watchCreate)
+- [policy.watchWhitelistUpdated](/tempo/actions/policy.watchWhitelistUpdated)
+- [receivePolicy.burn](/tempo/actions/receivePolicy.burn)
+- [receivePolicy.claim](/tempo/actions/receivePolicy.claim)
+- [receivePolicy.get](/tempo/actions/receivePolicy.get)
+- [receivePolicy.getBlockedBalance](/tempo/actions/receivePolicy.getBlockedBalance)
+- [receivePolicy.set](/tempo/actions/receivePolicy.set)
+- [receivePolicy.validate](/tempo/actions/receivePolicy.validate)
+- [receivePolicy.watchBlocked](/tempo/actions/receivePolicy.watchBlocked)
+- [receivePolicy.watchBurned](/tempo/actions/receivePolicy.watchBurned)
+- [receivePolicy.watchClaimed](/tempo/actions/receivePolicy.watchClaimed)
+- [receivePolicy.watchUpdated](/tempo/actions/receivePolicy.watchUpdated)
+- [faucet.fund](/tempo/actions/faucet.fund)
+- [reward.claim](/tempo/actions/reward.claim)
+- [reward.distribute](/tempo/actions/reward.distribute)
+- [reward.getGlobalRewardPerToken](/tempo/actions/reward.getGlobalRewardPerToken)
+- [reward.getPendingRewards](/tempo/actions/reward.getPendingRewards)
+- [reward.getUserRewardInfo](/tempo/actions/reward.getUserRewardInfo)
+- [reward.setRecipient](/tempo/actions/reward.setRecipient)
+- [reward.watchRewardDistributed](/tempo/actions/reward.watchRewardDistributed)
+- [reward.watchRewardRecipientSet](/tempo/actions/reward.watchRewardRecipientSet)
+- [simulate.simulateBlocks](/tempo/actions/simulate.simulateBlocks)
+- [simulate.simulateCalls](/tempo/actions/simulate.simulateCalls)
+- [dex.buy](/tempo/actions/dex.buy)
+- [dex.cancel](/tempo/actions/dex.cancel)
+- [dex.cancelStale](/tempo/actions/dex.cancelStale)
+- [dex.createPair](/tempo/actions/dex.createPair)
+- [dex.getBalance](/tempo/actions/dex.getBalance)
+- [dex.getBuyQuote](/tempo/actions/dex.getBuyQuote)
+- [dex.getOrder](/tempo/actions/dex.getOrder)
+- [dex.getTickLevel](/tempo/actions/dex.getTickLevel)
+- [dex.getSellQuote](/tempo/actions/dex.getSellQuote)
+- [dex.place](/tempo/actions/dex.place)
+- [dex.placeFlip](/tempo/actions/dex.placeFlip)
+- [dex.sell](/tempo/actions/dex.sell)
+- [dex.watchFlipOrderPlaced](/tempo/actions/dex.watchFlipOrderPlaced)
+- [dex.watchOrderCancelled](/tempo/actions/dex.watchOrderCancelled)
+- [dex.watchOrderFilled](/tempo/actions/dex.watchOrderFilled)
+- [dex.watchOrderPlaced](/tempo/actions/dex.watchOrderPlaced)
+- [dex.withdraw](/tempo/actions/dex.withdraw)
+- [token.approve](/tempo/actions/token.approve)
+- [token.burn](/tempo/actions/token.burn)
+- [token.burnBlocked](/tempo/actions/token.burnBlocked)
+- [token.changeTransferPolicy](/tempo/actions/token.changeTransferPolicy)
+- [token.create](/tempo/actions/token.create)
+- [token.getAllowance](/tempo/actions/token.getAllowance)
+- [token.getBalance](/tempo/actions/token.getBalance)
+- [token.getMetadata](/tempo/actions/token.getMetadata)
+- [token.getTotalSupply](/tempo/actions/token.getTotalSupply)
+- [token.grantRoles](/tempo/actions/token.grantRoles)
+- [token.hasRole](/tempo/actions/token.hasRole)
+- [token.mint](/tempo/actions/token.mint)
+- [token.pause](/tempo/actions/token.pause)
+- [token.renounceRoles](/tempo/actions/token.renounceRoles)
+- [token.revokeRoles](/tempo/actions/token.revokeRoles)
+- [token.setRoleAdmin](/tempo/actions/token.setRoleAdmin)
+- [token.setSupplyCap](/tempo/actions/token.setSupplyCap)
+- [token.transfer](/tempo/actions/token.transfer)
+- [token.unpause](/tempo/actions/token.unpause)
+- [token.watchAdminRole](/tempo/actions/token.watchAdminRole)
+- [token.watchApprove](/tempo/actions/token.watchApprove)
+- [token.watchBurn](/tempo/actions/token.watchBurn)
+- [token.watchCreate](/tempo/actions/token.watchCreate)
+- [token.watchMint](/tempo/actions/token.watchMint)
+- [token.watchRole](/tempo/actions/token.watchRole)
+- [token.watchTransfer](/tempo/actions/token.watchTransfer)
+- [validator.add](/tempo/actions/validator.add)
+- [validator.changeOwner](/tempo/actions/validator.changeOwner)
+- [validator.changeStatus](/tempo/actions/validator.changeStatus)
+- [validator.get](/tempo/actions/validator.get)
+- [validator.getByIndex](/tempo/actions/validator.getByIndex)
+- [validator.getCount](/tempo/actions/validator.getCount)
+- [validator.getNextFullDkgCeremony](/tempo/actions/validator.getNextFullDkgCeremony)
+- [validator.getOwner](/tempo/actions/validator.getOwner)
+- [validator.list](/tempo/actions/validator.list)
+- [validator.setNextFullDkgCeremony](/tempo/actions/validator.setNextFullDkgCeremony)
+- [validator.update](/tempo/actions/validator.update)
+- [virtualAddress.getMasterAddress](/tempo/actions/virtualAddress.getMasterAddress)
+- [virtualAddress.registerMaster](/tempo/actions/virtualAddress.registerMaster)
+- [virtualAddress.resolve](/tempo/actions/virtualAddress.resolve)
+- [wallet.deposit](/tempo/actions/wallet.deposit)
+- [wallet.transfer](/tempo/actions/wallet.transfer)
+- [wallet.swap](/tempo/actions/wallet.swap)
+- [zone.deposit](/tempo/actions/zone.deposit)
+- [zone.encryptedDeposit](/tempo/actions/zone.encryptedDeposit)
+- [zone.getAuthorizationTokenInfo](/tempo/actions/zone.getAuthorizationTokenInfo)
+- [zone.getEncryptionKey](/tempo/actions/zone.getEncryptionKey)
+- [zone.getPortalInfo](/tempo/actions/zone.getPortalInfo)
+- [zone.getWithdrawalFee](/tempo/actions/zone.getWithdrawalFee)
+- [zone.getZoneInfo](/tempo/actions/zone.getZoneInfo)
+- [zone.requestVerifiableWithdrawal](/tempo/actions/zone.requestVerifiableWithdrawal)
+- [zone.requestWithdrawal](/tempo/actions/zone.requestWithdrawal)
+- [zone.signAuthorizationToken](/tempo/actions/zone.signAuthorizationToken)
+- [zone.waitForTempoBlock](/tempo/actions/zone.waitForTempoBlock)
+- [withRelay](/tempo/transports/withRelay)
+- [Relay](/tempo/relay/): Extend the Tempo (Execution) RPC with offchain transaction services and coordination.
+- [Fee Payer Plugin](/tempo/relay/plugins/fee-payer)
+- [Fee Token Plugin](/tempo/relay/plugins/fee-token)
+- [Simulate Plugin](/tempo/relay/plugins/simulate)
+- [Multisig Plugin](/tempo/relay/plugins/multisig)
+- [ExecutionError](/tempo/utilities/ExecutionError): Decode Tempo precompile reverts into readable execution errors.
+- [Relay.create](/tempo/utilities/Relay.create)
+- [Relay.handleRequest](/tempo/utilities/Relay.handleRequest): Compose Tempo relay plugins around a downstream RPC request handler.
+- [Store](/tempo/utilities/Store): Store Tempo client data in memory, session storage, or a custom store.
+- [Store.defaultStore](/tempo/utilities/Store.defaultStore)
+- [Store.from](/tempo/utilities/Store.from)
+- [Store.memory](/tempo/utilities/Store.memory)
+- [Store.session](/tempo/utilities/Store.session)
+- [TempoAddress.format](/tempo/utilities/TempoAddress.format)
+- [TempoAddress.parse](/tempo/utilities/TempoAddress.parse)
+- [TempoAddress.validate](/tempo/utilities/TempoAddress.validate)
+- [Scopes](/tempo/utilities/Scopes)
+- [Selectors](/tempo/utilities/Selectors)
+- [Viem · TypeScript Interface for Ethereum](/index)
+- [Client](/experimental/client): Setting up your Viem Client
+- [defineKzg](/docs/utilities/defineKzg): Defines a KZG interface.
+- [fromBase58](/docs/utilities/fromBase58)
+- [fromBase64](/docs/utilities/fromBase64)
+- [toBase58](/docs/utilities/toBase58)
+- [toBase64](/docs/utilities/toBase64)
+- [opaqueDataToDepositData](/op-stack/utilities/fromOpaqueData): Decodes opaque deposit data found in the "TransactionDeposited" event log.
+- [Setup](/tempo/actions/setup)
+- [withFeePayer](/tempo/transports/withFeePayer)
+- [TODO](/account-abstraction/actions/bundler/introduction)
+- [verifyHash](/docs/actions/public/verifyHash): Verifies if a signed hash was generated by the provided address.

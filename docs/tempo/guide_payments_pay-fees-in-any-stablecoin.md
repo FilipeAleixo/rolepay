@@ -1,0 +1,722 @@
+# Pay Fees in Any Stablecoin
+
+Configure users to pay transaction fees in any supported stablecoin. Tempo's flexible fee system allows users to pay fees with the same token they're using, eliminating the need to hold a separate gas token.
+
+## Fee-token payment demo
+
+By the end of this guide you will be able to pay fees in any stablecoin on Tempo.
+
+**Interactive demo: Pay Fees in Any Stablecoin**
+
+1. Connect
+2. Add funds
+3. Pay with fee token
+
+Source: [tempoxyz/examples/tree/main/examples/payments](https://github.com/tempoxyz/examples/tree/main/examples/payments)
+
+<span id="quick-snippet" />
+
+## Quick fee-token snippet
+
+Using a custom fee token is as simple as passing a `feeToken` attribute to mutable actions like `useTransferSync`, `useSendTransactionSync`, and more.
+
+### Wagmi
+
+```tsx twoslash
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+import { parseUnits } from 'viem'
+
+const alphaUsd = '0x20c0000000000000000000000000000000000001'
+const betaUsd = '0x20c0000000000000000000000000000000000002'
+
+const sendPayment = Hooks.token.useTransferSync()
+
+sendPayment.mutate({ 
+  amount: parseUnits('100', 6), 
+  feeToken: betaUsd, // [!code ++]
+  to: '0x0000000000000000000000000000000000000000', 
+  token: alphaUsd, 
+}) 
+```
+
+### Viem
+
+```tsx twoslash
+// @noErrors
+import { parseUnits } from 'viem'
+import { client } from './viem.config'
+
+const alphaUsd = '0x20c0000000000000000000000000000000000001'
+const betaUsd = '0x20c0000000000000000000000000000000000002'
+
+const receipt = await client.token.transferSync({ 
+  amount: parseUnits('100', 6), 
+  feeToken: betaUsd, // [!code ++]
+  to: '0x0000000000000000000000000000000000000000', 
+  token: alphaUsd, 
+}) 
+```
+
+### Rust
+
+:::code-group
+```rust [example.rs]
+use alloy::{
+    primitives::{address, U256},
+    providers::Provider,
+    sol_types::SolCall,
+};
+use tempo_alloy::{
+    contracts::precompiles::ITIP20, primitives::transaction::Call,
+    rpc::TempoTransactionRequest,
+};
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    let alpha_usd = address!("0x20c0000000000000000000000000000000000001");
+    let beta_usd = address!("0x20c0000000000000000000000000000000000002");
+
+    let calls = vec![Call {
+        to: alpha_usd.into(),
+        input: ITIP20::transferCall {
+            to: address!("0x0000000000000000000000000000000000000000"),
+            amount: U256::from(100_000_000),
+        }
+        .abi_encode()
+        .into(),
+        value: U256::ZERO,
+    }];
+
+    let pending = provider
+        .send_transaction(TempoTransactionRequest {
+            calls,
+            fee_token: Some(beta_usd), // [!code ++]
+            ..Default::default()
+        })
+        .await?;
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+### Python
+
+```python
+from pytempo import TempoTransaction
+from pytempo.contracts import TIP20, ALPHA_USD, BETA_USD
+
+tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=100_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce=w3.eth.get_transaction_count(account.address),
+    fee_token=BETA_USD, # [!code ++]
+    calls=(
+        TIP20(ALPHA_USD).transfer(
+            to="0x0000000000000000000000000000000000000000",
+            amount=100_000_000,
+        ),
+    ),
+)
+```
+
+### Go
+
+```go
+alphaUSD := common.HexToAddress("0x20c0000000000000000000000000000000000001")
+betaUSD := common.HexToAddress("0x20c0000000000000000000000000000000000002")
+
+tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdModerato)).
+        SetNonce(nonce).
+        SetGas(100_000).
+        SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+        SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+        SetFeeToken(betaUSD). // [!code ++]
+        AddCall(alphaUSD, big.NewInt(0), buildTransferData(recipient, big.NewInt(100_000_000))).
+        Build()
+```
+
+### Cast
+
+```bash
+$ cast send \
+  0x20c0000000000000000000000000000000000001 \
+  "transfer(address,uint256)" \
+  0x0000000000000000000000000000000000000000 \
+  100000000 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --tempo.fee-token 0x20c0000000000000000000000000000000000002 # [!code ++]
+```
+
+### Solidity
+
+:::info
+The fee token for a given transaction cannot be set from Solidity — it is a transaction-level parameter handled by the signing SDK. However, you can configure a **default** fee token for an account using [`setUserToken`](#set-a-default-user-fee-token), which will apply to all future transactions unless explicitly overridden at submission.
+:::
+
+## Fee-token implementation steps
+
+### Wagmi
+
+::::steps
+### Set up Wagmi for fee tokens
+
+Ensure that you have set up your project with Wagmi, a Tempo chain config, and a wallet connector:
+
+* [Connection details](https://tempo.xyz/developers/docs/quickstart/connection-details)
+* [TypeScript SDK](https://tempo.xyz/developers/docs/sdk/typescript)
+* [Wallet integration](https://tempo.xyz/developers/docs/quickstart/wallet-developers)
+
+### Add testnet fee-token funds¹
+
+Before you can pay fees in a token of your choice, you need to fund your account. In this guide you will be sending `AlphaUSD` (`0x20c000…0001`) and paying fees in `BetaUSD` (`0x20c000…0002`).
+
+The built-in Tempo testnet faucet includes `AlphaUSD` and `BetaUSD` when funding.
+
+**Interactive demo: Add Funds**
+
+1. Add funds
+
+:::code-group
+```tsx twoslash [AddFunds.ts]
+// @noErrors
+import { Hooks } from 'wagmi/tempo'
+import { useConnection } from 'wagmi'
+
+function AddFunds() {
+  const { address } = useConnection()
+  const { mutate, isPending } = Hooks.faucet.useFundSync()
+
+  return (
+    <button onClick={() => mutate({ account: address })} disabled={isPending}>
+      Add Funds
+    </button>
+  )
+}
+```
+
+```tsx twoslash [wagmi.config.ts] filename="wagmi.config.ts"
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+:::warning
+¹ It is important to note that the `addFunds` Hook only works on testnets as a convenience feature to get
+started quickly. For production, you will need to onramp & fund your account manually.
+:::
+
+### Add custom fee-token logic
+
+Now that you have `AlphaUSD` to send and `BetaUSD` to pay fees with, you can add a form that allows users to select a fee token and send a payment.
+
+After this step, your users can send payments with a specified fee token by clicking the "Send Payment" button!
+
+**Interactive demo: Pay Fees in Any Stablecoin**
+
+1. Add funds
+2. Pay with fee token
+
+Source: [tempoxyz/examples/tree/main/examples/payments](https://github.com/tempoxyz/examples/tree/main/examples/payments)
+
+:::code-group
+```tsx twoslash [PayWithFeeToken.tsx]
+import { Hooks } from 'wagmi/tempo'
+import { parseUnits } from 'viem'
+
+const alphaUsd = '0x20c0000000000000000000000000000000000001'
+const betaUsd = '0x20c0000000000000000000000000000000000002'
+const thetaUsd = '0x20c0000000000000000000000000000000000003'
+const ousd = '0x20c0000000000000000000006a37da5c996874be'
+
+// @noErrors
+function PayWithFeeToken() {
+  const sendPayment = Hooks.token.useTransferSync()
+  const metadata = Hooks.token.useGetMetadata({
+    token: alphaUsd,
+  })
+
+  return (
+    <form onSubmit={
+      (event) => {
+        event.preventDefault()
+        const formData = new FormData(event.target as HTMLFormElement)
+
+        const recipient = (formData.get('recipient') ||
+          '0x0000000000000000000000000000000000000000') as `0x${string}`
+        const feeToken = (formData.get('feeToken') ||
+          alphaUsd) as `0x${string}`
+
+        sendPayment.mutate({ // [!code hl]
+          amount: parseUnits('100', metadata.data?.decimals ?? 6), // [!code hl]
+          to: recipient, // [!code hl]
+          token: alphaUsd, // [!code hl]
+          feeToken: feeToken, // [!code hl]
+        }) // [!code hl]
+      }
+    }>
+      <div>
+        <label htmlFor="recipient">Recipient address</label>
+        <input type="text" name="recipient" placeholder="0x..." />
+      </div>
+      <div>
+        <label htmlFor="feeToken">Fee token</label>
+        <select name="feeToken">
+          <option value={alphaUsd}>AlphaUSD</option>
+          <option value={betaUsd}>BetaUSD</option>
+          <option value={thetaUsd}>ThetaUSD</option>
+          <option value={ousd}>OUSD</option>
+        </select>
+      </div>
+      <button type="submit" disabled={sendPayment.isPending}>
+        Send Payment
+      </button>
+    </form>
+  )
+}
+```
+
+```tsx twoslash [wagmi.config.ts] filename="wagmi.config.ts"
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+### Display the fee-token receipt
+
+Now that users can send payments with a specified fee token, you can link to the transaction receipt.
+
+:::code-group
+```tsx twoslash [PayWithFeeToken.tsx]
+import { Hooks } from 'wagmi/tempo'
+import { parseUnits } from 'viem'
+
+const alphaUsd = '0x20c0000000000000000000000000000000000001'
+const betaUsd = '0x20c0000000000000000000000000000000000002'
+const thetaUsd = '0x20c0000000000000000000000000000000000003'
+const ousd = '0x20c0000000000000000000006a37da5c996874be'
+
+// @noErrors
+function PayWithFeeToken() {
+  const sendPayment = Hooks.token.useTransferSync()
+  const metadata = Hooks.token.useGetMetadata({
+    token: alphaUsd,
+  })
+
+  return (
+    <>
+      {/* ... your payment form ... */}
+      {sendPayment.data && ( // [!code ++]
+        <a href={`https://explore.tempo.xyz/tx/${sendPayment.data.receipt.transactionHash}`}> {/* [!code ++] */}
+          View receipt {/* [!code ++] */}
+        </a> {/* [!code ++] */}
+      )} {/* [!code ++] */}
+    </>
+  )
+}
+```
+
+```tsx twoslash [wagmi.config.ts] filename="wagmi.config.ts"
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+### Next fee-token steps
+
+Now that you have made a payment using a desired fee token, you can:
+
+* Follow a guide on how to [sponsor user fees](https://tempo.xyz/developers/docs/guide/payments/sponsor-user-fees) to enable gasless transactions
+* Learn more about [transaction fees](https://tempo.xyz/developers/docs/protocol/fees)
+::::
+
+### Viem
+
+::::steps
+### Set up a Viem client for fee tokens
+
+First, we will set up a Viem client configured with Tempo.
+
+```ts twoslash [viem.config.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+
+:::info
+For simplicity of the guide, this example uses a Private Key (Secp256k1) account instead of Passkeys (WebAuthn).
+:::
+
+### Add testnet fee-token funds¹
+
+Before you can pay fees in a token of your choice, you need to fund your account. In this guide you will be sending `AlphaUSD` (`0x20c000…0001`) and paying fees in `BetaUSD` (`0x20c000…0002`).
+
+The built-in Tempo testnet faucet includes `AlphaUSD` and `BetaUSD` when funding.
+
+**Interactive demo: Add Funds**
+
+1. Add funds
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { client } from './viem.config'
+
+await client.faucet.fundSync({
+  account: client.account,
+})
+```
+
+```tsx twoslash [viem.config.ts] filename="viem.config.ts"
+// @noErrors
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+### Add custom fee-token logic
+
+Now that you have `AlphaUSD` to send and `BetaUSD` to pay fees with, you can now add logic to send a payment with a specified fee token.
+
+**Interactive demo: Pay Fees in Any Stablecoin**
+
+1. Add funds
+2. Pay with fee token
+
+Source: [tempoxyz/examples/tree/main/examples/payments](https://github.com/tempoxyz/examples/tree/main/examples/payments)
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { client } from './viem.config'
+
+const receipt = await client.token.transferSync({
+  amount: parseUnits('100', 6),
+  feeToken: betaUsd, // [!code hl]
+  to: '0x0000000000000000000000000000000000000000',
+  token: alphaUsd,
+})
+```
+
+```tsx twoslash [viem.config.ts] filename="viem.config.ts"
+// @noErrors
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+::::
+
+### Rust
+
+:::info
+For Rust integration, refer to the [Quick Snippet](#quick-fee-token-snippet) above and the [Set user fee token](#set-a-default-user-fee-token) below.
+:::
+
+### Python
+
+:::info
+For Python integration, refer to the [Quick Snippet](#quick-fee-token-snippet) above and the [Set user fee token](#set-a-default-user-fee-token) below.
+:::
+
+### Go
+
+:::info
+For Go integration, refer to the [Quick Snippet](#quick-fee-token-snippet) above and the [Set user fee token](#set-a-default-user-fee-token) below.
+:::
+
+### Cast
+
+:::info
+For Cast integration, refer to the [Quick Snippet](#quick-fee-token-snippet) above and the [Set user fee token](#set-a-default-user-fee-token) below.
+:::
+
+### Solidity
+
+:::info
+For Solidity integration, refer to the [Quick Snippet](#quick-fee-token-snippet) above and the [Set user fee token](#set-a-default-user-fee-token) below.
+:::
+
+## Set a default user fee token
+
+You can also set a persistent default fee token for an account, so users don't need to specify `feeToken` on every transaction. Learn more about fee token preferences [here](https://tempo.xyz/developers/docs/protocol/fees/spec-fee#fee-token-preferences).
+
+### Wagmi
+
+```tsx twoslash
+// @noErrors
+// @errors: 2307
+import { Hooks } from 'wagmi/tempo'
+
+const { data: result, mutate } = Hooks.fee.useSetUserTokenSync()
+
+// Call `mutate` in response to user action (e.g. button click, form submission)
+mutate({
+  token: '0x20c0000000000000000000000000000000000001',
+})
+
+console.log('Transaction hash:', result.receipt.transactionHash)
+// @log: Transaction hash: 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+```
+
+### Viem
+
+```ts twoslash
+// @noErrors
+// @errors: 2307
+import { client } from './viem.config'
+
+const { receipt } = await client.fee.setUserTokenSync({
+  token: '0x20c0000000000000000000000000000000000001',
+})
+
+console.log('Transaction hash:', receipt.transactionHash)
+
+// @log: Transaction hash: 0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef
+```
+
+### Rust
+
+:::code-group
+```rust [example.rs]
+use alloy::primitives::address;
+use tempo_alloy::contracts::precompiles::IFeeManager;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    let fee_manager = IFeeManager::new(
+        address!("0xFEEc000000000000000000000000000000000000"),
+        &provider,
+    );
+
+    let receipt = fee_manager
+        .setUserToken( // [!code hl]
+            address!("0x20c0000000000000000000000000000000000001"), // [!code hl]
+        ) // [!code hl]
+        .send()
+        .await?
+        .get_receipt()
+        .await?;
+
+    println!("Transaction hash: {:?}", receipt.transaction_hash);
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+### Python
+
+:::code-group
+```python [example.py]
+from pytempo import TempoTransaction
+from pytempo.contracts import FeeManager, ALPHA_USD
+from provider import w3, account
+
+tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=100_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce=w3.eth.get_transaction_count(account.address),
+    calls=(
+        FeeManager.set_user_token(ALPHA_USD), # [!code hl]
+    ),
+)
+
+signed_tx = tx.sign(account.key.hex())
+tx_hash = w3.eth.send_raw_transaction(signed_tx.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.presto.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+   "context"
+   "log"
+   "math/big"
+
+   "github.com/ethereum/go-ethereum/common"
+   "github.com/tempoxyz/tempo-go/pkg/signer"
+   "github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+   sgn, _ := signer.NewSigner("0x...")
+   c := newClient()
+   ctx := context.Background()
+
+   nonce, _ := c.GetTransactionCount(ctx, sgn.Address().Hex())
+
+   feeManager := common.HexToAddress("0xFEEc000000000000000000000000000000000000")
+   token := common.HexToAddress("0x20c0000000000000000000000000000000000001")
+
+   // setUserToken(address) selector: 0xe7897444
+   data := make([]byte, 36) // [!code hl]
+   data[0], data[1], data[2], data[3] = 0xe7, 0x89, 0x74, 0x44 // [!code hl]
+   copy(data[16:36], token.Bytes()) // [!code hl]
+
+   tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdModerato)).
+           SetNonce(nonce).
+           SetGas(100_000).
+           SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+           SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+           AddCall(feeManager, big.NewInt(0), data).
+           Build()
+
+   _ = transaction.SignTransaction(tx, sgn)
+   serialized, _ := transaction.Serialize(tx, nil)
+   txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+   log.Printf("Transaction hash: %s", txHash)
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+### Cast
+
+```bash
+$ cast send \
+  0xFEEc000000000000000000000000000000000000 \
+  "setUserToken(address)" \
+  0x20c0000000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY # [!code hl]
+```
+
+### Solidity
+
+```solidity
+import {StdPrecompiles} from "tempo-std/StdPrecompiles.sol";
+
+StdPrecompiles.TIP_FEE_MANAGER.setUserToken(0x20c0000000000000000000000000000000000001); // [!code hl]
+```
+
+## Fee-token learning resources
+
+* [Transaction Fees](https://tempo.xyz/developers/docs/protocol/fees) — Learn more about transaction fees on Tempo

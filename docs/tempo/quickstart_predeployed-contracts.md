@@ -1,0 +1,56 @@
+# Predeployed contracts on Tempo
+
+## System Contracts
+
+Core protocol contracts that power Tempo's features.
+
+| Contract | Address | Description |
+|----------|---------|-------------|
+| [**TIP-20 Factory**](https://tempo.xyz/developers/docs/protocol/tip20/overview) | [`0x20fc000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0x20fc000000000000000000000000000000000000) | Create new TIP-20 tokens |
+| [**Fee Manager**](https://tempo.xyz/developers/docs/protocol/fees/spec-fee-amm#2-feemanager-contract) | [`0xfeec000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0xfeec000000000000000000000000000000000000) | Handle fee payments and conversions |
+| [**Stablecoin DEX**](https://tempo.xyz/developers/docs/protocol/exchange) | [`0xdec0000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0xdec0000000000000000000000000000000000000) | Enshrined DEX for stablecoin swaps |
+| [**TIP-403 Registry**](https://tempo.xyz/developers/docs/protocol/tip403/spec) | [`0x403c000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0x403c000000000000000000000000000000000000) | Transfer policy registry |
+| [**ReceivePolicyGuard**](https://tempo.xyz/developers/docs/protocol/upgrades/t6#account-level-receive-policies) | [`0xB10C000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0xB10C000000000000000000000000000000000000) | Holds TIP-20 transfers and mints blocked by account-level receive policies |
+| [**Signature Verifier**](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1020.md) | [`0x5165300000000000000000000000000000000000`](https://explore.tempo.xyz/address/0x5165300000000000000000000000000000000000) | Verify secp256k1, P256, and WebAuthn signatures onchain |
+| [**Address Registry**](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1022.md) | [`0xFDC0000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0xFDC0000000000000000000000000000000000000) | Resolve virtual TIP-20 deposit addresses to registered master wallets |
+| [**pathUSD**](https://tempo.xyz/developers/docs/protocol/exchange/quote-tokens#pathusd) | [`0x20c0000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0x20c0000000000000000000000000000000000000) | First stablecoin deployed |
+
+## Zone contracts
+
+The protocol provides the factory and shared Zone runtimes below. Each zone has its own portal proxy pointing to the shared implementation. Confirm the deployed runtime and configuration before integrating; these addresses alone do not establish execution-proof enforcement. See the [current settlement verification limits](https://tempo.xyz/developers/docs/protocol/zones/proving).
+
+| Contract | Address | Description |
+|----------|---------|-------------|
+| [ZoneFactory](https://tempo.xyz/developers/docs/protocol/zones/architecture#creating-a-zone) | [`0x5AF2000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0x5AF2000000000000000000000000000000000000) | Create zones and register their portals |
+| [ZonePortal implementation](https://tempo.xyz/developers/docs/protocol/zones/architecture#contract-architecture) | [`0x5AD1000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0x5AD1000000000000000000000000000000000000) | Shared bridge logic used by each zone's portal proxy |
+| [Zone verifier](https://tempo.xyz/developers/docs/protocol/zones/architecture#contract-architecture) | [`0x5a56000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0x5a56000000000000000000000000000000000000) | Protocol-managed verifier used by zone portals |
+| [ZoneMessenger](https://tempo.xyz/developers/docs/protocol/zones/architecture#contract-architecture) | [`0x5A4d000000000000000000000000000000000000`](https://explore.tempo.xyz/address/0x5A4d000000000000000000000000000000000000) | Shared withdrawal callback handler |
+
+## Standard Utilities
+
+Popular Ethereum contracts deployed for convenience.
+
+| Contract | Address | Description |
+|----------|---------|-------------|
+| [**Multicall3**](https://www.multicall3.com/) | [`0xcA11bde05977b3631167028862bE2a173976CA11`](https://explore.tempo.xyz/address/0xcA11bde05977b3631167028862bE2a173976CA11) | Batch multiple calls in one transaction |
+| [**CreateX**](https://github.com/pcaversaccio/createx) | [`0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed`](https://explore.tempo.xyz/address/0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed) | Deterministic contract deployment |
+| [**Permit2**](https://docs.uniswap.org/contracts/permit2/overview) | [`0x000000000022d473030f116ddee9f6b43ac78ba3`](https://explore.tempo.xyz/address/0x000000000022d473030f116ddee9f6b43ac78ba3) | Token approvals and transfers |
+| [**Arachnid Create2 Factory**](https://github.com/Arachnid/deterministic-deployment-proxy) | [`0x4e59b44847b379578588920cA78FbF26c0B4956C`](https://explore.tempo.xyz/address/0x4e59b44847b379578588920cA78FbF26c0B4956C) | CREATE2 deployment proxy |
+| [**Safe Deployer**](https://github.com/safe-fndn/safe-singleton-factory) | [`0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7`](https://explore.tempo.xyz/address/0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7) | Safe deployer contract |
+| **8004 Identity Registry** | [`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`](https://explore.tempo.xyz/address/0x8004A169FB4a3325136EB29fA0ceB6D2e539a432) | Identity registry |
+| **8004 Reputation Registry** | [`0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`](https://explore.tempo.xyz/address/0x8004BAa17C55a88189AE136b182e5fdA19dE9b63) | Reputation registry |
+
+## Contract ABIs
+
+ABIs for these contracts are available in the SDK:
+
+```typescript
+import { Abis } from 'viem/tempo'
+
+const tip20Abi = Abis.tip20
+const tip20FactoryAbi = Abis.tip20Factory
+const stablecoinDexAbi = Abis.stablecoinDex
+const feeManagerAbi = Abis.feeManager
+const feeAmmAbi = Abis.feeAmm
+// ...
+```

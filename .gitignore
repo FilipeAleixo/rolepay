@@ -1,0 +1,15 @@
+# Secrets: never commit. Throwaway testnet keys live in .env only.
+.env
+.env.*
+!.env.example
+
+node_modules/
+dist/
+coverage/
+*.log
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.DS_Store

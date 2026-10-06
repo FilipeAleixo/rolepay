@@ -1,0 +1,48 @@
+# How to connect to the Tempo network
+
+You can connect with Tempo like you would with any other EVM chain.
+
+Tempo Mainnet has been live since March 18, 2026. Use mainnet, chain ID `4217`, for Tempo Wallet, production assets such as OUSD and pathUSD, and live payment flows. Moderato, chain ID `42431`, is the separate public testnet for development.
+
+## Connect using a Browser Wallet
+
+Click on your browser wallet below to automatically connect it to the Tempo network.
+
+Connect a wallet in the interactive web page.
+
+:::warning
+Note that on some wallets, you might see an unusually high "balance". This is because, historically, blockchain wallets have always assumed that a blockchain has a "native gas token". On Tempo, there is no native gas token, and so the value shown is a placeholder. See [EVM Differences](https://tempo.xyz/developers/docs/quickstart/evm-compatibility#handling-eth-native-token-balance-checks) for more information on this quirk.
+:::
+
+## Connect via CLI
+
+To connect via CLI, we recommend using [`cast`](https://getfoundry.sh/cast/overview/), which is a command-line tool for interacting with Ethereum networks. To install cast, you can read more in the [Foundry SDK docs](https://tempo.xyz/developers/docs/sdk/foundry#get-started-with-foundry).
+
+```bash /dev/null/monitor.sh#L1-11
+# Check block height (should be steadily increasing)
+cast block-number --rpc-url https://rpc.tempo.xyz
+```
+
+## Direct Connection Details
+
+### Mainnet
+
+| **Property** | **Value** |
+|-------------------|-------|
+| **Network Name** | Tempo Mainnet |
+| **Currency** | `USD` |
+| **Chain ID** | `4217` |
+| **HTTP URL** | `https://rpc.tempo.xyz` |
+| **WebSocket URL** | `wss://rpc.tempo.xyz` |
+| **Block Explorer** | [`https://explore.tempo.xyz`](https://explore.tempo.xyz) |
+
+### Tempo Testnet
+
+| **Property** | **Value** |
+|-------------------|-------|
+| **Network Name** | Tempo Testnet (Moderato) |
+| **Currency** | `USD` |
+| **Chain ID** | `42431` |
+| **HTTP URL** | `https://rpc.moderato.tempo.xyz` |
+| **WebSocket URL** | `wss://rpc.moderato.tempo.xyz` |
+| **Block Explorer** | [`https://explore.testnet.tempo.xyz`](https://explore.testnet.tempo.xyz) |

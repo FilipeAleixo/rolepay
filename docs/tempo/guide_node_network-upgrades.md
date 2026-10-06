@@ -1,0 +1,259 @@
+# Network Upgrades and Releases
+
+Tempo uses scheduled network upgrades to introduce protocol changes. Each upgrade goes through testnet activation before mainnet. This page also tracks important releases that node operators should be aware of.
+
+For detailed release notes and binaries, see the [Changelog](https://tempo.xyz/developers/docs/changelog).
+
+## Network identities
+
+Follow/RPC nodes and validators verify consensus finalization certificates, including those that authenticate Tempo snapshots, against the current network identity. Each `tempo` release includes these identities as [built-in trust anchors](https://github.com/tempoxyz/tempo/blob/main/crates/chainspec/src/network_identity.rs). To learn how the identity is produced and rotated, see [Consensus, DKG, and network identity](https://tempo.xyz/developers/docs/guide/node/consensus-and-dkg).
+
+### Mainnet
+
+**Network identity, from epoch 0:**
+
+```text
+0xa217bb85001d4dcf8e5c50136f77af88cb2cab1857279b91c6240f41cca95c4f43f6dcab3e0dfb87dafb3ecbeb6251e90a5df2e6c47432482821cd8b84665ee4642589d2d9628a92b03e2bbfb00e006d038cd98def76d2a41b7c228c05f5a193
+```
+
+### Testnet
+
+**Network identity, from epoch 1747:**
+
+```text
+0x967ae1a6d3ddbe5cb0fe5e6fc58e74249787b4a277619b549fed6609d04660540dd2449cd7174def35e40f544e5ad72d15d064191a205ed6e0c49619c68f975108b614d0d51def9a8416a10a07c4193bea0cbbc4252ec1b33f21095a5d7aa590
+```
+
+Testnet nodes on v1.15.0 or earlier that do not already have this identity in their persisted DKG state need the [network identity override](https://tempo.xyz/developers/docs/guide/node/validator-troubleshooting#my-node-fails-to-start-finalized-tip-certificate-failed-verification-against-the-trusted-network-identity).
+
+After an identity rotation, this section and the release table below list the new identity and the first release that includes it. Start new nodes with that release or later. If a node fails to start after a rotation, see [My node fails to start: finalized tip certificate failed verification against the trusted network identity](https://tempo.xyz/developers/docs/guide/node/validator-troubleshooting#my-node-fails-to-start-finalized-tip-certificate-failed-verification-against-the-trusted-network-identity).
+
+## Node Operator Updates
+
+| Release | Date | Network | Description | Priority |
+|---------|------|---------|-------------|----------|
+| [v1.15.0](https://github.com/tempoxyz/tempo/releases/tag/v1.15.0) | Sep 24, 2026 | Testnet + Mainnet | Maintenance release with Commonware v2026.9.0, validator startup checks for network identity and DKG state, and performance improvements. Adds optional P2P sync via `--consensus.devp2p.finalizations`, disabled by default. Medium priority for validators and RPC nodes. | **Recommended** |
+| [v1.14.0](https://github.com/tempoxyz/tempo/releases/tag/v1.14.0) | Sep 7, 2026 | Testnet + Mainnet | Current required release for both networks ([T11](https://tempo.xyz/developers/docs/protocol/upgrades/t11)). Extends expiring-nonce validity and changes precompile pricing and ABI validation. Nodes running v1.13.x must upgrade. | **Required for T11** |
+| [v1.13.2](https://github.com/tempoxyz/tempo/releases/tag/v1.13.2) | Aug 27, 2026 | Testnet + Mainnet | Snapshot download and consensus startup fixes. Superseded by v1.14.0 for T11. | **Superseded** |
+| [v1.13.1](https://github.com/tempoxyz/tempo/releases/tag/v1.13.1) | Aug 20, 2026 | Testnet + Mainnet | Security release that hardens precompile input processing and improves Zone validation performance. Superseded by v1.14.0 for T11. | **Superseded** |
+| [v1.13.0](https://github.com/tempoxyz/tempo/releases/tag/v1.13.0) | Aug 17, 2026 | Testnet + Mainnet | Introduced [T10](https://tempo.xyz/developers/docs/protocol/upgrades/t10): native ZoneFactory, deterministic ZonePortal addresses, and shared zone runtimes. Superseded by v1.14.0 for T11. | **Superseded** |
+| [v1.12.0](https://github.com/tempoxyz/tempo/releases/tag/v1.12.0) | Aug 3, 2026 | Testnet + Mainnet | Required for T9. Adds TIP-403 storage for TIP-20 token policy bindings used by zones/provable contract flows, plus a targeted migration path for existing tokens that need one. T9 is active on testnet and mainnet. | **Required** |
+| [v1.11.0](https://github.com/tempoxyz/tempo/releases/tag/v1.11.0) | Jul 22, 2026 | Testnet + Mainnet | Required for T8. Includes current committee state, FeeAMM policy changes, versioned Stablecoin DEX order storage, DEX V2Order support, and final TIP-20 rewards deprecation. T8 is active on testnet and mainnet. | **Required** |
+| [v1.10.2](https://github.com/tempoxyz/tempo/releases/tag/v1.10.2) | Jul 17, 2026 | Testnet + Mainnet | Patch release with Alloy dependency updates. Operators running v1.10.x should upgrade to v1.10.2. | **High priority** |
+| [v1.10.1](https://github.com/tempoxyz/tempo/releases/tag/v1.10.1) | Jun 29, 2026 | Testnet + Mainnet | Required for T7; includes storage credits for DEX order storage and TIP-20 channel storage, dynamic base fee behavior, and TIP-20 rewards deprecation. | **Required** |
+| [v1.9.1](https://github.com/tempoxyz/tempo/releases/tag/v1.9.1) | Jun 19, 2026 | Testnet + Mainnet | Patch release with follow-mode stability fixes, payload-builder latency fixes, Reth/Rust dependency updates, and transaction-pool/RPC improvements. | **Recommended** |
+| [v1.9.0](https://github.com/tempoxyz/tempo/releases/tag/v1.9.0) | Jun 15, 2026 | Testnet + Mainnet | Required for T6; adds account-level receive policies for safer TIP-20 deposits and admin access keys for smoother passkey, device, and delegated-key management. Operators were required to run this release before the T6 activation timestamp on each network. | **Required** |
+| [v1.8.2](https://github.com/tempoxyz/tempo/releases/tag/v1.8.2) | Jun 8, 2026 | Testnet + Mainnet | High-priority patch release that fixes a `--minimal` node issue when requesting historical blocks through the commonware marshal interface. | **Recommended** |
+| [v1.8.1](https://github.com/tempoxyz/tempo/releases/tag/v1.8.1) | Jun 1, 2026 | Testnet + Mainnet | Required for T5; reverts builder prewarming and execution cache sharing defaults from v1.8.0 to avoid stale-state validation errors while retaining T5 compatibility. | **Required** |
+| [v1.8.0](https://github.com/tempoxyz/tempo/releases/tag/v1.8.0) | May 28, 2026 | Testnet + Mainnet | Required for T5; introduces the enshrined TIP-20 reserve channel precompile, payment lane classification, DEX flip-order improvements, multihop FeeAMM routing, optional on-chain TIP-20 `logoURI`, implicit approvals, and key authorization witnesses. Operators should use v1.8.2 for the latest patch fixes. | **Required** |
+| [v1.7.1](https://github.com/tempoxyz/tempo/releases/tag/v1.7.1) | May 21, 2026 | Moderato + Mainnet | Adds validator migration support for minimal snapshots, trustless RPC certificate checks on Moderato, and automatic pruning for finalized consensus blocks. | **Recommended** |
+| [v1.7.0](https://github.com/tempoxyz/tempo/releases/tag/v1.7.0) | Mon, May 11, 2026 | Moderato + Mainnet | Required for T4; embeds consensus context into block headers to unlock deferred verification and bundles T4 bug fixes and security hardening. | **Required** |
+| [v1.6.0](https://github.com/tempoxyz/tempo/releases/tag/v1.6.0) | Apr 16, 2026 | Moderato + Mainnet | Required for T3; implements enhanced access key permissions with periodic limits and call scoping, signature verification, and virtual addresses for TIP-20 deposit forwarding. | **Required** |
+| [v1.5.3](https://github.com/tempoxyz/tempo/releases/tag/v1.5.3) | Apr 9, 2026 | Moderato + Mainnet | Patch release that restores OTLP HTTPS telemetry and fixes an epoch-transition consensus race that could incorrectly block straggling peers. Validators that skipped v1.5.2 should upgrade directly to this release. | **Recommended** |
+| [v1.5.2](https://github.com/tempoxyz/tempo/releases/tag/v1.5.2) | Apr 8, 2026 | Moderato + Mainnet | Maintenance release with the latest reth update, payload builder and RPC improvements, plus transaction validation and mempool hardening. | **Recommended** |
+| [v1.5.1](https://github.com/tempoxyz/tempo/releases/tag/v1.5.1) | Mar 29, 2026 | Moderato + Mainnet | Security patch for RPC endpoints that accept `stateOverride`, including `eth_call` and `debug_traceCall`. This release is required for RPC providers and other public RPC nodes, and low priority for validators. | **RPC only** |
+| [v1.5.0](https://github.com/tempoxyz/tempo/releases/tag/v1.5.0) | Mar 26, 2026 | Moderato + Mainnet | Required for T2; implements compound transfer policies, permit support for TIP-20, Validator Config V2, and 14 audit-driven bug fixes. | **Required** |
+| [v1.4.3](https://github.com/tempoxyz/tempo/releases/tag/v1.4.3) | Mar 18, 2026 | Moderato + Mainnet | Fixes gas price oracle poisoning that caused inflated fee estimates for wallet transactions | **Recommended** |
+| [v1.4.2](https://github.com/tempoxyz/tempo/releases/tag/v1.4.2) | Mar 16, 2026 | Moderato + Mainnet | Strict payment calldata validation in the transaction pool and block builder, rejecting malformed payment transactions earlier | **Recommended** |
+| [v1.4.1](https://github.com/tempoxyz/tempo/releases/tag/v1.4.1) | Mar 12, 2026 | Moderato + Mainnet | Transaction pool DoS-hardening, consensus resilience improvements (DKG recovery), hardfork-aware gas estimation, and payload builder enhancements | **Recommended** |
+| [v1.4.0](https://github.com/tempoxyz/tempo/releases/tag/v1.4.0) | Mar 5, 2026 | Moderato + Mainnet | Required for T1C; introduces keychain signature migration so only V2 signatures and hashes are accepted after activation | **Required** |
+| [v1.3.1](https://github.com/tempoxyz/tempo/releases/tag/v1.3.1) | Feb 22, 2026 | Testnet + Mainnet | Fixes high-load issues and finalizes T1A/T1B hardening for expiring nonce replay protection and keychain precompile gas handling | **Required** |
+| [v1.2.0](https://github.com/tempoxyz/tempo/releases/tag/v1.2.0) | Feb 13, 2026 | Mainnet only | Fixes validation bug rejecting transactions with gas limits above ~16.7M, blocking large contract deployments | **Required** |
+
+## T10
+
+| | |
+|---|---|
+| **Scope** | Native ZoneFactory, deterministic ZonePortal accounts, and protocol-managed shared zone runtimes |
+| **TIPs** | [Enshrined ZoneFactory](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1091.md) |
+| **Details** | [T10 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t10) |
+| **Release** | [v1.13.0](https://github.com/tempoxyz/tempo/releases/tag/v1.13.0) |
+| **Testnet** | Live: August 20, 2026 at 14:00 UTC (`1787234400`) |
+| **Mainnet** | Live: August 21, 2026 at 14:00 UTC (`1787320800`) |
+| **Priority** | **Required** |
+
+T10 is active on testnet and mainnet and supported by [v1.13.0](https://github.com/tempoxyz/tempo/releases/tag/v1.13.0), published on August 17, 2026. Node operators were required to run the T10-compatible release before activation to stay synced.
+
+***
+
+## T9
+
+| | |
+|---|---|
+| **Scope** | TIP-20 policy IDs in TIP-403 for zones/provable contract flows, plus targeted migration for existing TIP-20 tokens that need a TIP-403 binding |
+| **TIPs** | [TIP-20 Policy IDs in TIP-403](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1092.md) |
+| **Details** | [T9 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t9) |
+| **Release** | [v1.12.0](https://github.com/tempoxyz/tempo/releases/tag/v1.12.0) |
+| **Testnet** | Live: August 5, 2026 |
+| **Mainnet** | Live: August 6, 2026 |
+| **Priority** | **Required** |
+
+T9 is active on testnet and mainnet and supported by [v1.12.0](https://github.com/tempoxyz/tempo/releases/tag/v1.12.0), published on August 3, 2026. Node operators were required to run the T9-compatible release before activation to stay synced.
+
+***
+
+## T8
+
+| | |
+|---|---|
+| **Scope** | current committee state; FeeAMM policy exemptions; versioned Stablecoin DEX order storage; DEX V2Order support; final TIP-20 rewards deprecation |
+| **References** | [current committee state specification](https://tips.sh/1070), [FeeAMM policy exemptions specification](https://tips.sh/1042), [versioned DEX order storage specification](https://tips.sh/1062), [TIP-20 rewards deprecation](https://tips.sh/1075), [V2 DEX order storage](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1087.md) |
+| **Details** | [T8 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t8) |
+| **Release** | [v1.11.0](https://github.com/tempoxyz/tempo/releases/tag/v1.11.0) |
+| **Testnet** | Live: July 27, 2026 |
+| **Mainnet** | Live: July 30, 2026 |
+| **Priority** | **Required** |
+
+T8 is active on testnet and mainnet and supported by [v1.11.0](https://github.com/tempoxyz/tempo/releases/tag/v1.11.0), published on July 22, 2026. Node operators were required to run the T8-compatible release before activation to stay synced.
+
+***
+
+## T7
+
+| | |
+|---|---|
+| **Scope** | Storage credits for DEX order storage and TIP-20 channel storage; lower the base fee when gas is below the target threshold; deprecate new TIP-20 rewards |
+| **TIPs** | [Storage credits](https://tips.sh/1060), [StablecoinDEX order storage credits](https://tips.sh/1064), [TIP-20 channel storage credits](https://tips.sh/1066), [Dynamic base fee](https://tips.sh/1067), TIP-20 rewards deprecation |
+| **Details** | [T7 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t7) |
+| **Release** | [v1.10.1](https://github.com/tempoxyz/tempo/releases/tag/v1.10.1) |
+| **Testnet** | Live: July 2, 2026 |
+| **Mainnet** | Live: July 9, 2026 |
+| **Priority** | **Required** |
+
+T7 is active on testnet and mainnet and supported by [v1.10.1](https://github.com/tempoxyz/tempo/releases/tag/v1.10.1), published on June 29, 2026. Node operators were required to run the T7-compatible release before their network's activation timestamp to stay synced.
+
+***
+
+## T6
+
+| | |
+|---|---|
+| **Scope** | Account-level receive policies for safer TIP-20 deposits; admin access keys for smoother passkey, device, and delegated-key management |
+| **TIPs** | [Receive policies](https://tips.sh/1028), [Admin access keys](https://tips.sh/1049) |
+| **Details** | [T6 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t6) |
+| **Release** | [v1.9.0](https://github.com/tempoxyz/tempo/releases/tag/v1.9.0) |
+| **Testnet** | June 18, 2026 4pm CEST (unix: 1781791200) |
+| **Mainnet** | June 23, 2026 4pm CEST (unix: 1782223200) |
+| **Priority** | **Required** |
+
+### Who is affected?
+
+Node operators were required to run v1.9.0 before the T6 activation timestamp on each network. Non-upgraded nodes fall out of consensus once T6 activates on their network.
+
+Integrators, indexers, wallets, explorers, and SDK maintainers should review the [T6 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t6) page for feature benefits and integration notes.
+
+***
+
+## T5
+
+| | |
+|---|---|
+| **Scope** | Enshrined TIP-20 reserve channel precompile; payment lane classification; DEX same-tick flip orders and persistent order IDs across flips; multihop FeeAMM routing; optional on-chain TIP-20 `logoURI`; implicit approvals; and key authorization witnesses |
+| **TIPs** | [Payment-channel reserve](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1034.md), [Payment lane classification](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1045.md), [Same-tick flip orders](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1030.md), [Keep order IDs across flips](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1056.md), [Multihop FeeAMM routing](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1033.md), [Logo URI](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1026.md), [Implicit approvals](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1035.md), [Witnesses in key authorizations](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1053.md) |
+| **Details** | [T5 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t5) |
+| **Release** | [v1.8.1](https://github.com/tempoxyz/tempo/releases/tag/v1.8.1) |
+| **Testnet** | June 3, 2026 16:00 CEST (unix: 1780495200) |
+| **Mainnet** | June 9, 2026 16:00 CEST (unix: 1781013600) |
+| **Priority** | **Required** |
+
+### Who is affected?
+
+All node operators needed to upgrade before the T5 activation timestamp.
+
+Integrators, indexers, wallets, explorers, and SDK maintainers should review the [T5 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t5) page for the T5 surfaces and migration notes.
+
+***
+
+## T4
+
+| | |
+|---|---|
+| **Scope** | Embed consensus context into the block header to unlock deferred verification, plus T4 bug fixes and security hardening |
+| **TIPs** | [Consensus context in block headers](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1031.md), [T4 network upgrade](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1046.md) |
+| **Details** | [T4 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t4) |
+| **Release** | [v1.7.0](https://github.com/tempoxyz/tempo/releases/tag/v1.7.0) |
+| **Testnet** | Moderato: May 14, 2026 16:00 CEST (unix: 1778767200) |
+| **Mainnet** | Presto: May 18, 2026 16:00 CEST (unix: 1779112800) |
+| **Priority** | **Required** |
+
+### Who is affected?
+
+All node operators needed to upgrade before the T4 activation timestamp. Adding consensus context to block headers changed how blocks are produced and verified; non-upgraded nodes have their proposals rejected and have fallen out of consensus.
+
+Smart contract developers and integrators are not directly affected by consensus context in block headers, but should review the [T4 network upgrade specification](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1046.md) for bundled gas accounting changes and access-key scope validation updates that may affect transaction gas usage post-T4.
+
+***
+
+## T3
+
+| | |
+|---|---|
+| **Scope** | Enhanced access keys with periodic limits, call scoping, and an authorization ABI update; signature verification precompile; and virtual addresses for TIP-20 deposit forwarding |
+| **TIPs** | [Enhanced access key permissions](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1011.md), [Signature verification](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1020.md), [Virtual addresses](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1022.md) |
+| **Details** | [T3 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t3) |
+| **Release** | [v1.6.0](https://github.com/tempoxyz/tempo/releases/tag/v1.6.0) |
+| **Testnet** | Moderato: Apr 21, 2026 16:00 CEST (unix: 1776780000) |
+| **Mainnet** | Presto: Apr 27, 2026 16:00 CEST (unix: 1777298400) |
+| **Priority** | **Required** |
+
+See the [T3 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t3) page for breaking changes, migration checklist, and integration guidance.
+
+***
+
+## T2
+
+| | |
+|---|---|
+| **Scope** | Compound transfer policies, ValidatorConfig V2, and audit-driven bug fixes |
+| **TIPs** | [Compound transfer policies](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1015.md), [Permit](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1004.md), [Validator Config V2](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1017.md), [T2 network upgrade](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1036.md) |
+| **Release** | v1.5.0 |
+| **Testnet** | Moderato: Mar 26, 2026 16:00 CET (unix: 1774537200) |
+| **Mainnet** | Mar 31, 2026 16:00 CEST (unix: 1774965600) |
+| **Priority** | **Required** |
+
+***
+
+## T1C
+
+| | |
+|---|---|
+| **Scope** | Security hardening, includes breaking change on keychain signatures |
+| **Release** | [v1.4.0](https://github.com/tempoxyz/tempo/releases/tag/v1.4.0) |
+| **Testnet** | Moderato: Mar 9, 2026 15:00 UTC (unix: 1773068400) |
+| **Mainnet** | Mar 12, 2026 15:00 UTC (unix: 1773327600) |
+| **Priority** | **Required** |
+
+***
+
+## T1A / T1B
+
+| | |
+|---|---|
+| **Scope** | T1A removes the 16.7M per-transaction gas limit in favor of Tempo's 30M cap; T1B adds keychain precompile gas metering and expiring nonce replay-protection hardening |
+| **TIPs** | T1A: [Mainnet gas parameters](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1010.md); T1B: upgrade hardening release |
+| **Release** | [v1.3.1](https://github.com/tempoxyz/tempo/releases/tag/v1.3.1) |
+| **Testnet** | T1A + T1B: Feb 23, 2026 15:00 UTC (unix: 1771858800) |
+| **Mainnet** | T1A: Feb 12, 2026 15:00 UTC (unix: 1770908400); T1B: Feb 23, 2026 15:00 UTC (unix: 1771858800) |
+| **Priority** | **Required** |
+
+***
+
+## T1 (Bach)
+
+| | |
+|---|---|
+| **Scope** | Mainnet-ready gas economics, expiring nonces, and security hardening |
+| **TIPs** | [State creation costs](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1000.md), [Expiring nonces](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1009.md), [Mainnet gas parameters](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1010.md) |
+| **Testnet** | Feb 5, 2026 15:00 UTC (unix: 1770303600) — Release: [v1.1.0](https://github.com/tempoxyz/tempo/releases/tag/v1.1.0) |
+| **Mainnet** | Feb 12, 2026 15:00 UTC (unix: 1770908400) — Release: [v1.1.1](https://github.com/tempoxyz/tempo/releases/tag/v1.1.1) |
+| **Priority** | **Required** |
+
+***
+
+## T0 (Genesis)
+
+| | |
+|---|---|
+| **Scope** | Initial mainnet launch |
+| **Mainnet** | Jan 16, 2026 (genesis) — Release: [v1.0.0](https://github.com/tempoxyz/tempo/releases/tag/v1.0.0) |
+| **Priority** | **Required** |

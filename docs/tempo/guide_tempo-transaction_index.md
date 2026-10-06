@@ -1,0 +1,2502 @@
+# Using Tempo Transactions: integration guides
+
+Tempo Transactions are a new [EIP-2718](https://github.com/ethereum/EIPs/blob/master/EIPS/eip-2718.md) transaction type, exclusively available on Tempo.
+
+:::note[SDKs Support]
+Transaction [SDKs](#integration-guides) are available for TypeScript, Rust, Go, Python, and Foundry.
+:::
+
+If you're integrating with Tempo, we **strongly recommend** using Tempo Transactions, and not regular Ethereum transactions. Learn more about the benefits below, or follow the guide on issuance [here](https://tempo.xyz/developers/docs/guide/issuance).
+
+* [Configurable Fee Tokens](#configurable-fee-tokens) — Pay transaction fees with any USD-denominated TIP-20 token via automatic Fee AMM conversion.
+* [Fee Sponsorship](#fee-sponsorship) — Sponsor gas fees for users, enabling feeless transaction experiences in your application.
+* [Batch Calls](#batch-calls) — Batch multiple transactions together for higher throughput and simpler wallet management.
+* [Access Keys](#access-keys) — Delegate transaction signing capabilities to specific keys with customizable permissions.
+* [Concurrent Transactions](#concurrent-transactions) — Execute transactions in parallel using independent nonces for improved throughput.
+* [Expiring Nonces](#expiring-nonces) — Create nonces that automatically expire after a set time window.
+* [2D Nonces](#2d-nonces) — Use two-dimensional nonces for flexible transaction ordering.
+* [Scheduled Transactions](#scheduled-transactions) — Schedule transactions to execute within a specific time window for automated payments.
+
+## Integration Guides
+
+Integrating Tempo Transactions is easy and can be done quickly by a developer in multiple languages. See below for quick links to some of our guides.
+
+|Language|Source|Integration Time|
+|--------|--------|--------|
+| **TypeScript**   | [tempoxyz/tempo-ts](https://tempo.xyz/developers/docs/sdk/typescript)                            | \< 1 hour         |
+| **Rust**         | [tempo-alloy](https://tempo.xyz/developers/docs/sdk/rust)              | \< 1 hour         |
+| **Golang**       | [tempo-go](https://github.com/tempoxyz/tempo-go)                                | \< 1 hour         |
+| **Python**       | [pytempo](https://github.com/tempoxyz/pytempo)                                | \< 1 hour         |
+| **Other Languages** | Reach out to us! The specification is [here](https://tempo.xyz/developers/docs/protocol/transactions/spec-tempo-transaction) and easy to build against.                                                                  | 1-3 days         |
+
+If you are an EVM smart contract developer, see the [Foundry guide for Tempo](https://tempo.xyz/developers/docs/sdk/foundry).
+
+## Properties
+
+### Configurable Fee Tokens
+
+A fee token is a permissionless [TIP-20 token](https://tempo.xyz/developers/docs/protocol/tip20/overview) that can be used to pay fees on Tempo.
+
+When a TIP-20 token is passed as the `fee_token` parameter in a transaction,
+Tempo's [Fee AMM](https://tempo.xyz/developers/docs/protocol/fees/spec-fee-amm) automatically facilitates conversion between the
+user's preferred fee token and the validator's preferred token.
+
+#### Viem
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { client } from './viem.config'
+
+const alphaUsd = '0x20c0000000000000000000000000000000000001'
+
+const receipt = await client.sendTransactionSync({
+  data: '0xdeadbeef',
+  feeToken: alphaUsd, // [!code hl]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+```
+
+```tsx twoslash [viem.config.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+#### Wagmi
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { useSendTransactionSync } from 'wagmi'
+
+const { sendTransactionSync } = useSendTransactionSync()
+
+const alphaUsd = '0x20c0000000000000000000000000000000000001'
+
+sendTransactionSync({
+  data: '0xdeadbeef',
+  feeToken: alphaUsd, // [!code hl]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+```
+
+```tsx twoslash [wagmi.config.ts]
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+#### Rust
+
+:::code-group
+```rust [example.rs]
+use alloy::primitives::{address, bytes};
+use alloy::providers::Provider;
+use tempo_alloy::rpc::TempoTransactionRequest;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    let alpha_usd = address!("0x20c0000000000000000000000000000000000001");
+
+    let pending = provider
+        .send_transaction(
+            TempoTransactionRequest::default()
+                .with_fee_token(alpha_usd) // [!code hl]
+                .with_to(address!("0xcafebabecafebabecafebabecafebabecafebabe"))
+                .with_input(bytes!("deadbeef")),
+        )
+        .await?;
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+#### Python
+
+:::code-group
+```python [example.py]
+from pytempo import Call, TempoTransaction
+from provider import w3, account
+
+alpha_usd = "0x20c0000000000000000000000000000000000001"
+
+tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=300_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce=w3.eth.get_transaction_count(account.address),
+    fee_token=alpha_usd, # [!code hl]
+    calls=(
+        Call.create(
+            to="0xcafebabecafebabecafebabecafebabecafebabe",
+            data="0xdeadbeef",
+        ),
+    ),
+)
+
+signed_tx = tx.sign(account.key.hex())
+tx_hash = w3.eth.send_raw_transaction(signed_tx.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+#### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+	"context"
+	"log"
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/tempoxyz/tempo-go/pkg/signer"
+	"github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+	sgn, _ := signer.NewSigner("0x...")
+	c := newClient()
+	ctx := context.Background()
+
+	nonce, _ := c.GetTransactionCount(ctx, sgn.Address().Hex())
+
+	tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdMainnet)).
+		SetNonce(nonce).
+		SetGas(300_000).
+		SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+		SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+		SetFeeToken(transaction.AlphaUSDAddress). // [!code hl]
+		AddCall(
+			common.HexToAddress("0xcafebabecafebabecafebabecafebabecafebabe"),
+			big.NewInt(0),
+			common.Hex2Bytes("deadbeef"),
+		).
+		Build()
+
+	_ = transaction.SignTransaction(tx, sgn)
+	serialized, _ := transaction.Serialize(tx, nil)
+	txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+	log.Printf("Transaction hash: %s", txHash)
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+#### Cast
+
+```bash
+$ cast send 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --tempo.fee-token 0x20c0000000000000000000000000000000000001 # [!code hl]
+```
+
+#### RLP
+
+```tsx
+rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key,
+  nonce,
+  valid_before,
+  valid_after,
+  fee_token, // [!code focus]
+  fee_payer_signature,
+  aa_authorization_list,
+  key_authorization,
+  signature,
+])
+```
+
+:::info
+See a full guide on [paying fees in any stablecoin](https://tempo.xyz/developers/docs/guide/payments/pay-fees-in-any-stablecoin).
+:::
+
+### Fee Sponsorship
+
+Fee sponsorship enables a third party (the fee payer) to pay transaction fees on behalf of the transaction sender.
+
+The process uses dual signature domains: the sender signs their transaction, and then the fee payer signs
+over the transaction with a special "fee payer envelope" to commit to paying fees for that specific sender.
+
+#### Viem
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { client } from './viem.config'
+import { privateKeyToAccount } from 'viem/accounts'
+
+const feePayer = privateKeyToAccount('0x...')
+
+const receipt = await client.sendTransactionSync({
+  data: '0xdeadbeef',
+  feePayer, // [!code hl]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+```
+
+```tsx twoslash [viem.config.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+#### Wagmi
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { useSendTransactionSync } from 'wagmi'
+import { privateKeyToAccount } from 'viem/accounts'
+
+export const feePayer = privateKeyToAccount('0x...')
+
+const { sendTransactionSync } = useSendTransactionSync()
+
+sendTransactionSync({
+  data: '0xdeadbeef',
+  feePayer, // [!code hl]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+```
+
+```tsx twoslash [wagmi.config.ts]
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+#### Rust
+
+:::code-group
+```rust [example.rs]
+use alloy::primitives::{U256, address, bytes};
+use alloy::providers::Provider;
+use alloy::signers::{SignerSync, local::PrivateKeySigner};
+use tempo_alloy::primitives::transaction::tempo_transaction::Call;
+use tempo_alloy::rpc::TempoTransactionRequest;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    let tx = TempoTransactionRequest {
+        calls: vec![Call {
+            to: address!("0xcafebabecafebabecafebabecafebabecafebabe").into(),
+            value: U256::ZERO,
+            input: bytes!("deadbeef"),
+        }],
+        ..Default::default()
+    };
+
+    // Step 1: Build the transaction
+    let mut tempo_tx = provider.fill(tx).await?.build_aa()?;
+    let sender_addr = provider.default_signer_address();
+    let fee_payer_hash = tempo_tx.fee_payer_signature_hash(sender_addr);
+
+    // Step 2: Fee payer counter-signs the transaction // [!code hl]
+    let fee_payer: PrivateKeySigner = "0x...".parse()?; // [!code hl]
+    tempo_tx.fee_payer_signature = Some(fee_payer.sign_hash_sync(&fee_payer_hash)?); // [!code hl]
+
+    // Step 3: Broadcast
+    let pending = provider.send_transaction(tempo_tx).await?;
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+#### Python
+
+:::code-group
+```python [example.py]
+from pytempo import Call, TempoTransaction
+from provider import w3, account
+
+fee_payer_key = "0x..."
+
+# Sender signs with awaiting_fee_payer flag
+tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=300_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce=w3.eth.get_transaction_count(account.address),
+    awaiting_fee_payer=True, # [!code hl]
+    calls=(
+        Call.create(
+            to="0xcafebabecafebabecafebabecafebabecafebabe",
+            data="0xdeadbeef",
+        ),
+    ),
+)
+sender_signed = tx.sign(account.key.hex())
+
+# Fee payer co-signs the transaction // [!code hl]
+fully_signed = sender_signed.sign(fee_payer_key, for_fee_payer=True) # [!code hl]
+
+tx_hash = w3.eth.send_raw_transaction(fully_signed.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+#### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+	"context"
+	"log"
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/tempoxyz/tempo-go/pkg/signer"
+	"github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+	senderSgn, _ := signer.NewSigner("0x...")
+	sponsorSgn, _ := signer.NewSigner("0x...")
+	c := newClient()
+	ctx := context.Background()
+
+	nonce, _ := c.GetTransactionCount(ctx, senderSgn.Address().Hex())
+
+	// Sender builds and signs a sponsored transaction
+	tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdMainnet)).
+		SetNonce(nonce).
+		SetGas(300_000).
+		SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+		SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+		SetSponsored(true). // [!code hl]
+		AddCall(
+			common.HexToAddress("0xcafebabecafebabecafebabecafebabecafebabe"),
+			big.NewInt(0),
+			common.Hex2Bytes("deadbeef"),
+		).
+		Build()
+
+	_ = transaction.SignTransaction(tx, senderSgn)
+
+	// Fee payer co-signs the transaction // [!code hl]
+	tx.FeeToken = transaction.AlphaUSDAddress // [!code hl]
+	tx.AwaitingFeePayer = false // [!code hl]
+	_ = transaction.AddFeePayerSignature(tx, sponsorSgn) // [!code hl]
+
+	serialized, _ := transaction.Serialize(tx, nil)
+	txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+	log.Printf("Transaction hash: %s", txHash)
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+#### Cast
+
+```bash
+# 1. Get the fee payer signature hash
+$ FEE_PAYER_HASH=$(cast mktx 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $SENDER_KEY \
+  --tempo.print-sponsor-hash) # [!code hl]
+
+# 2. Sponsor signs the hash
+$ SPONSOR_SIG=$(cast wallet sign \
+  --private-key $SPONSOR_KEY \
+  "$FEE_PAYER_HASH" \
+  --no-hash) # [!code hl]
+
+# 3. Send with sponsor signature
+$ cast send 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $SENDER_KEY \
+  --tempo.sponsor-signature "$SPONSOR_SIG" # [!code hl]
+```
+
+#### RLP
+
+```tsx
+// 1. User signs over `user_envelope` // [!code focus]
+user_envelope = 0x77 ∥ rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key,
+  nonce,
+  valid_before,
+  valid_after,
+  fee_token,
+  0x00, // indicate intention for a fee payer // [!code focus]
+  aa_authorization_list,
+  key_authorization
+])
+
+// 2. Fee payer signs over `fee_payer_envelope` // [!code focus]
+fee_payer_envelope = 0x76 ∥ rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key,
+  nonce,
+  valid_before,
+  valid_after,
+  fee_token,
+  sender_address, // scope to sender // [!code focus]
+  aa_authorization_list,
+  key_authorization
+])
+
+// 3. Construct + send off `final_envelope` to the network // [!code focus]
+final_envelope = 0x77 ∥ rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key,
+  nonce,
+  valid_before,
+  valid_after,
+  fee_token,
+  fee_payer_signature, // signature over `fee_payer_envelope` // [!code focus]
+  aa_authorization_list,
+  key_authorization,
+  signature, // signature over `user_envelope` // [!code focus]
+])
+```
+
+:::tip
+You can also use a remote [fee payer relay](https://tempo.xyz/developers/docs/api/fee-payer) instead of a local account.
+:::
+
+:::tip
+For demos and testnet development, use the public fee payer endpoint at `https://sponsor.moderato.tempo.xyz` without an API key. For authenticated sandbox and production sponsorship, use the [Fee Payer API](https://tempo.xyz/developers/docs/api/fee-payer).
+:::
+
+:::info
+See a full guide on [sponsoring fees](https://tempo.xyz/developers/docs/guide/payments/sponsor-user-fees).
+:::
+
+### Batch Calls
+
+Batch calls enable multiple operations to be executed atomically within a single transaction.
+Instead of sending separate transactions for each operation, you can bundle multiple calls together using the `calls`
+parameter.
+
+#### Viem
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { client } from './viem.config'
+
+const receipt = await client.sendTransactionSync({
+  calls: [ // [!code hl]
+    { // [!code hl]
+      to: '0xcafebabecafebabecafebabecafebabecafebabe', // [!code hl]
+      data: '0xdeadbeef0000000000000000000000000000000001', // [!code hl]
+    }, // [!code hl]
+    { // [!code hl]
+      to: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef', // [!code hl]
+      data: '0xcafebabe0000000000000000000000000000000001', // [!code hl]
+    }, // [!code hl]
+    { // [!code hl]
+      to: '0xcafebabecafebabecafebabecafebabecafebabe', // [!code hl]
+      data: '0xdeadbeef0000000000000000000000000000000001', // [!code hl]
+    }, // [!code hl]
+  ] // [!code hl]
+})
+```
+
+```tsx twoslash [viem.config.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+#### Wagmi
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { useSendTransactionSync } from 'wagmi'
+
+const { sendTransactionSync } = useSendTransactionSync()
+
+sendTransactionSync({
+  calls: [ // [!code hl]
+    { // [!code hl]
+      to: '0xcafebabecafebabecafebabecafebabecafebabe', // [!code hl]
+      data: '0xdeadbeef0000000000000000000000000000000001', // [!code hl]
+    }, // [!code hl]
+    { // [!code hl]
+      to: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef', // [!code hl]
+      data: '0xcafebabe0000000000000000000000000000000001', // [!code hl]
+    }, // [!code hl]
+    { // [!code hl]
+      to: '0xcafebabecafebabecafebabecafebabecafebabe', // [!code hl]
+      data: '0xdeadbeef0000000000000000000000000000000001', // [!code hl]
+    }, // [!code hl]
+  ] // [!code hl]
+})
+```
+
+```tsx twoslash [wagmi.config.ts]
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+#### Rust
+
+:::code-group
+```rust [example.rs]
+use alloy::primitives::{U256, address, bytes};
+use alloy::providers::Provider;
+use tempo_alloy::primitives::transaction::Call;
+use tempo_alloy::rpc::TempoTransactionRequest;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    let pending = provider
+        .send_transaction(TempoTransactionRequest {
+            calls: vec![ // [!code hl]
+                Call { // [!code hl]
+                    to: address!("0xcafebabecafebabecafebabecafebabecafebabe").into(), // [!code hl]
+                    value: U256::ZERO, // [!code hl]
+                    input: bytes!("deadbeef0000000000000000000000000000000001"), // [!code hl]
+                }, // [!code hl]
+                Call { // [!code hl]
+                    to: address!("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef").into(), // [!code hl]
+                    value: U256::ZERO, // [!code hl]
+                    input: bytes!("cafebabe0000000000000000000000000000000001"), // [!code hl]
+                }, // [!code hl]
+                Call { // [!code hl]
+                    to: address!("0xcafebabecafebabecafebabecafebabecafebabe").into(), // [!code hl]
+                    value: U256::ZERO, // [!code hl]
+                    input: bytes!("deadbeef0000000000000000000000000000000001"), // [!code hl]
+                }, // [!code hl]
+            ], // [!code hl]
+            ..Default::default()
+        })
+        .await?;
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+#### Python
+
+:::code-group
+```python [example.py]
+from pytempo import Call, TempoTransaction
+from provider import w3, account
+
+tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=600_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce=w3.eth.get_transaction_count(account.address),
+    calls=( # [!code hl]
+        Call.create( # [!code hl]
+            to="0xcafebabecafebabecafebabecafebabecafebabe", # [!code hl]
+            data="0xdeadbeef0000000000000000000000000000000001", # [!code hl]
+        ), # [!code hl]
+        Call.create( # [!code hl]
+            to="0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", # [!code hl]
+            data="0xcafebabe0000000000000000000000000000000001", # [!code hl]
+        ), # [!code hl]
+        Call.create( # [!code hl]
+            to="0xcafebabecafebabecafebabecafebabecafebabe", # [!code hl]
+            data="0xdeadbeef0000000000000000000000000000000001", # [!code hl]
+        ), # [!code hl]
+    ), # [!code hl]
+)
+
+signed_tx = tx.sign(account.key.hex())
+tx_hash = w3.eth.send_raw_transaction(signed_tx.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+#### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+	"context"
+	"log"
+	"math/big"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/tempoxyz/tempo-go/pkg/signer"
+	"github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+	sgn, _ := signer.NewSigner("0x...")
+	c := newClient()
+	ctx := context.Background()
+
+	nonce, _ := c.GetTransactionCount(ctx, sgn.Address().Hex())
+
+	tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdMainnet)).
+		SetNonce(nonce).
+		SetGas(600_000).
+		SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+		SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+		AddCall( // [!code hl]
+			common.HexToAddress("0xcafebabecafebabecafebabecafebabecafebabe"), // [!code hl]
+			big.NewInt(0), // [!code hl]
+			common.Hex2Bytes("deadbeef0000000000000000000000000000000001"), // [!code hl]
+		). // [!code hl]
+		AddCall( // [!code hl]
+			common.HexToAddress("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"), // [!code hl]
+			big.NewInt(0), // [!code hl]
+			common.Hex2Bytes("cafebabe0000000000000000000000000000000001"), // [!code hl]
+		). // [!code hl]
+		AddCall( // [!code hl]
+			common.HexToAddress("0xcafebabecafebabecafebabecafebabecafebabe"), // [!code hl]
+			big.NewInt(0), // [!code hl]
+			common.Hex2Bytes("deadbeef0000000000000000000000000000000001"), // [!code hl]
+		). // [!code hl]
+		Build()
+
+	_ = transaction.SignTransaction(tx, sgn)
+	serialized, _ := transaction.Serialize(tx, nil)
+	txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+	log.Printf("Transaction hash: %s", txHash)
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+#### Cast
+
+```bash
+$ cast batch-send \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --call "0xcafebabecafebabecafebabecafebabecafebabe::increment()" \
+  --call "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef::setNumber(uint256):500" \
+  --call "0xcafebabecafebabecafebabecafebabecafebabe::increment()"
+```
+
+#### RLP
+
+```tsx
+rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls, // [!code focus]
+  access_list,
+  nonce_key,
+  nonce,
+  valid_before,
+  valid_after,
+  fee_token,
+  fee_payer_signature,
+  aa_authorization_list,
+  key_authorization,
+  signature,
+])
+```
+
+### Access Keys
+
+Access keys enable you to delegate signing authority from a primary account to a secondary key,
+such as device-bound non-extractable [WebCrypto key](https://developer.mozilla.org/en-US/docs/Web/API/CryptoKeyPair). The primary account signs a key authorization that grants the access key permission
+to sign transactions on its behalf.
+
+This authorization is then attached to the next transaction (that can be signed by either the primary or the access key), then all
+transactions thereafter can be signed by the access key.
+
+#### Viem
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { parseUnits } from 'viem'
+import { Account, P256 } from 'viem/tempo'
+import { client } from './viem.config'
+
+const account = Account.fromSecp256k1('0x...')
+const alphaUsd = '0x20c0000000000000000000000000000000000001'
+const treasury = '0xcafebabecafebabecafebabecafebabecafebabe'
+
+const accessKey = Account.fromP256(P256.randomPrivateKey(), {
+  access: account,
+})
+
+const keyAuthorization = await account.signKeyAuthorization(accessKey, {
+  chainId: BigInt(client.chain.id),
+  expiry: Math.floor(Date.now() / 1000) + 3600,
+  limits: [
+    {
+      token: alphaUsd,
+      limit: parseUnits('1000', 6),
+      period: 60 * 60 * 24 * 30,
+    },
+  ],
+  scopes: [
+    {
+      address: alphaUsd,
+      selector: 'transfer(address,uint256)',
+      recipients: [treasury],
+    },
+  ],
+})
+
+// `keyAuthorization` provisions the access key and uses it in this same transaction.
+const receipt = await client.sendTransactionSync({
+  account: accessKey, // [!code hl]
+  data: '0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe00000000000000000000000000000000000000000000000000000000000f4240',
+  keyAuthorization, // [!code hl]
+  to: alphaUsd,
+})
+```
+
+```tsx twoslash [viem.config.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+#### Wagmi
+
+```tsx twoslash [example.tsx]
+// @noErrors
+import { parseUnits } from 'viem'
+import { Account, Expiry, P256, Period, tempoActions } from 'viem/tempo'
+import { useConnectorClient } from 'wagmi'
+
+export function useAuthorizeAccessKey() {
+  const { data: connectorClient } = useConnectorClient()
+
+  async function authorize() {
+    if (!connectorClient) return
+
+    const client = connectorClient.extend(tempoActions())
+    const alphaUsd = '0x20c0000000000000000000000000000000000001'
+    const accessKey = Account.fromP256(P256.randomPrivateKey(), {
+      access: connectorClient.account,
+    })
+
+    const { receipt } = await client.accessKey.authorizeSync({
+      accessKey, // [!code hl]
+      expiry: Expiry.hours(1),
+      limits: [
+        {
+          token: alphaUsd,
+          limit: parseUnits('1000', 6),
+          period: Period.months(1),
+        },
+      ],
+      scopes: [
+        {
+          address: alphaUsd,
+          selector: 'transfer(address,uint256)',
+        },
+      ],
+    })
+
+    return receipt.transactionHash
+  }
+
+  return { authorize }
+}
+```
+
+#### Rust
+
+:::code-group
+```rust [example.rs]
+use std::str::FromStr;
+
+use alloy::primitives::{U256, address, bytes};
+use alloy::providers::Provider;
+use alloy::signers::{SignerSync, local::PrivateKeySigner};
+use tempo_alloy::primitives::transaction::key_authorization::{
+    CallScope, KeyAuthorization, SelectorRule, TokenLimit,
+};
+use tempo_alloy::primitives::transaction::tt_signature::{
+    KeychainSignature, PrimitiveSignature, SignatureType, TempoSignature,
+};
+use tempo_alloy::rpc::TempoTransactionRequest;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    let root: PrivateKeySigner = std::env::var("PRIVATE_KEY")?.parse()?;
+    let access_key = PrivateKeySigner::random();
+    let alpha_usd = address!("0x20c0000000000000000000000000000000000001");
+    let treasury = address!("0xcafebabecafebabecafebabecafebabecafebabe");
+
+    let authorization = KeyAuthorization::unrestricted( // [!code hl]
+        4217, // [!code hl]
+        SignatureType::Secp256k1, // [!code hl]
+        access_key.address(), // [!code hl]
+    ) // [!code hl]
+    .with_expiry(1_893_456_000) // [!code hl]
+    .with_limits(vec![TokenLimit { // [!code hl]
+        token: alpha_usd, // [!code hl]
+        limit: U256::from(1_000_000u64), // [!code hl]
+        period: 86_400, // [!code hl]
+    }]) // [!code hl]
+    .with_allowed_calls(vec![CallScope { // [!code hl]
+        target: alpha_usd, // [!code hl]
+        selector_rules: vec![SelectorRule { // [!code hl]
+            selector: [0xa9, 0x05, 0x9c, 0xbb], // transfer(address,uint256) // [!code hl]
+            recipients: vec![treasury], // [!code hl]
+        }], // [!code hl]
+    }]); // [!code hl]
+    let sig = root.sign_hash_sync(&authorization.signature_hash())?; // [!code hl]
+    let key_authorization = // [!code hl]
+        authorization.into_signed(PrimitiveSignature::Secp256k1(sig)); // [!code hl]
+
+    provider
+        .send_transaction(
+            TempoTransactionRequest {
+                key_authorization: Some(key_authorization), // [!code hl]
+                ..Default::default()
+            }
+            .with_to(alpha_usd)
+            .with_input(bytes!("a9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe00000000000000000000000000000000000000000000000000000000000f4240")),
+        )
+        .await?
+        .get_receipt()
+        .await?;
+
+    let tx = TempoTransactionRequest::default()
+        .with_to(alpha_usd)
+        .with_input(bytes!("a9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe00000000000000000000000000000000000000000000000000000000000f4240"));
+
+    let filled = provider.fill(tx).await?;
+    let tempo_tx = filled.build_aa()?;
+
+    // Keychain signatures are domain-separated by the root account address.
+    let inner_hash = // [!code hl]
+        KeychainSignature::signing_hash(tempo_tx.signature_hash(), root.address()); // [!code hl]
+    let inner_sig = access_key.sign_hash_sync(&inner_hash)?; // [!code hl]
+    let signature = TempoSignature::Keychain(KeychainSignature::new( // [!code hl]
+        root.address(), // [!code hl]
+        PrimitiveSignature::Secp256k1(inner_sig), // [!code hl]
+    )); // [!code hl]
+
+    let envelope = tempo_tx.into_signed(signature); // [!code hl]
+    let pending = provider // [!code hl]
+        .send_raw_transaction(envelope.encoded_2718().as_ref()) // [!code hl]
+        .await?; // [!code hl]
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+#### Python
+
+:::code-group
+```python [example.py]
+import time
+
+from eth_account import Account as EthAccount
+from pytempo import (
+    Call, CallScope, KeyRestrictions, SignatureType, TempoTransaction,
+    TokenLimit,
+)
+from pytempo.contracts import AccountKeychain
+from provider import w3, account
+
+access_key = EthAccount.create()
+alpha_usd = "0x20c0000000000000000000000000000000000001"
+treasury = "0xcafebabecafebabecafebabecafebabecafebabe"
+auth_nonce = w3.eth.get_transaction_count(account.address)
+
+authorize_call = AccountKeychain.authorize_key( # [!code hl]
+    key_id=access_key.address, # [!code hl]
+    signature_type=SignatureType.SECP256K1, # [!code hl]
+    restrictions=KeyRestrictions( # [!code hl]
+        expiry=int(time.time()) + 3600, # [!code hl]
+        limits=[TokenLimit(token=alpha_usd, limit=1_000_000, period=86_400)], # [!code hl]
+        allowed_calls=[CallScope.transfer(target=alpha_usd, recipients=[treasury])], # [!code hl]
+    ), # [!code hl]
+) # [!code hl]
+
+# Root key authorizes first, then the access key signs later transactions.
+auth_tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=300_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce=auth_nonce,
+    calls=(authorize_call,),
+)
+signed_auth_tx = auth_tx.sign(account.key.hex())
+w3.eth.send_raw_transaction(signed_auth_tx.encode())
+
+tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=300_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce=auth_nonce + 1,
+    calls=(
+        Call.create(
+            to=alpha_usd,
+            data="0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe00000000000000000000000000000000000000000000000000000000000f4240",
+        ),
+    ),
+)
+
+signed_tx = tx.sign_access_key( # [!code hl]
+    access_key_private_key=access_key.key.hex(), # [!code hl]
+    root_account=account.address, # [!code hl]
+) # [!code hl]
+tx_hash = w3.eth.send_raw_transaction(signed_tx.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+#### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+	"context"
+	"log"
+	"math/big"
+	"time"
+
+"github.com/ethereum/go-ethereum/common"
+	"github.com/tempoxyz/tempo-go/pkg/keychain"
+	"github.com/tempoxyz/tempo-go/pkg/signer"
+	"github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+	rootSgn, _ := signer.NewSigner("0x...")
+accessKey, _ := signer.NewSigner("0x...")
+c := newClient()
+ctx := context.Background()
+
+	chainID := big.NewInt(transaction.ChainIdMainnet)
+	gasPrice := big.NewInt(25_000_000_000)
+	alphaUSD := common.HexToAddress("0x20c0000000000000000000000000000000000001")
+	treasury := common.HexToAddress("0xcafebabecafebabecafebabecafebabecafebabe")
+
+	// Authorize the access key with T3 restrictions. // [!code hl]
+	restrictions := keychain.NewKeyRestrictions(uint64(time.Now().Add(1 * time.Hour).Unix())). // [!code hl]
+	WithLimits([]keychain.TokenLimit{{ // [!code hl]
+		Token: alphaUSD, // [!code hl]
+		Amount: big.NewInt(1_000_000), // [!code hl]
+		Period: 86_400, // [!code hl]
+	}}). // [!code hl]
+		WithAllowedCalls([]keychain.CallScope{ // [!code hl]
+		keychain.NewCallScopeBuilder(alphaUSD).Transfer([]common.Address{treasury}).Build(), // [!code hl]
+		}) // [!code hl]
+authorizeCall, _ := keychain.AuthorizeKey( // [!code hl]
+	accessKey.Address(), // [!code hl]
+	keychain.SignatureTypeSecp256k1, // [!code hl]
+	restrictions, // [!code hl]
+) // [!code hl]
+
+// Go shows the explicit two-step flow: root key authorizes first, then the access key signs later transactions.
+nonce, _ := c.GetTransactionCount(ctx, rootSgn.Address().Hex())
+authTx := transaction.NewBuilder(chainID).
+	SetNonce(nonce).
+	SetGas(300_000).
+	SetMaxFeePerGas(gasPrice).
+		SetMaxPriorityFeePerGas(gasPrice).
+		AddCall(authorizeCall.To, big.NewInt(0), authorizeCall.Data).
+	Build()
+
+_ = transaction.SignTransaction(authTx, rootSgn)
+serializedAuth, _ := transaction.Serialize(authTx, nil)
+authHash, _ := c.SendRawTransaction(ctx, serializedAuth)
+log.Printf("Authorized access key: %s", authHash)
+
+	// Sign a transaction with the access key. // [!code hl]
+tx := transaction.NewBuilder(chainID). // [!code hl]
+	SetNonce(nonce + 1). // [!code hl]
+	SetGas(300_000). // [!code hl]
+		SetMaxFeePerGas(gasPrice). // [!code hl]
+		SetMaxPriorityFeePerGas(gasPrice). // [!code hl]
+		AddCall( // [!code hl]
+		alphaUSD, // [!code hl]
+		big.NewInt(0), // [!code hl]
+		common.Hex2Bytes("a9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe00000000000000000000000000000000000000000000000000000000000f4240"), // [!code hl]
+		). // [!code hl]
+	Build() // [!code hl]
+
+	_ = keychain.SignWithAccessKey(tx, accessKey, rootSgn.Address()) // [!code hl]
+
+	serialized, _ := transaction.Serialize(tx, nil)
+	txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+	log.Printf("Transaction hash: %s", txHash)
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+#### Cast
+
+```bash
+# 1. Authorize the access key with a recurring limit and transfer scope
+$ cast keychain authorize $ACCESS_KEY_ADDR secp256k1 $(($(date +%s) + 3600)) \
+  --limit 0x20c0000000000000000000000000000000000001:1000000:86400 \
+  --scope 0x20c0000000000000000000000000000000000001:transfer@0xcafebabecafebabecafebabecafebabecafebabe \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $ROOT_PRIVATE_KEY # [!code hl]
+
+# 2. Send using the access key
+$ cast send 0x20c0000000000000000000000000000000000001 \
+  --data 0xa9059cbb000000000000000000000000cafebabecafebabecafebabecafebabecafebabe00000000000000000000000000000000000000000000000000000000000f4240 \
+  --rpc-url $TEMPO_RPC_URL \
+  --tempo.root-account $ROOT_ADDRESS \
+  --tempo.access-key $ACCESS_KEY_PRIVATE_KEY # [!code hl]
+```
+
+#### RLP
+
+```tsx
+rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key,
+  nonce,
+  valid_before,
+  valid_after,
+  fee_token,
+  fee_payer_signature,
+  aa_authorization_list,
+  key_authorization, // rlp([chain_id, key_type, key_id, expiry?, limits?, allowed_calls?, signature]) // [!code focus]
+  signature,
+])
+```
+
+:::info
+Learn more about [Access Keys](https://tempo.xyz/developers/docs/protocol/transactions/spec-tempo-transaction#access-keys).
+:::
+
+### Concurrent Transactions
+
+Concurrent transactions enable higher throughput by allowing multiple transactions from the same account to be sent
+in parallel without waiting for sequential nonce confirmation.
+
+By utilizing nonce keys, you can submit multiple transactions simultaneously that don't conflict with each other,
+enabling parallel execution and significantly improved transaction throughput for high-activity accounts.
+
+Concurrent transactions can be achieved with nonce keys via:
+
+* [Expiring Nonces](#expiring-nonces)
+* [2D Nonces](#2d-nonces)
+
+In **Viem** and **Wagmi**, expiring nonces are handled automatically.
+
+#### Viem
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { client } from './viem.config'
+
+const [receipt1, receipt2, receipt3] = await Promise.all([
+  client.sendTransactionSync({
+    data: '0xdeadbeef0000000000000000000000000000000001',
+    to: '0xcafebabecafebabecafebabecafebabecafebabe',
+  }),
+  client.sendTransactionSync({
+    data: '0xcafebabe0000000000000000000000000000000001',
+    to: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+  }),
+  client.sendTransactionSync({
+    data: '0xdeadbeef0000000000000000000000000000000001',
+    to: '0xcafebabecafebabecafebabecafebabecafebabe',
+  }),
+])
+```
+
+```tsx twoslash [viem.config.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+#### Wagmi
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { useSendTransaction } from 'wagmi'
+
+const { sendTransaction } = useSendTransaction()
+
+sendTransaction({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+sendTransaction({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+sendTransaction({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+```
+
+```tsx twoslash [wagmi.config.ts]
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+#### Rust
+
+:::code-group
+```rust [example.rs]
+use alloy::primitives::{U256, address, bytes};
+use alloy::providers::Provider;
+use tempo_alloy::rpc::TempoTransactionRequest;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    // Send three transactions concurrently using different nonce keys
+    let (r1, r2, r3) = tokio::try_join!(
+        provider.send_transaction(
+            TempoTransactionRequest::default()
+                .with_nonce_key(U256::from(1)) // [!code hl]
+                .with_to(address!("0xcafebabecafebabecafebabecafebabecafebabe"))
+                .with_input(bytes!("deadbeef0000000000000000000000000000000001")),
+        ),
+        provider.send_transaction(
+            TempoTransactionRequest::default()
+                .with_nonce_key(U256::from(2)) // [!code hl]
+                .with_to(address!("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"))
+                .with_input(bytes!("cafebabe0000000000000000000000000000000001")),
+        ),
+        provider.send_transaction(
+            TempoTransactionRequest::default()
+                .with_nonce_key(U256::from(3)) // [!code hl]
+                .with_to(address!("0xcafebabecafebabecafebabecafebabecafebabe"))
+                .with_input(bytes!("deadbeef0000000000000000000000000000000001")),
+        ),
+    )?;
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+#### Python
+
+:::code-group
+```python [example.py]
+from pytempo import Call, TempoTransaction
+from provider import w3, account
+
+# Send three transactions concurrently using different nonce keys
+for nonce_key, to, data in [
+    (1, "0xcafebabecafebabecafebabecafebabecafebabe", "0xdeadbeef0000000000000000000000000000000001"),
+    (2, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "0xcafebabe0000000000000000000000000000000001"),
+    (3, "0xcafebabecafebabecafebabecafebabecafebabe", "0xdeadbeef0000000000000000000000000000000001"),
+]:
+    tx = TempoTransaction.create(
+        chain_id=w3.eth.chain_id,
+        gas_limit=300_000,
+        max_fee_per_gas=w3.eth.gas_price * 2,
+        max_priority_fee_per_gas=w3.eth.gas_price,
+        nonce=0,
+        nonce_key=nonce_key, # [!code hl]
+        calls=(Call.create(to=to, data=data),),
+    )
+    signed_tx = tx.sign(account.key.hex())
+    w3.eth.send_raw_transaction(signed_tx.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+#### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+	"context"
+	"log"
+	"math/big"
+	"sync"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/tempoxyz/tempo-go/pkg/signer"
+	"github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+	sgn, _ := signer.NewSigner("0x...")
+	c := newClient()
+	ctx := context.Background()
+
+	// Send three transactions concurrently using different nonce keys
+	type txParams struct {
+		nonceKey int64
+		to       string
+		data     string
+	}
+	params := []txParams{
+		{1, "0xcafebabecafebabecafebabecafebabecafebabe", "deadbeef0000000000000000000000000000000001"},
+		{2, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "cafebabe0000000000000000000000000000000001"},
+		{3, "0xcafebabecafebabecafebabecafebabecafebabe", "deadbeef0000000000000000000000000000000001"},
+	}
+
+	var wg sync.WaitGroup
+	for _, p := range params {
+		wg.Add(1)
+		go func(p txParams) {
+			defer wg.Done()
+			tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdMainnet)).
+				SetNonce(0).
+				SetNonceKey(big.NewInt(p.nonceKey)). // [!code hl]
+				SetGas(300_000).
+				SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+				SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+				AddCall(
+					common.HexToAddress(p.to),
+					big.NewInt(0),
+					common.Hex2Bytes(p.data),
+				).
+				Build()
+
+			_ = transaction.SignTransaction(tx, sgn)
+			serialized, _ := transaction.Serialize(tx, nil)
+			txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+			log.Printf("Nonce key %d tx: %s", p.nonceKey, txHash)
+		}(p)
+	}
+	wg.Wait()
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+#### Cast
+
+```bash
+# Send three transactions concurrently using different nonce keys
+$ cast send 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef0000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --async --nonce 0 --tempo.nonce-key 1 # [!code hl]
+
+$ cast send 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef \
+  --data 0xcafebabe0000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --async --nonce 0 --tempo.nonce-key 2 # [!code hl]
+
+$ cast send 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef0000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --async --nonce 0 --tempo.nonce-key 3 # [!code hl]
+```
+
+#### RLP
+
+```tsx
+rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key, // [!code focus]
+  nonce,
+  valid_before, // [!code focus]
+  valid_after,
+  fee_token,
+  fee_payer_signature,
+  aa_authorization_list,
+  key_authorization,
+  signature,
+])
+```
+
+### Expiring Nonces
+
+The [expiring nonces specification](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1009.md) defines transactions that automatically expire if they are not executed within a specified time window.
+
+**Benefits:**
+
+* No nonce tracking required
+* Automatic replay protection via circular buffer
+* No permanent state bloat from unused nonce keys
+
+Set `nonceKey` to `maxUint256` and `validBefore` to a Unix timestamp in seconds satisfying `now < validBefore <= now + 300`, where `now` is the current block timestamp. The maximum window is five minutes; SDK defaults may use shorter windows. See [TIP-1093](https://tips.sh/1093).
+
+#### Viem
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { maxUint256 } from 'viem'
+import { client } from './viem.config'
+
+const receipt = await client.sendTransactionSync({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  nonceKey: maxUint256, // [!code focus]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+  validBefore: Math.floor(Date.now() / 1000) + 20, // [!code focus]
+})
+```
+
+```tsx twoslash [viem.config.ts] filename="viem.config.ts"
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+#### Wagmi
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { maxUint256 } from 'viem'
+import { useSendTransaction } from 'wagmi'
+
+const { sendTransaction } = useSendTransaction()
+
+sendTransaction({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  nonceKey: maxUint256, // [!code focus]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+  validBefore: Math.floor(Date.now() / 1000) + 20, // [!code focus]
+})
+```
+
+```tsx twoslash [wagmi.config.ts]
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+#### Rust
+
+:::code-group
+```rust [example.rs]
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use alloy::primitives::{U256, address, bytes};
+use alloy::providers::Provider;
+use tempo_alloy::rpc::TempoTransactionRequest;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    let valid_before = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() + 30;
+
+    let pending = provider
+        .send_transaction(
+            TempoTransactionRequest::default()
+                .with_nonce_key(U256::MAX) // [!code focus]
+                .with_valid_before(valid_before) // [!code focus]
+                .with_to(address!("0xcafebabecafebabecafebabecafebabecafebabe"))
+                .with_input(bytes!("deadbeef0000000000000000000000000000000001")),
+        )
+        .await?;
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+#### Python
+
+:::code-group
+```python [example.py]
+import time
+
+from pytempo import Call, TempoTransaction
+from provider import w3, account
+
+# maxUint256: signals an expiring nonce
+MAX_UINT256 = 2**256 - 1
+valid_before = int(time.time()) + 20
+
+tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=300_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce_key=MAX_UINT256, # [!code focus]
+    valid_before=valid_before, # [!code focus]
+    calls=(
+        Call.create(
+            to="0xcafebabecafebabecafebabecafebabecafebabe",
+            data="0xdeadbeef0000000000000000000000000000000001",
+        ),
+    ),
+)
+
+signed_tx = tx.sign(account.key.hex())
+tx_hash = w3.eth.send_raw_transaction(signed_tx.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+#### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+	"context"
+	"log"
+	"math/big"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/tempoxyz/tempo-go/pkg/signer"
+	"github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+	sgn, _ := signer.NewSigner("0x...")
+	c := newClient()
+	ctx := context.Background()
+
+	// maxUint256: signals an expiring nonce
+	maxUint256, _ := new(big.Int).SetString("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 16)
+
+	validBefore := uint64(time.Now().Unix()) + 20
+
+	tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdMainnet)).
+		SetGas(300_000).
+		SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+		SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+		SetNonceKey(maxUint256). // [!code focus]
+		SetValidBefore(validBefore). // [!code focus]
+		AddCall(
+			common.HexToAddress("0xcafebabecafebabecafebabecafebabecafebabe"),
+			big.NewInt(0),
+			common.Hex2Bytes("deadbeef0000000000000000000000000000000001"),
+		).
+		Build()
+
+	_ = transaction.SignTransaction(tx, sgn)
+	serialized, _ := transaction.Serialize(tx, nil)
+	txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+	log.Printf("Transaction hash: %s", txHash)
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+#### Cast
+
+```bash
+$ VALID_BEFORE=$(($(date +%s) + 20))
+$ cast send 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef0000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --tempo.expiring-nonce --tempo.valid-before $VALID_BEFORE # [!code hl]
+```
+
+#### RLP
+
+```tsx
+rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key, // set to `maxUint256` // [!code focus]
+  nonce,
+  valid_before, // e.g. `now + 20`; maximum `now + 300` // [!code focus]
+  valid_after,
+  fee_token,
+  fee_payer_signature,
+  aa_authorization_list,
+  key_authorization,
+  signature,
+])
+```
+
+#### Distinguishing identical transactions
+
+Expiring nonce transactions don't use a sequential nonce, so two transactions from the same sender with the same calls, fee parameters, and `validBefore` have the same hash. The second one is rejected as a replay.
+
+After [T12](https://tempo.xyz/developers/docs/protocol/upgrades/t12), the `nonce` field of an expiring nonce transaction can be any `uint64` value. The protocol doesn't track or order it; it only makes the transaction hash unique. To submit otherwise identical transactions in parallel, set a distinct or random `nonce` on each one. Before T12, `nonce` must be `0`. See [TIP-1106](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1106.md).
+
+### 2D Nonces
+
+For cases requiring ordered sequences within a key, Tempo's **2D nonce system** enables parallel transaction execution:
+
+* **Protocol nonce (key 0)**: The default sequential nonce. Transactions must be processed in order.
+* **User nonces (keys 1+)**: Independent nonce sequences that allow concurrent transaction submission.
+
+#### Viem
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { client } from './viem.config'
+
+const [receipt1, receipt2, receipt3] = await Promise.all([ 
+  client.sendTransactionSync({
+    data: '0xdeadbeef0000000000000000000000000000000001',
+    nonceKey: 1n, // [!code focus]
+    to: '0xcafebabecafebabecafebabecafebabecafebabe',
+  }),
+  client.sendTransactionSync({
+    data: '0xcafebabe0000000000000000000000000000000001',
+    nonceKey: 2n, // [!code focus]
+    to: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+  }),
+  client.sendTransactionSync({
+    data: '0xdeadbeef0000000000000000000000000000000001',
+    nonceKey: 3n, // [!code focus]
+    to: '0xcafebabecafebabecafebabecafebabecafebabe',
+  }),
+])
+```
+
+```tsx twoslash [viem.config.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+#### Wagmi
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { useSendTransaction } from 'wagmi'
+
+const { sendTransaction } = useSendTransaction()
+
+sendTransaction({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  nonceKey: 1n, // [!code focus]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+sendTransaction({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  nonceKey: 2n, // [!code focus]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+sendTransaction({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  nonceKey: 3n, // [!code focus]
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+})
+```
+
+```tsx twoslash [wagmi.config.ts]
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+#### Rust
+
+:::code-group
+```rust [example.rs]
+use alloy::primitives::{U256, address, bytes};
+use alloy::providers::Provider;
+use tempo_alloy::rpc::TempoTransactionRequest;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    let (r1, r2, r3) = tokio::try_join!(
+        provider.send_transaction(
+            TempoTransactionRequest::default()
+                .with_nonce_key(U256::from(1)) // [!code focus]
+                .with_to(address!("0xcafebabecafebabecafebabecafebabecafebabe"))
+                .with_input(bytes!("deadbeef0000000000000000000000000000000001")),
+        ),
+        provider.send_transaction(
+            TempoTransactionRequest::default()
+                .with_nonce_key(U256::from(2)) // [!code focus]
+                .with_to(address!("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"))
+                .with_input(bytes!("cafebabe0000000000000000000000000000000001")),
+        ),
+        provider.send_transaction(
+            TempoTransactionRequest::default()
+                .with_nonce_key(U256::from(3)) // [!code focus]
+                .with_to(address!("0xcafebabecafebabecafebabecafebabecafebabe"))
+                .with_input(bytes!("deadbeef0000000000000000000000000000000001")),
+        ),
+    )?;
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+#### Python
+
+:::code-group
+```python [example.py]
+from pytempo import Call, TempoTransaction
+from provider import w3, account
+
+for nonce_key, to, data in [
+    (1, "0xcafebabecafebabecafebabecafebabecafebabe", "0xdeadbeef0000000000000000000000000000000001"),
+    (2, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "0xcafebabe0000000000000000000000000000000001"),
+    (3, "0xcafebabecafebabecafebabecafebabecafebabe", "0xdeadbeef0000000000000000000000000000000001"),
+]:
+    tx = TempoTransaction.create(
+        chain_id=w3.eth.chain_id,
+        gas_limit=300_000,
+        max_fee_per_gas=w3.eth.gas_price * 2,
+        max_priority_fee_per_gas=w3.eth.gas_price,
+        nonce=0,
+        nonce_key=nonce_key, # [!code focus]
+        calls=(Call.create(to=to, data=data),),
+    )
+    signed_tx = tx.sign(account.key.hex())
+    w3.eth.send_raw_transaction(signed_tx.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+#### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+	"context"
+	"log"
+	"math/big"
+	"sync"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/tempoxyz/tempo-go/pkg/signer"
+	"github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+	sgn, _ := signer.NewSigner("0x...")
+	c := newClient()
+	ctx := context.Background()
+
+	type txParams struct {
+		nonceKey int64
+		to       string
+		data     string
+	}
+	params := []txParams{
+		{1, "0xcafebabecafebabecafebabecafebabecafebabe", "deadbeef0000000000000000000000000000000001"},
+		{2, "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "cafebabe0000000000000000000000000000000001"},
+		{3, "0xcafebabecafebabecafebabecafebabecafebabe", "deadbeef0000000000000000000000000000000001"},
+	}
+
+	var wg sync.WaitGroup
+	for _, p := range params {
+		wg.Add(1)
+		go func(p txParams) {
+			defer wg.Done()
+			tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdMainnet)).
+				SetNonce(0).
+				SetNonceKey(big.NewInt(p.nonceKey)). // [!code focus]
+				SetGas(300_000).
+				SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+				SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+				AddCall(
+					common.HexToAddress(p.to),
+					big.NewInt(0),
+					common.Hex2Bytes(p.data),
+				).
+				Build()
+
+			_ = transaction.SignTransaction(tx, sgn)
+			serialized, _ := transaction.Serialize(tx, nil)
+			txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+			log.Printf("Nonce key %d tx: %s", p.nonceKey, txHash)
+		}(p)
+	}
+	wg.Wait()
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+#### Cast
+
+```bash
+$ cast send 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef0000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --nonce 0 --tempo.nonce-key 1 # [!code hl]
+
+$ cast send 0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef \
+  --data 0xcafebabe0000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --nonce 0 --tempo.nonce-key 2 # [!code hl]
+
+$ cast send 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef0000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --nonce 0 --tempo.nonce-key 3 # [!code hl]
+```
+
+#### RLP
+
+```tsx
+rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key, // [!code focus]
+  nonce,
+  valid_before,
+  valid_after,
+  fee_token,
+  fee_payer_signature,
+  aa_authorization_list,
+  key_authorization,
+  signature,
+])
+```
+
+:::warning
+**Reuse nonce keys instead of generating random ones.** Creating a new nonce key incurs a state creation cost that increases with the number of active keys (see [State creation costs](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1000.md)). For most applications, using a small set of sequential nonce keys (e.g., `1n`, `2n`, `3n`) is sufficient and much more cost-effective than generating random nonce keys for each transaction.
+:::
+
+### Scheduled Transactions
+
+Scheduled transactions allow you to sign a transaction in advance and specify a time window for when it can be
+executed onchain. By setting `validAfter` and `validBefore` timestamps, you define the earliest and latest times
+the transaction can be included in a block.
+
+#### Viem
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { client } from './viem.config'
+
+const signature = await client.signTransaction({
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+  validAfter: Math.floor(Number(new Date('2026-01-01')) / 1000), // [!code hl]
+  validBefore: Math.floor(Number(new Date('2026-01-02')) / 1000), // [!code hl]
+})
+```
+
+```tsx twoslash [viem.config.ts]
+import { privateKeyToAccount } from 'viem/accounts'
+import { createClient } from 'viem/tempo'
+
+export const client = createClient({
+  account: privateKeyToAccount('0x...'),
+})
+```
+:::
+
+#### Wagmi
+
+:::code-group
+```tsx twoslash [example.ts]
+// @noErrors
+import { signTransaction } from 'wagmi/actions'
+import { config } from './wagmi.config'
+
+const signature = await signTransaction(config, {
+  data: '0xdeadbeef0000000000000000000000000000000001',
+  to: '0xcafebabecafebabecafebabecafebabecafebabe',
+  validAfter: Math.floor(Number(new Date('2026-01-01')) / 1000), // [!code hl]
+  validBefore: Math.floor(Number(new Date('2026-01-02')) / 1000), // [!code hl]
+})
+```
+
+```tsx twoslash [wagmi.config.ts]
+// @noErrors
+import { tempo } from 'viem/chains'
+import { createConfig, http } from 'wagmi'
+import { tempoWallet } from 'wagmi/connectors'
+
+export const config = createConfig({
+  connectors: [tempoWallet()],
+  chains: [tempo],
+  multiInjectedProviderDiscovery: false,
+  transports: {
+    [tempo.id]: http(),
+  },
+})
+```
+:::
+
+#### Rust
+
+:::code-group
+```rust [example.rs]
+use alloy::primitives::{address, bytes};
+use alloy::providers::Provider;
+use tempo_alloy::rpc::TempoTransactionRequest;
+
+mod provider;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let provider = provider::get_provider().await?;
+
+    // 2026-01-01 00:00:00 UTC
+    let valid_after = 1_767_225_600;
+    // 2026-01-02 00:00:00 UTC
+    let valid_before = 1_767_312_000;
+
+    let pending = provider
+        .send_transaction(
+            TempoTransactionRequest::default()
+                .with_valid_after(valid_after) // [!code hl]
+                .with_valid_before(valid_before) // [!code hl]
+                .with_to(address!("0xcafebabecafebabecafebabecafebabecafebabe"))
+                .with_input(bytes!("deadbeef0000000000000000000000000000000001")),
+        )
+        .await?;
+
+    Ok(())
+}
+```
+
+```rust [provider.rs]
+use alloy::providers::ProviderBuilder;
+use alloy::signers::local::PrivateKeySigner;
+use tempo_alloy::TempoNetwork;
+
+pub async fn get_provider() -> Result<
+    impl alloy::providers::Provider<TempoNetwork>,
+    Box<dyn std::error::Error>,
+> {
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY")
+        .expect("PRIVATE_KEY not set")
+        .parse()?;
+
+    let provider = ProviderBuilder::new_with_network::<TempoNetwork>()
+        .wallet(signer)
+        .connect(&std::env::var("RPC_URL").expect("RPC_URL not set"))
+        .await?;
+
+    Ok(provider)
+}
+```
+:::
+
+#### Python
+
+:::code-group
+```python [example.py]
+from datetime import datetime, timezone
+
+from pytempo import Call, TempoTransaction
+from provider import w3, account
+
+# 2026-01-01 00:00:00 UTC
+valid_after = int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp())
+# 2026-01-02 00:00:00 UTC
+valid_before = int(datetime(2026, 1, 2, tzinfo=timezone.utc).timestamp())
+
+tx = TempoTransaction.create(
+    chain_id=w3.eth.chain_id,
+    gas_limit=300_000,
+    max_fee_per_gas=w3.eth.gas_price * 2,
+    max_priority_fee_per_gas=w3.eth.gas_price,
+    nonce=w3.eth.get_transaction_count(account.address),
+    valid_after=valid_after, # [!code hl]
+    valid_before=valid_before, # [!code hl]
+    calls=(
+        Call.create(
+            to="0xcafebabecafebabecafebabecafebabecafebabe",
+            data="0xdeadbeef0000000000000000000000000000000001",
+        ),
+    ),
+)
+
+# Sign now, submit to the network for later execution
+signed_tx = tx.sign(account.key.hex())
+tx_hash = w3.eth.send_raw_transaction(signed_tx.encode())
+```
+
+```python [provider.py]
+from web3 import Web3
+from eth_account import Account
+
+w3 = Web3(Web3.HTTPProvider("https://rpc.tempo.xyz"))
+account = Account.from_key("0x...")
+```
+:::
+
+#### Go
+
+:::code-group
+```go [main.go]
+package main
+
+import (
+	"context"
+	"log"
+	"math/big"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/tempoxyz/tempo-go/pkg/signer"
+	"github.com/tempoxyz/tempo-go/pkg/transaction"
+)
+
+func main() {
+	sgn, _ := signer.NewSigner("0x...")
+	c := newClient()
+	ctx := context.Background()
+
+	nonce, _ := c.GetTransactionCount(ctx, sgn.Address().Hex())
+
+	// 2026-01-01 00:00:00 UTC
+	validAfter := uint64(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC).Unix())
+	// 2026-01-02 00:00:00 UTC
+	validBefore := uint64(time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC).Unix())
+
+	tx := transaction.NewBuilder(big.NewInt(transaction.ChainIdMainnet)).
+		SetNonce(nonce).
+		SetGas(300_000).
+		SetMaxFeePerGas(big.NewInt(25_000_000_000)).
+		SetMaxPriorityFeePerGas(big.NewInt(1_000_000_000)).
+		SetValidAfter(validAfter). // [!code hl]
+		SetValidBefore(validBefore). // [!code hl]
+		AddCall(
+			common.HexToAddress("0xcafebabecafebabecafebabecafebabecafebabe"),
+			big.NewInt(0),
+			common.Hex2Bytes("deadbeef0000000000000000000000000000000001"),
+		).
+		Build()
+
+	// Sign now, submit to the network for later execution
+	_ = transaction.SignTransaction(tx, sgn)
+	serialized, _ := transaction.Serialize(tx, nil)
+	txHash, _ := c.SendRawTransaction(ctx, serialized)
+
+	log.Printf("Transaction hash: %s", txHash)
+}
+```
+
+```go [provider.go]
+package main
+
+import (
+	"os"
+
+	"github.com/tempoxyz/tempo-go/pkg/client"
+)
+
+func newClient() *client.Client {
+	return client.New(os.Getenv("TEMPO_RPC_URL"))
+}
+```
+:::
+
+#### Cast
+
+```bash
+$ VALID_AFTER=$(date -d '2026-01-01' +%s)
+$ VALID_BEFORE=$(date -d '2026-01-02' +%s)
+$ cast mktx 0xcafebabecafebabecafebabecafebabecafebabe \
+  --data 0xdeadbeef0000000000000000000000000000000001 \
+  --rpc-url $TEMPO_RPC_URL \
+  --private-key $PRIVATE_KEY \
+  --tempo.valid-after $VALID_AFTER \
+  --tempo.valid-before $VALID_BEFORE # [!code hl]
+```
+
+#### RLP
+
+```tsx
+rlp([
+  chain_id,
+  max_priority_fee_per_gas,
+  max_fee_per_gas,
+  gas,
+  calls,
+  access_list,
+  nonce_key,
+  nonce,
+  valid_before, // [!code focus]
+  valid_after, // [!code focus]
+  fee_token,
+  fee_payer_signature,
+  aa_authorization_list,
+  key_authorization,
+  signature,
+])
+```
