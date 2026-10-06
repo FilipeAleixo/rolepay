@@ -2,7 +2,8 @@ import { ResponseType } from '../api.js'
 import { newRunCommand } from '../commands/newRun.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
 import { setupCommand } from '../commands/setup.js'
-import { decodeCustomId } from '../components/customId.js'
+import { type RunAction, decodeCustomId } from '../components/customId.js'
+import { approveButton, cancelButton, retryButton } from '../components/runButtons.js'
 import type { Dispatch } from '../http/handler.js'
 import type { DiscordAppDeps } from './deps.js'
 import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext } from './handlers.js'
@@ -18,7 +19,7 @@ const COMMANDS: Record<string, CommandHandler> = {
 
 const AUTOCOMPLETE: Record<string, AutocompleteHandler> = {}
 
-const BUTTONS: Partial<Record<string, ButtonHandler>> = {}
+const BUTTONS: Record<RunAction, ButtonHandler> = { approve: approveButton, cancel: cancelButton, retry: retryButton }
 
 export const ROUTED_COMMANDS = Object.keys(COMMANDS)
 
