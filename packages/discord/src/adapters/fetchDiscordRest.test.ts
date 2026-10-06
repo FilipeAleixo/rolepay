@@ -102,6 +102,21 @@ describe('FetchDiscordRest', () => {
     expect(await rest.postToChannel('700000000000000001', { content: 'x' })).toEqual({ ok: false, error: { code: 'forbidden' } })
   })
 
+  it('registers commands with PUT, for one guild (instant) or globally', async () => {
+    const { fetch, calls } = fakeFetch({ status: 200, json: [] }, { status: 200, json: [] }, { status: 401, json: { code: 0 } })
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
+    const commands = [{ name: 'payrun', description: 'x' }]
+    expect((await rest.putCommands({ applicationId: REPLY.applicationId, guildId: '1094309218049937418', commands })).ok).toBe(true)
+    expect((await rest.putCommands({ applicationId: REPLY.applicationId, commands })).ok).toBe(true)
+    expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
+      `PUT ${API}/applications/${REPLY.applicationId}/guilds/1094309218049937418/commands`,
+      `PUT ${API}/applications/${REPLY.applicationId}/commands`,
+    ])
+    expect(JSON.parse(calls[0]?.body as string)).toEqual(commands)
+    expect(calls[0]?.headers.get('authorization')).toBe(`Bot ${BOT_TOKEN}`)
+    expect(await rest.putCommands({ applicationId: REPLY.applicationId, commands })).toEqual({ ok: false, error: { code: 'http_error', status: 401 } })
+  })
+
   it('throws (unexpected) on a 5xx so the caller can treat it as an outage', async () => {
     const { fetch } = fakeFetch({ status: 502 })
     const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
