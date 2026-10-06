@@ -1,5 +1,5 @@
 import type { KeyStatusView } from '@payrun/core'
-import { money, relativeTime, shortAddress, tokenLabel } from './format.js'
+import { count, money, relativeTime, shortAddress, tokenLabel } from './format.js'
 
 /** The bot key in one paragraph: what it may spend and what the chain says about it now. */
 export function keyText({ key, state }: KeyStatusView): string {
@@ -15,8 +15,10 @@ export function keyText({ key, state }: KeyStatusView): string {
   return `${id}: Active. ${money(state.remaining, p.token)} of ${money(p.limit, p.token)} left${resets}. Expires ${relativeTime(state.expiry)}.`
 }
 
+/** After "per": "day" for one, "30 days" for more. */
 function period(seconds: number): string {
-  if (seconds % 86_400 === 0) return seconds === 86_400 ? 'day' : `${seconds / 86_400} days`
-  if (seconds % 3_600 === 0) return seconds === 3_600 ? 'hour' : `${seconds / 3_600} hours`
-  return `${seconds} seconds`
+  const per = (n: number, one: string, many: string) => (n === 1 ? one : count(n, one, many))
+  if (seconds % 86_400 === 0) return per(seconds / 86_400, 'day', 'days')
+  if (seconds % 3_600 === 0) return per(seconds / 3_600, 'hour', 'hours')
+  return per(seconds, 'second', 'seconds')
 }

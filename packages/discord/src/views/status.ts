@@ -1,6 +1,6 @@
 import type { Community, KeyStatusView, Run, RunStatus } from '@payrun/core'
 import type { Message } from '../api.js'
-import { COLORS, NO_PINGS, money, relativeTime, roleMention } from './format.js'
+import { COLORS, NO_PINGS, count, money, relativeTime, roleMention } from './format.js'
 import { keyText } from './key.js'
 
 export const STATUS_LABELS: Record<RunStatus, string> = {
@@ -15,7 +15,7 @@ export const STATUS_LABELS: Record<RunStatus, string> = {
 
 /** One line per run, for lists and autocomplete. */
 export const runSummary = (r: Run) =>
-  [r.id, STATUS_LABELS[r.status], money(r.total, r.token), `${r.lines.length} ${r.lines.length === 1 ? 'person' : 'people'}`, r.note]
+  [r.id, STATUS_LABELS[r.status], money(r.total, r.token), count(r.lines.length, 'person', 'people'), r.note]
     .filter(Boolean)
     .join(' · ')
 

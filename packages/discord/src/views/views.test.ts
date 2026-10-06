@@ -1,10 +1,13 @@
+import type { KeyStatusView } from '@payrun/core'
 import { describe, expect, it } from 'vitest'
-import { ADMIN, ALICE, BOB, TREASURER, TX, approved, cancelled, executing, failed, paid, pending, run } from '../../test/fixtures.js'
+import { ADMIN, ALICE, BOB, GUILD, T0, TOKEN, TREASURER, TX, approved, cancelled, executing, failed, paid, pending, run } from '../../test/fixtures.js'
 import { ButtonStyle, type Message } from '../api.js'
 import { decodeCustomId } from '../components/customId.js'
 import { explainError } from './errors.js'
-import { money, shortAddress, tokenLabel } from './format.js'
+import { count, money, shortAddress, tokenLabel } from './format.js'
+import { keyText } from './key.js'
 import { receiptDm, runMessage } from './run.js'
+import { runSummary } from './status.js'
 
 const ctx = { network: 'moderato' as const }
 const buttons = (m: Message) => (m.components ?? []).flatMap((row) => row.components)
@@ -23,7 +26,58 @@ describe('format', () => {
     expect(money(1_500_000n, '0x20c0000000000000000000000000000000000001')).toBe('1.5 AlphaUSD')
     expect(money(1n, '0x20c0000000000000000000000000000000000001')).toBe('0.000001 AlphaUSD')
   })
+
+  it('counts in the singular for exactly one, the plural otherwise', () => {
+    expect(count(1, 'person', 'people')).toBe('1 person')
+    expect(count(3, 'person', 'people')).toBe('3 people')
+    expect(count(0, 'person', 'people')).toBe('0 people')
+  })
 })
+
+describe('count strings: never "1 people"', () => {
+  const receipts = (sent: number, total: number) => runMessage(paid(), { ...ctx, receipts: { sent, total } }).embeds?.[0]?.fields?.find((f) => f.name === 'Receipts')?.value
+
+  it('the receipts line says one person, or all of many', () => {
+    expect(receipts(1, 1)).toBe('Sent by DM to 1 person.')
+    expect(receipts(3, 3)).toBe('Sent by DM to all 3 people.')
+  })
+
+  it('the receipts line agrees with how many were missed', () => {
+    expect(receipts(1, 2)).toBe('Sent by DM to 1 of 2 people (1 does not accept DMs from this server).')
+    expect(receipts(1, 3)).toBe('Sent by DM to 1 of 3 people (2 do not accept DMs from this server).')
+    expect(receipts(0, 1)).toBe('Sent by DM to 0 of 1 person (1 does not accept DMs from this server).')
+  })
+
+  it('a run summary says person for one line and people for more', () => {
+    const r = run()
+    expect(runSummary({ ...r, lines: r.lines.slice(0, 1) })).toContain(' · 1 person · ')
+    expect(runSummary(r)).toContain(' · 2 people · ')
+  })
+
+  it("the bot key's period reads per second, per hour, per day, or a plural count", () => {
+    const per = (periodSeconds: number) => keyText(keyView(periodSeconds)).match(/ per ([^,]+),/)?.[1]
+    expect(per(1)).toBe('second')
+    expect(per(90)).toBe('90 seconds')
+    expect(per(3_600)).toBe('hour')
+    expect(per(7_200)).toBe('2 hours')
+    expect(per(86_400)).toBe('day')
+    expect(per(2_592_000)).toBe('30 days')
+  })
+
+  it('one unregistered payee is not "each of them"', () => {
+    expect(explainError({ code: 'unregistered_payees', discordUserIds: [ALICE] })).toBe(`Not registered to be paid yet: <@${ALICE}>. They need to run /payee link first.`)
+    expect(explainError({ code: 'unregistered_payees', discordUserIds: [ALICE, BOB] })).toBe(`Not registered to be paid yet: <@${ALICE}>, <@${BOB}>. Each of them runs /payee link first.`)
+  })
+})
+
+/** A bot key waiting for the treasury, whose text spells out its policy. */
+function keyView(periodSeconds: number): KeyStatusView {
+  const policy = { token: TOKEN, limit: 100_000_000n, periodSeconds, expiresAt: 1_900_000_000, recipients: null, feeToken: null, feeBudget: null }
+  return {
+    key: { address: '0x5555555555555555555555555555555555555555', communityId: GUILD, status: 'pending_authorization', policy, createdAt: T0, authorizedAt: null, revokedAt: null },
+    state: { status: 'not_authorized', expiry: 0, remaining: 0n, periodEnd: null, chainTime: 1_800_000_000, feeBudgetRemaining: null },
+  }
+}
 
 describe('runMessage', () => {
   it('a run awaiting approval lists every line and the total, with Approve and Cancel', () => {
@@ -93,7 +147,7 @@ describe('runMessage', () => {
 
   it('a paid run reports how many receipts went out by DM', () => {
     expect(text(runMessage(paid(), { ...ctx, receipts: 'sending' }))).toMatch(/Sending receipts/)
-    expect(text(runMessage(paid(), { ...ctx, receipts: { sent: 1, total: 2 } }))).toMatch(/1 of 2 people.*1 do not accept DMs/)
+    expect(text(runMessage(paid(), { ...ctx, receipts: { sent: 1, total: 2 } }))).toMatch(/1 of 2 people.*1 does not accept DMs/)
     expect(text(runMessage(paid(), { ...ctx, receipts: { sent: 2, total: 2 } }))).toMatch(/to all 2 people/)
   })
 

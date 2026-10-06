@@ -7,7 +7,10 @@ export const tokenLabel = (token: string) => TOKEN_SYMBOLS[token.toLowerCase()] 
 /** Money for people: bigint micro-units in, "1.5 AlphaUSD" out. */
 export const money = (micros: bigint, token: string) => `${formatAmount(micros)} ${tokenLabel(token)}`
 
-export const txUrl = (network: NetworkName, txHash: string) => `${NETWORKS[network].explorerUrl}/tx/${txHash}`
+/** A count with its noun: "1 person", "3 people", "0 people". */
+export const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+
+export const txUrl =(network: NetworkName, txHash: string) => `${NETWORKS[network].explorerUrl}/tx/${txHash}`
 export const addressUrl = (network: NetworkName, address: string) => `${NETWORKS[network].explorerUrl}/address/${address}`
 
 /** Discord renders `<t:unix:R>` as "in 5 minutes" / "2 hours ago" in the reader's locale. */

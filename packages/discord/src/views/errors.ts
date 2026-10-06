@@ -20,7 +20,8 @@ export function explainError(error: CodedError, ctx: { token?: string } = {}): s
       return 'Someone else changed this run at the same moment. Check /payrun status.'
     case 'unregistered_payees': {
       const ids = (error.discordUserIds as string[] | undefined) ?? []
-      return `Not registered to be paid yet: ${ids.map(mention).join(', ')}. Each of them runs /payee link first.`
+      const next = ids.length === 1 ? 'They need to run /payee link first.' : 'Each of them runs /payee link first.'
+      return `Not registered to be paid yet: ${ids.map(mention).join(', ')}. ${next}`
     }
     case 'no_lines':
       return 'Nobody to pay. Pick a role or list some users.'

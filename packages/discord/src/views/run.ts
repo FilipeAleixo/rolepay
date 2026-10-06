@@ -1,7 +1,7 @@
 import type { Failure, NetworkName, Run, RunLine } from '@payrun/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
 import { type RunAction, encodeCustomId } from '../components/customId.js'
-import { COLORS, NO_PINGS, mention, money, relativeTime, roleMention, shortAddress, txUrl } from './format.js'
+import { COLORS, NO_PINGS, count, mention, money, relativeTime, roleMention, shortAddress, txUrl } from './format.js'
 
 export type RunViewContext = {
   network: NetworkName
@@ -131,8 +131,9 @@ function buttonsFor(run: Run, ctx: RunViewContext): Button[] {
 
 function receiptsText(r: NonNullable<RunViewContext['receipts']>): string {
   if (r === 'sending') return 'Sending receipts by DM…'
-  if (r.sent === r.total) return `Sent by DM to all ${r.total} people.`
-  return `Sent by DM to ${r.sent} of ${r.total} people (${r.total - r.sent} do not accept DMs from this server).`
+  if (r.sent === r.total) return r.total === 1 ? 'Sent by DM to 1 person.' : `Sent by DM to all ${r.total} people.`
+  const missed = r.total - r.sent
+  return `Sent by DM to ${r.sent} of ${count(r.total, 'person', 'people')} (${missed} ${missed === 1 ? 'does' : 'do'} not accept DMs from this server).`
 }
 
 const rows = (buttons: Button[]): ActionRow[] => (buttons.length ? [{ type: ComponentType.ActionRow, components: buttons }] : [])
