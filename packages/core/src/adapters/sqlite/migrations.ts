@@ -118,6 +118,15 @@ const migrations: Record<string, Migration> = {
         .execute()
     },
   },
+  '0004_require_separate_approver': {
+    async up(db: Kysely<unknown>) {
+      // Four eyes per community (0/1, portable to Postgres as integer). Existing rows: off.
+      await db.schema
+        .alterTable('communities')
+        .addColumn('require_separate_approver', 'integer', (c) => c.notNull().defaultTo(0))
+        .execute()
+    },
+  },
 }
 
 class InlineMigrations implements MigrationProvider {

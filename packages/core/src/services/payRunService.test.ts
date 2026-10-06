@@ -129,6 +129,27 @@ describe('PayRunService: building and approving runs', () => {
     })
   })
 
+  it('the creator may approve their own run by default; with requireSeparateApprover another approver must', async () => {
+    const w = await world()
+    const own = async () => {
+      const created = await w.svc.create({ guildId: GUILD, createdBy: TREASURER, note: null, lines: LINES })
+      if (!created.ok) throw new Error(created.error.code)
+      await w.svc.submit({ guildId: GUILD, runId: created.value.id, actor: TREASURER })
+      return created.value.id
+    }
+    const first = await own()
+    expect(await w.svc.approve({ guildId: GUILD, runId: first, actor: TREASURER, actorCanApprove: true })).toMatchObject({ ok: true, value: { status: 'approved' } })
+
+    await w.communitySvc.register({ guildId: '1094309218049937420', name: null, treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
+    const c = await w.repos.communities.get(GUILD)
+    if (!c) throw new Error('no community')
+    await w.repos.communities.update({ ...c, requireSeparateApprover: true })
+    const second = await own()
+    expect(await w.svc.approve({ guildId: GUILD, runId: second, actor: TREASURER, actorCanApprove: true })).toEqual({ ok: false, error: { code: 'creator_cannot_approve' } })
+    expect(await w.svc.get({ guildId: GUILD, runId: second })).toMatchObject({ ok: true, value: { status: 'pending_approval' } })
+    expect(await w.svc.approve({ guildId: GUILD, runId: second, actor: CAROL, actorCanApprove: true })).toMatchObject({ ok: true, value: { status: 'approved' } })
+  })
+
   it('rejects actors that are not Discord user IDs (they are persisted on the run)', async () => {
     const created = await w.svc.create({ guildId: GUILD, createdBy: ALICE, note: null, lines: LINES })
     if (!created.ok) throw new Error()

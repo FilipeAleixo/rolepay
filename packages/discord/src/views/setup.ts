@@ -16,6 +16,9 @@ export type SetupView = {
   network: NetworkName
 }
 
+const approverText = (roleId: string | null, separate: boolean | undefined, unset: string) =>
+  roleId ? `${roleMention(roleId)} approves runs.${separate ? ' The person who created a run cannot approve it.' : ''}` : unset
+
 const feesText = (feeMode: string, feeToken: string | null) => (feeMode === 'sponsor' ? 'Sponsored' : `From a fee budget in ${tokenLabel(feeToken ?? '')}`)
 
 const linkField = (link: SetupLinkView) => ({
@@ -44,10 +47,7 @@ export function setupMessage(v: SetupView): Message {
     { name: 'Treasury', value: `[${shortAddress(c.treasuryAddress)}](${addressUrl(v.network, c.treasuryAddress)})`, inline: true },
     { name: 'Payout token', value: tokenLabel(c.payoutToken), inline: true },
     { name: 'Fees', value: feesText(c.feeMode, c.feeToken), inline: true },
-    {
-      name: 'Approver role',
-      value: c.approverRoleId ? `${roleMention(c.approverRoleId)} approves runs.` : 'Not set. Nobody can approve runs until you set one.',
-    },
+    { name: 'Approver role', value: approverText(c.approverRoleId, c.requireSeparateApprover, 'Not set. Nobody can approve runs until you set one.') },
     { name: 'Bot key', value: v.key ? keyText(v.key) : 'None yet.' },
   ]
   if (v.notices.length) fields.push({ name: 'Note', value: v.notices.join('\n') })
@@ -62,7 +62,7 @@ export function setupMessage(v: SetupView): Message {
 
 /** The first /payrun setup: nothing is registered until the treasurer creates the treasury on the page. */
 export function firstSetupMessage(v: {
-  settings: { name: string | null; payoutToken: string; feeMode: string; feeToken: string | null; approverRoleId: string | null }
+  settings: { name: string | null; payoutToken: string; feeMode: string; feeToken: string | null; approverRoleId: string | null; requireSeparateApprover?: boolean }
   setupLink: SetupLinkView
 }): Message {
   const s = v.settings
@@ -76,7 +76,7 @@ export function firstSetupMessage(v: {
         fields: [
           { name: 'Payout token', value: tokenLabel(s.payoutToken), inline: true },
           { name: 'Fees', value: feesText(s.feeMode, s.feeToken), inline: true },
-          { name: 'Approver role', value: s.approverRoleId ? `${roleMention(s.approverRoleId)} approves runs.` : 'Not set.' },
+          { name: 'Approver role', value: approverText(s.approverRoleId, s.requireSeparateApprover, 'Not set.') },
           linkField(v.setupLink),
         ],
       },

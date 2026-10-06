@@ -45,6 +45,23 @@ describe('Approve button', () => {
     expect(await status(a)).toBe('pending_approval')
   })
 
+  it('the creator may approve their own run, unless the server requires a separate approver', async () => {
+    const creatorTreasurer = { userId: ADMIN, roles: [TREASURER_ROLE] }
+    const a = await withPendingRun()
+    await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, creatorTreasurer))
+    expect(await status(a)).toBe('approved')
+
+    const b = await withPendingRun()
+    await b.payrun.communities.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [TREASURER_ROLE] })
+    const own = await b.send(buttonClick(SCOPE, `payrun:approve:${b.runId}`, creatorTreasurer))
+    expect(isEphemeral(own)).toBe(true)
+    expect(body(own).data?.content).toMatch(/created .* cannot approve/)
+    expect(await status(b)).toBe('pending_approval')
+    expect(b.queue.jobs).toEqual([])
+    await b.send(buttonClick(SCOPE, `payrun:approve:${b.runId}`, treasurer))
+    expect(await status(b)).toBe('approved')
+  })
+
   it('with no approver role configured, nobody can approve, and the message says how to fix it', async () => {
     const a = await withPendingRun({ approverRoleId: null })
     const d = await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))

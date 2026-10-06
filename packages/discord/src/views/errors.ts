@@ -35,6 +35,8 @@ export function explainError(error: CodedError, ctx: { token?: string } = {}): s
       return `That run is not valid: ${String(error.message ?? '')}`
     case 'not_permitted':
       return 'Only members with the approver role can approve runs.'
+    case 'creator_cannot_approve':
+      return 'In this server the person who created a run cannot approve it. Another member with the approver role approves it.'
     case 'not_retryable':
       return 'This run cannot be retried automatically, because money may already have moved. Check the explorer before doing anything else.'
     case 'chain_shows_payments':

@@ -9,7 +9,7 @@ const PATH_USD = '0x20c0000000000000000000000000000000000000'
 const setupUrl = (final: string) => /https:\/\/payrun\.test\/setup\/([A-Za-z0-9_-]+)/.exec(final)?.[1] ?? null
 const NEW_ROLE = '400000000000000077'
 
-async function setup(a: Awaited<ReturnType<typeof appHarness>>, values: Record<string, string | boolean | undefined>, who = admin) {
+async function setup(a: Awaited<ReturnType<typeof appHarness>>, values: Record<string, string | boolean | undefined>, who: { userId: string; manageGuild?: boolean; roles?: string[] } = admin) {
   a.clock.advance(60) // time passes between admin commands (keys are ordered by creation time)
   const token = `tok-setup-${Math.random()}`
   const d = await a.send(slashCommand(SCOPE, 'payrun', 'setup', values, who, token))
@@ -99,12 +99,12 @@ describe('/payrun setup', () => {
     const a = await appHarness()
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     await a.payrun.communities.authorizeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })
-    const toBudget = await setup(a, { fees: 'fee_budget' })
+    const toBudget = await setup(a, { fees: 'fee_budget' }, treasurerAdmin)
     expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'fee_budget', feeToken: PATH_USD } })
     expect(toBudget.final).toMatch(/From a fee budget in pathUSD/)
     expect(toBudget.final).toMatch(/fee budget/)
     expect(toBudget.final).toMatch(/new bot key/)
-    const back = await setup(a, { fees: 'sponsor' })
+    const back = await setup(a, { fees: 'sponsor' }, treasurerAdmin)
     expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor', feeToken: null } })
     expect(back.final).toMatch(/Sponsored/)
   })
@@ -112,7 +112,7 @@ describe('/payrun setup', () => {
   it('refuses a fee token equal to the payout token', async () => {
     const a = await appHarness()
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
-    const { final } = await setup(a, { fees: 'fee_budget', fee_token: TOKEN })
+    const { final } = await setup(a, { fees: 'fee_budget', fee_token: TOKEN }, treasurerAdmin)
     expect(final).toMatch(/fee token must differ/)
     expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor' } })
   })
@@ -128,14 +128,42 @@ describe('/payrun setup', () => {
     expect(final).toContain(`<@&${TREASURER_ROLE}>`)
   })
 
-  it('run again, it updates the approver role and keeps the pending key', async () => {
+  it('run again by a treasurer, it updates the approver role and keeps the pending key', async () => {
     const a = await appHarness()
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     const before = await keyAddress(a)
-    const { final } = await setup(a, { approver_role: NEW_ROLE })
+    const { final } = await setup(a, { approver_role: NEW_ROLE }, treasurerAdmin)
     expect((await a.payrun.communities.get(GUILD)).ok && (await a.payrun.communities.get(GUILD))).toMatchObject({ value: { approverRoleId: NEW_ROLE } })
     expect(await keyAddress(a)).toBe(before)
     expect(final).toContain(`<@&${NEW_ROLE}>`)
+  })
+
+  it('Manage Server alone cannot change the approver role, the fee mode or the separate-approver rule (H1)', async () => {
+    const a = await appHarness()
+    await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
+    for (const values of [{ approver_role: NEW_ROLE }, { fees: 'fee_budget' }, { separate_approver: true }]) {
+      // A moderator with Manage Server, holding the role they want to make the approver.
+      const { final } = await setup(a, values, { userId: ADMIN, manageGuild: true, roles: [NEW_ROLE] })
+      expect(final).toContain(`Only a member with <@&${TREASURER_ROLE}>`)
+    }
+    expect(await a.payrun.communities.get(GUILD)).toMatchObject({
+      ok: true,
+      value: { approverRoleId: TREASURER_ROLE, feeMode: 'sponsor', requireSeparateApprover: false },
+    })
+  })
+
+  it('a treasurer can require a separate approver; the card says so; a first setup can choose it too', async () => {
+    const a = await appHarness()
+    await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
+    const on = await setup(a, { separate_approver: true }, treasurerAdmin)
+    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { requireSeparateApprover: true } })
+    expect(on.final).toMatch(/created a run cannot approve it/)
+
+    const b = await appHarness()
+    const first = await setup(b, { approver_role: TREASURER_ROLE, separate_approver: true }, treasurerAdmin)
+    expect(first.final).toMatch(/created a run cannot approve it/)
+    const link = await b.payrun.communities.describeSetupLink({ token: setupUrl(first.final) as string })
+    expect(link).toMatchObject({ ok: true, value: { settings: { requireSeparateApprover: true } } })
   })
 
   it('once the treasury has authorised the key, shows it active with its remaining limit', async () => {

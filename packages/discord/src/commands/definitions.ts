@@ -44,6 +44,7 @@ export const commandDefinitions = (opts: { devShortcuts: boolean }) => [
           },
           { type: OptionType.String, name: 'fee_token', description: 'Fee budget token address (default: pathUSD on testnet)' },
           { type: OptionType.String, name: 'token', description: 'Payout token address, the first time (default: AlphaUSD on testnet)' },
+          { type: OptionType.Boolean, name: 'separate_approver', description: 'Require someone other than the creator of a run to approve it (off by default)' },
           ...(opts.devShortcuts ? DEV_SETUP_OPTIONS : []),
         ],
       },

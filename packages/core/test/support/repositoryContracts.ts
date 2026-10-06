@@ -22,7 +22,7 @@ export function repositoryContracts(name: string, make: RepoFactory) {
     })
 
     it('round-trips a community exactly', async () => {
-      const c = f.community({ feeMode: 'fee_budget', feeToken: f.FEE_TOKEN, approverRoleId: '400000000000000001' })
+      const c = f.community({ feeMode: 'fee_budget', feeToken: f.FEE_TOKEN, approverRoleId: '400000000000000001', requireSeparateApprover: true })
       expect(await repo.insert(c)).toEqual({ ok: true, value: undefined })
       expect(await repo.get(f.GUILD)).toEqual(c)
     })

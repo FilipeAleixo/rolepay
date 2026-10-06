@@ -12,6 +12,8 @@ export interface CommunitiesTable {
   fee_mode: string
   fee_token: string | null
   approver_role_id: string | null
+  /** 0 or 1. */
+  require_separate_approver: number
   created_at: string
   updated_at: string
 }

@@ -16,6 +16,7 @@ const SetupOptions = z.object({
   treasury: AddressSchema.optional(),
   key_limit: z.string().optional(),
   new_key: z.boolean().optional(),
+  separate_approver: z.boolean().optional(),
 })
 type Options = z.infer<typeof SetupOptions>
 type Fees = { feeMode: 'sponsor' | 'fee_budget'; feeToken: string | null }
@@ -24,6 +25,12 @@ const fail = (content: string): DeferredResult => ({ ok: false, message: { conte
 
 /** A fee budget for a key issued on the dev path in fee_budget mode (1 unit of the fee token per period). */
 const DEV_FEE_BUDGET = 1_000_000n
+
+/** Changing how runs are approved or paid needs the current approver role, not just Manage Server (core enforces it). */
+const notPermitted = (c: Community, what: string, nextRoleId?: string) =>
+  c.approverRoleId
+    ? `Only a member with ${roleMention(c.approverRoleId)} can change ${what}. Manage Server alone is not enough.`
+    : `Only a member who holds ${nextRoleId ? roleMention(nextRoleId) : 'the approver role'} can set it as the approver role.`
 
 const DEV_SHORTCUTS_OFF =
   '`treasury`, `new_key` and `key_limit` are testnet dev shortcuts, and they are off on this server. Run /payrun setup without them: the treasurer sets up the treasury and the bot key on the treasury page.'
@@ -80,6 +87,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       feeMode: fees?.feeMode ?? 'sponsor',
       feeToken: fees?.feeToken ?? null,
       approverRoleId: role.roleId,
+      requireSeparateApprover: o.separate_approver ?? false,
     })
     if (!registered.ok) return fail(explainError(registered.error))
     community = registered
@@ -92,14 +100,22 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       const renamed = await payrun.communities.setName({ guildId, name: guildName })
       if (renamed.ok) community = renamed
     }
+    const actorRoleIds = ctx.caller.roles
     if (o.approver_role && o.approver_role !== community.value.approverRoleId) {
-      const updated = await payrun.communities.setApproverRole({ guildId, approverRoleId: o.approver_role })
-      if (!updated.ok) return fail(explainError(updated.error))
+      const updated = await payrun.communities.setApproverRole({ guildId, approverRoleId: o.approver_role, actorRoleIds })
+      if (!updated.ok) {
+        return fail(updated.error.code === 'not_permitted' ? notPermitted(community.value, 'the approver role', o.approver_role) : explainError(updated.error))
+      }
+      community = updated
+    }
+    if (o.separate_approver !== undefined && o.separate_approver !== community.value.requireSeparateApprover) {
+      const updated = await payrun.communities.setRequireSeparateApprover({ guildId, value: o.separate_approver, actorRoleIds })
+      if (!updated.ok) return fail(updated.error.code === 'not_permitted' ? notPermitted(community.value, 'who may approve') : explainError(updated.error))
       community = updated
     }
     if (fees && (fees.feeMode !== community.value.feeMode || fees.feeToken !== community.value.feeToken)) {
-      const switched = await payrun.communities.setFeeMode({ guildId, ...fees })
-      if (!switched.ok) return fail(explainError(switched.error))
+      const switched = await payrun.communities.setFeeMode({ guildId, ...fees, actorRoleIds })
+      if (!switched.ok) return fail(switched.error.code === 'not_permitted' ? notPermitted(community.value, 'the fee mode') : explainError(switched.error))
       community = { ok: true, value: switched.value.community }
       if (switched.value.keyNeedsFeeBudget) {
         notices.push('The bot key has no fee budget for this: authorise a new bot key on the treasury page (with a fee budget) before the next run.')
@@ -165,6 +181,7 @@ async function firstSetup(o: Options, fees: Fees | null, guildName: string | nul
     feeMode: fees?.feeMode ?? ('sponsor' as const),
     feeToken: fees?.feeToken ?? null,
     approverRoleId: role.roleId,
+    requireSeparateApprover: o.separate_approver ?? false,
   }
   const link = await deps.payrun.communities.issueSetupLink({ guildId: ctx.guildId, discordUserId: ctx.caller.userId, settings })
   if (!link.ok) return fail(explainError(link.error))
@@ -177,7 +194,14 @@ async function issueLink(c: Community, ctx: GuildContext, deps: DiscordAppDeps):
   const link = await deps.payrun.communities.issueSetupLink({
     guildId: c.id,
     discordUserId: ctx.caller.userId,
-    settings: { name: c.name, payoutToken: c.payoutToken, feeMode: c.feeMode, feeToken: c.feeToken, approverRoleId: c.approverRoleId },
+    settings: {
+      name: c.name,
+      payoutToken: c.payoutToken,
+      feeMode: c.feeMode,
+      feeToken: c.feeToken,
+      approverRoleId: c.approverRoleId,
+      requireSeparateApprover: c.requireSeparateApprover,
+    },
   })
   return link.ok ? { url: setupUrl(deps, link.value.token), expiresAt: link.value.expiresAt } : null
 }

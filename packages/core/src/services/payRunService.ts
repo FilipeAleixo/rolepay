@@ -95,11 +95,18 @@ export class PayRunService {
     return this.step(input, { type: 'submit', actor: input.actor })
   }
 
-  /** The caller (the Discord layer) asserts whether `actor` holds the approver role. */
+  /**
+   * The caller (the Discord layer) asserts whether `actor` holds the approver role. The run's
+   * creator may approve it too, unless the community requires a separate approver.
+   */
   async approve(
     input: RunRef & { actor: string; actorCanApprove: boolean },
-  ): Promise<Result<Run, StepError | InvalidInput | { code: 'not_retryable' } | { code: 'not_permitted' }>> {
+  ): Promise<Result<Run, StepError | InvalidInput | { code: 'not_retryable' } | { code: 'not_permitted' } | { code: 'creator_cannot_approve' }>> {
     if (!input.actorCanApprove) return err({ code: 'not_permitted' })
+    const run = await this.get(input)
+    if (!run.ok) return run
+    const community = await this.deps.communities.get(run.value.communityId)
+    if (community?.requireSeparateApprover && run.value.createdBy === input.actor) return err({ code: 'creator_cannot_approve' })
     return this.step(input, { type: 'approve', actor: input.actor })
   }
 

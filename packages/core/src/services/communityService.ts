@@ -12,6 +12,7 @@ import {
   type SetupSettings,
   SetupSettingsSchema,
   botKeyContext,
+  canChangeApprovalRules,
   keyAuthorization,
   toBotKeyView,
 } from '../domain/community.js'
@@ -44,6 +45,7 @@ export const RegisterCommunityInputSchema = z.object({
   feeMode: FeeModeSchema,
   feeToken: AddressSchema.nullable().default(null),
   approverRoleId: DiscordIdSchema.nullable().default(null),
+  requireSeparateApprover: z.boolean().default(false),
 })
 export type RegisterCommunityInput = z.input<typeof RegisterCommunityInputSchema>
 
@@ -69,6 +71,7 @@ export const IssueSetupLinkInputSchema = z.object({
 export type IssueSetupLinkInput = z.input<typeof IssueSetupLinkInputSchema>
 
 export type NotFound = { code: 'community_not_found' }
+export type NotPermitted = { code: 'not_permitted' }
 export type SetupLinkError = { code: 'link_not_found' } | { code: 'link_expired' }
 export type SetupLinkView = {
   guildId: string
@@ -102,6 +105,7 @@ export class CommunityService {
       feeMode: parsed.data.feeMode,
       feeToken: parsed.data.feeToken,
       approverRoleId: parsed.data.approverRoleId,
+      requireSeparateApprover: parsed.data.requireSeparateApprover,
       createdAt: now,
       updatedAt: now,
     })
@@ -111,12 +115,36 @@ export class CommunityService {
     return ok(candidate.data)
   }
 
-  async setApproverRole(input: { guildId: string; approverRoleId: string | null }): Promise<Result<Community, InvalidInput | NotFound>> {
+  /**
+   * Changes the approver role. Only a member who holds the CURRENT approver role may (with
+   * none set yet, one who holds the new role): Manage Server alone cannot make itself the
+   * approver. `actorRoleIds` are the caller's roles from the signed interaction.
+   */
+  async setApproverRole(input: {
+    guildId: string
+    approverRoleId: string | null
+    actorRoleIds: readonly string[]
+  }): Promise<Result<Community, InvalidInput | NotFound | NotPermitted>> {
     const role = DiscordIdSchema.nullable().safeParse(input.approverRoleId)
     if (!role.success) return invalidInput(role.error)
     const community = await this.deps.communities.get(input.guildId)
     if (!community) return err({ code: 'community_not_found' })
+    if (!canChangeApprovalRules(community, input.actorRoleIds, role.data)) return err({ code: 'not_permitted' })
     const updated: Community = { ...community, approverRoleId: role.data, updatedAt: this.deps.clock.now() }
+    await this.deps.communities.update(updated)
+    return ok(updated)
+  }
+
+  /** Four eyes on or off: whether a run's creator may approve it. The same rule as the approver role. */
+  async setRequireSeparateApprover(input: {
+    guildId: string
+    value: boolean
+    actorRoleIds: readonly string[]
+  }): Promise<Result<Community, NotFound | NotPermitted>> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    if (!canChangeApprovalRules(community, input.actorRoleIds)) return err({ code: 'not_permitted' })
+    const updated: Community = { ...community, requireSeparateApprover: input.value, updatedAt: this.deps.clock.now() }
     await this.deps.communities.update(updated)
     return ok(updated)
   }
@@ -134,15 +162,18 @@ export class CommunityService {
   /**
    * Switches how the bot's transactions pay fees. A key authorised without a fee budget
    * cannot pay fees itself, so `keyNeedsFeeBudget` says when the treasury must authorise
-   * a new key (the old one keeps working in sponsor mode).
+   * a new key (the old one keeps working in sponsor mode). The same rule as the approver role:
+   * a wrong fee mode stops every run, so Manage Server alone cannot switch it.
    */
   async setFeeMode(input: {
     guildId: string
     feeMode: string
     feeToken: string | null
-  }): Promise<Result<{ community: Community; keyNeedsFeeBudget: boolean }, InvalidInput | NotFound>> {
+    actorRoleIds: readonly string[]
+  }): Promise<Result<{ community: Community; keyNeedsFeeBudget: boolean }, InvalidInput | NotFound | NotPermitted>> {
     const community = await this.deps.communities.get(input.guildId)
     if (!community) return err({ code: 'community_not_found' })
+    if (!canChangeApprovalRules(community, input.actorRoleIds)) return err({ code: 'not_permitted' })
     const candidate = CommunitySchema.safeParse({
       ...community,
       feeMode: input.feeMode,

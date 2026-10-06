@@ -107,6 +107,7 @@ function communityRow(c: Community) {
     fee_mode: c.feeMode,
     fee_token: c.feeToken,
     approver_role_id: c.approverRoleId,
+    require_separate_approver: c.requireSeparateApprover ? 1 : 0,
     created_at: iso(c.createdAt),
     updated_at: iso(c.updatedAt),
   }
@@ -122,6 +123,7 @@ function toCommunity(r: Selectable<Database['communities']>): Community {
     feeMode: r.fee_mode,
     feeToken: r.fee_token,
     approverRoleId: r.approver_role_id,
+    requireSeparateApprover: r.require_separate_approver === 1,
     createdAt: date(r.created_at),
     updatedAt: date(r.updated_at),
   })

@@ -22,6 +22,8 @@ export const CommunitySchema = z
     feeToken: AddressSchema.nullable(),
     /** The Discord role allowed to approve runs (the Treasurer). The Discord layer checks it. */
     approverRoleId: DiscordIdSchema.nullable(),
+    /** Four eyes: the person who created a run may not approve it. Off by default. */
+    requireSeparateApprover: z.boolean().default(false),
     createdAt: z.date(),
     updatedAt: z.date(),
   })
@@ -41,11 +43,23 @@ export const SetupSettingsSchema = z
     feeMode: FeeModeSchema,
     feeToken: AddressSchema.nullable().default(null),
     approverRoleId: DiscordIdSchema.nullable(),
+    requireSeparateApprover: z.boolean().default(false),
   })
   // The same fee rules as CommunitySchema, so binding the treasury can never fail on them later.
   .refine((s) => s.feeMode !== 'fee_budget' || s.feeToken !== null, 'fee_budget mode needs a fee token')
   .refine((s) => s.feeToken === null || s.feeToken !== s.payoutToken, 'the fee token must differ from the payout token')
 export type SetupSettings = z.infer<typeof SetupSettingsSchema>
+
+/**
+ * Who may change how runs are approved (the approver role, the separate-approver rule) and how
+ * the bot pays fees: a member holding the CURRENT approver role, so Manage Server alone cannot
+ * make itself the approver. With no role set yet (first setup), the first one is set by someone
+ * who holds it. `actorRoleIds` are the roles Discord signed into the interaction.
+ */
+export function canChangeApprovalRules(community: Pick<Community, 'approverRoleId'>, actorRoleIds: readonly string[], nextApproverRoleId?: string | null): boolean {
+  if (community.approverRoleId !== null) return actorRoleIds.includes(community.approverRoleId)
+  return nextApproverRoleId === undefined || nextApproverRoleId === null || actorRoleIds.includes(nextApproverRoleId)
+}
 
 /**
  * A short-lived link to the treasurer's setup page for one guild. Only a keyed fingerprint

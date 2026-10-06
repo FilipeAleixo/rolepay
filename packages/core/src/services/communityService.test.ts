@@ -47,10 +47,13 @@ describe('CommunityService', () => {
     it('stores the approver (Treasurer) role, which the Discord layer checks before asserting approval', async () => {
       const r = await register({ approverRoleId: '400000000000000001' })
       expect(r.ok && r.value.approverRoleId).toBe('400000000000000001')
-      const changed = await svc.setApproverRole({ guildId: GUILD, approverRoleId: '400000000000000002' })
+      const changed = await svc.setApproverRole({ guildId: GUILD, approverRoleId: '400000000000000002', actorRoleIds: ['400000000000000001'] })
       expect(changed).toMatchObject({ ok: true, value: { approverRoleId: '400000000000000002' } })
       expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { approverRoleId: '400000000000000002' } })
-      expect(await svc.setApproverRole({ guildId: GUILD, approverRoleId: 'nope' })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await svc.setApproverRole({ guildId: GUILD, approverRoleId: 'nope', actorRoleIds: ['400000000000000002'] })).toMatchObject({
+        ok: false,
+        error: { code: 'invalid_input' },
+      })
     })
 
     it('normalises addresses to lowercase', async () => {
@@ -248,6 +251,49 @@ describe('CommunityService', () => {
     })
   })
 
+  describe('who may change the approval rules (H1: Manage Server alone must not make itself the approver)', () => {
+    const ROLE = '400000000000000001'
+    const NEW_ROLE = '400000000000000002'
+
+    it('changing the approver role needs the CURRENT approver role; holding only the new one is not enough', async () => {
+      await register({ approverRoleId: ROLE })
+      expect(await svc.setApproverRole({ guildId: GUILD, approverRoleId: NEW_ROLE, actorRoleIds: [] })).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await svc.setApproverRole({ guildId: GUILD, approverRoleId: NEW_ROLE, actorRoleIds: [NEW_ROLE] })).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { approverRoleId: ROLE } })
+      expect(await svc.setApproverRole({ guildId: GUILD, approverRoleId: NEW_ROLE, actorRoleIds: [ROLE] })).toMatchObject({ ok: true, value: { approverRoleId: NEW_ROLE } })
+    })
+
+    it('with no approver role yet, the first one is set by someone who holds it (the first-setup rule)', async () => {
+      await register()
+      expect(await svc.setApproverRole({ guildId: GUILD, approverRoleId: ROLE, actorRoleIds: [] })).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await svc.setApproverRole({ guildId: GUILD, approverRoleId: ROLE, actorRoleIds: [ROLE] })).toMatchObject({ ok: true, value: { approverRoleId: ROLE } })
+    })
+
+    it('switching the fee mode follows the same rule', async () => {
+      await register({ approverRoleId: ROLE })
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: FEE_TOKEN, actorRoleIds: [] })).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor' } })
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: FEE_TOKEN, actorRoleIds: [ROLE] })).toMatchObject({ ok: true })
+    })
+
+    it('requireSeparateApprover is off by default, changes under the same rule, and travels with a first setup link', async () => {
+      const r = await register({ approverRoleId: ROLE })
+      expect(r.ok && r.value.requireSeparateApprover).toBe(false)
+      expect(await svc.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [] })).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await svc.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [ROLE] })).toMatchObject({ ok: true, value: { requireSeparateApprover: true } })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { requireSeparateApprover: true } })
+
+      const OTHER = '1094309218049937419'
+      const link = await svc.issueSetupLink({
+        guildId: OTHER,
+        discordUserId: '300000000000000001',
+        settings: { name: null, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: ROLE, requireSeparateApprover: true },
+      })
+      if (!link.ok) throw new Error(link.error.code)
+      expect(await svc.bindTreasury({ token: link.value.token, treasuryAddress: TREASURY })).toMatchObject({ ok: true, value: { requireSeparateApprover: true } })
+    })
+  })
+
   describe('settings after registration', () => {
     it('stores the community name', async () => {
       await register({ name: null })
@@ -261,9 +307,9 @@ describe('CommunityService', () => {
       await register()
       await svc.provisionBotKey(policy())
       await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
-      const toBudget = await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: FEE_TOKEN })
+      const toBudget = await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: FEE_TOKEN, actorRoleIds: [] })
       expect(toBudget).toMatchObject({ ok: true, value: { community: { feeMode: 'fee_budget', feeToken: FEE_TOKEN }, keyNeedsFeeBudget: true } })
-      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'sponsor', feeToken: null })).toMatchObject({
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'sponsor', feeToken: null, actorRoleIds: [] })).toMatchObject({
         ok: true,
         value: { community: { feeMode: 'sponsor', feeToken: null }, keyNeedsFeeBudget: false },
       })
@@ -273,14 +319,14 @@ describe('CommunityService', () => {
       await register({ feeMode: 'fee_budget', feeToken: FEE_TOKEN })
       await svc.provisionBotKey(policy({ feeBudget: 1_000_000n }))
       await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
-      await svc.setFeeMode({ guildId: GUILD, feeMode: 'sponsor', feeToken: null })
-      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: FEE_TOKEN })).toMatchObject({ ok: true, value: { keyNeedsFeeBudget: false } })
+      await svc.setFeeMode({ guildId: GUILD, feeMode: 'sponsor', feeToken: null, actorRoleIds: [] })
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: FEE_TOKEN, actorRoleIds: [] })).toMatchObject({ ok: true, value: { keyNeedsFeeBudget: false } })
     })
 
     it('refuses fee_budget without a fee token, or with the payout token', async () => {
       await register()
-      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: null })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
-      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: TOKEN })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: null, actorRoleIds: [] })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: TOKEN, actorRoleIds: [] })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
       expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor' } })
     })
   })
