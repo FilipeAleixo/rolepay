@@ -16,3 +16,5 @@ coverage/
 
 # Chain test evidence (public tx hashes, regenerated per run)
 .chain-results/
+test-results/
+playwright-report/
