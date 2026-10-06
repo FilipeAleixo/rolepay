@@ -79,7 +79,7 @@ export class TempoPayoutChain implements PayoutChain {
       this.reader.accessKey
         .getRemainingLimit({ account: input.account, accessKey: input.accessKey, token })
         .catch(() => ({ remaining: 0n, periodEnd: undefined }))
-    const [meta, limit, block, fee] = await Promise.all([
+    const [meta, spend, block, fee] = await Promise.all([
       this.reader.accessKey.getMetadata({ account: input.account, accessKey: input.accessKey }),
       remaining(input.token),
       this.reader.getBlock(),
@@ -89,11 +89,11 @@ export class TempoPayoutChain implements PayoutChain {
     const expiry = Number(meta.expiry)
     // The keychain zeroes expiry on revoke; an unknown key reads as expiry 0, not revoked.
     const status: KeyState['status'] = meta.isRevoked ? 'revoked' : expiry === 0 ? 'not_authorized' : chainTime >= expiry ? 'expired' : 'active'
-    const periodEnd = limit.periodEnd ? Number(limit.periodEnd) : null
+    const periodEnd = spend.periodEnd ? Number(spend.periodEnd) : null
     return {
       status,
       expiry,
-      remaining: limit.remaining,
+      remaining: spend.remaining,
       periodEnd: periodEnd || null,
       chainTime,
       feeBudgetRemaining: fee ? fee.remaining : null,
