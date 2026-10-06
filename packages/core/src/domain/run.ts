@@ -158,6 +158,8 @@ const CANCELLABLE: ReadonlySet<RunStatus> = new Set(['draft', 'pending_approval'
  *   draft -submit-> pending_approval -approve-> approved -start_attempt-> executing
  *   executing -record_signed-> executing (once per attempt)
  *   executing -mark_paid-> paid | -mark_failed-> failed -start_attempt-> executing (if retryable)
+ *   failed -mark_paid-> paid | -mark_failed (partial_match, transfer_mismatch)-> failed
+ *     (the chain shows the run's memos after all: record what it shows)
  *   draft | pending_approval | approved | failed -cancel-> cancelled
  */
 export function transition(run: Run, event: RunEvent, now: Date): Result<Run, TransitionError> {
@@ -196,11 +198,11 @@ export function transition(run: Run, event: RunEvent, now: Date): Result<Run, Tr
       return next({ attempts: [...run.attempts.slice(0, -1), signed] })
     }
     case 'mark_paid':
-      return run.status === 'executing'
-        ? next({ status: 'paid', paidTxHash: event.txHash, paidBlock: event.blockNumber, paidAt: now })
+      return run.status === 'executing' || run.status === 'failed'
+        ? next({ status: 'paid', paidTxHash: event.txHash, paidBlock: event.blockNumber, paidAt: now, failure: null })
         : illegal()
     case 'mark_failed':
-      return run.status === 'executing'
+      return run.status === 'executing' || (run.status === 'failed' && NOT_RETRYABLE.has(event.reason))
         ? next({
             status: 'failed',
             failure: { reason: event.reason, detail: event.detail, retryable: !NOT_RETRYABLE.has(event.reason), at: now },

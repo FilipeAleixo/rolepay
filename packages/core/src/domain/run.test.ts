@@ -127,7 +127,8 @@ describe('transition: every illegal (status, event) pair is rejected', () => {
     approved: ['start_attempt', 'cancel'],
     executing: ['record_signed', 'mark_paid', 'mark_failed'],
     paid: [],
-    failed: ['start_attempt', 'cancel'],
+    // mark_paid: the chain shows the run paid after all (a non-retryable mark_failed is tested below).
+    failed: ['start_attempt', 'cancel', 'mark_paid'],
     cancelled: [],
   }
   const reach: Record<RunStatus, () => Run> = {
@@ -184,6 +185,14 @@ describe('transition: execution attempts and retries', () => {
       [1, 100n, 1_800_000_000, HASH],
       [2, 200n, 1_800_000_300, null],
     ])
+  })
+
+  it('a failed run can be brought up to date with the chain: paid, or a failure where money moved', () => {
+    const r = apply(draft(), submit, approve, start, signed, failed('rejected'))
+    expect(transition(r, paid, later(9))).toMatchObject({ ok: true, value: { status: 'paid', paidTxHash: HASH, failure: null } })
+    expect(transition(r, failed('partial_match'), later(9))).toMatchObject({ ok: true, value: { status: 'failed', failure: { reason: 'partial_match', retryable: false } } })
+    // A retryable reason would say nothing new, and would hide what the chain showed.
+    expect(transition(r, failed('not_landed'), later(9))).toMatchObject({ ok: false, error: { code: 'illegal_transition' } })
   })
 
   it('refuses to retry a run whose failure means money may have moved', () => {

@@ -136,6 +136,39 @@ describe('FakePayoutChain (the chain double behind every service unit test)', ()
     expect(chain.landedTxCount).toBe(0)
   })
 
+  it('fault: answers "rejected" but keeps the tx pending (a misread node error); mine() lands it before its deadline, never after', async () => {
+    await authorize()
+    const signed = await sign()
+    if (!signed.ok) throw new Error()
+    chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    expect(await chain.broadcast(signed.value.rawTx)).toMatchObject({ kind: 'rejected' })
+    expect(chain.landedTxCount).toBe(0)
+    await chain.mine()
+    expect(chain.landedTxCount).toBe(1)
+    expect(chain.balance(TOKEN, A1)).toBe(1_000_000n)
+    await chain.mine()
+    expect(chain.landedTxCount).toBe(1)
+
+    const late = await sign({ transfers: [{ to: A1, amount: 1n, memo: encodeMemo('run_g', 1) }] })
+    if (!late.ok) throw new Error()
+    chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    await chain.broadcast(late.value.rawTx)
+    chain.advance(200)
+    await chain.mine()
+    expect(chain.landedTxCount).toBe(1)
+  })
+
+  it('searches memo transfers up to toBlock when given', async () => {
+    await authorize()
+    const signed = await sign()
+    if (!signed.ok) throw new Error()
+    const before = chain.blockNumber
+    await chain.broadcast(signed.value.rawTx)
+    const memos = transfers.map((t) => t.memo)
+    expect(await chain.findMemoTransfers({ token: TOKEN, from: TREASURY, memos, fromBlock: 0n, toBlock: before })).toEqual([])
+    expect(await chain.findMemoTransfers({ token: TOKEN, from: TREASURY, memos, fromBlock: 0n, toBlock: chain.blockNumber })).toHaveLength(2)
+  })
+
   it('advances time and blocks', () => {
     const { time, blockNumber } = chain
     chain.advance(30)

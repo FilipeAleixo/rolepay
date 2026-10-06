@@ -7,7 +7,10 @@ export type RunViewContext = {
   network: NetworkName
   /** Shown on a run awaiting approval: who may approve it. */
   approverRoleId?: string | null
-  /** Why an approved run has not been paid yet (a pre-flight failure such as a revoked key). */
+  /**
+   * Why an approved run has not been paid yet (a pre-flight failure such as a revoked key), or
+   * why payrun stopped on a failed one (for example, the chain already shows its payments).
+   */
   problem?: string
   /** A payment (or retry) is in progress: show it as paying whatever the stored status says. */
   paying?: boolean
@@ -30,7 +33,10 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
     { name: 'Created by', value: mention(run.createdBy), inline: true },
     { name: 'Status', value: head.status },
   ]
-  if (ctx.problem && run.status === 'approved' && !ctx.paying) fields.push({ name: 'Not paid yet', value: ctx.problem })
+  if (ctx.problem && !ctx.paying) {
+    if (run.status === 'approved') fields.push({ name: 'Not paid yet', value: ctx.problem })
+    if (run.status === 'failed') fields.push({ name: 'Note', value: ctx.problem })
+  }
   if (ctx.receipts && run.status === 'paid') fields.push({ name: 'Receipts', value: receiptsText(ctx.receipts) })
   if (ctx.stillConfirming && run.status === 'executing') {
     fields.push({ name: 'Confirming', value: 'The transaction is out but not confirmed yet. payrun keeps checking; /payrun status shows the result.' })
@@ -64,15 +70,19 @@ export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; 
   return { embeds: [embed], components: rows(link), allowed_mentions: NO_PINGS }
 }
 
-/** Plain English for why an attempt failed, and whether it is safe to try again. */
+/**
+ * Plain English for why an attempt failed, and whether it is safe to try again. Each says what
+ * payrun actually checked, never "nothing was paid": Retry waits until the last transaction can
+ * no longer land and checks the chain for this run's payments before it sends anything.
+ */
 export function explainFailure(failure: Failure): string {
   switch (failure.reason) {
     case 'rejected':
-      return `The network or the fee sponsor refused the transaction (${failure.detail}). Nothing was paid, so it is safe to retry.`
+      return `The network or the fee sponsor refused the transaction (${failure.detail}). Retry is safe: it waits until that transaction can no longer land and checks the chain first.`
     case 'reverted':
-      return 'The transaction reverted on chain. Nothing was paid, so it is safe to retry once the cause is fixed.'
+      return 'The transaction reverted on chain, so none of its transfers happened. Retry once the cause is fixed: it checks the chain first.'
     case 'not_landed':
-      return 'The transaction did not land before its deadline. Nothing was paid, so it is safe to retry.'
+      return 'The transaction did not land before its deadline, and the chain shows nothing paid for this run. Retry is safe: it checks the chain first.'
     case 'partial_match':
       return `Only some lines show as paid on chain (${failure.detail}). Do not retry: someone needs to check the explorer.`
     case 'transfer_mismatch':

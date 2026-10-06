@@ -320,6 +320,109 @@ describe('PayRunService: execution', () => {
   })
 })
 
+describe('PayRunService: telling the truth about failed and unsure runs', () => {
+  let w: World
+  beforeEach(async () => {
+    w = await world()
+  })
+  const pastDeadline = () => {
+    w.chain.advance(200)
+    w.clock.advance(200)
+  }
+  /** Line 1 of the run paid by hand with the run's memo (someone holding the key, or a stray tx). */
+  async function payLineOneByHand(runId: string) {
+    const status = await w.communitySvc.keyStatus({ guildId: GUILD })
+    if (!status.ok) throw new Error()
+    const stored = await w.repos.runs.get(runId)
+    const secret = (await w.repos.communities.getBotKey(status.value.key.address))?.sealedSecret.split(':').at(-1) ?? ''
+    const manual = await w.chain.signBatch({
+      account: TREASURY,
+      accessKeySecret: secret,
+      token: TOKEN,
+      transfers: [{ to: ADDR.alice, amount: 1_500_000n, memo: stored!.lines[0]!.memo }],
+      validBefore: w.chain.time + 120,
+      fee: { mode: 'sponsor' },
+    })
+    if (!manual.ok) throw new Error(manual.error.detail)
+    await w.chain.broadcast(manual.value.rawTx)
+  }
+
+  it('reconcile reads the head before the memo search: a tx landing between the two reads is never called not_landed', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'drop'
+    await w.svc.execute({ guildId: GUILD, runId: run.id })
+    const attempt = (await w.repos.runs.get(run.id))?.attempts[0]
+    if (!attempt?.rawTx) throw new Error('no signed tx')
+    w.chain.advance(attempt.validBefore - 5 - w.chain.time) // just before the deadline
+    // The tx lands while the memo search is in flight, and the next read of the head is a slow one, well past the deadline.
+    const search = w.chain.findMemoTransfers.bind(w.chain)
+    let raced = false
+    w.chain.findMemoTransfers = async (input) => {
+      const found = await search(input)
+      if (!raced) {
+        raced = true
+        await w.chain.broadcast(attempt.rawTx as `0x${string}`)
+        w.chain.advance(30)
+      }
+      return found
+    }
+    const r = await w.svc.reconcile({ guildId: GUILD, runId: run.id })
+    expect(r).toMatchObject({ ok: true, value: { status: 'paid' } })
+    expect(w.chain.landedTxCount).toBe(1)
+    expect(paidTo(w)).toEqual([1_500_000n, 2_000_000n])
+  })
+
+  it('a retry of a failed run whose payments are all on chain records it paid and sends nothing new', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    expect(await w.svc.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'failed', failure: { reason: 'rejected' } } })
+    await w.chain.mine() // the "rejected" tx lands after all
+    pastDeadline()
+    const broadcasts = w.chain.broadcastCount
+    const retry = await w.svc.execute({ guildId: GUILD, runId: run.id })
+    expect(retry).toMatchObject({ ok: true, value: { status: 'paid', run: { status: 'paid', failure: null } } })
+    expect(w.chain.broadcastCount).toBe(broadcasts)
+    expect(w.chain.landedTxCount).toBe(1)
+    expect(paidTo(w)).toEqual([1_500_000n, 2_000_000n])
+  })
+
+  it('a retry that finds some of the run on chain refuses (chain_shows_payments), sends nothing, and the run can no longer be retried or cancelled', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'drop'
+    await w.svc.execute({ guildId: GUILD, runId: run.id })
+    pastDeadline()
+    expect(await w.svc.reconcile({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'failed', failure: { reason: 'not_landed', retryable: true } } })
+    await payLineOneByHand(run.id)
+    pastDeadline()
+    const broadcasts = w.chain.broadcastCount
+    expect(await w.svc.execute({ guildId: GUILD, runId: run.id })).toEqual({ ok: false, error: { code: 'chain_shows_payments', detail: 'partial' } })
+    expect(w.chain.broadcastCount).toBe(broadcasts)
+    expect(await w.repos.runs.get(run.id)).toMatchObject({ status: 'failed', failure: { reason: 'partial_match', retryable: false } })
+    expect(await w.svc.cancel({ guildId: GUILD, runId: run.id, actor: TREASURER })).toEqual({ ok: false, error: { code: 'chain_shows_payments', detail: 'partial' } })
+    expect((await w.repos.runs.get(run.id))?.status).toBe('failed')
+    expect(paidTo(w)).toEqual([1_500_000n, 0n])
+  })
+
+  it('cancelling a failed run whose payments are on chain is refused, and the run is recorded paid', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    await w.svc.execute({ guildId: GUILD, runId: run.id })
+    await w.chain.mine()
+    pastDeadline()
+    expect(await w.svc.cancel({ guildId: GUILD, runId: run.id, actor: TREASURER })).toEqual({ ok: false, error: { code: 'chain_shows_payments', detail: 'all_paid' } })
+    expect(await w.repos.runs.get(run.id)).toMatchObject({ status: 'paid', cancelledBy: null })
+  })
+
+  it('a failed run with nothing on chain can still be cancelled', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'drop'
+    await w.svc.execute({ guildId: GUILD, runId: run.id })
+    pastDeadline()
+    await w.svc.reconcile({ guildId: GUILD, runId: run.id })
+    expect(await w.svc.cancel({ guildId: GUILD, runId: run.id, actor: TREASURER })).toMatchObject({ ok: true, value: { status: 'cancelled' } })
+  })
+})
+
 describe('PayRunService: crash recovery (a crash mid-run never pays twice)', () => {
   let w: World
   beforeEach(async () => {

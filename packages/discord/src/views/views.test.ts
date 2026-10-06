@@ -119,6 +119,22 @@ describe('runMessage', () => {
     expect(actions(m)).toEqual(['retry', 'cancel'])
   })
 
+  it('no failure claims "nothing was paid": each says what was checked, and that Retry checks the chain first', () => {
+    for (const reason of ['rejected', 'reverted', 'not_landed'] as const) {
+      const r = failed(reason as 'rejected')
+      const m = runMessage({ ...r, failure: r.failure && { ...r.failure, reason } }, ctx)
+      expect(text(m)).not.toMatch(/nothing was paid/i)
+      expect(text(m)).toMatch(/checks the chain/i)
+    }
+  })
+
+  it('a failed run shows the problem too (for example, the chain shows its payments), and a run where money moved offers no buttons', () => {
+    const problem = explainError({ code: 'chain_shows_payments', detail: 'partial' })
+    const m = runMessage(failed('partial_match'), { ...ctx, problem })
+    expect(text(m)).toContain('The chain already shows payments from this run')
+    expect(actions(m)).toEqual([])
+  })
+
   it('a failure where money may have moved offers no Retry and says a human must look', () => {
     const m = runMessage(failed('partial_match'), ctx)
     expect(text(m)).toMatch(/do not retry/i)

@@ -192,9 +192,9 @@ export class TempoPayoutChain implements PayoutChain {
     }
   }
 
-  async findMemoTransfers(input: { token: Address; from: Address; memos: Hex[]; fromBlock: bigint }): Promise<MemoTransfer[]> {
+  async findMemoTransfers(input: { token: Address; from: Address; memos: Hex[]; fromBlock: bigint; toBlock?: bigint }): Promise<MemoTransfer[]> {
     if (input.memos.length === 0) return []
-    const head = await this.reader.getBlockNumber()
+    const head = input.toBlock ?? (await this.reader.getBlockNumber())
     const out: MemoTransfer[] = []
     for (let start = input.fromBlock; start <= head; start += this.maxLogRange) {
       const end = start + this.maxLogRange - 1n < head ? start + this.maxLogRange - 1n : head

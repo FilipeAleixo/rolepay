@@ -115,6 +115,20 @@ describe('Cancel button', () => {
     expect(await status(a)).toBe('cancelled')
   })
 
+  it('a failed run whose payments are on chain cannot be cancelled: the message turns into the truth, with no Cancel', async () => {
+    const a = await withPendingRun()
+    await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
+    a.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    await a.payrun.payRuns.execute({ guildId: GUILD, runId: a.runId })
+    await a.chain.mine() // it was paid after all
+    await a.sleep(200_000)
+    const d = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, treasurer))
+    expect(body(d).type).toBe(7)
+    expect(text(body(d))).toMatch(/"title":"Paid"/)
+    expect(text(body(d))).not.toContain('payrun:cancel:')
+    expect(await status(a)).toBe('paid')
+  })
+
   it('an approver can cancel; a bystander cannot', async () => {
     const a = await withPendingRun()
     const nope = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, { userId: CAROL }))

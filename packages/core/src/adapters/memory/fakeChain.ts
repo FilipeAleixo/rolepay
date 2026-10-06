@@ -41,13 +41,18 @@ export class FakePayoutChain implements PayoutChain {
   blockNumber = 1n
   landedTxCount = 0
   broadcastCount = 0
-  readonly faults: { nextBroadcast: 'land_then_lose_response' | 'drop' | null } = { nextBroadcast: null }
+  /**
+   * `reject_but_keep_pending`: the node answers "rejected" but the tx sits in a mempool and lands on
+   * the next `mine()` if its validBefore has not passed (an error string misread as definitive).
+   */
+  readonly faults: { nextBroadcast: 'land_then_lose_response' | 'drop' | 'reject_but_keep_pending' | null } = { nextBroadcast: null }
 
   private balances = new Map<string, bigint>()
   private keys = new Map<string, KeyRecord>()
   private signed = new Map<Hex, Payload>()
   private landed = new Map<Hex, Landed>()
   private events: MemoTransfer[] = []
+  private pending: Hex[] = []
   private counter = 0
 
   constructor(opts: { startTime?: number } = {}) {
@@ -67,6 +72,16 @@ export class FakePayoutChain implements PayoutChain {
   }
   rootSigner(address: Address): RootSigner {
     return { address: lc(address) as Address, kind: 'fake', [FAKE_ROOT]: true } as RootSigner
+  }
+  /** Lands every pending tx (see `reject_but_keep_pending`) that is still valid; drops the rest. */
+  async mine() {
+    const queued = this.pending
+    this.pending = []
+    for (const raw of queued) {
+      const payload = this.signed.get(raw) ?? decodePayload(raw)
+      if (!payload || this.landed.has(hex32(0x7e, payload.n)) || this.refuse(payload)) continue
+      this.land(payload)
+    }
   }
 
   // ---- PayoutChain ---------------------------------------------------------
@@ -160,11 +175,52 @@ export class FakePayoutChain implements PayoutChain {
     const already = this.landed.get(txHash)
     if (already) return this.outcome(already)
     if (fault === 'drop') return { kind: 'unknown', detail: 'fake: dropped, response timed out' }
+    if (fault === 'reject_but_keep_pending') {
+      this.pending.push(rawTx)
+      return { kind: 'rejected', reason: 'other', detail: 'fake: keychain validation failed (misread: the tx is still pending)' }
+    }
+    const refused = this.refuse(payload)
+    if (refused) return refused
+    const landed = this.land(payload)
+    if (fault === 'land_then_lose_response') return { kind: 'unknown', detail: 'fake: landed, response lost' }
+    return this.outcome(landed)
+  }
+
+  async lookupTx(txHash: Hex): Promise<TxLookup> {
+    const l = this.landed.get(lc(txHash) as Hex)
+    if (!l) return { kind: 'not_found' }
+    return l.status === 'success'
+      ? { kind: 'confirmed', blockNumber: l.blockNumber, transfers: l.transfers }
+      : { kind: 'reverted', blockNumber: l.blockNumber }
+  }
+
+  async findMemoTransfers(input: { token: Address; from: Address; memos: Hex[]; fromBlock: bigint; toBlock?: bigint }) {
+    const memos = new Set(input.memos.map(lc))
+    const toBlock = input.toBlock ?? this.blockNumber
+    return this.events.filter(
+      (e) =>
+        lc(e.token) === lc(input.token) &&
+        lc(e.from) === lc(input.from) &&
+        memos.has(lc(e.memo)) &&
+        e.blockNumber >= input.fromBlock &&
+        e.blockNumber <= toBlock,
+    )
+  }
+
+  // ---- internals -----------------------------------------------------------
+  /** Admission: why the node would refuse this tx right now, or null. */
+  private refuse(payload: Payload): BroadcastOutcome | null {
     if (this.time > payload.validBefore) return { kind: 'rejected', reason: 'other', detail: 'validBefore has passed' }
     const k = this.keys.get(payload.key)
     if (!k || k.revoked) return { kind: 'rejected', reason: 'key_revoked', detail: 'keychain validation failed' }
     if (k.expiry <= this.time) return { kind: 'rejected', reason: 'key_expired', detail: 'keychain validation failed' }
+    return null
+  }
 
+  /** Puts an admitted tx in a new block: the whole batch, or a revert that moves nothing. */
+  private land(payload: Payload): Landed {
+    const txHash = hex32(0x7e, payload.n)
+    const k = this.keys.get(payload.key) as KeyRecord
     this.blockNumber += 1n
     const refusal = this.check(k, payload.account, payload.token, payload.transfers)
     let landed: Landed
@@ -184,26 +240,9 @@ export class FakePayoutChain implements PayoutChain {
     }
     this.landed.set(txHash, landed)
     this.landedTxCount++
-    if (fault === 'land_then_lose_response') return { kind: 'unknown', detail: 'fake: landed, response lost' }
-    return this.outcome(landed)
+    return landed
   }
 
-  async lookupTx(txHash: Hex): Promise<TxLookup> {
-    const l = this.landed.get(lc(txHash) as Hex)
-    if (!l) return { kind: 'not_found' }
-    return l.status === 'success'
-      ? { kind: 'confirmed', blockNumber: l.blockNumber, transfers: l.transfers }
-      : { kind: 'reverted', blockNumber: l.blockNumber }
-  }
-
-  async findMemoTransfers(input: { token: Address; from: Address; memos: Hex[]; fromBlock: bigint }) {
-    const memos = new Set(input.memos.map(lc))
-    return this.events.filter(
-      (e) => lc(e.token) === lc(input.token) && lc(e.from) === lc(input.from) && memos.has(lc(e.memo)) && e.blockNumber >= input.fromBlock,
-    )
-  }
-
-  // ---- internals -----------------------------------------------------------
   private outcome(l: Landed): BroadcastOutcome {
     return l.status === 'success'
       ? { kind: 'confirmed', txHash: l.txHash, blockNumber: l.blockNumber, transfers: l.transfers }

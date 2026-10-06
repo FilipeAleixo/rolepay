@@ -52,7 +52,10 @@ export type ExecuteError =
   | { code: 'no_active_key' }
   | { code: 'unseal_failed' }
   | { code: 'not_retryable' }
-  | { code: 'chain_shows_payments'; detail: string }
+  | ChainShowsPayments
+
+/** A failed run's memos are on chain: payrun records what the chain shows and sends nothing. */
+export type ChainShowsPayments = { code: 'chain_shows_payments'; detail: 'all_paid' | 'partial' | 'mismatch' }
 
 /**
  * Pay runs: build, approve, execute, reconcile, export.
@@ -110,7 +113,25 @@ export class PayRunService {
     return this.step(input, { type: 'approve', actor: input.actor })
   }
 
-  cancel(input: RunRef & { actor: string }) {
+  /**
+   * Cancels a run that has not paid. A failed run is checked against the chain first: if any of
+   * its memos are there, the run is brought up to date (paid, or a failure a human must look at)
+   * and the cancel is refused, so a paid run never reads "cancelled" and nobody pays it again.
+   */
+  async cancel(
+    input: RunRef & { actor: string },
+  ): Promise<Result<Run, StepError | InvalidInput | { code: 'not_retryable' } | { code: 'community_not_found' } | ChainShowsPayments>> {
+    const loaded = await this.get(input)
+    if (!loaded.ok) return loaded
+    if (loaded.value.status === 'failed') {
+      const community = await this.deps.communities.get(loaded.value.communityId)
+      if (!community) return err({ code: 'community_not_found' })
+      const seen = await this.matchOnChain(loaded.value, community, (await this.deps.chain.head()).number)
+      if (seen.kind !== 'none') {
+        await this.applyMatch(loaded.value, seen)
+        return err({ code: 'chain_shows_payments', detail: seen.kind })
+      }
+    }
     return this.step(input, { type: 'cancel', actor: input.actor })
   }
 
@@ -145,14 +166,20 @@ export class PayRunService {
 
     const community = await this.deps.communities.get(run.communityId)
     if (!community) return err({ code: 'community_not_found' })
-    const key = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
-    if (!key) return err({ code: 'no_active_key' })
 
     if (run.status === 'failed') {
-      // Belt and braces before any re-send: if the chain shows ANY of this run's memos, stop.
-      const seen = await this.matchOnChain(run, community)
-      if (seen.kind !== 'none') return err({ code: 'chain_shows_payments', detail: seen.kind })
+      // Belt and braces before any re-send: if the chain shows ANY of this run's memos, stop and
+      // record what it shows (all of them: the run is paid; some or wrong ones: a human looks).
+      const seen = await this.matchOnChain(run, community, (await this.deps.chain.head()).number)
+      if (seen.kind !== 'none') {
+        const recorded = await this.applyMatch(run, seen)
+        if (seen.kind === 'all_paid' && recorded.ok) return recorded
+        return err({ code: 'chain_shows_payments', detail: seen.kind })
+      }
     }
+
+    const key = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
+    if (!key) return err({ code: 'no_active_key' })
 
     const state = await this.deps.chain.keyState({
       account: community.treasuryAddress,
@@ -221,10 +248,13 @@ export class PayRunService {
       if (tx.kind === 'reverted') return this.settle(run, { kind: 'reverted', txHash: attempt.txHash, blockNumber: tx.blockNumber }, community)
     }
 
-    const match = await this.matchOnChain(run, community)
+    // The head FIRST, and the memo search bounded by it: "nothing on chain up to block N" and
+    // "block N is past the deadline" then describe the same moment. Searching first and reading
+    // the head after would let a tx land in between and be called not_landed.
+    const head = await this.deps.chain.head()
+    const match = await this.matchOnChain(run, community, head.number)
     if (match.kind !== 'none') return this.applyMatch(run, match)
 
-    const head = await this.deps.chain.head()
     if (!attempt || head.timestamp > attempt.validBefore + VALID_BEFORE_MARGIN_SECONDS) {
       return this.conclude(run, { type: 'mark_failed', reason: 'not_landed', detail: 'validBefore passed with no memo transfers on chain' })
     }
@@ -232,13 +262,15 @@ export class PayRunService {
     return ok({ status: 'pending', run, retryAfter: deadline(attempt.validBefore) })
   }
 
-  private async matchOnChain(run: Run, community: Community): Promise<MatchResult> {
+  /** The run's memo transfers from its first attempt up to `toBlock` (a head the caller read). */
+  private async matchOnChain(run: Run, community: Community, toBlock: bigint): Promise<MatchResult> {
     const fromBlock = run.attempts[0]?.fromBlock ?? 0n
     const transfers = await this.deps.chain.findMemoTransfers({
       token: run.token,
       from: community.treasuryAddress,
       memos: run.lines.map((l) => l.memo),
       fromBlock,
+      toBlock,
     })
     return matchTransfers(run, community.treasuryAddress, transfers)
   }

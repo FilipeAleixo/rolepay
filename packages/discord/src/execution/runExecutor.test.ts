@@ -97,6 +97,21 @@ describe('createRunExecutor', () => {
     expect(h.chain.landedTxCount).toBe(0)
   })
 
+  it('a retry of a "rejected" run whose payment landed after all ends Paid, with no second payment and no "nothing was paid"', async () => {
+    const h = await ready()
+    h.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    await h.execute(job(h.run.id))
+    expect(text(h.rest.lastEdit('tok-approve'))).toContain('payrun:retry:')
+    await h.chain.mine() // the tx the node "rejected" lands
+    await h.sleep(200_000)
+    await h.execute(job(h.run.id, 'tok-retry'))
+    const final = text(h.rest.lastEdit('tok-retry'))
+    expect(final).toMatch(/"title":"Paid"/)
+    expect(final).not.toMatch(/nothing was paid/i)
+    expect(h.chain.landedTxCount).toBe(1)
+    expect(h.rest.dms).toHaveLength(2)
+  })
+
   it('stops polling after a bounded number of checks and says payrun keeps checking', async () => {
     const h = await harness()
     await h.setupCommunity()

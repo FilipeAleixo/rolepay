@@ -3,6 +3,7 @@ import { type ButtonHandler, type GuildContext, replyError } from '../app/handle
 import { type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canManageGuild, holdsApproverRole } from '../app/permissions.js'
 import type { ExecutionJob } from '../ports.js'
+import { explainError } from '../views/errors.js'
 import { roleMention } from '../views/format.js'
 import { runMessage } from '../views/run.js'
 
@@ -40,7 +41,10 @@ export const approveButton: ButtonHandler = async ({ runId, messageId, ctx }, { 
   return { kind: 'update', message: runMessage(approved.value, { network: config.network }) }
 }
 
-/** Cancel: the run's creator, an admin or an approver, while the run has not started paying. */
+/**
+ * Cancel: the run's creator, an admin or an approver, while the run has not started paying. Core
+ * refuses to cancel a failed run whose payments are on chain; the message then shows the truth.
+ */
 export const cancelButton: ButtonHandler = async ({ runId, ctx }, { payrun, config }) => {
   const community = await payrun.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
@@ -49,6 +53,11 @@ export const cancelButton: ButtonHandler = async ({ runId, ctx }, { payrun, conf
   const allowed = run.value.createdBy === ctx.caller.userId || canManageGuild(ctx.caller) || holdsApproverRole(ctx.caller, community.value)
   if (!allowed) return ephemeralReply('Only the person who created this run, an admin or an approver can cancel it.')
   const cancelled = await payrun.payRuns.cancel({ guildId: ctx.guildId, runId, actor: ctx.caller.userId })
+  if (!cancelled.ok && cancelled.error.code === 'chain_shows_payments') {
+    // Core has recorded what the chain shows: put the truth on the message, for everyone.
+    const current = await payrun.payRuns.get({ guildId: ctx.guildId, runId })
+    if (current.ok) return { kind: 'update', message: runMessage(current.value, { network: config.network, problem: explainError(cancelled.error) }) }
+  }
   if (!cancelled.ok) return replyError(cancelled.error)
   return { kind: 'update', message: runMessage(cancelled.value, { network: config.network }) }
 }

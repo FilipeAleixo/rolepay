@@ -79,6 +79,8 @@ draft --submit--> pending_approval --approve--> approved --start_attempt--> exec
 executing --record_signed--> executing            (once per attempt)
 executing --mark_paid--> paid
 executing --mark_failed--> failed --start_attempt--> executing   (only if retryable)
+failed --mark_paid--> paid | --mark_failed (partial_match, transfer_mismatch)--> failed
+                                                  (the chain shows the run's memos after all)
 draft | pending_approval | approved | failed --cancel--> cancelled
 ```
 
@@ -104,7 +106,9 @@ The memo is an indexed topic of `TransferWithMemo`, so "was line N of run R paid
 2. **Persist before broadcast.** The adapter signs the batch without broadcasting; the service stores the signed tx and its hash; only then is it broadcast. Re-broadcasting the same signed tx can land it at most once.
 3. **A deadline for every attempt.** Each attempt fixes `validBefore` (now + 120 s, an expiring nonce) before signing. Once chain time passes it, that tx can never land.
 
-`reconcile` never signs anything new. In order: look up the recorded tx hash; otherwise search memo transfers from the first attempt's start block; if nothing is found and the deadline has not passed, re-broadcast the same signed tx (or report `pending`); once the deadline has passed with nothing on chain, mark the attempt `not_landed`, which makes a fresh attempt provably safe. Before any retry, `execute` checks the chain once more and refuses (`chain_shows_payments`) if any of the run's memos are there.
+`reconcile` never signs anything new. In order: look up the recorded tx hash; otherwise read the chain head, then search memo transfers from the first attempt's start block up to THAT head's block; if nothing is found and that head's timestamp has not passed the deadline, re-broadcast the same signed tx (or report `pending`); once it has passed with nothing on chain, mark the attempt `not_landed`, which makes a fresh attempt provably safe. Reading the head first matters: a search followed by a separate head read could miss a tx that landed between the two and call a paid run `not_landed`.
+
+Before any retry, `execute` checks the chain once more. If any of the run's memos are there it sends nothing and records what the chain shows: all of them, and the run is `paid` (receipts go out as usual); some, or the wrong amounts, and it becomes a failure a human must look at, and `execute` returns `chain_shows_payments`. `cancel` makes the same check on a failed run and refuses (`chain_shows_payments`), so a paid run never reads "cancelled" and a person following the UI is never led to pay it again. The failure messages in Discord say what was checked ("the chain shows nothing paid for this run"), never "nothing was paid".
 
 | Crash point | State left behind | Recovery |
 | --- | --- | --- |

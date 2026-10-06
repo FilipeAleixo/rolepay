@@ -74,6 +74,10 @@ export interface PayoutChain {
   /** Idempotent: re-broadcasting the same raw tx can land it at most once. */
   broadcast(rawTx: Hex): Promise<BroadcastOutcome>
   lookupTx(txHash: Hex): Promise<TxLookup>
-  /** `TransferWithMemo` events in `token` from `from` carrying any of `memos`, from `fromBlock` to head. */
-  findMemoTransfers(input: { token: Address; from: Address; memos: Hex[]; fromBlock: bigint }): Promise<MemoTransfer[]>
+  /**
+   * `TransferWithMemo` events in `token` from `from` carrying any of `memos`, from `fromBlock` to
+   * `toBlock` (default: the head). Pass the block of a head you already read, so the search and
+   * a deadline check against that head's timestamp describe the same moment.
+   */
+  findMemoTransfers(input: { token: Address; from: Address; memos: Hex[]; fromBlock: bigint; toBlock?: bigint }): Promise<MemoTransfer[]>
 }
