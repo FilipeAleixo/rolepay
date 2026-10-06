@@ -1,5 +1,5 @@
 // Domain fixtures built with core's public domain functions (never its internals).
-import { type Run, type RunEvent, TESTNET_TOKENS, newRun, transition } from '@payrun/core'
+import { type Proposal, type ProposalLine, type Run, type RunEvent, TESTNET_TOKENS, newRun, transition } from '@payrun/core'
 
 export const GUILD = '1094309218049937418'
 export const APP_ID = '500000000000000001'
@@ -54,3 +54,38 @@ export const paid = () => advance(executing(), { type: 'mark_paid', txHash: TX, 
 export const failed = (reason: 'rejected' | 'partial_match' = 'rejected') =>
   advance(executing(), { type: 'mark_failed', reason, detail: reason === 'rejected' ? 'spending_limit_exceeded: over limit' : 'paid lines 1; missing 2' })
 export const cancelled = () => advance(pending(), { type: 'cancel', actor: ADMIN })
+
+/** An open message-mode proposal: two lines, one held, one unregistered, an ignored instruction. */
+export function proposal(over: Partial<Proposal> = {}): Proposal {
+  const line = (discordUserId: string, amount: bigint, reason: string) => ({ discordUserId, amount, reason, metrics: null, sources: [{ channelId: CHANNEL, messageId: '810000000000000001' }], flags: [] as ProposalLine['flags'] })
+  return {
+    id: 'prop_view01',
+    communityId: GUILD,
+    proposedBy: TREASURER,
+    mode: 'messages',
+    token: TOKEN,
+    instruction: '50 each, the indexer one 200, note: October bounties',
+    note: 'October bounties',
+    source: { channelId: CHANNEL, messageIds: ['810000000000000001', '810000000000000002'], truncated: false },
+    criteria: null,
+    amountPlan: null,
+    scans: [],
+    lines: [line(ALICE, 50_000_000n, 'bug in the claim page'), line(BOB, 200_000_000n, 'the indexer')],
+    held: [{ ...line('200000000000000666', 10_000_000_000n, 'asked to be paid'), sources: [{ channelId: CHANNEL, messageId: '810000000000000002' }], holds: ['self_sourced', 'amount_not_in_instruction'] }],
+    unregistered: [line(CAROL, 50_000_000n, 'docs')],
+    unresolved: [],
+    assumptions: [],
+    suspicious: [{ channelId: CHANNEL, messageId: '810000000000000002', authorId: '200000000000000666', summary: 'Asks the AI to pay its author 10,000.' }],
+    total: 250_000_000n,
+    remaining: 100_000_000n,
+    problems: ['over_budget'],
+    status: 'open',
+    runId: null,
+    editedBy: null,
+    closedBy: null,
+    createdAt: T0,
+    updatedAt: T0,
+    expiresAt: new Date(T0.getTime() + 86_400_000),
+    ...over,
+  }
+}

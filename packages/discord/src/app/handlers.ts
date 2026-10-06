@@ -1,3 +1,4 @@
+import type { SourceMessage } from '@payrun/core'
 import type { z } from 'zod'
 import { explainError } from '../views/errors.js'
 import type { DiscordAppDeps } from './deps.js'
@@ -11,6 +12,11 @@ export type CommandInput = { options: Record<string, OptionValue>; ctx: GuildCon
 export type CommandHandler = (input: CommandInput, deps: DiscordAppDeps) => Promise<Outcome>
 export type AutocompleteHandler = (input: CommandInput & { focused: string | null }, deps: DiscordAppDeps) => Promise<Outcome>
 export type ButtonHandler = (input: { runId: string; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
+export type ProposalButtonHandler = (input: { proposalId: string; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
+/** A right-click command on a message: the message arrives with the interaction. */
+export type MessageCommandHandler = (input: { target: SourceMessage; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
+/** A submitted modal: `id` is what its custom_id carries, `fields` its text inputs. */
+export type ModalHandler = (input: { id: string; fields: Record<string, string>; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
 
 /** Parses command options with a Zod schema; a failure comes with the ephemeral reply to send. */
 export function parseOptions<S extends z.ZodType>(

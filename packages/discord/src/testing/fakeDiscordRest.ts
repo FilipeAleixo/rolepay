@@ -1,7 +1,23 @@
+import type { SourceMessage } from '@payrun/core'
 import type { Message } from '../api.js'
-import type { DiscordRest, ExecutionJob, ExecutionQueue, InteractionLog, MemberDirectory, ReplyHandle, RestResult, RunMessageRef, RunNotices } from '../ports.js'
+import type {
+  DiscordRest,
+  ExecutionJob,
+  ExecutionQueue,
+  InteractionLog,
+  MemberDirectory,
+  PendingSources,
+  ReplyHandle,
+  RestError,
+  RestResult,
+  RunMessageRef,
+  RunNotices,
+} from '../ports.js'
+import type { WireMessage } from './messages.js'
 
 const OK: RestResult = { ok: true, value: undefined }
+const fail = (code: 'forbidden' | 'not_found') => ({ ok: false as const, error: { code } as RestError })
+const byIdDesc = (a: { id: string }, b: { id: string }) => (BigInt(a.id) < BigInt(b.id) ? 1 : -1)
 
 /**
  * An in-memory Discord: records every edit, follow-up, channel post and DM, and serves
@@ -18,10 +34,32 @@ export class FakeDiscordRest implements DiscordRest {
   readonly dms: { userId: string; message: Message }[] = []
   readonly expiredTokens = new Set<string>()
   readonly closedDms = new Set<string>()
-  private members = new Map<string, string[]>()
+  /** Channels the bot may not read (View Channel or Read Message History missing). */
+  readonly forbiddenChannels = new Set<string>()
+  /** Every read, in order, for tests of paging and bounds. */
+  readonly reads: string[] = []
+  readonly roles = new Map<string, { id: string; name: string; managed?: boolean }[]>()
+  readonly channels = new Map<string, { id: string; name: string; type: number }[]>()
+  readonly threads = new Map<string, { id: string; name: string; type: number; parent_id?: string }[]>()
+  private members = new Map<string, { roles: string[]; joinedAt: Date | null }>()
+  private history = new Map<string, WireMessage[]>()
+  private reacted = new Map<string, Map<string, { id: string; bot?: boolean }[]>>()
 
-  setMember(guildId: string, userId: string, roles: string[]) {
-    this.members.set(`${guildId}:${userId}`, roles)
+  setMember(guildId: string, userId: string, roles: string[], joinedAt: Date | null = null) {
+    this.members.set(`${guildId}:${userId}`, { roles, joinedAt })
+  }
+
+  /** Messages in a channel or thread, as Discord would send them. */
+  addChannelMessages(...messages: WireMessage[]) {
+    for (const m of messages) this.history.set(m.channel_id, [...(this.history.get(m.channel_id) ?? []), structuredClone(m)])
+  }
+
+  /** Who reacted to a message with an emoji (the character, or `name:id` for a custom one). */
+  setReactions(channelId: string, messageId: string, emoji: string, users: { id: string; bot?: boolean }[]) {
+    const key = `${channelId}:${messageId}`
+    const byEmoji = this.reacted.get(key) ?? new Map()
+    byEmoji.set(emoji, users)
+    this.reacted.set(key, byEmoji)
   }
 
   /** The latest edit of a reply (what the user now sees), if any. */
@@ -70,8 +108,52 @@ export class FakeDiscordRest implements DiscordRest {
   }
 
   async getMember(guildId: string, userId: string) {
-    const roles = this.members.get(`${guildId}:${userId}`)
-    return roles ? { roles: [...roles] } : null
+    const m = this.members.get(`${guildId}:${userId}`)
+    return m ? { roles: [...m.roles], joinedAt: m.joinedAt } : null
+  }
+
+  async getChannelMessages(channelId: string, query: { before?: string; limit: number }) {
+    this.reads.push(`messages ${channelId} before=${query.before ?? ''} limit=${query.limit}`)
+    if (this.forbiddenChannels.has(channelId)) return fail('forbidden')
+    const before = query.before ? BigInt(query.before) : null
+    const page = [...(this.history.get(channelId) ?? [])]
+      .sort(byIdDesc)
+      .filter((m) => before === null || BigInt(m.id) < before)
+      .slice(0, Math.min(100, query.limit))
+    return { ok: true as const, value: structuredClone(page) as unknown[] }
+  }
+
+  async getMessage(channelId: string, messageId: string) {
+    this.reads.push(`message ${channelId} ${messageId}`)
+    if (this.forbiddenChannels.has(channelId)) return fail('forbidden')
+    const m = (this.history.get(channelId) ?? []).find((x) => x.id === messageId)
+    if (!m) return fail('not_found')
+    const reactions = [...(this.reacted.get(`${channelId}:${messageId}`) ?? new Map()).entries()].map(([emoji, users]) => {
+      const custom = /^(\w+):(\d+)$/.exec(emoji)
+      return { emoji: custom ? { id: custom[2], name: custom[1] } : { id: null, name: emoji }, count: users.length }
+    })
+    return { ok: true as const, value: structuredClone({ ...m, ...(reactions.length ? { reactions } : {}) }) as unknown }
+  }
+
+  async getReactions(channelId: string, messageId: string, emoji: string, query: { after?: string; limit: number }) {
+    this.reads.push(`reactions ${channelId} ${messageId} ${emoji} after=${query.after ?? ''}`)
+    if (this.forbiddenChannels.has(channelId)) return fail('forbidden')
+    const users = this.reacted.get(`${channelId}:${messageId}`)?.get(decodeURIComponent(emoji)) ?? []
+    const after = query.after ? BigInt(query.after) : null
+    const page = [...users].sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1)).filter((u) => after === null || BigInt(u.id) > after)
+    return { ok: true as const, value: page.slice(0, Math.min(100, query.limit)).map((u) => ({ ...u, username: `user${u.id.slice(-3)}` })) as unknown[] }
+  }
+
+  async getGuildRoles(guildId: string) {
+    return { ok: true as const, value: structuredClone(this.roles.get(guildId) ?? []) as unknown[] }
+  }
+
+  async getGuildChannels(guildId: string) {
+    return { ok: true as const, value: structuredClone(this.channels.get(guildId) ?? []) as unknown[] }
+  }
+
+  async getActiveThreads(guildId: string) {
+    return { ok: true as const, value: { threads: structuredClone(this.threads.get(guildId) ?? []) } as unknown }
   }
 }
 
@@ -117,5 +199,19 @@ export class MemoryInteractionLog implements InteractionLog {
     if (this.ids.has(interactionId)) return false
     this.ids.add(interactionId)
     return true
+  }
+}
+
+/** PendingSources in memory. */
+export class MemoryPendingSources implements PendingSources {
+  private sources = new Map<string, SourceMessage>()
+  async put(key: { userId: string; messageId: string }, message: SourceMessage) {
+    this.sources.set(`${key.userId}:${key.messageId}`, structuredClone(message))
+  }
+  async take(key: { userId: string; messageId: string }) {
+    const k = `${key.userId}:${key.messageId}`
+    const m = this.sources.get(k)
+    this.sources.delete(k)
+    return m ?? null
   }
 }

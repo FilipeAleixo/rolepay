@@ -1,5 +1,55 @@
-import { MAX_LINES_PER_RUN } from '@payrun/core'
-import { mention, money, relativeTime } from './format.js'
+import { type Community, MAX_LINES_PER_RUN, PROPOSAL_LIMITS } from '@payrun/core'
+import { escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'
+
+export const AI_NOT_CONFIGURED = 'AI proposals are not set up on this payrun server: it has no Anthropic API key. Create the run with `/payrun new` instead.'
+export const AI_OFF = 'AI proposals are off in this server. A member with the approver role turns them on with `/payrun setup ai_proposals:true`.'
+
+export const proposerOnly = (c: Pick<Community, 'approverRoleId' | 'proposerRoleId'>) =>
+  c.approverRoleId
+    ? `Only members with ${roleMention(c.approverRoleId)}${c.proposerRoleId ? ` or ${roleMention(c.proposerRoleId)}` : ''} can propose pay runs with AI.`
+    : 'No approver role is set, so nobody can propose pay runs with AI yet. An admin runs `/payrun setup approver_role:@Treasurer`.'
+
+const COULD_NOT_PROPOSE = {
+  refused: 'The AI declined to propose this one. Try rewording the instruction, or create the run with `/payrun new`. Nothing was created.',
+  malformed: 'The AI answered in a form payrun could not use. Try again; nothing was created.',
+  unavailable: 'The AI service is not reachable right now. Try again in a minute; nothing was created.',
+  rejected: 'The AI service refused the request. The person running payrun can see why in the server log. Nothing was created.',
+  auth: 'The AI service refused the API key. The person running payrun checks ANTHROPIC_API_KEY. Nothing was created.',
+} as const
+
+/** Proposal errors in plain English, then everything else as `explainError`. */
+export function explainProposalError(error: CodedError, ctx: { token?: string; community?: Pick<Community, 'approverRoleId' | 'proposerRoleId'> } = {}): string {
+  switch (error.code) {
+    case 'ai_not_configured':
+      return AI_NOT_CONFIGURED
+    case 'ai_disabled':
+      return AI_OFF
+    case 'not_permitted':
+      return ctx.community ? proposerOnly(ctx.community) : 'Only members with the approver role (or the proposer role) can do that.'
+    case 'could_not_propose':
+      return String(error.reason) in COULD_NOT_PROPOSE ? COULD_NOT_PROPOSE[error.reason as keyof typeof COULD_NOT_PROPOSE] : COULD_NOT_PROPOSE.malformed
+    case 'criteria_unclear':
+      return `The AI could not turn that into a filter: ${escapeMarkdown(String(error.problem ?? ''))} Try naming a role, a channel and an amount, or propose from messages with \`/payrun propose source:#channel\`.`
+    case 'criteria_invalid':
+      return `The filter the AI wrote does not work: ${escapeMarkdown(((error.issues as string[] | undefined) ?? []).join('; '))}. Try rewording. Nothing was created.`
+    case 'cannot_read':
+      return error.reason === 'not_found'
+        ? `payrun cannot find that in <#${String(error.channelId)}>. Check the channel or the message link.`
+        : `payrun cannot read <#${String(error.channelId)}>: the bot needs View Channel and Read Message History there.`
+    case 'no_message_content':
+      return 'payrun can see those messages but not their text. Turn on the Message Content intent (Developer Portal, Bot), or right-click a message and use Apps > Propose pay run, which needs no intent.'
+    case 'source_empty':
+      return 'There are no messages to read there in that period.'
+    case 'proposal_not_found':
+      return `This proposal has expired (they last ${PROPOSAL_LIMITS.ttlSeconds / 3600} hours) or does not exist. Propose again.`
+    case 'proposal_closed':
+      return error.status === 'discarded' ? 'This proposal was discarded.' : 'A pay run was already created from this proposal.'
+    case 'proposal_blocked':
+      return 'Fix this proposal with Edit first: it has an amount your instruction does not state, nobody to pay, or more than 50 people.'
+    default:
+      return explainError(error, ctx)
+  }
+}
 
 type CodedError = { code: string } & Record<string, unknown>
 

@@ -3,7 +3,7 @@
 import { serve } from '@hono/node-server'
 import { createPayrun } from '@payrun/core'
 import { openPayrunAdapters } from '@payrun/core/adapters'
-import { FetchDiscordRest } from '@payrun/discord'
+import { FetchDiscordRest, RestActivityReader } from '@payrun/discord'
 import { bundledAssets, createPasskeys } from '@payrun/web'
 import { composeServer } from './compose.js'
 import { parseServerConfig } from './config.js'
@@ -14,8 +14,9 @@ const log = (event: string, fields: Record<string, unknown> = {}) => console.log
 async function main() {
   const config = parseServerConfig(loadEnvironment())
   const { deps, kv, close } = await openPayrunAdapters(config.core)
-  const payrun = createPayrun(deps)
   const rest = new FetchDiscordRest({ botToken: config.discord.botToken })
+  // AI proposals read Discord through the bot's REST client; one log line per proposal (counts and cost, never text).
+  const payrun = createPayrun({ ...deps, activity: new RestActivityReader(rest), proposalLog: (entry) => log('proposal', entry) })
   const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
   const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() }
   const composed = composeServer({ config, payrun, rest, clock: deps.clock, kv, web, log })
@@ -29,6 +30,7 @@ async function main() {
       db: config.core.dbPath,
       publicUrl: config.web.origin,
       passkeyRpId: config.web.rpId,
+      ai: config.core.ai.apiKey ? config.core.ai.model : 'off (no ANTHROPIC_API_KEY)',
     })
   })
 

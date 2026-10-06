@@ -261,3 +261,48 @@ describe('/payrun setup dev shortcuts (treasury, new_key, key_limit)', () => {
     expect(await keyAddress(a)).toBe(before)
   })
 })
+
+describe('/payrun setup: AI proposals (off by default; a treasurer switches them on)', () => {
+  const PROPOSERS = '400000000000000003'
+
+  it('the card says they are off, how to turn them on, and that messages go to Anthropic', async () => {
+    const a = await appHarness()
+    await a.setupCommunity()
+    const { final } = await setup(a, {}, treasurerAdmin)
+    expect(final).toContain('"name":"AI proposals"')
+    expect(final).toContain('Off. A member with the approver role turns them on with `/payrun setup ai_proposals:true`')
+    expect(final).toContain("proposing from messages sends their text to Anthropic's API")
+  })
+
+  it('a treasurer turns them on and names a proposer role; the card says who can propose', async () => {
+    const a = await appHarness()
+    await a.setupCommunity()
+    const { final } = await setup(a, { ai_proposals: true, proposer_role: PROPOSERS }, treasurerAdmin)
+    expect(final).toContain(`On. <@&${TREASURER_ROLE}> and <@&${PROPOSERS}> can propose`)
+    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: true, proposerRoleId: PROPOSERS } })
+    await setup(a, { ai_proposals: false }, treasurerAdmin)
+    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: false } })
+  })
+
+  it('Manage Server alone cannot switch them on or widen who proposes', async () => {
+    const a = await appHarness()
+    await a.setupCommunity()
+    const { final } = await setup(a, { ai_proposals: true, proposer_role: PROPOSERS }, { userId: ADMIN, manageGuild: true, roles: [PROPOSERS] })
+    expect(final).toMatch(/Only a member with .* can change AI proposals/)
+    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: false, proposerRoleId: null } })
+  })
+
+  it('on a payrun server without an Anthropic key the card says they are not available', async () => {
+    const a = await appHarness({ proposer: null })
+    await a.setupCommunity()
+    const { final } = await setup(a, { ai_proposals: true }, treasurerAdmin)
+    expect(final).toContain('Not available on this payrun server (no Anthropic API key is configured).')
+    expect(final).toContain('cannot run yet')
+  })
+
+  it('at first setup they wait for the treasury', async () => {
+    const a = await appHarness()
+    const { final } = await setup(a, { approver_role: TREASURER_ROLE, ai_proposals: true }, treasurerAdmin)
+    expect(final).toMatch(/AI proposals are set after the treasury exists/)
+  })
+})

@@ -2,6 +2,8 @@
  * Builders for raw interaction bodies, shaped like what Discord sends, for tests of
  * the router and of the HTTP endpoint end to end.
  */
+import type { WireMessage } from './messages.js'
+
 type OptionValue = string | number | boolean
 
 export type Who = { userId: string; roles?: string[]; manageGuild?: boolean }
@@ -65,6 +67,34 @@ export function buttonClick(scope: InteractionScope, customId: string, who: Who,
     member: member(who),
     message: { id: '810000000000000001' },
     data: { custom_id: customId, component_type: 2 },
+  }
+}
+
+/** A right-click command on a message (type 3): Discord sends the target message in `resolved`. */
+export function messageCommand(scope: InteractionScope, name: string, target: WireMessage, who: Who, token = `tok-msgcmd-${seq + 1}`) {
+  return {
+    id: nextId(),
+    application_id: scope.applicationId ?? APP,
+    type: 2,
+    token,
+    ...(scope.guildId ? { guild_id: scope.guildId, member: member(who) } : { user: { id: who.userId, username: 'dm' } }),
+    channel_id: scope.channelId ?? target.channel_id,
+    data: { id: '900000000000000002', name, type: 3, target_id: target.id, resolved: { messages: { [target.id]: target } } },
+  }
+}
+
+/** A submitted modal (type 5), its text inputs in action rows. `messageId`: the message whose button opened it. */
+export function modalSubmit(scope: InteractionScope, customId: string, fields: Record<string, string>, who: Who, opts: { messageId?: string; token?: string } = {}) {
+  return {
+    id: nextId(),
+    application_id: scope.applicationId ?? APP,
+    type: 5,
+    token: opts.token ?? `tok-modal-${seq + 1}`,
+    guild_id: scope.guildId,
+    channel_id: scope.channelId ?? '700000000000000001',
+    member: member(who),
+    ...(opts.messageId ? { message: { id: opts.messageId } } : {}),
+    data: { custom_id: customId, components: Object.entries(fields).map(([id, value]) => ({ type: 1, components: [{ type: 4, custom_id: id, value }] })) },
   }
 }
 

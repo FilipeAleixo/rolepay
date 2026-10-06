@@ -1,6 +1,7 @@
-import { DiscordIdSchema, type Result, err, ok } from '@payrun/core'
+import { DiscordIdSchema, type Result, type SourceMessage, err, ok } from '@payrun/core'
 import { z } from 'zod'
-import { InteractionType, OptionType } from '../api.js'
+import { CommandType, ComponentType, InteractionType, OptionType } from '../api.js'
+import { DiscordMessageSchema, toSourceMessage } from '../wire.js'
 
 /** Who clicked or typed, as Discord vouches for them in the signed interaction. */
 export type Caller = { userId: string; roles: string[]; permissions: bigint }
@@ -20,6 +21,10 @@ export type ParsedInteraction =
   | { kind: 'command'; command: string; sub: string | null; options: Record<string, OptionValue>; focused: null; ctx: InteractionContext }
   | { kind: 'autocomplete'; command: string; sub: string | null; options: Record<string, OptionValue>; focused: string | null; ctx: InteractionContext }
   | { kind: 'component'; customId: string; messageId: string | null; ctx: InteractionContext }
+  /** A right-click command on a message (Apps > ...): the message arrives in the interaction, text included, with no intent. */
+  | { kind: 'message_command'; command: string; target: SourceMessage; ctx: InteractionContext }
+  /** A modal's form, by text input custom_id. `messageId` is the message whose button opened it, if any. */
+  | { kind: 'modal'; customId: string; fields: Record<string, string>; messageId: string | null; ctx: InteractionContext }
 
 type RawOption = { name: string; type: number; value?: OptionValue; options?: RawOption[]; focused?: boolean }
 const OptionSchema: z.ZodType<RawOption> = z.lazy(() =>
@@ -42,11 +47,27 @@ const common = {
   member: MemberSchema.optional(),
   user: UserSchema.optional(),
 }
-const CommandDataSchema = z.object({ name: z.string(), options: z.array(OptionSchema).optional() })
+const CommandDataSchema = z.object({ name: z.string(), type: z.number().int().optional(), options: z.array(OptionSchema).optional() })
+const MessageCommandDataSchema = z.object({
+  name: z.string(),
+  type: z.literal(CommandType.Message),
+  target_id: DiscordIdSchema,
+  resolved: z.object({ messages: z.record(z.string(), z.unknown()) }),
+})
+type ModalField = { type: number; custom_id?: string; value?: string; component?: ModalField; components?: ModalField[] }
+const ModalFieldSchema: z.ZodType<ModalField> = z.lazy(() =>
+  z.object({
+    type: z.number().int(),
+    custom_id: z.string().optional(),
+    value: z.string().optional(),
+    component: ModalFieldSchema.optional(),
+    components: z.array(ModalFieldSchema).optional(),
+  }),
+)
 
 const InteractionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal(InteractionType.Ping) }),
-  z.object({ type: z.literal(InteractionType.ApplicationCommand), ...common, data: CommandDataSchema }),
+  z.object({ type: z.literal(InteractionType.ApplicationCommand), ...common, data: z.union([MessageCommandDataSchema, CommandDataSchema]) }),
   z.object({ type: z.literal(InteractionType.Autocomplete), ...common, data: CommandDataSchema }),
   z.object({
     type: z.literal(InteractionType.MessageComponent),
@@ -54,7 +75,25 @@ const InteractionSchema = z.discriminatedUnion('type', [
     data: z.object({ custom_id: z.string().max(100), component_type: z.number().int() }),
     message: z.object({ id: DiscordIdSchema }).optional(),
   }),
+  z.object({
+    type: z.literal(InteractionType.ModalSubmit),
+    ...common,
+    data: z.object({ custom_id: z.string().max(100), components: z.array(ModalFieldSchema).max(10) }),
+    message: z.object({ id: DiscordIdSchema }).optional(),
+  }),
 ])
+
+/** Text inputs of a modal, whether in action rows (the classic form) or in labels (the newer one). */
+function modalFields(components: readonly ModalField[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  const visit = (c: ModalField) => {
+    if (c.type === ComponentType.TextInput && c.custom_id !== undefined) out[c.custom_id] = c.value ?? ''
+    if (c.component) visit(c.component)
+    for (const child of c.components ?? []) visit(child)
+  }
+  components.forEach(visit)
+  return out
+}
 
 /** Validates an interaction body and flattens it into what handlers need. */
 export function parseInteraction(body: unknown): Result<ParsedInteraction, { code: 'unsupported_interaction'; detail: string }> {
@@ -75,6 +114,12 @@ export function parseInteraction(body: unknown): Result<ParsedInteraction, { cod
     caller: { userId: callerUser.id, roles: i.member?.roles ?? [], permissions: i.member ? BigInt(i.member.permissions) : 0n },
   }
   if (i.type === InteractionType.MessageComponent) return ok({ kind: 'component', customId: i.data.custom_id, messageId: i.message?.id ?? null, ctx })
+  if (i.type === InteractionType.ModalSubmit) return ok({ kind: 'modal', customId: i.data.custom_id, fields: modalFields(i.data.components), messageId: i.message?.id ?? null, ctx })
+  if ('target_id' in i.data) {
+    const target = DiscordMessageSchema.safeParse(i.data.resolved.messages[i.data.target_id])
+    if (!target.success) return err({ code: 'unsupported_interaction', detail: 'the target message is missing or malformed' })
+    return ok({ kind: 'message_command', command: i.data.name, target: toSourceMessage(target.data), ctx })
+  }
 
   const top = i.data.options ?? []
   const sub = top.find((o) => o.type === OptionType.SubCommand)

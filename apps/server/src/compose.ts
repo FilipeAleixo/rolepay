@@ -3,6 +3,7 @@ import {
   type DiscordRest,
   InProcessExecutionQueue,
   KvInteractionLog,
+  KvPendingSources,
   KvRunNotices,
   type MemberDirectory,
   RestMemberDirectory,
@@ -87,6 +88,8 @@ export function composeServer(deps: ServerDeps) {
       rest,
       queue,
       members: deps.members ?? new RestMemberDirectory(rest),
+      // The message a "Propose pay run" command targeted, until its modal is submitted (15 minutes at most).
+      pendingSources: new KvPendingSources(deps.kv),
       clock: deps.clock,
       config: config.app,
       onError: (error) => log('interaction_error', errorFields(error)),

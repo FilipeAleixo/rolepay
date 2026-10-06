@@ -1,5 +1,5 @@
 import type { Clock, NetworkName, Payrun } from '@payrun/core'
-import type { DiscordRest, ExecutionQueue, MemberDirectory } from '../ports.js'
+import type { DiscordRest, ExecutionQueue, MemberDirectory, PendingSources } from '../ports.js'
 
 /** Operational settings for the Discord layer (the server builds these from env). */
 export type DiscordAppConfig = {
@@ -32,6 +32,8 @@ export type DiscordAppDeps = {
   rest: DiscordRest
   queue: ExecutionQueue
   members: MemberDirectory
+  /** The message-command target between the command and its instruction modal. */
+  pendingSources: PendingSources
   clock: Clock
   config: DiscordAppConfig
   onError?: (error: unknown) => void

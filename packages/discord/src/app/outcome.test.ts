@@ -53,6 +53,27 @@ describe('renderOutcome', () => {
     expect(rest.lastEdit('tok')?.content).toMatch(/went wrong/)
   })
 
+  it('a modal answers with the form', async () => {
+    const modal = { custom_id: 'proposal-modal:instruct:810000000000000001', title: 'Propose pay run', components: [] }
+    const { d } = await render({ kind: 'modal', modal })
+    expect(d.body).toEqual({ type: 9, data: modal })
+  })
+
+  it('an update with a follow-up replaces the message, then posts a new one (a run review after Create)', async () => {
+    const { d, rest } = await render({ kind: 'update', message: { content: 'created' }, followUp: { content: 'review' } })
+    expect(d.body).toEqual({ type: 7, data: { content: 'created' } })
+    expect(rest.followUps.map((f) => f.message)).toEqual([{ content: 'review' }])
+  })
+
+  it('if the follow-up fails, the new message is posted in the channel as the bot', async () => {
+    const rest = new FakeDiscordRest()
+    rest.expiredTokens.add('tok')
+    const d = renderOutcome({ kind: 'update', message: { content: 'created' }, followUp: { content: 'review' } }, { ...ctx, channelId: '700000000000000001' }, rest)
+    if (d.kind !== 'respond') throw new Error('expected a response')
+    await d.background?.()
+    expect(rest.channelPosts).toEqual([{ channelId: '700000000000000001', message: { content: 'review' } }])
+  })
+
   it('autocomplete choices', async () => {
     const { d } = await render({ kind: 'choices', choices: [{ name: 'run_1 · paid', value: 'run_1' }] })
     expect(d.body).toEqual({ type: 8, data: { choices: [{ name: 'run_1 · paid', value: 'run_1' }] } })

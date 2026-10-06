@@ -17,6 +17,8 @@ const SetupOptions = z.object({
   key_limit: z.string().optional(),
   new_key: z.boolean().optional(),
   separate_approver: z.boolean().optional(),
+  ai_proposals: z.boolean().optional(),
+  proposer_role: DiscordIdSchema.optional(),
 })
 type Options = z.infer<typeof SetupOptions>
 type Fees = { feeMode: 'sponsor' | 'fee_budget'; feeToken: string | null }
@@ -74,6 +76,9 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
 
   let community = await payrun.communities.get(guildId)
   if (!community.ok) {
+    if (o.ai_proposals !== undefined || o.proposer_role !== undefined) {
+      return fail('AI proposals are set after the treasury exists: finish setup on the treasury page, then run `/payrun setup ai_proposals:true`.')
+    }
     if (!o.treasury) return firstSetup(o, fees, guildName, ctx, deps)
     // Dev path: register an existing treasury account (its root key signs elsewhere). The same
     // rule as the treasury page link: Manage Server AND the approver role being set.
@@ -112,6 +117,21 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       const updated = await payrun.communities.setRequireSeparateApprover({ guildId, value: o.separate_approver, actorRoleIds })
       if (!updated.ok) return fail(updated.error.code === 'not_permitted' ? notPermitted(community.value, 'who may approve') : explainError(updated.error))
       community = updated
+    }
+    const ai = o.ai_proposals !== undefined && o.ai_proposals !== community.value.aiProposals
+    const proposerRole = o.proposer_role !== undefined && o.proposer_role !== community.value.proposerRoleId
+    if (ai || proposerRole) {
+      const updated = await payrun.communities.setAiProposals({
+        guildId,
+        ...(ai ? { enabled: o.ai_proposals } : {}),
+        ...(proposerRole ? { proposerRoleId: o.proposer_role } : {}),
+        actorRoleIds,
+      })
+      if (!updated.ok) return fail(updated.error.code === 'not_permitted' ? notPermitted(community.value, 'AI proposals') : explainError(updated.error))
+      community = updated
+      if (ai && updated.value.aiProposals && !payrun.proposals.isConfigured()) {
+        notices.push('AI proposals are on for this server, but this payrun server has no Anthropic API key, so they cannot run yet.')
+      }
     }
     if (fees && (fees.feeMode !== community.value.feeMode || fees.feeToken !== community.value.feeToken)) {
       const switched = await payrun.communities.setFeeMode({ guildId, ...fees, actorRoleIds })
@@ -152,6 +172,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       setupLink: link,
       authorizeHint: config.authorizeHint?.replaceAll('{guildId}', guildId) ?? null,
       network: config.network,
+      aiConfigured: payrun.proposals.isConfigured(),
     }),
   }
 }

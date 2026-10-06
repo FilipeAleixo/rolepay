@@ -1,4 +1,5 @@
 import { type Message, attachmentMeta, multipartBody, splitFiles } from '../api.js'
+import type { Result } from '@payrun/core'
 import type { DiscordRest, ReplyHandle, RestError, RestResult } from '../ports.js'
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>
@@ -68,12 +69,37 @@ export class FetchDiscordRest implements DiscordRest {
     return this.result(sent)
   }
 
-  async getMember(guildId: string, userId: string): Promise<{ roles: string[] } | null> {
+  async getMember(guildId: string, userId: string): Promise<{ roles: string[]; joinedAt: Date | null } | null> {
     const res = await this.request('GET', `/guilds/${guildId}/members/${userId}`, { bot: true })
     if (res.status === 404) return null
     if (!res.ok) throw new Error(`Discord GET guild member failed: HTTP ${res.status}`)
-    const member = (await res.json()) as { roles?: string[] }
-    return { roles: member.roles ?? [] }
+    const member = (await res.json()) as { roles?: string[]; joined_at?: string | null }
+    const joined = member.joined_at ? new Date(member.joined_at) : null
+    return { roles: member.roles ?? [], joinedAt: joined && !Number.isNaN(joined.getTime()) ? joined : null }
+  }
+
+  getChannelMessages(channelId: string, query: { before?: string; limit: number }) {
+    return this.read<unknown[]>(`/channels/${channelId}/messages?${page({ limit: query.limit, before: query.before })}`)
+  }
+
+  getMessage(channelId: string, messageId: string) {
+    return this.read<unknown>(`/channels/${channelId}/messages/${messageId}`)
+  }
+
+  getReactions(channelId: string, messageId: string, emoji: string, query: { after?: string; limit: number }) {
+    return this.read<unknown[]>(`/channels/${channelId}/messages/${messageId}/reactions/${emoji}?${page({ limit: query.limit, after: query.after })}`)
+  }
+
+  getGuildRoles(guildId: string) {
+    return this.read<unknown[]>(`/guilds/${guildId}/roles`)
+  }
+
+  getGuildChannels(guildId: string) {
+    return this.read<unknown[]>(`/guilds/${guildId}/channels`)
+  }
+
+  getActiveThreads(guildId: string) {
+    return this.read<unknown>(`/guilds/${guildId}/threads/active`)
   }
 
   /** Registers (overwrites) the application's slash commands, globally or for one guild (instant). */
@@ -85,6 +111,16 @@ export class FetchDiscordRest implements DiscordRest {
   }
 
   // ---- internals -------------------------------------------------------------
+
+  /** A GET as the bot. The JSON is returned as Discord sent it: the caller validates the shape. */
+  private async read<T>(path: string): Promise<Result<T, RestError>> {
+    const res = await this.request('GET', path, { bot: true })
+    if (!res.ok) {
+      const failed = this.result(res)
+      return failed.ok ? { ok: false, error: { code: 'http_error', status: res.status } } : failed
+    }
+    return { ok: true, value: (await res.json()) as T }
+  }
 
   private async webhook(method: string, path: string, message?: Message): Promise<RestResult> {
     for (let attempt = 0; ; attempt++) {
@@ -115,6 +151,11 @@ export class FetchDiscordRest implements DiscordRest {
       const res = await this.fetch(`${this.baseUrl}${path}`, { method, headers, body: payload })
       if (res.status !== 429 || attempt >= MAX_RATE_LIMIT_RETRIES) {
         if (res.status >= 500) throw new Error(`Discord ${method} ${path.split('/')[1]} failed: HTTP ${res.status}`)
+        // Paging through history: when this bucket is empty, wait for it to refill instead of earning a 429.
+        if (method === 'GET' && res.headers.get('x-ratelimit-remaining') === '0') {
+          const resetAfter = Number(res.headers.get('x-ratelimit-reset-after') ?? 0)
+          if (resetAfter > 0) await this.sleep(Math.ceil(Math.min(resetAfter, 60) * 1000))
+        }
         return res
       }
       const retryAfter = Number(((await res.json().catch(() => ({}))) as { retry_after?: number }).retry_after ?? res.headers.get('retry-after') ?? 1)
@@ -131,6 +172,14 @@ export class FetchDiscordRest implements DiscordRest {
 }
 
 const hook = (reply: ReplyHandle) => `/webhooks/${reply.applicationId}/${reply.token}`
+
+/** Query string for a page: limit 1-100, and a cursor if given. */
+function page(q: { limit: number; before?: string | undefined; after?: string | undefined }) {
+  const params = new URLSearchParams({ limit: String(Math.min(100, Math.max(1, Math.floor(q.limit)))) })
+  if (q.before) params.set('before', q.before)
+  if (q.after) params.set('after', q.after)
+  return params.toString()
+}
 
 async function code(res: Response): Promise<number | null> {
   const body = (await res

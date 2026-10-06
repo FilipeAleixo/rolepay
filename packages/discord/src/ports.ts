@@ -1,4 +1,4 @@
-import type { Result } from '@payrun/core'
+import type { Result, SourceMessage } from '@payrun/core'
 import type { Message } from './api.js'
 
 /**
@@ -33,8 +33,22 @@ export interface DiscordRest {
   getGuild(guildId: string): Promise<{ name: string } | null>
   /** Opens a DM with the user and posts. `dm_closed` when they do not accept DMs from the server. */
   sendDm(userId: string, message: Message): Promise<RestResult>
-  /** One guild member's roles, or null if they are not a member. Needs no privileged intent. */
-  getMember(guildId: string, userId: string): Promise<{ roles: string[] } | null>
+  /** One guild member's roles and join date, or null if they are not a member. Needs no privileged intent. */
+  getMember(guildId: string, userId: string): Promise<{ roles: string[]; joinedAt: Date | null } | null>
+
+  // ---- reads for AI proposals (the activity reader validates every shape) --------------------
+  /**
+   * One page of a channel's or thread's history, newest first, before a message ID (or a
+   * snowflake made from a time). Needs View Channel and Read Message History; message text needs
+   * the Message Content intent (author IDs, mentions and times do not).
+   */
+  getChannelMessages(channelId: string, query: { before?: string; limit: number }): Promise<Result<unknown[], RestError>>
+  getMessage(channelId: string, messageId: string): Promise<Result<unknown, RestError>>
+  /** One page of the users who reacted with `emoji` (already in the URL form), after a user ID. */
+  getReactions(channelId: string, messageId: string, emoji: string, query: { after?: string; limit: number }): Promise<Result<unknown[], RestError>>
+  getGuildRoles(guildId: string): Promise<Result<unknown[], RestError>>
+  getGuildChannels(guildId: string): Promise<Result<unknown[], RestError>>
+  getActiveThreads(guildId: string): Promise<Result<unknown, RestError>>
 }
 
 export type ExecutionJob = {
@@ -86,4 +100,14 @@ export interface ExecutionQueue {
 export interface MemberDirectory {
   /** Of `userIds`, those who currently hold `roleId` in the guild. Members who left are dropped. */
   withRole(input: { guildId: string; roleId: string; userIds: string[] }): Promise<string[]>
+}
+
+/**
+ * The message a "Propose pay run" command targeted, kept between the command and the modal that
+ * asks for the instruction (Discord does not send the message again with the modal). Kept for
+ * 15 minutes at most and taken once; the text is never logged.
+ */
+export interface PendingSources {
+  put(key: { userId: string; messageId: string }, message: SourceMessage): Promise<void>
+  take(key: { userId: string; messageId: string }): Promise<SourceMessage | null>
 }

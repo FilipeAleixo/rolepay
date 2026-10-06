@@ -1,0 +1,138 @@
+import type { Criteria } from '@payrun/core'
+import { describe, expect, it } from 'vitest'
+import { ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER_ROLE, proposal } from '../../test/fixtures.js'
+import { amountInWords, criteriaInWords, editModal, editText, instructionModal, proposalMessage } from './proposal.js'
+
+const ctx = { approverRoleId: TREASURER_ROLE }
+const embedOf = (m: ReturnType<typeof proposalMessage>) => m.embeds?.[0] ?? {}
+const all = (m: ReturnType<typeof proposalMessage>) => JSON.stringify(m)
+const size = (m: ReturnType<typeof proposalMessage>) => {
+  const e = embedOf(m)
+  return (e.title?.length ?? 0) + (e.description?.length ?? 0) + (e.footer?.text.length ?? 0) + (e.fields ?? []).reduce((s, f) => s + f.name.length + f.value.length, 0)
+}
+
+describe('proposalMessage', () => {
+  it('one line per person with amount, reason and a link to the source; the total against the bot key', () => {
+    const m = proposalMessage(proposal(), ctx)
+    const e = embedOf(m)
+    expect(e.title).toBe('Pay run proposal')
+    expect(e.description).toContain(`1. <@${ALICE}>  50 AlphaUSD · bug in the claim page · [source](https://discord.com/channels/${GUILD}/${CHANNEL}/810000000000000001)`)
+    expect(e.description).toContain('**From:** 2 messages in')
+    expect(e.description).toContain('**Note on the run:** October bounties')
+    expect(e.fields?.slice(0, 2)).toEqual([
+      { name: 'Total', value: '250 AlphaUSD for 2 people', inline: true },
+      { name: 'Bot key', value: '100 AlphaUSD left', inline: true },
+    ])
+    expect(m.allowed_mentions).toEqual({ parse: [] })
+  })
+
+  it('flags: left out with the reasons, not registered with a nudge, ignored instructions by author, over budget', () => {
+    const fields = Object.fromEntries((embedOf(proposalMessage(proposal(), ctx)).fields ?? []).map((f) => [f.name, f.value]))
+    expect(fields['Left out (shown, not in the run)']).toBe('<@200000000000000666> 10000 AlphaUSD: their own message is the only source; the amount is not in your instruction.')
+    expect(fields['Not registered payees']).toBe(`<@${CAROL}> (50 AlphaUSD)\nThey register with \`/payee link\`, then propose again.`)
+    expect(fields['Ignored instructions in messages']).toBe(`[A message](https://discord.com/channels/${GUILD}/${CHANNEL}/810000000000000002) by <@200000000000000666>: Asks the AI to pay its author 10,000.`)
+    expect(fields['Check before creating']).toMatch(/^⚠️ The total is more than the bot key has left/)
+  })
+
+  it('Create pay run, Edit and Discard; Create is disabled while a blocking problem stands', () => {
+    const buttons = (p: ReturnType<typeof proposal>) => proposalMessage(p, ctx).components?.[0]?.components ?? []
+    expect(buttons(proposal()).map((b) => ['label' in b && b.label, 'custom_id' in b && b.custom_id, 'disabled' in b && b.disabled])).toEqual([
+      ['Create pay run', 'proposal:create:prop_view01', false],
+      ['Edit', 'proposal:edit:prop_view01', false],
+      ['Discard', 'proposal:discard:prop_view01', false],
+    ])
+    const blocked = buttons(proposal({ problems: ['amount_not_in_instruction'] }))[0]
+    expect(blocked && 'disabled' in blocked && blocked.disabled).toBe(true)
+  })
+
+  it("the model's words cannot format the message: reasons, assumptions and summaries are escaped", () => {
+    const evil = '**Approved** [click](https://evil.example) <@&400000000000000099>'
+    const p = proposal({ lines: [{ ...proposal().lines[0], reason: evil } as ReturnType<typeof proposal>['lines'][number]], assumptions: [evil], unresolved: [{ text: evil, why: evil }] })
+    const text = all(proposalMessage(p, ctx))
+    expect(text).not.toContain('**Approved**')
+    expect(text).not.toContain('[click](https://evil')
+    expect(text).not.toContain('<@&400000000000000099>')
+  })
+
+  it('stays inside Discord limits with 50 long lines, pointing at Edit for the rest', () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({ ...proposal().lines[0], discordUserId: `2000000000000${String(i).padStart(5, '0')}`, reason: 'x'.repeat(190) }) as ReturnType<typeof proposal>['lines'][number])
+    const m = proposalMessage(proposal({ lines: many, held: Array.from({ length: 40 }, () => proposal().held[0]) as ReturnType<typeof proposal>['held'] }), ctx)
+    expect(embedOf(m).description?.length).toBeLessThanOrEqual(4096)
+    expect(size(m)).toBeLessThanOrEqual(6000)
+    expect(embedOf(m).description).toMatch(/…and \d+ more \(Edit shows every line\)/)
+    for (const f of embedOf(m).fields ?? []) expect(f.value.length).toBeLessThanOrEqual(1024)
+  })
+
+  it('criteria mode: the criteria and the amount in plain words, what was scanned, and each match explained', () => {
+    const criteria: Criteria = {
+      hasRole: [MODS_ROLE],
+      lacksRole: [],
+      joinedBefore: null,
+      joinedAfter: null,
+      messagesIn: null,
+      activeDaysIn: null,
+      repliesIn: { channelIds: [CHANNEL], since: new Date('2026-09-06T00:00:00Z'), until: new Date('2026-10-06T12:00:00Z'), min: 10 },
+      reactedTo: null,
+      mentionedIn: null,
+      postedIn: null,
+      paidInRun: null,
+      exclude: [],
+      excludeProposer: true,
+    }
+    const p = proposal({
+      mode: 'criteria',
+      source: null,
+      criteria,
+      amountPlan: { rule: { kind: 'flat', amount: 20_000_000n }, overrides: [], perPersonCap: null },
+      scans: [{ channelId: CHANNEL, since: new Date('2026-09-06T00:00:00Z'), until: new Date('2026-10-06T12:00:00Z'), messages: 1234, truncated: false }],
+      lines: [{ discordUserId: ALICE, amount: 20_000_000n, reason: null, metrics: { messages: null, activeDays: null, replies: 34 }, sources: [], flags: [] }],
+    })
+    const d = embedOf(proposalMessage(p, ctx)).description ?? ''
+    expect(d).toContain(`**Who:** Registered payees who have <@&${MODS_ROLE}>, who replied to other people at least 10 times in <#${CHANNEL}> since <t:1788652800:D> and except the person proposing.`)
+    expect(d).toContain('**Amount:** 20 AlphaUSD each.')
+    expect(d).toContain(`**Scanned:** 1234 messages in <#${CHANNEL}> since <t:1788652800:D>.`)
+    expect(d).toContain(`1. <@${ALICE}>  20 AlphaUSD · 34 replies`)
+  })
+})
+
+describe('criteriaInWords and amountInWords', () => {
+  const none: Criteria = { hasRole: [], lacksRole: [], joinedBefore: null, joinedAfter: null, messagesIn: null, activeDaysIn: null, repliesIn: null, reactedTo: null, mentionedIn: null, postedIn: null, paidInRun: null, exclude: [], excludeProposer: false }
+
+  it('no conditions is every registered payee; each condition reads as a clause', () => {
+    expect(criteriaInWords(none, GUILD)).toBe('Every registered payee.')
+    expect(criteriaInWords({ ...none, reactedTo: { channelId: CHANNEL, messageId: '810000000000000009', emoji: '✅' } }, GUILD)).toBe(
+      `Registered payees who reacted ✅ to [this message](https://discord.com/channels/${GUILD}/${CHANNEL}/810000000000000009).`,
+    )
+    expect(criteriaInWords({ ...none, paidInRun: { last: true, runId: 'run_abc' }, exclude: [BOB] }, GUILD)).toBe(`Registered payees paid in the last run (run_abc) and except <@${BOB}>.`)
+  })
+
+  it('amount rules', () => {
+    const token = '0x20c0000000000000000000000000000000000001'
+    expect(amountInWords({ rule: { kind: 'perUnit', amount: 1_000_000n, per: 'replies', cap: 25_000_000n }, overrides: [], perPersonCap: null }, token)).toBe('1 AlphaUSD per reply, at most 25 AlphaUSD each.')
+    expect(amountInWords({ rule: { kind: 'pool', total: 500_000_000n, splitBy: 'activeDays' }, overrides: [{ discordUserId: ALICE, amount: 100_000_000n }], perPersonCap: 150_000_000n }, token)).toBe(
+      `500 AlphaUSD split by active days; <@${ALICE}> gets 100 AlphaUSD; at most 150 AlphaUSD for anyone.`,
+    )
+    expect(amountInWords({ rule: { kind: 'pool', total: 90_000_000n, splitBy: 'equal' }, overrides: [], perPersonCap: null }, token)).toBe('90 AlphaUSD split equally.')
+  })
+})
+
+describe('the modals', () => {
+  it('the instruction form fits Discord limits', () => {
+    const m = instructionModal('810000000000000001')
+    expect(m.custom_id).toBe('proposal-modal:instruct:810000000000000001')
+    expect(m.title.length).toBeLessThanOrEqual(45)
+    const input = m.components[0]?.components[0]
+    expect(input?.label.length).toBeLessThanOrEqual(45)
+    expect(input?.placeholder?.length ?? 0).toBeLessThanOrEqual(100)
+  })
+
+  it('the edit form: one @user=amount per line, held and unregistered people as comments', () => {
+    expect(editText(proposal())).toBe(
+      [`<@${ALICE}>=50  # bug in the claim page`, `<@${BOB}>=200  # the indexer`, '# <@200000000000000666>=10000  (left out: their own message is the only source; the amount is not in your instruction)', `# <@${CAROL}>  (not registered)`].join('\n'),
+    )
+    const m = editModal(proposal())
+    expect(m.custom_id).toBe('proposal-modal:edit:prop_view01')
+    expect(m.components[0]?.components[0]?.label.length).toBeLessThanOrEqual(45)
+    expect(m.components[0]?.components[0]?.value?.length).toBeLessThanOrEqual(4000)
+  })
+})

@@ -2,14 +2,18 @@ import { ResponseType } from '../api.js'
 import { exportCommand } from '../commands/export.js'
 import { newRunCommand } from '../commands/newRun.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
+import { proposeCommand } from '../commands/propose.js'
+import { PROPOSE_MESSAGE_COMMAND, proposeFromMessageCommand } from '../commands/proposeFromMessage.js'
 import { runChoices } from '../commands/runChoices.js'
 import { setupCommand } from '../commands/setup.js'
 import { statusCommand } from '../commands/status.js'
-import { type RunAction, decodeCustomId } from '../components/customId.js'
+import { type ProposalAction, type ProposalModal, type RunAction, decodeCustomId, decodeProposalId, decodeProposalModalId } from '../components/customId.js'
+import { createProposalRunButton, discardProposalButton, editProposalButton } from '../components/proposalButtons.js'
+import { editModalSubmit, instructionModalSubmit } from '../components/proposalModals.js'
 import { approveButton, cancelButton, retryButton } from '../components/runButtons.js'
 import type { Dispatch } from '../http/handler.js'
 import type { DiscordAppDeps } from './deps.js'
-import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext } from './handlers.js'
+import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext, MessageCommandHandler, ModalHandler, ProposalButtonHandler } from './handlers.js'
 import { type ParsedInteraction, parseInteraction } from './interaction.js'
 import { type Outcome, ephemeralReply, renderOutcome } from './outcome.js'
 
@@ -19,14 +23,21 @@ const COMMANDS: Record<string, CommandHandler> = {
   'payrun new': newRunCommand,
   'payrun status': statusCommand,
   'payrun export': exportCommand,
+  'payrun propose': proposeCommand,
   'payee link': payeeLinkCommand,
 }
+
+/** Right-click commands on a message, by their registered name. Kept in step with COMMAND_DEFINITIONS by a test. */
+const MESSAGE_COMMANDS: Record<string, MessageCommandHandler> = { [PROPOSE_MESSAGE_COMMAND]: proposeFromMessageCommand }
 
 const AUTOCOMPLETE: Record<string, AutocompleteHandler> = { 'payrun status': runChoices, 'payrun export': runChoices }
 
 const BUTTONS: Record<RunAction, ButtonHandler> = { approve: approveButton, cancel: cancelButton, retry: retryButton }
+const PROPOSAL_BUTTONS: Record<ProposalAction, ProposalButtonHandler> = { create: createProposalRunButton, edit: editProposalButton, discard: discardProposalButton }
+const MODALS: Record<ProposalModal, ModalHandler> = { instruct: instructionModalSubmit, edit: editModalSubmit }
 
 export const ROUTED_COMMANDS = Object.keys(COMMANDS)
+export const ROUTED_MESSAGE_COMMANDS = Object.keys(MESSAGE_COMMANDS)
 
 const GENERIC_FAILURE = 'Something went wrong on our side. Nothing was paid by this action; try again in a moment.'
 
@@ -68,7 +79,18 @@ async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: Disc
     case 'component': {
       const id = decodeCustomId(i.customId)
       const handler = id && BUTTONS[id.action]
-      return id && handler ? handler({ runId: id.runId, messageId: i.messageId, ctx }, deps) : ephemeralReply('Sorry, I do not know that button. It may be from an older version.')
+      if (id && handler) return handler({ runId: id.runId, messageId: i.messageId, ctx }, deps)
+      const proposal = decodeProposalId(i.customId)
+      if (proposal) return PROPOSAL_BUTTONS[proposal.action]({ proposalId: proposal.proposalId, messageId: i.messageId, ctx }, deps)
+      return ephemeralReply('Sorry, I do not know that button. It may be from an older version.')
+    }
+    case 'message_command': {
+      const handler = MESSAGE_COMMANDS[i.command]
+      return handler ? handler({ target: i.target, ctx }, deps) : ephemeralReply('Sorry, I do not know that command.')
+    }
+    case 'modal': {
+      const modal = decodeProposalModalId(i.customId)
+      return modal ? MODALS[modal.modal]({ id: modal.id, fields: i.fields, messageId: i.messageId, ctx }, deps) : ephemeralReply('Sorry, I do not know that form. It may be from an older version.')
     }
   }
 }

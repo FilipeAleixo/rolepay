@@ -14,6 +14,21 @@ export type SetupView = {
   setupLink: SetupLinkView | null
   authorizeHint: string | null
   network: NetworkName
+  /** Whether this payrun server has an Anthropic API key (AI proposals can run at all). */
+  aiConfigured: boolean
+}
+
+/**
+ * AI proposals: on or off, who may propose, and where the text goes. The privacy line is the
+ * point: proposing from messages sends their text to Anthropic's API.
+ */
+export function aiText(c: Pick<Community, 'aiProposals' | 'approverRoleId' | 'proposerRoleId'>, configured: boolean): string {
+  const privacy =
+    "Privacy: proposing from messages sends their text to Anthropic's API, with user IDs replaced by tokens (names typed as plain text are sent as written). A criteria proposal sends only the instruction and this server's role and channel names."
+  if (!configured) return 'Not available on this payrun server (no Anthropic API key is configured).'
+  if (!c.aiProposals) return `Off. A member with the approver role turns them on with \`/payrun setup ai_proposals:true\`.\n${privacy}`
+  const who = c.approverRoleId ? `${roleMention(c.approverRoleId)}${c.proposerRoleId ? ` and ${roleMention(c.proposerRoleId)}` : ''}` : 'Nobody (no approver role)'
+  return `On. ${who} can propose: right-click a message > Apps > Propose pay run, or \`/payrun propose\`. A proposal is a draft: the run it creates still needs approval.\n${privacy}`
 }
 
 const approverText = (roleId: string | null, separate: boolean | undefined, unset: string) =>
@@ -49,6 +64,7 @@ export function setupMessage(v: SetupView): Message {
     { name: 'Fees', value: feesText(c.feeMode, c.feeToken), inline: true },
     { name: 'Approver role', value: approverText(c.approverRoleId, c.requireSeparateApprover, 'Not set. Nobody can approve runs until you set one.') },
     { name: 'Bot key', value: v.key ? keyText(v.key) : 'None yet.' },
+    { name: 'AI proposals', value: aiText(c, v.aiConfigured) },
   ]
   if (v.notices.length) fields.push({ name: 'Note', value: v.notices.join('\n') })
   if (v.setupLink) fields.push(linkField(v.setupLink))

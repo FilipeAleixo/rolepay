@@ -3,7 +3,8 @@
 import { randomBytes } from 'node:crypto'
 import { TESTNET_TOKENS, createPayrun, parseAmount } from '@payrun/core'
 import { type KeyValueStore, type Payrun } from '@payrun/core'
-import { FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
+import { FakePayoutChain, FakeRunProposer, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
+import { RestActivityReader } from '@payrun/discord'
 import { FakeDiscordRest, createTestSigner } from '@payrun/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@payrun/web/testing'
 import { parseServerConfig } from '../src/config.js'
@@ -18,7 +19,7 @@ export const usd = (s: string) => {
   return r.value
 }
 
-type SharedState = { payrun: Payrun; chain: FakePayoutChain; clock: ManualClock; kv: KeyValueStore }
+type SharedState = { payrun: Payrun; chain: FakePayoutChain; clock: ManualClock; kv: KeyValueStore; rest: FakeDiscordRest; proposer: FakeRunProposer }
 
 /**
  * `from`: start a second server over the first one's database and chain, as a restarted
@@ -39,11 +40,24 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
   const clock = opts.from?.clock ?? new ManualClock(new Date())
   const chain = opts.from?.chain ?? new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
   if (!opts.from) chain.fund(TOKEN, TREASURY, usd('1000'))
-  const payrun =
-    opts.from?.payrun ?? createPayrun({ chain, repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' })
-  const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
-  const rest = new FakeDiscordRest()
   const logs: { event: string; fields?: Record<string, unknown> }[] = []
+  // A restarted process gets a fresh Discord connection; the AI proposals read through it.
+  const rest = new FakeDiscordRest()
+  const proposer = opts.from?.proposer ?? new FakeRunProposer()
+  const payrun =
+    opts.from?.payrun ??
+    createPayrun({
+      chain,
+      repositories: createMemoryRepositories({ clock }),
+      vault: new PlainKeyVault(),
+      ids: new SequentialIds(),
+      clock,
+      network: 'moderato',
+      proposer,
+      activity: new RestActivityReader(rest),
+      proposalLog: (entry) => logs.push({ event: 'proposal', fields: entry }),
+    })
+  const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
   const server = composeServer({
     web: { sessions, assets: staticAssets({ 'payrun.js': '' }) },
@@ -78,5 +92,5 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
       body: JSON.stringify(body),
     })
 
-  return { ...server, config, clock, chain, payrun, kv, rest, logs, interact, browserPost }
+  return { ...server, config, clock, chain, payrun, kv, rest, proposer, logs, interact, browserPost }
 }

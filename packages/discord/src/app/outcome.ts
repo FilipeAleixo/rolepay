@@ -1,4 +1,4 @@
-import { type Message, MessageFlags, ResponseType, splitFiles } from '../api.js'
+import { type Message, MessageFlags, type Modal, ResponseType, splitFiles } from '../api.js'
 import type { Dispatched } from '../http/handler.js'
 import type { DiscordRest } from '../ports.js'
 import type { InteractionContext } from './interaction.js'
@@ -11,8 +11,10 @@ export type DeferredResult = { ok: true; message: Message } | { ok: false; messa
 /** What a handler decides. Handlers never talk to Discord directly; this is rendered for them. */
 export type Outcome =
   | { kind: 'reply'; message: Message; ephemeral: boolean }
-  /** For a button: replace the message the button is on. */
-  | { kind: 'update'; message: Message }
+  /** For a button (or a modal a button opened): replace the message it is on; `followUp` then posts a new message. */
+  | { kind: 'update'; message: Message; followUp?: Message }
+  /** Show a form. Only as the answer to a command or a button. */
+  | { kind: 'modal'; modal: Modal }
   /** Answer now ("thinking…"), finish in the background, then edit the reply. For anything slower than 3 s. */
   | { kind: 'defer'; ephemeral: boolean; work: () => Promise<DeferredResult> }
   | { kind: 'choices'; choices: Choice[] }
@@ -28,8 +30,23 @@ export function renderOutcome(outcome: Outcome, ctx: InteractionContext, rest: D
       const data = outcome.ephemeral ? { ...json, flags: (json.flags ?? 0) | MessageFlags.Ephemeral } : json
       return { kind: 'respond', body: { type: ResponseType.ChannelMessage, data }, ...(files.length ? { files } : {}) }
     }
-    case 'update':
-      return { kind: 'respond', body: { type: ResponseType.UpdateMessage, data: splitFiles(outcome.message).json } }
+    case 'update': {
+      const body = { type: ResponseType.UpdateMessage, data: splitFiles(outcome.message).json }
+      const followUp = outcome.followUp
+      if (!followUp) return { kind: 'respond', body }
+      const reply = { applicationId: ctx.applicationId, token: ctx.token }
+      return {
+        kind: 'respond',
+        body,
+        background: async () => {
+          const posted = await rest.followUp(reply, followUp)
+          // The interaction token is fresh here; if the follow-up still fails, post in the channel as the bot.
+          if (!posted.ok && ctx.channelId) await rest.postToChannel(ctx.channelId, followUp)
+        },
+      }
+    }
+    case 'modal':
+      return { kind: 'respond', body: { type: ResponseType.Modal, data: outcome.modal } }
     case 'choices':
       return { kind: 'respond', body: { type: ResponseType.AutocompleteResult, data: { choices: outcome.choices.slice(0, 25) } } }
     case 'defer': {

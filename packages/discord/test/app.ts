@@ -5,6 +5,8 @@ import type { DiscordAppConfig, DiscordAppDeps } from '../src/app/deps.js'
 import { createDispatcher } from '../src/app/router.js'
 import type { Dispatched } from '../src/http/handler.js'
 import type { MemberDirectory } from '../src/ports.js'
+import { MemoryPendingSources } from '../src/testing/fakeDiscordRest.js'
+import type { FakeRunProposer } from '@payrun/core/adapters'
 import { CHANNEL, GUILD } from './fixtures.js'
 import { harness, usd } from './harness.js'
 
@@ -21,14 +23,15 @@ export const CONFIG: DiscordAppConfig = {
 
 export const SCOPE = { guildId: GUILD, channelId: CHANNEL }
 
-export async function appHarness(opts: { members?: MemberDirectory; config?: Partial<DiscordAppConfig> } = {}) {
-  const h = await harness()
+export async function appHarness(opts: { members?: MemberDirectory; config?: Partial<DiscordAppConfig>; proposer?: FakeRunProposer | null } = {}) {
+  const h = await harness(opts.proposer === undefined ? {} : { proposer: opts.proposer })
   const errors: unknown[] = []
   const deps: DiscordAppDeps = {
     payrun: h.payrun,
     rest: h.rest,
     queue: h.queue,
     members: opts.members ?? new RestMemberDirectory(h.rest),
+    pendingSources: new MemoryPendingSources(),
     clock: h.clock,
     config: { ...CONFIG, ...opts.config },
     onError: (e) => errors.push(e),

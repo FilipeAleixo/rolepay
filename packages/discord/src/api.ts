@@ -12,13 +12,21 @@ export const ResponseType = {
   DeferredUpdateMessage: 6,
   UpdateMessage: 7,
   AutocompleteResult: 8,
+  Modal: 9,
 } as const
+
+/** Slash commands (chat input) and the right-click commands on a message. */
+export const CommandType = { ChatInput: 1, User: 2, Message: 3 } as const
 
 export const MessageFlags = { Ephemeral: 1 << 6 } as const
 
 export const OptionType = { SubCommand: 1, SubCommandGroup: 2, String: 3, Integer: 4, Boolean: 5, User: 6, Channel: 7, Role: 8 } as const
 
-export const ComponentType = { ActionRow: 1, Button: 2 } as const
+export const ComponentType = { ActionRow: 1, Button: 2, TextInput: 4, Label: 18 } as const
+export const TextInputStyle = { Short: 1, Paragraph: 2 } as const
+
+/** Channel types payrun reads from (text, announcement, threads) or lists (forum). */
+export const ChannelType = { Text: 0, Voice: 2, Category: 4, Announcement: 5, AnnouncementThread: 10, PublicThread: 11, PrivateThread: 12, Forum: 15, Media: 16 } as const
 export const ButtonStyle = { Primary: 1, Secondary: 2, Success: 3, Danger: 4, Link: 5 } as const
 
 /** Permission bits payrun checks (from the interaction's member.permissions bitfield). */
@@ -39,6 +47,21 @@ export type Button =
   | { type: typeof ComponentType.Button; style: typeof ButtonStyle.Link; label: string; url: string }
 
 export type ActionRow = { type: typeof ComponentType.ActionRow; components: Button[] }
+
+export type TextInput = {
+  type: typeof ComponentType.TextInput
+  custom_id: string
+  label: string
+  style: 1 | 2
+  min_length?: number
+  max_length?: number
+  required?: boolean
+  value?: string
+  placeholder?: string
+}
+
+/** A modal (a form Discord shows): the response to a command or a button, never to a modal. */
+export type Modal = { custom_id: string; title: string; components: { type: typeof ComponentType.ActionRow; components: [TextInput] }[] }
 
 /** A file sent alongside a message (an attachment). */
 export type FileUpload = { name: string; contentType: string; data: string }

@@ -86,12 +86,46 @@ describe('FetchDiscordRest', () => {
     expect(await rest.sendDm('200000000000000001', { content: 'receipt' })).toEqual({ ok: false, error: { code: 'dm_closed' } })
   })
 
-  it('reads one guild member, null when they are not a member', async () => {
-    const { fetch, calls } = fakeFetch({ status: 200, json: { roles: ['400000000000000001'] } }, { status: 404, json: { code: 10007 } })
+  it('reads one guild member with their join date, null when they are not a member', async () => {
+    const { fetch, calls } = fakeFetch({ status: 200, json: { roles: ['400000000000000001'], joined_at: '2026-01-02T03:04:05.000000+00:00' } }, { status: 404, json: { code: 10007 } })
     const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
-    expect(await rest.getMember('1094309218049937418', '200000000000000001')).toEqual({ roles: ['400000000000000001'] })
+    expect(await rest.getMember('1094309218049937418', '200000000000000001')).toEqual({ roles: ['400000000000000001'], joinedAt: new Date('2026-01-02T03:04:05.000Z') })
     expect(await rest.getMember('1094309218049937418', '200000000000000002')).toBeNull()
     expect(calls[0]?.url).toBe(`${API}/guilds/1094309218049937418/members/200000000000000001`)
+  })
+
+  it('reads channel history a page at a time (limit 1-100, before a cursor), as the bot', async () => {
+    const { fetch, calls } = fakeFetch({ status: 200, json: [{ id: '1' }] }, { status: 403, json: { code: 50001 } }, { status: 404, json: { code: 10003 } })
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
+    expect(await rest.getChannelMessages('700000000000000001', { before: '810000000000000009', limit: 500 })).toEqual({ ok: true, value: [{ id: '1' }] })
+    expect(calls[0]?.url).toBe(`${API}/channels/700000000000000001/messages?limit=100&before=810000000000000009`)
+    expect(calls[0]?.headers.get('authorization')).toBe(`Bot ${BOT_TOKEN}`)
+    expect(await rest.getChannelMessages('700000000000000001', { limit: 5 })).toEqual({ ok: false, error: { code: 'forbidden' } })
+    expect(await rest.getMessage('700000000000000001', '810000000000000001')).toEqual({ ok: false, error: { code: 'not_found' } })
+  })
+
+  it('reads reactions, roles, channels and active threads', async () => {
+    const { fetch, calls } = fakeFetch({ status: 200, json: [] }, { status: 200, json: [] }, { status: 200, json: [] }, { status: 200, json: { threads: [] } })
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
+    await rest.getReactions('700000000000000001', '810000000000000001', encodeURIComponent('✅'), { after: '200000000000000001', limit: 100 })
+    await rest.getGuildRoles('1094309218049937418')
+    await rest.getGuildChannels('1094309218049937418')
+    await rest.getActiveThreads('1094309218049937418')
+    expect(calls.map((c) => c.url.replace(API, ''))).toEqual([
+      '/channels/700000000000000001/messages/810000000000000001/reactions/%E2%9C%85?limit=100&after=200000000000000001',
+      '/guilds/1094309218049937418/roles',
+      '/guilds/1094309218049937418/channels',
+      '/guilds/1094309218049937418/threads/active',
+    ])
+  })
+
+  it('paging is rate-limit aware: when a bucket is empty it waits for the reset before the next request', async () => {
+    const { fetch } = fakeFetch({ status: 200, json: [], headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset-after': '1.25' } }, { status: 200, json: [] })
+    const waits: number[] = []
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: async (ms) => void waits.push(ms) })
+    await rest.getChannelMessages('700000000000000001', { limit: 100 })
+    await rest.getChannelMessages('700000000000000001', { limit: 100 })
+    expect(waits).toEqual([1250])
   })
 
   it('reads the guild name with the bot token, null when the bot is not in it', async () => {

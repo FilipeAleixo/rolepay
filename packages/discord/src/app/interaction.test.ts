@@ -61,6 +61,64 @@ describe('parseInteraction', () => {
     expect(r.ok && r.value.kind === 'command' && r.value.ctx).toMatchObject({ guildId: null, caller: { userId: '200000000000000001', roles: [], permissions: 0n } })
   })
 
+  it('reads a message command (Apps > Propose pay run) with its target message, text included', () => {
+    const target = {
+      id: '810000000000000001',
+      channel_id: '700000000000000001',
+      author: { id: '300000000000000001', username: 'treasurer' },
+      content: 'Winners: <@200000000000000001>',
+      mentions: [{ id: '200000000000000001', username: 'ana' }],
+      timestamp: '2026-10-06T12:00:00.000000+00:00',
+      referenced_message: { id: '810000000000000000', author: { id: '200000000000000002', bot: false } },
+    }
+    const r = parseInteraction({
+      ...base,
+      type: 2,
+      guild_id: '1094309218049937418',
+      channel_id: '700000000000000001',
+      member,
+      data: { id: '900000000000000002', name: 'Propose pay run', type: 3, target_id: target.id, resolved: { messages: { [target.id]: target } } },
+    })
+    expect(r.ok && r.value.kind === 'message_command' && r.value).toMatchObject({
+      command: 'Propose pay run',
+      target: {
+        id: '810000000000000001',
+        channelId: '700000000000000001',
+        authorId: '300000000000000001',
+        authorIsBot: false,
+        content: 'Winners: <@200000000000000001>',
+        mentionIds: ['200000000000000001'],
+        at: new Date('2026-10-06T12:00:00.000Z'),
+        replyTo: { messageId: '810000000000000000', authorId: '200000000000000002' },
+      },
+    })
+  })
+
+  it('a message command whose target is missing is refused', () => {
+    const r = parseInteraction({ ...base, type: 2, guild_id: '1094309218049937418', member, data: { name: 'Propose pay run', type: 3, target_id: '810000000000000001', resolved: { messages: {} } } })
+    expect(r).toMatchObject({ ok: false, error: { code: 'unsupported_interaction' } })
+  })
+
+  it('reads a submitted modal: text inputs in action rows or in labels, and the message whose button opened it', () => {
+    const rows = parseInteraction({
+      ...base,
+      type: 5,
+      guild_id: '1094309218049937418',
+      member,
+      message: { id: '810000000000000005' },
+      data: { custom_id: 'proposal-modal:edit:prop_1', components: [{ type: 1, components: [{ type: 4, custom_id: 'lines', value: '<@200000000000000001>=5' }] }] },
+    })
+    expect(rows.ok && rows.value).toMatchObject({ kind: 'modal', customId: 'proposal-modal:edit:prop_1', fields: { lines: '<@200000000000000001>=5' }, messageId: '810000000000000005' })
+    const labels = parseInteraction({
+      ...base,
+      type: 5,
+      guild_id: '1094309218049937418',
+      member,
+      data: { custom_id: 'proposal-modal:instruct:810000000000000001', components: [{ type: 18, component: { type: 4, custom_id: 'instruction', value: '50 each' } }] },
+    })
+    expect(labels.ok && labels.value).toMatchObject({ kind: 'modal', fields: { instruction: '50 each' }, messageId: null })
+  })
+
   it('refuses shapes it does not understand', () => {
     expect(parseInteraction({ ...base, type: 99 }).ok).toBe(false)
     expect(parseInteraction({ ...base, type: 2, guild_id: 'nope', member, data: { name: 'x' } }).ok).toBe(false)
