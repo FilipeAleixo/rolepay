@@ -45,7 +45,13 @@ export function createWebApp(deps: WebAppDeps): Hono {
 
   if (deps.passkeys) {
     const passkeys = deps.passkeys
-    app.all('/webauthn/*', (c) => passkeys.fetch(c.req.raw))
+    // Behind a tunnel or proxy the request arrives as plain http; the handler marks its session
+    // cookie Secure from the URL's protocol, so it gets the public URL instead.
+    app.all('/webauthn/*', async (c) => {
+      const url = new URL(c.req.url)
+      const body = c.req.method === 'GET' || c.req.method === 'HEAD' ? null : await c.req.arrayBuffer()
+      return passkeys.fetch(new Request(`${config.origin}${url.pathname}${url.search}`, { method: c.req.method, headers: c.req.raw.headers, body }))
+    })
   }
 
   // The bundle is about 1.5 MB (viem's Tempo ABIs, the Accounts SDK); gzip takes it to a fraction.
