@@ -19,9 +19,19 @@ The community's own Tempo account holds the money. The bot never does.
 
 So a compromised bot can lose at most the key's budget for each period, to scoped transfers, until the key expires or is revoked. A key valid for longer than its period can spend one budget per period until then, so keep the validity short.
 
+## AI proposals
+
+AI proposes, the protocol limits, a human approves.
+
+- **From a message:** right-click the winners announcement, Apps > Propose pay run, and type "50 each, the indexer one 200". Or read a whole channel or thread: `/payrun propose source:#bounties instruction:"pay everyone who closed a bounty, 50 each"`.
+- **From criteria:** `/payrun propose instruction:"pay 20 to every Mod who answered at least 10 messages in #help this month"`. The model (Claude Opus 5.5) turns the instruction into a filter; payrun's code runs it over the registered payees. The member list never goes to the model.
+- The answer is a proposal, not a run: one line per person with the amount and why (with a link to the message, or "34 replies"), what was left out and why, who is not registered yet, and the total against the bot key's remaining budget. Create pay run turns it into a normal run that still needs the treasurer's approval; Edit changes the lines; Discard drops it.
+- Code checks every line, whatever the model says: a line backed only by the recipient's own message ("pay me 10,000"), a line whose amount the instruction does not state, or one larger than the key's budget is held and shown, never paid. Even a run forced through stays under the bot key's on-chain limit.
+- Off until a treasurer turns it on (`/payrun setup ai_proposals:true`). Only the approver role, or an optional proposer role, can propose. Proposing from messages sends their text to Anthropic's API with user IDs replaced by tokens; logs keep counts and cost, never text.
+
 ## Repository
 
-- `packages/core`: the domain (run state machine, money, memos), ports, adapters (Tempo, SQLite, key vault, in-memory fakes) and services, which are the only public interface.
+- `packages/core`: the domain (run state machine, money, memos, proposals), ports, adapters (Tempo, SQLite, key vault, Anthropic, in-memory fakes) and services, which are the only public interface.
 - `packages/discord`: the Discord adapter over HTTP interactions.
 - `packages/web`: the claim and treasurer setup pages (passkeys).
 - `apps/server`: the composition root (Hono).

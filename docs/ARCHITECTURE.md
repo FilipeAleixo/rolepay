@@ -34,14 +34,16 @@ Dependencies point one way: `apps/server` -> `packages/discord` and `packages/we
 caller (apps/server, packages/discord, CLI)
    |
    v
-services/      CommunityService, PayeeService, PayRunService   (the ONLY public interface)
+services/      CommunityService, PayeeService, PayRunService, ProposalService   (the ONLY public interface)
    |  uses
    v
-domain/        pure: Zod schemas, types, state machine, money, memo, reconcile, CSV
-ports/         interfaces: PayoutChain, *Repository, KeyValueStore, KeyVault, Clock, IdGenerator
+domain/        pure: Zod schemas, types, state machine, money, memo, reconcile, CSV, proposal/
+ports/         interfaces: PayoutChain, *Repository, KeyValueStore, KeyVault, Clock, IdGenerator,
+               RunProposer, ActivityReader, ProposalLog
    ^
    |  implement
-adapters/      tempo/ (viem), sqlite/ (Kysely), crypto/ (node:crypto), memory/ (fakes)
+adapters/      tempo/ (viem), sqlite/ (Kysely), crypto/ (node:crypto), anthropic/ (the SDK),
+               kv/ (proposals on the KeyValueStore), memory/ (fakes)
 ```
 
 | Layer | Can | Cannot |
@@ -55,22 +57,23 @@ adapters/      tempo/ (viem), sqlite/ (Kysely), crypto/ (node:crypto), memory/ (
 
 These rules are enforced by `packages/core/test/architecture.test.ts`, not by memory. The same file checks that the package root exports no adapter and that nothing outside core reaches into core internals.
 
-**Public surface.** `@payrun/core` exports `createPayrun(deps)` (returns the three services), the services' types and input schemas, domain types and schemas, port types, config and constants. `@payrun/core/adapters` exports the implementations, for composition roots only. `openPayrunAdapters(parseConfig(process.env))` opens the production set (SQLite file, AES vault, Tempo chain, random IDs, system clock) and returns `{ deps, kv, close }`: `kv` is the KeyValueStore in the same database file.
+**Public surface.** `@payrun/core` exports `createPayrun(deps)` (returns the four services), the services' types and input schemas, domain types and schemas, port types, config and constants. `@payrun/core/adapters` exports the implementations, for composition roots only. `openPayrunAdapters(parseConfig(process.env))` opens the production set (SQLite file, AES vault, Tempo chain, random IDs, system clock) and returns `{ deps, kv, close }`: `kv` is the KeyValueStore in the same database file.
 
 **Results, not throws.** Every expected failure is a value: `{ ok: false, error: { code: 'snake_case', ... } }`. Services throw only for the unexpected (a database or RPC outage), which the caller treats as "try again".
 
-**No orchestrator layer.** soulform-app puts multi-service flows in orchestrators. payrun has three services and one real flow, so services read the repositories they need directly (a pay run reads communities, keys and payees) but each entity is written only by its owning service. Add an orchestrator layer the day a flow genuinely spans services.
+**No orchestrator layer.** soulform-app puts multi-service flows in orchestrators. payrun has four services and two real flows, so services read the repositories they need directly (a pay run reads communities, keys and payees) but each entity is written only by its owning service. `ProposalService` is the one service that calls others: it reads the key's remaining budget through `CommunityService` and turns a proposal into a run through `PayRunService.create` and `submit`, so runs are still written only by their own service. Add an orchestrator layer the day a flow genuinely spans more services than that.
 
 ## Domain model
 
 Everything is keyed by the Discord guild ID: a guild is a community.
 
-- **Community**: guild ID, name (read from Discord by `/payrun setup`), network, treasury address, payout token, fee mode (`sponsor` or `fee_budget`, with a fee token), approver role ID (the Treasurer role the Discord layer checks), and `requireSeparateApprover` (four eyes: a run's creator may not approve it; off by default). Changing the approver role, the fee mode or `requireSeparateApprover` needs a member who holds the CURRENT approver role (with none set yet, one who holds the new role): `canChangeApprovalRules` in the domain, enforced by `CommunityService` from the roles the caller passes, so Manage Server alone cannot make itself the approver.
+- **Community**: guild ID, name (read from Discord by `/payrun setup`), network, treasury address, payout token, fee mode (`sponsor` or `fee_budget`, with a fee token), approver role ID (the Treasurer role the Discord layer checks), `requireSeparateApprover` (four eyes: a run's creator may not approve it; off by default), `aiProposals` (off by default) and an optional `proposerRoleId` (who may propose with AI besides the approver role). Changing the last two follows the same rule as the approver role. Changing the approver role, the fee mode or `requireSeparateApprover` needs a member who holds the CURRENT approver role (with none set yet, one who holds the new role): `canChangeApprovalRules` in the domain, enforced by `CommunityService` from the roles the caller passes, so Manage Server alone cannot make itself the approver.
 - **SetupLink**: a short-lived (30 minute) link to the treasurer's setup page for one guild, issued by `/payrun setup` to a member with Manage Server and the approver role. Only a fingerprint is stored. It carries the settings that first setup chose (name, payout token, fee mode, approver role), because the community cannot be registered until its treasury exists. It is not consumed on use (the page takes several steps); instead `bindTreasury` registers the treasury once and refuses any other address afterwards, and every later change also needs the treasury's own passkey session (checked by the web layer) or its signature on chain.
 - **BotKey**: the bot's access key for one community. Address, sealed secret (encrypted by the KeyVault, bound to the community and key; `null` once the key is revoked or replaced, because payrun destroys a secret it will never use again), status (`pending_authorization`, `active`, `revoked`, `superseded`), and the policy the root signed: limit, period, expiry, optional recipient allowlist (`null` = none, the v1 default), optional fee budget.
 - **Payee**: (guild, Discord user) to the address of their passkey account.
 - **LinkToken**: a one-time registration link. Only an HMAC fingerprint of the token is stored, so a database reader cannot hijack a link and redirect someone's pay.
 - **Run**: lines (1-based, each with payee, address, amount in bigint micro-units, and its bytes32 memo), total, status, actors and timestamps, attempts, the paying tx, a failure if any, and a version for compare-and-set.
+- **Proposal**: a draft run the AI helped write (below): its lines with reasons and sources, held lines with why, people who are not registered, the criteria and amount rule (criteria mode) or the messages read (message mode), problems, the remaining key budget, a status (`open`, `run_created`, `discarded`) and an expiry a day out.
 
 ### Run state machine (`domain/run.ts`, pure)
 
@@ -141,11 +144,49 @@ A recurring limit's period is anchored at authorisation time, not at calendar mo
 
 ## Persistence
 
-SQLite through Kysely and better-sqlite3 (`adapters/sqlite/`). The schema is portable on purpose: money as exact decimal text (Postgres `NUMERIC`), timestamps as ISO text, small nested values (key policy, attempts, failure) as JSON text. Moving to Postgres means a Kysely Postgres dialect plus the same migrations, with no service changes. Migrations live inline in `migrations.ts` and are append-only. Every row read is re-validated by the domain's Zod schema.
+SQLite through Kysely and better-sqlite3 (`adapters/sqlite/`). Proposals are not a table: they are short-lived KeyValueStore records (see AI-proposed pay runs). The schema is portable on purpose: money as exact decimal text (Postgres `NUMERIC`), timestamps as ISO text, small nested values (key policy, attempts, failure) as JSON text. Moving to Postgres means a Kysely Postgres dialect plus the same migrations, with no service changes. Migrations live inline in `migrations.ts` and are append-only. Every row read is re-validated by the domain's Zod schema.
 
 The repository contract (`test/support/repositoryContracts.ts`) runs against both the in-memory fakes and SQLite, so unit tests on fakes can be trusted.
 
 **KeyValueStore** (`ports/keyValueStore.ts`, migration `0002_key_value`): small JSON records with an optional expiry, with atomic create-if-absent and read-and-delete, for state that is not a domain entity. The web layer keeps the passkey credentials, challenges and sessions there (through the Accounts SDK's `Handler.webAuthn`, keys under `webauthn:`), and the Discord layer keeps where a run's review message is and whether its receipts went out (`discord:`). The shape matches the Accounts SDK's `Kv`. `create` is one upsert guarded by expiry and `take` is one `DELETE ... RETURNING`, so both stay atomic on Postgres. Its own contract (`test/support/keyValueContract.ts`) runs against memory and SQLite.
+
+## AI-proposed pay runs
+
+**AI proposes, the protocol limits, a human approves.** A proposal is a draft. The model never approves, signs or pays: a proposal becomes money only through `PayRunService.create`, the treasurer's approval and the bot key's on-chain limit, all unchanged.
+
+Two modes, both `ProposalService` methods:
+
+- **Message mode** (`proposeFromMessages`): the model reads messages and the treasurer's instruction ("50 each, the indexer one 200, note: October bounties"). The source is the message a "Propose pay run" command targeted (it arrives with the interaction, so no intent is needed) or a channel's or thread's newest messages (at most 200, at most 31 days back; their text needs the Message Content intent). Before anything is sent, every user ID and mention becomes a token (`U1`, `U2`, ...) and every message `M1`, `M2`, ... (`domain/proposal/sources.ts`); the map back stays in code. Names typed as plain text cannot be recognised and are sent as written, which the setup card says.
+- **Criteria mode** (`proposeFromCriteria`, "pay X to people who Y"): the model sees only the instruction (with roles, channels, people and message links as tokens) and the server's role and channel names by token, never members or messages. It returns a filter and an amount rule (`domain/proposal/raw.ts`); code checks them (`resolveCriteria`), reads what they need through the `ActivityReader` port, and runs them over the registered payees (`evaluateCriteria`). People the activity shows who match but are not registered are listed with a nudge to `/payee link`.
+
+| Filter (v1, AND of all) | Read through |
+| --- | --- |
+| `hasRole` (any of), `lacksRole` (none of), `joinedBefore`, `joinedAfter` | one Get Guild Member per candidate (no GUILD_MEMBERS intent) |
+| `messagesIn`, `activeDaysIn` (distinct days), `repliesIn` (replies to other people's messages) `{ channels, since, until, min }` | channel history, author IDs only (no Message Content intent; View Channel and Read Message History) |
+| `reactedTo { message, emoji? }`, `mentionedIn { message }` (a message linked in the instruction) | the message and its reactions |
+| `postedIn { thread }` | the thread's history |
+| `paidInRun { run }`, `paidInLastRun` | payrun's own runs |
+| `exclude { users }`, `excludeProposer` | |
+
+Bounds, applied in code: at most 31 days back (a longer window is cut and the proposal says so), 10,000 messages per proposal across every channel it reads (a scan the bound stops is flagged), 5 channels, 100 unregistered people listed. The REST adapter pages history 100 at a time and waits when a rate-limit bucket empties. Not in v1: voice activity, reactions received, deep forum scans, OR between groups.
+
+**Amount rules** (`domain/proposal/amounts.ts`, bigint micro-units throughout): `flat`, `perUnit` (per message, active day or reply, with an optional cap), `pool` (a total split by messages, active days, replies or equally), per-person overrides (they win over the rule and the cap) and an optional per-person cap. A pool is split by the largest-remainder rule: each person gets floor(total times weight, divided by the sum of weights) micro-units, and the few micro-units left over go one each to the largest remainders, ties broken by Discord user ID ascending, so the shares always add up to the total exactly and the same input always gives the same split. Overrides come out of a pool first; a pool is split among registered matches only. Message mode's "split 300 between the winners" uses the same rule.
+
+**The checks, in code, whatever the model says** (`domain/proposal/proposal.ts`). A line is held (shown, left out of the run) when:
+
+- every message backing it was written by the person it pays (`self_sourced`: "pay me 10,000");
+- a message backing it tried to instruct the AI (`suspicious_source`; such messages are listed by author, never by text);
+- no message backs it, or the model named someone who is not in the messages;
+- its amount is not stated in the instruction (`amount_not_in_instruction`), or was said to come from a message and no message by someone else states it;
+- the person is listed twice, or the line alone is more than the bot key has left.
+
+Then registration, the 50-line limit and the total against the key's remaining budget. In criteria mode an amount the instruction never stated blocks Create until an Edit, because the instruction is the only text the model saw. Edit (the treasurer types `@user=amount` lines) makes the lines exactly what was typed. Create claims the proposal once (`ProposalRepository.claim`), so two clicks make one run.
+
+**Who may propose.** The approver role, or the community's optional proposer role (`canPropose`), checked by core on every propose, edit, discard and create from the roles Discord signed into the interaction; the Discord layer checks first for a clear message, and the commands are hidden from members by default (`default_member_permissions`). The instruction is therefore trusted; the source messages are written by anyone in the channel and stay untrusted data. AI proposals are off per community until a member with the approver role turns them on.
+
+**The model** (`adapters/anthropic/`, behind the `RunProposer` port, a deterministic fake in `adapters/memory/fakeProposer.ts`): `claude-opus-5-5` (`PAYRUN_AI_MODEL`) through the official SDK, one request per proposal, structured output in a JSON schema derived from the domain's Zod schemas (`outputSchema`), then validated with those same schemas. No `temperature` (Opus 5.5 rejects it); thinking cannot be disabled, so effort is `low` and `max_tokens` is 16,000 to leave room after thinking; Anthropic's server-side fallback (`fallbacks: "default"`) covers safety-classifier declines. Message text goes inside `<messages>` as JSON with `<` and `>` escaped, so no message can close its tag, and the system prompt says instructions inside it are never followed. A refusal, a cut-off or malformed answer, or an API error is a `could_not_propose` result, never a crash. Without `ANTHROPIC_API_KEY` there is no proposer and every AI command answers that AI is not configured.
+
+**Storage and logs.** Proposals are KeyValueStore records (`adapters/kv/proposals.ts`) that expire after a day: no migration, and they move to Postgres with the store. The target of a message command is kept the same way for at most 15 minutes, until its modal is submitted. One `proposal` log line per attempt: mode, outcome, counts (messages sent or scanned, lines, held, unregistered), model, tokens, an estimated cost and latency; never message text, instructions, reasons or names.
 
 ## apps/server (Hono on Node)
 
@@ -160,11 +201,12 @@ The composition root (`src/main.ts`). It parses config (`src/config.ts`: the ser
 
 ```ts
 const config = parseServerConfig(loadEnvironment())        // root .env, DB path anchored at the repo root
-const { deps, kv, close } = await openPayrunAdapters(config.core)
-const payrun = createPayrun(deps)
+const { deps, kv, close } = await openPayrunAdapters(config.core)   // Anthropic too, when ANTHROPIC_API_KEY is set
+const rest = new FetchDiscordRest({ botToken })
+const payrun = createPayrun({ ...deps, activity: new RestActivityReader(rest), proposalLog })
 const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
 const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() }
-const server = composeServer({ config, payrun, rest: new FetchDiscordRest({ botToken }), clock: deps.clock, kv, web })
+const server = composeServer({ config, payrun, rest, clock: deps.clock, kv, web })
 ```
 
 `composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters, a fake Discord and fake passkey sessions and drive the real Hono app over HTTP; the Playwright e2e passes the production set with real passkeys. Scripts: `pnpm register-commands`, and on testnet with `PAYRUN_DEV_SHORTCUTS=true` the dev shortcut `pnpm dev:treasury` (print and fund a dev treasury whose key is in `.env`) and `pnpm dev:authorize-key <guildId>` (that in-process root signs the pending bot key). How to run it: `apps/server/README.md`.
@@ -211,8 +253,9 @@ commands/    slash command definitions (JSON) and handlers
 components/  the Approve, Cancel and Retry buttons
 views/       pure builders from domain objects to Discord message payloads (soulform's transformers)
 execution/   the in-process ExecutionQueue and the run executor job
-adapters/    DiscordRest over fetch, MemberDirectory over DiscordRest
-ports.ts     DiscordRest, ExecutionQueue, MemberDirectory, RunNotices, InteractionLog
+adapters/    DiscordRest over fetch, MemberDirectory and core's ActivityReader over DiscordRest, KV stores
+wire.ts      Zod schemas for Discord messages (message-command targets, history) and core's SourceMessage
+ports.ts     DiscordRest, ExecutionQueue, MemberDirectory, RunNotices, InteractionLog, PendingSources
 ```
 
 A handler is a thin route: parse options with Zod, check permissions, call a service, return an **outcome** (`reply`, `update`, `defer` or `choices`). Handlers never talk to Discord; `app/outcome.ts` renders the outcome. A `defer` answers at once ("thinking...") and finishes in the background, then edits the reply through the interaction webhook; a public deferral that fails is deleted and the error goes to the caller alone. Layering is enforced by `packages/discord/test/architecture.test.ts`: discord imports only `@payrun/core` and `zod`; views import nothing with IO; handlers never reach adapters, the HTTP layer or the queue implementation.
@@ -227,6 +270,10 @@ A handler is a thin route: parse options with Zod, check permissions, call a ser
 | Retry | approver role only | enqueue execution for an approved-but-unpaid or retryable failed run |
 | `/payrun status` | Manage Server or approver | `payRuns.get`, or `payRuns.list` + `communities.keyStatus` (deferred: reads the chain) |
 | `/payrun export` | Manage Server or approver | `payRuns.exportCsv` (default: the latest run), sent as a CSV attachment |
+| Apps > Propose pay run (message command) | approver or proposer role, AI on | keeps the target message (`PendingSources`), answers with the instruction modal; the modal submit (deferred, ephemeral) calls `proposals.proposeFromMessages` |
+| `/payrun propose instruction: [source:] [since:]` | approver or proposer role, AI on | deferred, ephemeral: `proposals.proposeFromMessages` with `source` (a channel or thread, default 7 days), else `proposals.proposeFromCriteria` |
+| Create pay run / Edit / Discard (on a proposal) | approver or proposer role | `proposals.createRun` (the review is then posted with a follow-up, Approve unchanged), the edit modal then `proposals.edit`, `proposals.discard` |
+| `/payrun setup ai_proposals: proposer_role:` | the current approver role | `communities.setAiProposals`; the setup card shows the AI state and the privacy line |
 
 Decisions worth knowing:
 
@@ -257,6 +304,8 @@ interface ExecutionQueue { enqueue(job: ExecutionJob): Promise<void> }
 | Discord: verification, routing, every handler, views, executor, queue, REST adapter | `packages/discord/src/**/*.test.ts` (real core on in-memory fakes, fake Discord REST) | `pnpm test` |
 | Web: claim and setup routes (fake passkey sessions), Handler.webAuthn over KeyValueStore, the keychain authorizeKey call the browser sends, the real client bundle builds, architecture guards | `packages/web/**/*.test.ts` | `pnpm test` |
 | Server: config, routes, web pages, recovery loop and its Discord report, in-process end to end over signed HTTP | `apps/server/**/*.test.ts` | `pnpm test` |
+| AI proposals: domain checks and the injection suite, ProposalService on fakes, the Anthropic adapter on recorded-style fixtures (valid, fallback, malformed, schema-invalid, refusal, cut off, HTTP errors), the activity reader on a fake Discord, handlers, views, signed message command and modal, and the in-process end to end (`apps/server/test/proposals.test.ts`) | `packages/*/src/**/proposal*`, `domain/proposal/`, `adapters/anthropic/` | `pnpm test` |
+| AI, live, opt-in (three real calls: the demo with an injection beside it, the criteria demo, an instruction the filters cannot express) | `packages/core/test/anthropic.live.test.ts` | `PAYRUN_AI_LIVE=true pnpm test:ai-live` |
 | Chain, Moderato testnet, opt-in | `packages/core/test/*.chain.test.ts` (incl. fee budget), `apps/server/test/server.chain.test.ts` | `pnpm test:chain` |
 | Browser, Moderato testnet, opt-in | `apps/server/e2e/passkeys.spec.ts` (Playwright, Chromium's virtual WebAuthn authenticator, the real server on `localhost`) | `pnpm test:e2e` |
 
@@ -281,4 +330,5 @@ The browser e2e proves the passkey paths for real: a recipient creates a passkey
 - A setup link is short-lived rather than single-use (see SetupLink). A recipient's claim link is single-use.
 - The setup page's code is served by the bot server itself (see "The page signs what the treasurer typed"): a separate static origin for it is a mainnet prerequisite.
 - The setup page signs with whatever passkey account the Accounts SDK has signed in on that browser; if it is not the treasury, the page asks for the treasury passkey and the server refuses the others anyway.
+- AI proposals: the model can misread an instruction; the checks hold what they can prove wrong (sources, amounts, budget) and the treasurer reads the rest. Plain-text names in messages reach Anthropic as written. A pool is split among registered matches only. Proposals expire after a day.
 - The WebAuthn endpoints are open (anyone can register a passkey with the server; a registration session never counts as the treasury's passkey, see Setup). POSTs to /webauthn, /claim and /setup are rate limited behind the `RateLimiter` port (`defaultRateLimits` in `apps/server/src/compose.ts`: per client, by the last X-Forwarded-For hop, and per endpoint group overall), in memory per process. Expired key-value rows are dropped lazily, not swept, and request bodies have no size cap yet.
