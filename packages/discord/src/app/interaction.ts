@@ -19,7 +19,7 @@ export type ParsedInteraction =
   | { kind: 'ping' }
   | { kind: 'command'; command: string; sub: string | null; options: Record<string, OptionValue>; focused: null; ctx: InteractionContext }
   | { kind: 'autocomplete'; command: string; sub: string | null; options: Record<string, OptionValue>; focused: string | null; ctx: InteractionContext }
-  | { kind: 'component'; customId: string; ctx: InteractionContext }
+  | { kind: 'component'; customId: string; messageId: string | null; ctx: InteractionContext }
 
 type RawOption = { name: string; type: number; value?: OptionValue; options?: RawOption[]; focused?: boolean }
 const OptionSchema: z.ZodType<RawOption> = z.lazy(() =>
@@ -52,6 +52,7 @@ const InteractionSchema = z.discriminatedUnion('type', [
     type: z.literal(InteractionType.MessageComponent),
     ...common,
     data: z.object({ custom_id: z.string().max(100), component_type: z.number().int() }),
+    message: z.object({ id: DiscordIdSchema }).optional(),
   }),
 ])
 
@@ -73,7 +74,7 @@ export function parseInteraction(body: unknown): Result<ParsedInteraction, { cod
     channelId: i.channel_id ?? null,
     caller: { userId: callerUser.id, roles: i.member?.roles ?? [], permissions: i.member ? BigInt(i.member.permissions) : 0n },
   }
-  if (i.type === InteractionType.MessageComponent) return ok({ kind: 'component', customId: i.data.custom_id, ctx })
+  if (i.type === InteractionType.MessageComponent) return ok({ kind: 'component', customId: i.data.custom_id, messageId: i.message?.id ?? null, ctx })
 
   const top = i.data.options ?? []
   const sub = top.find((o) => o.type === OptionType.SubCommand)

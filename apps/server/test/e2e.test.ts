@@ -2,10 +2,11 @@
 // setup -> claim links -> /payrun new -> review -> Approve -> deferred -> queue -> core
 // -> fake chain -> webhook edit + DMs -> export. Only the Discord REST and the chain are fakes.
 import { buttonClick, slashCommand } from '@payrun/discord/testing'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer, usd } from './support.js'
 
-const SCOPE = { guildId: GUILD, channelId: '700000000000000001' }
+const CHANNEL = '700000000000000001'
+const SCOPE = { guildId: GUILD, channelId: CHANNEL }
 const ADMIN = { userId: '300000000000000002', manageGuild: true }
 const TREASURER_ROLE = '400000000000000001'
 const TREASURER = { userId: '300000000000000001', roles: [TREASURER_ROLE] }
@@ -110,5 +111,41 @@ describe('pay run end to end through the HTTP endpoint', () => {
     await s.drain()
     expect(text(s.rest.lastEdit('tok-retry'))).toMatch(/"title":"Paid"/)
     expect(s.chain.landedTxCount).toBe(1)
+  })
+
+  it('a run left executing when the process died is finished by the next process: message updated, receipts once', async () => {
+    const before = await testServer({ sleep: async () => Promise.reject(new Error('the process died')) })
+    await before.payrun.communities.register({ guildId: GUILD, name: 'Test guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE })
+    await before.payrun.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 86_400, expiresAt: before.chain.time + 86_400 })
+    await before.payrun.communities.authorizeBotKey({ guildId: GUILD, root: before.chain.rootSigner(TREASURY) })
+    const link = await before.payrun.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
+    if (!link.ok) throw new Error(link.error.code)
+    await before.payrun.payees.register({ token: link.value.token, address: ADDR.alice })
+    await before.interact(slashCommand(SCOPE, 'payrun', 'new', { amount: '5', users: `<@${ALICE}>` }, ADMIN, 'tok-new'))
+    await before.drain()
+    const runId = /payrun:approve:([^"]+)"/.exec(text(before.rest.lastEdit('tok-new')))?.[1] as string
+
+    // The transaction lands but the answer is lost, and the process dies while waiting.
+    before.chain.faults.nextBroadcast = 'land_then_lose_response'
+    await before.interact(buttonClick(SCOPE, `payrun:approve:${runId}`, TREASURER, 'tok-approve'))
+    await before.drain()
+    expect((await before.payrun.payRuns.get({ guildId: GUILD, runId })).ok && (await before.payrun.payRuns.get({ guildId: GUILD, runId }))).toMatchObject({ value: { status: 'executing' } })
+    expect(before.rest.dms).toEqual([])
+
+    // The next process: same database, a fresh Discord connection, the recovery sweep on start.
+    const after = await testServer({ from: before })
+    const recovery = after.startRecovery()
+    await vi.waitFor(() => expect(after.rest.channelEdits).toHaveLength(1))
+    await recovery.stop()
+    expect(after.rest.channelEdits[0]).toMatchObject({ channelId: CHANNEL, messageId: '810000000000000001' })
+    expect(text(after.rest.channelEdits[0]?.message)).toMatch(/"title":"Paid"/)
+    expect(after.rest.dms.map((d) => d.userId)).toEqual([ALICE])
+    expect(after.chain.landedTxCount).toBe(1)
+
+    // Another sweep (or process) tells nobody again.
+    const again = after.startRecovery()
+    await new Promise((r) => setTimeout(r, 20))
+    await again.stop()
+    expect(after.rest.dms).toHaveLength(1)
   })
 })

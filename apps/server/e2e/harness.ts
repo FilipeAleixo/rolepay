@@ -37,6 +37,7 @@ export async function startServer(port: number) {
     payrun,
     rest: new FakeDiscordRest(),
     clock: deps.clock,
+    kv,
     web: { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() },
     log: () => {},
   })

@@ -27,6 +27,10 @@ export interface DiscordRest {
   followUp(reply: ReplyHandle, message: Message): Promise<RestResult>
   /** Posts as the bot (bot token). The fallback once an interaction token has expired. */
   postToChannel(channelId: string, message: Message): Promise<RestResult>
+  /** Edits a message in a channel as the bot (a pay run's review once its interaction token has expired). */
+  editChannelMessage(channelId: string, messageId: string, message: Message): Promise<RestResult>
+  /** The guild's name, or null if the bot is not in it. Needs no privileged intent. */
+  getGuild(guildId: string): Promise<{ name: string } | null>
   /** Opens a DM with the user and posts. `dm_closed` when they do not accept DMs from the server. */
   sendDm(userId: string, message: Message): Promise<RestResult>
   /** One guild member's roles, or null if they are not a member. Needs no privileged intent. */
@@ -41,6 +45,23 @@ export type ExecutionJob = {
   reply: ReplyHandle
   /** Fallback destination when the interaction token has expired. */
   channelId: string | null
+  /** The review message the button is on, so it can be updated after a restart. */
+  messageId: string | null
+}
+
+/** Where a pay run's review message is. */
+export type RunMessageRef = { channelId: string; messageId: string | null }
+
+/**
+ * What payrun has told people about a run, kept outside the process (the server's database),
+ * so the recovery sweep can finish the story after a restart: where the review message is,
+ * and whether the receipts went out. Receipts go out at most once per run.
+ */
+export interface RunNotices {
+  rememberMessage(runId: string, ref: RunMessageRef): Promise<void>
+  message(runId: string): Promise<RunMessageRef | null>
+  /** True exactly once per run: whoever gets true sends the receipts. */
+  claimReceipts(runId: string): Promise<boolean>
 }
 
 /** Pays approved runs outside the 3-second interaction window. In-process today; durable later. */

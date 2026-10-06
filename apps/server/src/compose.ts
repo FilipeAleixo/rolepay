@@ -1,10 +1,12 @@
-import type { Clock, Payrun } from '@payrun/core'
+import type { Clock, KeyValueStore, Payrun } from '@payrun/core'
 import {
   type DiscordRest,
   InProcessExecutionQueue,
+  KvRunNotices,
   type MemberDirectory,
   RestMemberDirectory,
   createDiscordInteractions,
+  createRecoveryNotifier,
   createRunExecutor,
 } from '@payrun/discord'
 import { type Assets, type PasskeySessions, createWebApp } from '@payrun/web'
@@ -19,6 +21,8 @@ export type ServerDeps = {
   payrun: Payrun
   rest: DiscordRest
   clock: Clock
+  /** Small records that must survive a restart (where a run's message is, receipts sent). The SQLite file in production. */
+  kv: KeyValueStore
   members?: MemberDirectory
   /** The claim and setup pages: passkey sessions, the WebAuthn endpoints (production) and the client bundle. */
   web: { sessions: PasskeySessions; assets: Assets; passkeys?: { fetch: (req: Request) => Response | Promise<Response> } }
@@ -36,11 +40,13 @@ export function composeServer(deps: ServerDeps) {
   const errorFields = (error: unknown) => ({ error: error instanceof Error ? error.message : String(error) })
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const { config, payrun, rest } = deps
+  const notices = new KvRunNotices(deps.kv)
 
   const queue = new InProcessExecutionQueue(
     createRunExecutor({
       payrun,
       rest,
+      notices,
       network: config.core.network,
       now: () => deps.clock.now(),
       sleep,
@@ -70,6 +76,14 @@ export function composeServer(deps: ServerDeps) {
     waitUntil,
   })
 
+  const notifyRecovered = createRecoveryNotifier({
+    payrun,
+    rest,
+    notices,
+    network: config.core.network,
+    onError: (error) => log('recovery_notify_error', errorFields(error)),
+  })
+
   const app = new Hono()
   app.get('/health', (c) => c.json({ ok: true, network: config.core.network, jobsInFlight: queue.size }))
   app.post('/discord/interactions', (c) => interactions(c.req.raw))
@@ -81,7 +95,12 @@ export function composeServer(deps: ServerDeps) {
     /** Starts the crash-recovery sweep (on start, then every interval). */
     startRecovery: () =>
       startRecovery({
-        recover: () => payrun.payRuns.recoverInFlight(),
+        // A run the sweep settles (typically after a restart) is reported in Discord as part of the sweep.
+        recover: async () => {
+          const results = await payrun.payRuns.recoverInFlight()
+          await notifyRecovered(results)
+          return results
+        },
         intervalMs: config.recoveryIntervalMs,
         onResult: (results) => log('recovery', { results }),
         onError: (error) => log('recovery_error', errorFields(error)),

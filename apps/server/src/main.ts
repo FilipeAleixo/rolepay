@@ -18,7 +18,7 @@ async function main() {
   const rest = new FetchDiscordRest({ botToken: config.discord.botToken })
   const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
   const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() }
-  const composed = composeServer({ config, payrun, rest, clock: deps.clock, web, log })
+  const composed = composeServer({ config, payrun, rest, clock: deps.clock, kv, web, log })
   const recovery = composed.startRecovery()
 
   const server = serve({ fetch: composed.app.fetch, hostname: config.http.host, port: config.http.port }, (info) => {

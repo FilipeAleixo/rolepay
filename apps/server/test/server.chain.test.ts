@@ -66,7 +66,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
     const opened = await openPayrunAdapters(config.core)
     close = opened.close
     rest = new FakeDiscordRest()
-    server = composeServer({ config, payrun: createPayrun(opened.deps), rest, clock: opened.deps.clock, web: { sessions, assets: staticAssets({}) }, log: () => {} })
+    server = composeServer({ config, payrun: createPayrun(opened.deps), rest, clock: opened.deps.clock, kv: opened.kv, web: { sessions, assets: staticAssets({}) }, log: () => {} })
     interact = async (interaction) => {
       const body = JSON.stringify(interaction)
       const timestamp = String(Math.floor(Date.now() / 1000))

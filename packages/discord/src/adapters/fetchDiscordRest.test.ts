@@ -94,6 +94,25 @@ describe('FetchDiscordRest', () => {
     expect(calls[0]?.url).toBe(`${API}/guilds/1094309218049937418/members/200000000000000001`)
   })
 
+  it('reads the guild name with the bot token, null when the bot is not in it', async () => {
+    const { fetch, calls } = fakeFetch({ status: 200, json: { id: '1094309218049937418', name: 'Mods guild', roles: [] } }, { status: 404, json: { code: 10004 } })
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
+    expect(await rest.getGuild('1094309218049937418')).toEqual({ name: 'Mods guild' })
+    expect(calls[0]?.url).toBe(`${API}/guilds/1094309218049937418`)
+    expect(calls[0]?.headers.get('authorization')).toBe(`Bot ${BOT_TOKEN}`)
+    expect(await rest.getGuild('1094309218049937419')).toBeNull()
+  })
+
+  it('edits a channel message as the bot (after the interaction token has expired), not_found when it is gone', async () => {
+    const { fetch, calls } = fakeFetch({ status: 200, json: {} }, { status: 404, json: { code: 10008 } })
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
+    expect(await rest.editChannelMessage('700000000000000001', '900000000000000001', { content: 'paid' })).toEqual({ ok: true, value: undefined })
+    expect(calls[0]?.method).toBe('PATCH')
+    expect(calls[0]?.url).toBe(`${API}/channels/700000000000000001/messages/900000000000000001`)
+    expect(calls[0]?.headers.get('authorization')).toBe(`Bot ${BOT_TOKEN}`)
+    expect(await rest.editChannelMessage('700000000000000001', '900000000000000002', { content: 'x' })).toEqual({ ok: false, error: { code: 'not_found' } })
+  })
+
   it('posts to a channel as the bot, and reports forbidden on 403', async () => {
     const { fetch, calls } = fakeFetch({ status: 200, json: {} }, { status: 403, json: { code: 50013 } })
     const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })

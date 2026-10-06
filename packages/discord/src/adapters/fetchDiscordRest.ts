@@ -47,6 +47,18 @@ export class FetchDiscordRest implements DiscordRest {
     return this.result(res)
   }
 
+  async editChannelMessage(channelId: string, messageId: string, message: Message): Promise<RestResult> {
+    return this.result(await this.request('PATCH', `/channels/${channelId}/messages/${messageId}`, { message, bot: true }))
+  }
+
+  async getGuild(guildId: string): Promise<{ name: string } | null> {
+    const res = await this.request('GET', `/guilds/${guildId}`, { bot: true })
+    if (res.status === 403 || res.status === 404) return null
+    if (!res.ok) throw new Error(`Discord GET guild failed: HTTP ${res.status}`)
+    const guild = (await res.json()) as { name?: string }
+    return typeof guild.name === 'string' ? { name: guild.name } : null
+  }
+
   async sendDm(userId: string, message: Message): Promise<RestResult> {
     const open = await this.request('POST', '/users/@me/channels', { json: { recipient_id: userId }, bot: true })
     if (!open.ok) return (await code(open)) === 50007 ? ERR({ code: 'dm_closed' }) : this.result(open)

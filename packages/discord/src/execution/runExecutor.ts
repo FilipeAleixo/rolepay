@@ -1,12 +1,15 @@
 import type { NetworkName, Payrun, Run } from '@payrun/core'
 import type { Message } from '../api.js'
-import type { DiscordRest, ExecutionJob } from '../ports.js'
+import type { DiscordRest, ExecutionJob, RunNotices } from '../ports.js'
 import { explainError } from '../views/errors.js'
-import { type RunViewContext, receiptDm, runMessage } from '../views/run.js'
+import { type RunViewContext, runMessage } from '../views/run.js'
+import { sendReceipts } from './receipts.js'
 
 export type RunExecutorDeps = {
   payrun: Payrun
   rest: DiscordRest
+  /** Where the review message is and whether receipts went out, shared with the recovery notifier. */
+  notices: RunNotices
   network: NetworkName
   now: () => Date
   sleep: (ms: number) => Promise<void>
@@ -42,6 +45,7 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
     }
 
     try {
+      if (job.channelId) await deps.notices.rememberMessage(job.runId, { channelId: job.channelId, messageId: job.messageId })
       const before = await payRuns.get(ref)
       if (!before.ok) return await publish({ content: explainError(before.error) })
       const alreadyPaid = before.value.status === 'paid'
@@ -71,9 +75,10 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
         case 'failed':
           return await publish(view(run))
         case 'paid': {
-          if (alreadyPaid) return await publish(view(run))
+          // Receipts go out once per run, whoever finishes it (this job or the recovery sweep).
+          if (alreadyPaid || !(await deps.notices.claimReceipts(run.id))) return await publish(view(run))
           await publish(view(run, { receipts: 'sending' }))
-          const sent = await sendReceipts(run)
+          const sent = await sendReceipts(deps, run)
           return await publish(view(run, { receipts: { sent, total: run.lines.length } }))
         }
       }
@@ -86,20 +91,5 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
         deps.onError?.(again, job)
       }
     }
-  }
-
-  async function sendReceipts(run: Run): Promise<number> {
-    const community = await deps.payrun.communities.get(run.communityId)
-    const communityName = community.ok ? community.value.name : null
-    let sent = 0
-    // One at a time: DM channel creation is rate limited, and receipts are not urgent.
-    for (const line of run.lines) {
-      try {
-        if ((await deps.rest.sendDm(line.payeeDiscordId, receiptDm(run, line, { network: deps.network, communityName }))).ok) sent++
-      } catch {
-        // A failed receipt never fails the run; it is counted as not delivered.
-      }
-    }
-    return sent
   }
 }

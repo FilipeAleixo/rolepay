@@ -18,3 +18,5 @@ coverage/
 .chain-results/
 test-results/
 playwright-report/
+*.db-wal
+*.db-shm

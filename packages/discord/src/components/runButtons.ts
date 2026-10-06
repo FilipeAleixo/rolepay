@@ -6,12 +6,13 @@ import type { ExecutionJob } from '../ports.js'
 import { roleMention } from '../views/format.js'
 import { runMessage } from '../views/run.js'
 
-const executeJob = (ctx: GuildContext, runId: string): ExecutionJob => ({
+const executeJob = (ctx: GuildContext, runId: string, messageId: string | null): ExecutionJob => ({
   kind: 'execute_run',
   guildId: ctx.guildId,
   runId,
   reply: { applicationId: ctx.applicationId, token: ctx.token },
   channelId: ctx.channelId,
+  messageId,
 })
 
 /** The Treasurer check, from the roles Discord signed into the interaction. */
@@ -28,14 +29,14 @@ function refuseUnlessApprover(ctx: GuildContext, community: Community): Outcome 
  * queues the payment and immediately turns the review into "paying" with no buttons, so
  * nobody can click twice. The queued job edits this message with the result.
  */
-export const approveButton: ButtonHandler = async ({ runId, ctx }, { payrun, queue, config }) => {
+export const approveButton: ButtonHandler = async ({ runId, messageId, ctx }, { payrun, queue, config }) => {
   const community = await payrun.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
   const refused = refuseUnlessApprover(ctx, community.value)
   if (refused) return refused
   const approved = await payrun.payRuns.approve({ guildId: ctx.guildId, runId, actor: ctx.caller.userId, actorCanApprove: true })
   if (!approved.ok) return replyError(approved.error)
-  await queue.enqueue(executeJob(ctx, runId))
+  await queue.enqueue(executeJob(ctx, runId, messageId))
   return { kind: 'update', message: runMessage(approved.value, { network: config.network }) }
 }
 
@@ -57,7 +58,7 @@ export const cancelButton: ButtonHandler = async ({ runId, ctx }, { payrun, conf
  * failure, or a restart lost the job) or a failure core marks retryable. Core re-checks
  * the chain for this run's memos before any new attempt.
  */
-export const retryButton: ButtonHandler = async ({ runId, ctx }, { payrun, queue, config }) => {
+export const retryButton: ButtonHandler = async ({ runId, messageId, ctx }, { payrun, queue, config }) => {
   const community = await payrun.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
   const refused = refuseUnlessApprover(ctx, community.value)
@@ -68,6 +69,6 @@ export const retryButton: ButtonHandler = async ({ runId, ctx }, { payrun, queue
   if (r.status === 'paid') return ephemeralReply('This run is already paid.')
   const retryable = r.status === 'approved' || r.status === 'executing' || (r.status === 'failed' && r.failure?.retryable)
   if (!retryable) return replyError(r.status === 'failed' ? { code: 'not_retryable' } : { code: 'illegal_state', status: r.status })
-  await queue.enqueue(executeJob(ctx, runId))
+  await queue.enqueue(executeJob(ctx, runId, messageId))
   return { kind: 'update', message: runMessage(r, { network: config.network, paying: true }) }
 }

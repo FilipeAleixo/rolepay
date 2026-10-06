@@ -1,5 +1,5 @@
 import type { Message } from '../api.js'
-import type { DiscordRest, ExecutionJob, ExecutionQueue, MemberDirectory, ReplyHandle, RestResult } from '../ports.js'
+import type { DiscordRest, ExecutionJob, ExecutionQueue, MemberDirectory, ReplyHandle, RestResult, RunMessageRef, RunNotices } from '../ports.js'
 
 const OK: RestResult = { ok: true, value: undefined }
 
@@ -12,6 +12,9 @@ export class FakeDiscordRest implements DiscordRest {
   readonly deletes: ReplyHandle[] = []
   readonly followUps: { reply: ReplyHandle; message: Message }[] = []
   readonly channelPosts: { channelId: string; message: Message }[] = []
+  readonly channelEdits: { channelId: string; messageId: string; message: Message }[] = []
+  readonly goneMessages = new Set<string>()
+  readonly guilds = new Map<string, string>()
   readonly dms: { userId: string; message: Message }[] = []
   readonly expiredTokens = new Set<string>()
   readonly closedDms = new Set<string>()
@@ -49,6 +52,17 @@ export class FakeDiscordRest implements DiscordRest {
     return OK
   }
 
+  async editChannelMessage(channelId: string, messageId: string, message: Message): Promise<RestResult> {
+    if (this.goneMessages.has(messageId)) return { ok: false, error: { code: 'not_found' } }
+    this.channelEdits.push({ channelId, messageId, message })
+    return OK
+  }
+
+  async getGuild(guildId: string) {
+    const name = this.guilds.get(guildId)
+    return name === undefined ? null : { name }
+  }
+
   async sendDm(userId: string, message: Message): Promise<RestResult> {
     if (this.closedDms.has(userId)) return { ok: false, error: { code: 'dm_closed' } }
     this.dms.push({ userId, message })
@@ -75,5 +89,23 @@ export class StaticMemberDirectory implements MemberDirectory {
   async withRole(input: { guildId: string; roleId: string; userIds: string[] }) {
     const holders = new Set(this.roles[input.roleId] ?? [])
     return input.userIds.filter((u) => holders.has(u))
+  }
+}
+
+/** RunNotices in memory. */
+export class MemoryRunNotices implements RunNotices {
+  private messages = new Map<string, RunMessageRef>()
+  private receipts = new Set<string>()
+  async rememberMessage(runId: string, ref: RunMessageRef) {
+    this.messages.set(runId, { ...ref })
+  }
+  async message(runId: string) {
+    const m = this.messages.get(runId)
+    return m ? { ...m } : null
+  }
+  async claimReceipts(runId: string) {
+    if (this.receipts.has(runId)) return false
+    this.receipts.add(runId)
+    return true
   }
 }

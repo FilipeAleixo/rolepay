@@ -60,7 +60,14 @@ describe('Approve button', () => {
     expect(text(body(d))).not.toContain('payrun:approve:')
     expect(await status(a)).toBe('approved')
     expect(a.queue.jobs).toEqual([
-      { kind: 'execute_run', guildId: GUILD, runId: a.runId, reply: { applicationId: APP_ID, token: 'tok-approve' }, channelId: CHANNEL },
+      {
+        kind: 'execute_run',
+        guildId: GUILD,
+        runId: a.runId,
+        reply: { applicationId: APP_ID, token: 'tok-approve' },
+        channelId: CHANNEL,
+        messageId: '810000000000000001', // the review message, so it can be updated after a restart
+      },
     ])
     const r = await a.payrun.payRuns.get({ guildId: GUILD, runId: a.runId })
     expect(r.ok && r.value.approvedBy).toBe(TREASURER)

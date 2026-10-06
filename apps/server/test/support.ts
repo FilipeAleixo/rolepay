@@ -2,7 +2,8 @@
 // (Hono's app.request), with Discord-style Ed25519 signatures.
 import { randomBytes } from 'node:crypto'
 import { TESTNET_TOKENS, createPayrun, parseAmount } from '@payrun/core'
-import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
+import { type KeyValueStore, type Payrun } from '@payrun/core'
+import { FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
 import { FakeDiscordRest, createTestSigner } from '@payrun/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@payrun/web/testing'
 import { parseServerConfig } from '../src/config.js'
@@ -17,7 +18,13 @@ export const usd = (s: string) => {
   return r.value
 }
 
-export async function testServer() {
+type SharedState = { payrun: Payrun; chain: FakePayoutChain; clock: ManualClock; kv: KeyValueStore }
+
+/**
+ * `from`: start a second server over the first one's database and chain, as a restarted
+ * process would (a fresh Discord connection and queue). `sleep`: replace the job's waits.
+ */
+export async function testServer(opts: { from?: SharedState; sleep?: (ms: number) => Promise<void> } = {}) {
   const signer = await createTestSigner()
   const config = parseServerConfig({
     PAYRUN_MASTER_KEY: randomBytes(32).toString('hex'),
@@ -26,10 +33,12 @@ export async function testServer() {
     DISCORD_BOT_TOKEN: 'test-bot-token',
     PUBLIC_URL: 'https://payrun.test',
   })
-  const clock = new ManualClock(new Date())
-  const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
-  chain.fund(TOKEN, TREASURY, usd('1000'))
-  const payrun = createPayrun({ chain, repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' })
+  const clock = opts.from?.clock ?? new ManualClock(new Date())
+  const chain = opts.from?.chain ?? new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
+  if (!opts.from) chain.fund(TOKEN, TREASURY, usd('1000'))
+  const payrun =
+    opts.from?.payrun ?? createPayrun({ chain, repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' })
+  const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const rest = new FakeDiscordRest()
   const logs: { event: string; fields?: Record<string, unknown> }[] = []
   const sessions = new FakePasskeySessions()
@@ -39,10 +48,13 @@ export async function testServer() {
     payrun,
     rest,
     clock,
-    sleep: async (ms) => {
-      clock.advance(ms / 1000)
-      chain.advance(Math.ceil(ms / 1000))
-    },
+    kv,
+    sleep:
+      opts.sleep ??
+      (async (ms) => {
+        clock.advance(ms / 1000)
+        chain.advance(Math.ceil(ms / 1000))
+      }),
     log: (event, fields) => logs.push({ event, ...(fields ? { fields } : {}) }),
   })
 
@@ -63,5 +75,5 @@ export async function testServer() {
       body: JSON.stringify(body),
     })
 
-  return { ...server, config, clock, chain, payrun, rest, logs, interact, browserPost }
+  return { ...server, config, clock, chain, payrun, kv, rest, logs, interact, browserPost }
 }

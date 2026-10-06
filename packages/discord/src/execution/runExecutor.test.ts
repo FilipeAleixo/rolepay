@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ALICE, APP_ID, BOB, CHANNEL, GUILD, TREASURY } from '../../test/fixtures.js'
 import { type Harness, harness } from '../../test/harness.js'
+import { MemoryRunNotices } from '../testing/index.js'
 import type { Message } from '../api.js'
 import type { ExecutionJob } from '../ports.js'
 import { createRunExecutor } from './runExecutor.js'
@@ -12,6 +13,7 @@ const job = (runId: string, token = 'tok-approve'): ExecutionJob => ({
   runId,
   reply: { applicationId: APP_ID, token },
   channelId: CHANNEL,
+  messageId: '810000000000000001',
 })
 
 async function ready(opts: Parameters<Harness['setupCommunity']>[0] = {}) {
@@ -19,8 +21,9 @@ async function ready(opts: Parameters<Harness['setupCommunity']>[0] = {}) {
   await h.setupCommunity(opts)
   await h.registerAll()
   const run = await h.approvedRun()
-  const execute = createRunExecutor({ payrun: h.payrun, rest: h.rest, network: 'moderato', now: () => h.clock.now(), sleep: h.sleep })
-  return { ...h, run, execute }
+  const notices = new MemoryRunNotices()
+  const execute = createRunExecutor({ payrun: h.payrun, rest: h.rest, notices, network: 'moderato', now: () => h.clock.now(), sleep: h.sleep })
+  return { ...h, run, notices, execute }
 }
 
 describe('createRunExecutor', () => {
@@ -35,6 +38,20 @@ describe('createRunExecutor', () => {
     expect(h.rest.dms.map((d) => d.userId)).toEqual([ALICE, BOB])
     expect(text(h.rest.dms[1]?.message)).toContain('25 AlphaUSD')
     expect((await h.payrun.payRuns.get({ guildId: GUILD, runId: h.run.id })).ok && h.chain.landedTxCount).toBe(1)
+  })
+
+  it('remembers where the review message is, for an update after a restart', async () => {
+    const h = await ready()
+    await h.execute(job(h.run.id))
+    expect(await h.notices.message(h.run.id)).toEqual({ channelId: CHANNEL, messageId: '810000000000000001' })
+  })
+
+  it('sends receipts at most once per run, whoever finishes it (here the recovery sweep got there first)', async () => {
+    const h = await ready()
+    expect(await h.notices.claimReceipts(h.run.id)).toBe(true)
+    await h.execute(job(h.run.id))
+    expect(text(h.rest.lastEdit('tok-approve'))).toMatch(/"title":"Paid"/)
+    expect(h.rest.dms).toEqual([])
   })
 
   it('counts receipts that could not be delivered without failing the job', async () => {
@@ -90,6 +107,7 @@ describe('createRunExecutor', () => {
     const execute = createRunExecutor({
       payrun: h.payrun,
       rest: h.rest,
+      notices: new MemoryRunNotices(),
       network: 'moderato',
       now: () => h.clock.now(),
       sleep: async () => {

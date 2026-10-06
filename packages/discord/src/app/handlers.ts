@@ -10,7 +10,7 @@ export type GuildContext = InteractionContext & { guildId: string }
 export type CommandInput = { options: Record<string, OptionValue>; ctx: GuildContext }
 export type CommandHandler = (input: CommandInput, deps: DiscordAppDeps) => Promise<Outcome>
 export type AutocompleteHandler = (input: CommandInput & { focused: string | null }, deps: DiscordAppDeps) => Promise<Outcome>
-export type ButtonHandler = (input: { runId: string; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
+export type ButtonHandler = (input: { runId: string; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
 
 /** Parses command options with a Zod schema; a failure comes with the ephemeral reply to send. */
 export function parseOptions<S extends z.ZodType>(

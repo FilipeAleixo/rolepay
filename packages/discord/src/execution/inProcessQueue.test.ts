@@ -8,6 +8,7 @@ const job = (runId: string): ExecutionJob => ({
   runId,
   reply: { applicationId: '500000000000000001', token: `tok-${runId}` },
   channelId: null,
+  messageId: null,
 })
 
 function gate() {

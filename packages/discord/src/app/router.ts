@@ -68,7 +68,7 @@ async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: Disc
     case 'component': {
       const id = decodeCustomId(i.customId)
       const handler = id && BUTTONS[id.action]
-      return id && handler ? handler({ runId: id.runId, ctx }, deps) : ephemeralReply('Sorry, I do not know that button. It may be from an older version.')
+      return id && handler ? handler({ runId: id.runId, messageId: i.messageId, ctx }, deps) : ephemeralReply('Sorry, I do not know that button. It may be from an older version.')
     }
   }
 }
