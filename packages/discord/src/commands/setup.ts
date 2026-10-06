@@ -81,7 +81,13 @@ export const setupCommand: CommandHandler = async ({ options, ctx }, { payrun, c
 
       return {
         ok: true,
-        message: setupMessage({ community: community.value, key: key.ok ? key.value : null, notices, authorizeHint: config.authorizeHint, network: config.network }),
+        message: setupMessage({
+          community: community.value,
+          key: key.ok ? key.value : null,
+          notices,
+          authorizeHint: config.authorizeHint?.replaceAll('{guildId}', guildId) ?? null,
+          network: config.network,
+        }),
       }
     },
   }

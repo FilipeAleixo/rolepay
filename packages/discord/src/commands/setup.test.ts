@@ -49,7 +49,7 @@ describe('/payrun setup', () => {
     expect(c).toMatchObject({ ok: true, value: { treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE } })
     expect(final).toMatch(/Waiting for the treasury to authorise/)
     expect(final).toContain('100 AlphaUSD per 30 days')
-    expect(final).toContain('pnpm dev:authorize-key')
+    expect(final).toContain(`pnpm dev:authorize-key ${GUILD}`)
     expect(final).toContain(`<@&${TREASURER_ROLE}>`)
   })
 

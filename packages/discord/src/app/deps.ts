@@ -10,7 +10,7 @@ export type DiscordAppConfig = {
   defaultPayoutToken: string
   /** The bot key `/payrun setup` provisions when the community has none. */
   botKey: { limit: bigint; periodSeconds: number; validitySeconds: number }
-  /** How the treasury authorises a pending key, shown in /payrun setup (for example the dev script on testnet). */
+  /** How the treasury authorises a pending key, shown in /payrun setup (for example the dev script on testnet). `{guildId}` is filled in. */
   authorizeHint: string | null
 }
 

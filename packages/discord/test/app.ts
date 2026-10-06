@@ -13,7 +13,7 @@ export const CONFIG: DiscordAppConfig = {
   claimBaseUrl: 'https://payrun.test/claim',
   defaultPayoutToken: TESTNET_TOKENS.alpha_usd,
   botKey: { limit: usd('100'), periodSeconds: 2_592_000, validitySeconds: 2_592_000 },
-  authorizeHint: 'Dev: run `pnpm dev:authorize-key <guild>`.',
+  authorizeHint: 'Dev: run `pnpm dev:authorize-key {guildId}`.',
 }
 
 export const SCOPE = { guildId: GUILD, channelId: CHANNEL }
