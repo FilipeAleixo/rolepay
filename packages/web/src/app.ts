@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { type Clock, NETWORKS, type Payrun } from '@payrun/core'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
@@ -5,6 +6,7 @@ import type { WebConfig } from './config.js'
 import type { Assets, PasskeySessions, RateLimiter } from './ports.js'
 import { claimRoutes } from './routes/claim.js'
 import { setupRoutes } from './routes/setup.js'
+import { STYLE } from './views/page.js'
 
 export type WebAppDeps = {
   payrun: Payrun
@@ -25,6 +27,29 @@ export type WebAppDeps = {
 
 /** The client as the proxy in front saw it: the last X-Forwarded-For hop, which it appended. */
 const lastForwardedHop = (req: Request) => req.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || 'direct'
+/**
+ * Content-Security-Policy for every response: scripts only from this origin (the one bundle),
+ * the inline stylesheet by its hash, connections only to this origin, the RPC and the sponsor
+ * (the page signs and sends the treasurer's transactions itself), and no framing, plugins or
+ * base-URL tricks. The JSON page config is a data block, never executed.
+ */
+function contentSecurityPolicy(config: WebConfig): string {
+  const origin = (u: string | null) => (u && URL.canParse(u) ? [new URL(u).origin] : [])
+  const connect = ["'self'", ...new Set([...origin(config.rpcUrl), ...origin(config.sponsorUrl)])]
+  const style = `'sha256-${createHash('sha256').update(STYLE).digest('base64')}'`
+  return [
+    "default-src 'none'",
+    "script-src 'self'",
+    `style-src ${style}`,
+    `connect-src ${connect.join(' ')}`,
+    "img-src 'self' data:",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'none'",
+    "object-src 'none'",
+  ].join('; ')
+}
+
 const RATE_LIMITED_PREFIXES = /^\/(webauthn|claim|setup)\//
 
 /**
@@ -36,6 +61,8 @@ export function createWebApp(deps: WebAppDeps): Hono {
   const { config } = deps
   const testnet = NETWORKS[config.network].testnet
   const app = new Hono()
+  const csp = contentSecurityPolicy(config)
+  const https = new URL(config.origin).protocol === 'https:'
 
   app.use(async (c, next) => {
     // State-changing requests must come from our own pages (CSRF). Browsers always send
@@ -52,6 +79,9 @@ export function createWebApp(deps: WebAppDeps): Hono {
     c.header('referrer-policy', 'no-referrer')
     c.header('x-content-type-options', 'nosniff')
     c.header('x-frame-options', 'DENY')
+    c.header('content-security-policy', csp)
+    // Browsers only honour HSTS over https; never sent for http://localhost.
+    if (https) c.header('strict-transport-security', 'max-age=31536000')
   })
 
   if (deps.rateLimits) {

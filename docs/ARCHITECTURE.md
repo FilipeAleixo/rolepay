@@ -174,7 +174,7 @@ const server = composeServer({ config, payrun, rest: new FetchDiscordRest({ botT
 The claim and setup pages, as an adapter over core like `packages/discord`: it calls core only through `@payrun/core` services, and everything external is a port with a fake in `@payrun/web/testing`.
 
 ```
-app.ts       the Hono app: security headers, same-origin POSTs only (CSRF), rate limits, /webauthn, /assets, the routes
+app.ts       the Hono app: security headers (a strict CSP: our one script, the inline style by hash, connections only to us, the RPC and the sponsor; HSTS on https), same-origin POSTs only (CSRF), rate limits, /webauthn, /assets, the routes
 rateLimit.ts TokenBucketLimiter, the in-memory RateLimiter
 routes/      claim.ts (/claim/:token) and setup.ts (/setup/:token and its JSON endpoints)
 views/       pure HTML builders; each page embeds a JSON config for the client

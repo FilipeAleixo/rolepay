@@ -24,6 +24,34 @@ describe('the web app', () => {
     expect(res.headers.get('referrer-policy')).toBe('no-referrer')
   })
 
+  it('sends a strict Content-Security-Policy: our own script only, the inline style by hash, and connections only to us, the RPC and the sponsor', async () => {
+    const h = webHarness()
+    const csp = (await h.send('/claim/nope')).headers.get('content-security-policy') ?? ''
+    const directives = Object.fromEntries(csp.split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]))
+    expect(directives['default-src']).toEqual(["'none'"])
+    expect(directives['script-src']).toEqual(["'self'"])
+    expect(directives['style-src']?.[0]).toMatch(/^'sha256-[A-Za-z0-9+/]+=*'$/)
+    expect(directives['connect-src']).toEqual(["'self'", 'https://rpc.moderato.tempo.xyz', 'https://sponsor.moderato.tempo.xyz'])
+    expect(directives['frame-ancestors']).toEqual(["'none'"])
+    expect(directives['base-uri']).toEqual(["'none'"])
+    expect(directives['object-src']).toEqual(["'none'"])
+  })
+
+  it('sends HSTS only on an https origin', async () => {
+    expect((await webHarness().send('/claim/nope')).headers.get('strict-transport-security')).toBeNull()
+    const clock = new ManualClock()
+    const app = createWebApp({
+      payrun: createPayrun({ chain: new FakePayoutChain(), repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' }),
+      clock,
+      sessions: new FakePasskeySessions(),
+      assets: staticAssets({}),
+      config: { origin: 'https://pay.example.org', rpId: 'pay.example.org', network: 'moderato', rpcUrl: 'https://rpc.moderato.tempo.xyz', sponsorUrl: null, explorerUrl: 'x', botKeyDefaults: { limit: 1n, periodSeconds: 1, validitySeconds: 1, feeBudget: 1n } },
+    })
+    const res = await app.request('https://pay.example.org/claim/nope')
+    expect(res.headers.get('strict-transport-security')).toBe('max-age=31536000')
+    expect(res.headers.get('content-security-policy')).toContain("connect-src 'self' https://rpc.moderato.tempo.xyz;")
+  })
+
   it('hands the WebAuthn handler the public URL, so behind a tunnel (plain http inside) its session cookie is still Secure', async () => {
     const seen: { url: string; method: string; body: string }[] = []
     const clock = new ManualClock()

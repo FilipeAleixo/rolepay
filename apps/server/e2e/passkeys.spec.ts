@@ -23,6 +23,18 @@ test.afterAll(async () => {
   await server?.stop()
 })
 
+// The pages run under a strict Content-Security-Policy: anything it blocks fails the test.
+let cspViolations: string[] = []
+test.beforeEach(async ({ page }) => {
+  cspViolations = []
+  page.on('console', (m) => {
+    if (/Content Security Policy/i.test(m.text())) cspViolations.push(m.text())
+  })
+})
+test.afterEach(() => {
+  expect(cspViolations).toEqual([])
+})
+
 test('a recipient creates a passkey on the claim page, and a returning one signs in with it', async ({ page }) => {
   const guildId = snowflake()
   const dev = privateKeyToAddress(generatePrivateKey()).toLowerCase()

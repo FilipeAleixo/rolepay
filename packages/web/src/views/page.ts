@@ -11,7 +11,8 @@ export function esc(s: string): string {
 const configScript = (config: unknown) =>
   `<script type="application/json" id="payrun-config">${JSON.stringify(config, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)).replaceAll('<', '\\u003c')}</script>`
 
-const STYLE = `
+/** The pages' only stylesheet, inline. Exported so the server can allow exactly it in the CSP (by hash). */
+export const STYLE = `
 :root{--bg:#f7f7f5;--card:#fff;--fg:#1d1d1f;--muted:#5f6368;--line:#e2e2de;--accent:#3b5bdb;--accent-fg:#fff;--ok:#2b8a3e;--warn:#b35c00;--bad:#c92a2a}
 @media (prefers-color-scheme:dark){:root{--bg:#141416;--card:#1d1d20;--fg:#ececee;--muted:#a0a0a8;--line:#2e2e33;--accent:#748ffc;--accent-fg:#0b0b0c;--ok:#69db7c;--warn:#ffa94d;--bad:#ff8787}}
 *{box-sizing:border-box}
