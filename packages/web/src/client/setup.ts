@@ -50,6 +50,14 @@ const explain = (e: { code: string } & Record<string, unknown>) =>
 
 const date = (unix: number) => new Date(unix * 1000).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 
+/**
+ * Signing the key is one passkey prompt (one transaction, see keychain.ts). Only when this
+ * browser does not remember the treasury account (site data cleared, say) while its session is
+ * still live does the page need a sign-in first, which is a second prompt: say so up front.
+ */
+const PROMPTS_ONCE = 'Your device will ask for your passkey once, to sign the key.'
+const PROMPTS_TWICE = 'Your device will ask twice: once to sign in, once to sign the key.'
+
 export function startSetup(config: SetupConfig) {
   const keys = passkeys(config.network)
   const base = `/setup/${encodeURIComponent(config.token)}`
@@ -57,8 +65,11 @@ export function startSetup(config: SetupConfig) {
   let state: State | null = null
   const buttons = ['#create', '#signin', '#signin-bound', '#faucet', '#authorize', '#revoke'].map((s) => $<HTMLButtonElement>(s))
 
+  /** Whether this browser holds the treasury's passkey account, so it can sign without signing in. */
+  const holdsTreasury = (treasury: string) => keys.account()?.address.toLowerCase() === treasury
+
   async function refresh() {
-    const s = await get<State>(`${base}/state`)
+    const [s] = await Promise.all([get<State>(`${base}/state`), keys.ready()])
     if (!s.ok) {
       status(explain(s.error), 'bad')
       for (const b of buttons) if (b) b.disabled = true
@@ -85,6 +96,7 @@ export function startSetup(config: SetupConfig) {
       .then((b) => fill('balance', formatMicros(b.toString())))
       .catch(() => fill('balance', 'unknown'))
     fill('key-status', keyText(s.key))
+    fill('key-prompts', holdsTreasury(s.community.treasury) ? PROMPTS_ONCE : PROMPTS_TWICE)
     const active = s.key?.status === 'active' && s.key.chain.status === 'active'
     show('#revoke', active)
     const authorize = $<HTMLButtonElement>('#authorize')
@@ -106,12 +118,11 @@ export function startSetup(config: SetupConfig) {
   async function treasuryAccount() {
     const treasury = state?.community?.treasury
     if (!treasury) throw new Error('the treasury is not set up yet')
-    let account = keys.account()
-    if (!account || account.address.toLowerCase() !== treasury) {
-      status('Sign in with the treasury passkey...')
+    if (!holdsTreasury(treasury)) {
+      status('First, sign in with the treasury passkey. Your device will then ask once more, to sign.')
       await keys.signIn()
-      account = keys.account()
     }
+    const account = keys.account()
     if (!account || account.address.toLowerCase() !== treasury) throw new Error(`this passkey is not the treasury (${treasury})`)
     return account
   }

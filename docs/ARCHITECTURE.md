@@ -173,7 +173,7 @@ routes/      claim.ts (/claim/:token) and setup.ts (/setup/:token and its JSON e
 views/       pure HTML builders; each page embeds a JSON config for the client
 passkeys.ts  the Accounts SDK's Handler.webAuthn over core's KeyValueStore, and the session reader
 assets.ts    the client bundle, built in memory with esbuild on first request and cached
-client/      browser code (its own tsconfig with DOM types): main, claim, setup, passkey, tempo, dom
+client/      browser code (its own tsconfig with DOM types): main, claim, setup, passkey, tempo, keychain, dom
 ports.ts     PasskeySessions, Assets
 ```
 
@@ -183,7 +183,9 @@ ports.ts     PasskeySessions, Assets
 
 **Claim.** `GET /claim/:token` describes the link; `POST /claim/:token` with a passkey session registers that session's address (`payees.register`, which consumes the link once).
 
-**Setup.** `GET /setup/:token` (page), `GET /setup/:token/state` (community, key and chain state, who is signed in), `POST .../treasury` (bind the signed-in passkey as the treasury, registering the community the first time), `POST .../key` (provision a key with the chosen limit, period, expiry and fee budget; returns the exact authorisation), `POST .../key/confirm` and `POST .../key/revoked` (read the result from the chain). Everything after binding needs the session of the passkey that is the treasury. The browser itself signs the keychain transactions (`client/tempo.ts`: viem's `accessKey.authorizeSync` and `revokeSync` with the passkey account, sponsored through the public sponsor on testnet; without a sponsor the treasury pays its own fee in its fee token). On testnet a faucet button funds the treasury.
+**Setup.** `GET /setup/:token` (page), `GET /setup/:token/state` (community, key and chain state, who is signed in), `POST .../treasury` (bind the signed-in passkey as the treasury, registering the community the first time), `POST .../key` (provision a key with the chosen limit, period, expiry and fee budget; returns the exact authorisation), `POST .../key/confirm` and `POST .../key/revoked` (read the result from the chain). Everything after binding needs the session of the passkey that is the treasury. The browser itself signs the keychain transactions (`client/tempo.ts`, with the passkey account, sponsored through the public sponsor on testnet; without a sponsor the treasury pays its own fee in its fee token). On testnet a faucet button funds the treasury.
+
+**One passkey prompt per action.** Creating the treasury is one prompt (the new passkey), authorising the key is one, revoking it is one. The authorisation is a transaction from the root calling the keychain's `authorizeKey(keyId, signatureType, KeyRestrictions)` directly (`client/keychain.ts`), which a root key may do. viem's `accessKey.authorize` would instead sign a key authorization and then the transaction carrying it, two prompts for the same result on chain (the protocol runs the same `authorizeKey` for a signed key authorization). Revocation is viem's `accessKey.revokeSync`, already one transaction. The only second prompt is a sign-in: when the treasury's server session is live but this browser no longer remembers the passkey account (site data cleared), the page must sign in before it can sign, and says "Your device will ask twice" before the click. The Playwright e2e counts every WebAuthn call to hold these numbers, and reads the key's call scope back from the chain.
 
 Layering is enforced by `packages/web/test/architecture.test.ts`: server code imports only `@payrun/core`, hono, zod, the Accounts SDK server, `viem/tempo`, esbuild and node; client code imports only the Accounts SDK and viem; views are pure; nothing imports the fakes.
 
@@ -242,7 +244,7 @@ interface ExecutionQueue { enqueue(job: ExecutionJob): Promise<void> }
 | SQLite integration (temp file DB) | `packages/core/**/*.integration.test.ts` | `pnpm test` |
 | Architecture guards | `packages/core/test/architecture.test.ts`, `packages/discord/test/architecture.test.ts` | `pnpm test` |
 | Discord: verification, routing, every handler, views, executor, queue, REST adapter | `packages/discord/src/**/*.test.ts` (real core on in-memory fakes, fake Discord REST) | `pnpm test` |
-| Web: claim and setup routes (fake passkey sessions), Handler.webAuthn over KeyValueStore, the real client bundle builds, architecture guards | `packages/web/**/*.test.ts` | `pnpm test` |
+| Web: claim and setup routes (fake passkey sessions), Handler.webAuthn over KeyValueStore, the keychain authorizeKey call the browser sends, the real client bundle builds, architecture guards | `packages/web/**/*.test.ts` | `pnpm test` |
 | Server: config, routes, web pages, recovery loop and its Discord report, in-process end to end over signed HTTP | `apps/server/**/*.test.ts` | `pnpm test` |
 | Chain, Moderato testnet, opt-in | `packages/core/test/*.chain.test.ts` (incl. fee budget), `apps/server/test/server.chain.test.ts` | `pnpm test:chain` |
 | Browser, Moderato testnet, opt-in | `apps/server/e2e/passkeys.spec.ts` (Playwright, Chromium's virtual WebAuthn authenticator, the real server on `localhost`) | `pnpm test:e2e` |

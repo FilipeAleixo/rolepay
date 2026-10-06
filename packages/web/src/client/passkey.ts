@@ -1,7 +1,7 @@
 // The passkey account, through the Tempo Accounts SDK's webAuthn adapter. The ceremonies
 // run against this server's Handler.webAuthn at /webauthn, which keeps the credential's
 // public key and issues a session cookie; the server derives the account address from it.
-import { Provider, webAuthn } from 'accounts'
+import { Provider, Store, webAuthn } from 'accounts'
 import type { Account } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 
@@ -12,6 +12,8 @@ export type Passkeys = {
   signIn(): Promise<string>
   /** The signed-in account, able to sign Tempo transactions with the passkey, or null. */
   account(): Account.Account | null
+  /** Resolves once the account this browser remembers (IndexedDB) is loaded, so account() is meaningful. */
+  ready(): Promise<void>
 }
 
 export function passkeys(network: string): Passkeys {
@@ -32,5 +34,6 @@ export function passkeys(network: string): Passkeys {
         return null
       }
     },
+    ready: () => Store.waitForHydration(provider.store),
   }
 }

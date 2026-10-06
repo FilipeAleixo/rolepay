@@ -1,9 +1,12 @@
 // Browser end to end on Moderato: a recipient claims with a real passkey; a treasurer creates the
 // community account with a passkey as root, funds it, authorises the bot key with the passkey,
-// the bot pays a run from that account, and the treasurer revokes the key with the passkey.
+// the bot pays a run from that account, and the treasurer revokes the key with the passkey. Every
+// WebAuthn call is counted: one prompt per action, two only when the browser must sign in first.
 import { expect, test } from '@playwright/test'
+import { createPublicClient, http, toFunctionSelector } from 'viem'
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts'
-import { NET, startServer, virtualAuthenticator } from './harness.js'
+import { Abis, Addresses } from 'viem/tempo'
+import { NET, passkeyPrompts, startServer, virtualAuthenticator } from './harness.js'
 
 const PORT = 8799
 const TOKEN = '0x20c0000000000000000000000000000000000001' // AlphaUSD
@@ -54,6 +57,7 @@ test('a recipient creates a passkey on the claim page, and a returning one signs
 test('a treasurer creates the treasury with a passkey, authorises the bot key with it, the bot pays, and the passkey revokes it', async ({ page }) => {
   const guildId = snowflake()
   await virtualAuthenticator(page)
+  const prompts = await passkeyPrompts(page)
   page.on('dialog', (d) => void d.accept())
   const link = await server.payrun.communities.issueSetupLink({
     guildId,
@@ -67,6 +71,7 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await expect(page.getByRole('heading', { name: 'Treasury for E2E treasury guild' })).toBeVisible()
   await page.getByRole('button', { name: 'Create the treasury passkey' }).click()
   await expect(page.locator('#status')).toHaveText('Signed in as the treasury.')
+  expect(await prompts()).toEqual({ create: 1, get: 0 })
   const community = await server.payrun.communities.get(guildId)
   if (!community.ok) throw new Error('not registered')
   const treasury = community.value.treasuryAddress
@@ -82,10 +87,25 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await page.locator('#limit').fill('5')
   await page.locator('#periodDays').fill('1')
   await page.locator('#validityDays').fill('2')
+  await expect(page.locator('[data-field="key-prompts"]')).toHaveText('Your device will ask for your passkey once, to sign the key.')
   await page.getByRole('button', { name: 'Authorise the bot key with my passkey' }).click()
   await expect(page.locator('#status')).toContainText('The bot key is active')
+  // One fingerprint for the authorisation: the root signs one transaction, no separate key signature.
+  expect(await prompts()).toEqual({ create: 1, get: 1 })
   const status = await server.payrun.communities.keyStatus({ guildId })
   expect(status).toMatchObject({ ok: true, value: { key: { status: 'active' }, state: { status: 'active', remaining: 5_000_000n } } })
+  if (!status.ok) throw new Error(status.error.code)
+  // The call scope on chain: only transferWithMemo on the payout token, to anyone.
+  const [isScoped, scopes] = (await createPublicClient({ transport: http(NET.rpcUrl) }).readContract({
+    address: Addresses.accountKeychain,
+    abi: Abis.accountKeychain,
+    functionName: 'getAllowedCalls',
+    args: [treasury as `0x${string}`, status.value.key.address as `0x${string}`],
+  })) as readonly [boolean, readonly { target: string; selectorRules: readonly { selector: string; recipients: readonly string[] }[] }[]]
+  expect(isScoped).toBe(true)
+  expect(scopes.map((s) => ({ target: s.target.toLowerCase(), selectorRules: s.selectorRules.map((r) => ({ ...r })) }))).toEqual([
+    { target: TOKEN, selectorRules: [{ selector: toFunctionSelector('transferWithMemo(address,uint256,bytes32)'), recipients: [] }] },
+  ])
   console.log(`passkey-signed authorisation: ${await page.locator('#status').textContent()}`)
 
   // 4. The bot pays a run from the passkey treasury with its limited key.
@@ -109,5 +129,18 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   // 5. Revoke with the passkey; the server confirms it from the chain.
   await page.getByRole('button', { name: 'Revoke the bot key' }).click()
   await expect(page.locator('#status')).toHaveText('The bot key is revoked.')
+  expect(await prompts()).toEqual({ create: 0, get: 1 })
   expect(await server.payrun.communities.keyStatus({ guildId })).toMatchObject({ ok: true, value: { key: { status: 'revoked' }, state: { status: 'revoked' } } })
+
+  // 6. This browser forgets the passkey account (site data cleared) while the treasury session
+  // is still live: the page must sign in before it can sign, and says so before the click.
+  await page.goto(`${server.url}/health`)
+  await page.evaluate(async () => {
+    for (const db of await indexedDB.databases()) if (db.name) indexedDB.deleteDatabase(db.name)
+  })
+  await page.goto(`${server.url}/setup/${link.value.token}`)
+  await expect(page.locator('[data-field="key-prompts"]')).toHaveText('Your device will ask twice: once to sign in, once to sign the key.')
+  await page.getByRole('button', { name: 'Authorise the bot key with my passkey' }).click()
+  await expect(page.locator('#status')).toContainText('The bot key is active')
+  expect(await prompts()).toEqual({ create: 0, get: 2 })
 })

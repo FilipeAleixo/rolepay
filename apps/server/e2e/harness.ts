@@ -65,3 +65,22 @@ export async function virtualAuthenticator(page: Page): Promise<{ cdp: CDPSessio
   })
   return { cdp, credentials: async () => (await cdp.send('WebAuthn.getCredentials', { authenticatorId })).credentials }
 }
+
+type Prompts = { create: number; get: number }
+
+/**
+ * Counts the passkey prompts a person would see: every navigator.credentials.create (a new
+ * passkey) and .get (a sign-in or a signature). Counts restart on every page load.
+ */
+export async function passkeyPrompts(page: Page): Promise<() => Promise<Prompts>> {
+  await page.addInitScript(() => {
+    const counts = { create: 0, get: 0 }
+    const c = navigator.credentials
+    const create = c.create.bind(c)
+    const get = c.get.bind(c)
+    c.create = (o) => (counts.create++, create(o))
+    c.get = (o) => (counts.get++, get(o))
+    ;(globalThis as unknown as { __passkeyPrompts: Prompts }).__passkeyPrompts = counts
+  })
+  return () => page.evaluate(() => ({ ...(globalThis as unknown as { __passkeyPrompts: Prompts }).__passkeyPrompts }))
+}
