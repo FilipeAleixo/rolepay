@@ -103,3 +103,10 @@ export function checkKeyForRun(state: KeyState, run: { total: Micros; needsFeeBu
   if (run.needsFeeBudget && (state.feeBudgetRemaining ?? 0n) <= 0n) return err({ code: 'fee_budget_exhausted' })
   return ok(undefined)
 }
+
+/** A bot key without its sealed secret: the only form that leaves the services. */
+export type BotKeyView = Omit<BotKey, 'sealedSecret'>
+export const toBotKeyView = ({ sealedSecret: _sealed, ...view }: BotKey): BotKeyView => view
+
+/** Vault context binding a sealed bot secret to its community and key. */
+export const botKeyContext = (communityId: string, keyAddress: string) => `bot-key:${communityId}:${keyAddress.toLowerCase()}`
