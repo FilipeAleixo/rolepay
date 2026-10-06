@@ -11,6 +11,12 @@ const EnvSchema = z.object({
   PAYRUN_SPONSOR_URL: z.url().optional(),
   PAYRUN_LINK_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   PAYRUN_DEV_SHORTCUTS: z.enum(['true', 'false']).default('false'),
+  /** AI proposals. Optional: without it the AI commands answer that AI is not configured. */
+  ANTHROPIC_API_KEY: z
+    .string()
+    .optional()
+    .transform((v) => v?.trim() || undefined),
+  PAYRUN_AI_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,63}$/, 'must be a model ID such as claude-opus-5-5').default('claude-opus-5-5'),
 })
 
 const DevShortcutsSchema = EnvSchema.pick({ PAYRUN_NETWORK: true, PAYRUN_DEV_SHORTCUTS: true })
@@ -31,6 +37,8 @@ export type PayrunConfig = {
    * on any other network they do not exist.
    */
   devShortcuts: boolean
+  /** AI-proposed pay runs: the Anthropic API key (null = AI off on this server) and the model. */
+  ai: { apiKey: string | null; model: string }
 }
 
 export class ConfigError extends Error {
@@ -74,5 +82,6 @@ export function parseConfig(env: Record<string, string | undefined>): PayrunConf
     dbPath: e.PAYRUN_DB_PATH,
     linkTtlSeconds: e.PAYRUN_LINK_TTL_SECONDS,
     devShortcuts: devShortcutsEnabled(env),
+    ai: { apiKey: e.ANTHROPIC_API_KEY ?? null, model: e.PAYRUN_AI_MODEL },
   }
 }

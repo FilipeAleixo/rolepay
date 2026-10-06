@@ -4,6 +4,22 @@ import { devShortcutsEnabled, parseConfig } from './env.js'
 const MASTER = 'a'.repeat(64)
 
 describe('parseConfig (operational settings from env)', () => {
+  it('AI proposals: no model without ANTHROPIC_API_KEY (blank counts as unset); Opus 5.5 by default', () => {
+    expect(parseConfig({ PAYRUN_MASTER_KEY: MASTER }).ai).toEqual({ apiKey: null, model: 'claude-opus-5-5' })
+    expect(parseConfig({ PAYRUN_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: '  ' }).ai.apiKey).toBeNull()
+    expect(parseConfig({ PAYRUN_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: 'sk-ant-SECRET', PAYRUN_AI_MODEL: 'claude-sonnet-5-5' }).ai).toEqual({ apiKey: 'sk-ant-SECRET', model: 'claude-sonnet-5-5' })
+  })
+
+  it('refuses a malformed model name without echoing the key', () => {
+    try {
+      parseConfig({ PAYRUN_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: 'sk-ant-SECRET', PAYRUN_AI_MODEL: 'opus please' })
+      expect.unreachable()
+    } catch (e) {
+      expect(String(e)).toMatch(/PAYRUN_AI_MODEL/)
+      expect(String(e)).not.toContain('SECRET')
+    }
+  })
+
   it('defaults to the Moderato testnet with its public sponsor', () => {
     const c = parseConfig({ PAYRUN_MASTER_KEY: MASTER })
     expect(c).toMatchObject({

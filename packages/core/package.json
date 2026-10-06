@@ -11,9 +11,11 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "test:chain": "vitest run --config vitest.chain.config.ts"
+    "test:chain": "vitest run --config vitest.chain.config.ts",
+    "test:ai-live": "vitest run --config vitest.live.config.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.131.0",
     "better-sqlite3": "^13.0.3",
     "kysely": "^0.29.6",
     "viem": "2.57.3",

@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { TempoPayoutChain, openPayrunAdapters } from '../src/adapters/index.js'
+import { AnthropicRunProposer, TempoPayoutChain, openPayrunAdapters } from '../src/adapters/index.js'
 import { createPayrun, parseConfig } from '../src/index.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'payrun-wiring-'))
@@ -27,6 +27,17 @@ describe('openPayrunAdapters', () => {
     // The key-value store lives in the same database file.
     await kv.set('k', { v: 1 })
     expect(await kv.get('k')).toEqual({ v: 1 })
+    expect(deps.proposer).toBeNull()
+    expect(payrun.proposals.isConfigured()).toBe(false)
+    await close()
+  })
+
+  it('with ANTHROPIC_API_KEY, proposals use Anthropic with the configured model (no request is made here)', async () => {
+    const config = parseConfig({ PAYRUN_MASTER_KEY: 'c'.repeat(64), PAYRUN_DB_PATH: join(dir, 'ai.db'), ANTHROPIC_API_KEY: 'sk-ant-test', PAYRUN_AI_MODEL: 'claude-opus-5-5' })
+    const { deps, close } = await openPayrunAdapters(config)
+    expect(deps.proposer).toBeInstanceOf(AnthropicRunProposer)
+    expect(deps.proposer?.model).toBe('claude-opus-5-5')
+    expect(createPayrun(deps).proposals.isConfigured()).toBe(true)
     await close()
   })
 })
