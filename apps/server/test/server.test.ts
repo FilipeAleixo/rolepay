@@ -1,3 +1,4 @@
+import { slashCommand } from '@payrun/discord/testing'
 import { describe, expect, it } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer } from './support.js'
 
@@ -37,6 +38,16 @@ describe('server routes', () => {
     expect(statuses.slice(0, 30).every((st) => st !== 429)).toBe(true)
     expect(statuses[30]).toBe(429)
     expect((await post('203.0.113.8')).status).not.toBe(429)
+  })
+
+  it('a replayed signed interaction (inside the 5-minute window) never mints a second claim link', async () => {
+    const s = await withLink()
+    const link = slashCommand({ guildId: GUILD, channelId: '700000000000000001' }, 'payee', 'link', {}, { userId: ALICE })
+    const first = await s.interact(link)
+    expect(JSON.stringify(await first.json())).toContain('/claim/')
+    const replay = await s.interact(link)
+    expect(replay.status).toBe(409)
+    expect(await replay.text()).not.toContain('/claim/')
   })
 
   it('anything else is 404', async () => {

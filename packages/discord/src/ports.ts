@@ -64,6 +64,16 @@ export interface RunNotices {
   claimReceipts(runId: string): Promise<boolean>
 }
 
+/**
+ * Interaction IDs already answered. A signed request stays valid for the 5-minute timestamp
+ * window, so anyone who sees one (a tunnel's request inspector, say) could replay it: answering
+ * each ID once means a replay never mints a second claim link (L1).
+ */
+export interface InteractionLog {
+  /** True exactly once per interaction ID. */
+  firstSeen(interactionId: string): Promise<boolean>
+}
+
 /** Pays approved runs outside the 3-second interaction window. In-process today; durable later. */
 export interface ExecutionQueue {
   enqueue(job: ExecutionJob): Promise<void>

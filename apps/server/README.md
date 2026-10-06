@@ -41,6 +41,7 @@ You need: the Discord desktop app, a private test server where you are the owner
    - A free ngrok account has one static domain, so the URL usually stays the same. If it ever changes, update `PUBLIC_URL`, restart the server and repeat step 8.
    - Passkeys are bound to that tunnel host: one made on `https://<name>.ngrok-free.app` only works there. That is fine for testing. The production claim domain is still Filipe's decision (passkeys bind to it for good).
    - The first time a browser opens a tunnel page, ngrok shows a "You are about to visit" warning: press Visit Site. Discord's requests to the interactions endpoint are not affected.
+   - For a demo with other people, run `ngrok http 8787 --inspect=false`: ngrok's local inspector (127.0.0.1:4040) otherwise records every request and response body, including the claim links `/payee link` returns. payrun answers each interaction ID once, so a replay from the inspector gets 409 and no new link, but the recorded responses would still show the links.
 
 7. **Start the server** in another terminal: `pnpm dev`. It logs `{"event":"listening","url":"http://127.0.0.1:8787",...,"publicUrl":"https://<name>.ngrok-free.app","passkeyRpId":"<name>.ngrok-free.app"}`. Check `curl http://127.0.0.1:8787/health` gives `{"ok":true,"network":"moderato","jobsInFlight":0}`. (`pnpm dev` watches the code, not `.env`: restart it after editing `.env`.)
 

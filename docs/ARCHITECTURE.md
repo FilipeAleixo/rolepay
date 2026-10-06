@@ -205,14 +205,14 @@ Layering is enforced by `packages/web/test/architecture.test.ts`: server code im
 The Discord adapter. It calls core only through `@payrun/core` services; everything external is a port with an in-memory fake (`@payrun/discord/testing`).
 
 ```
-http/        Ed25519 verification (WebCrypto) and the endpoint as a fetch handler: Request in, Response out
+http/        Ed25519 verification (WebCrypto) and the endpoint as a fetch handler: Request in, Response out; each interaction ID is answered once (InteractionLog), so a replay inside the 5-minute window gets 409
 app/         Zod parsing of interactions, the router, permission rules, outcome rendering
 commands/    slash command definitions (JSON) and handlers
 components/  the Approve, Cancel and Retry buttons
 views/       pure builders from domain objects to Discord message payloads (soulform's transformers)
 execution/   the in-process ExecutionQueue and the run executor job
 adapters/    DiscordRest over fetch, MemberDirectory over DiscordRest
-ports.ts     DiscordRest, ExecutionQueue, MemberDirectory
+ports.ts     DiscordRest, ExecutionQueue, MemberDirectory, RunNotices, InteractionLog
 ```
 
 A handler is a thin route: parse options with Zod, check permissions, call a service, return an **outcome** (`reply`, `update`, `defer` or `choices`). Handlers never talk to Discord; `app/outcome.ts` renders the outcome. A `defer` answers at once ("thinking...") and finishes in the background, then edits the reply through the interaction webhook; a public deferral that fails is deleted and the error goes to the caller alone. Layering is enforced by `packages/discord/test/architecture.test.ts`: discord imports only `@payrun/core` and `zod`; views import nothing with IO; handlers never reach adapters, the HTTP layer or the queue implementation.

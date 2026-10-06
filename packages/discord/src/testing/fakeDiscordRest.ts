@@ -1,5 +1,5 @@
 import type { Message } from '../api.js'
-import type { DiscordRest, ExecutionJob, ExecutionQueue, MemberDirectory, ReplyHandle, RestResult, RunMessageRef, RunNotices } from '../ports.js'
+import type { DiscordRest, ExecutionJob, ExecutionQueue, InteractionLog, MemberDirectory, ReplyHandle, RestResult, RunMessageRef, RunNotices } from '../ports.js'
 
 const OK: RestResult = { ok: true, value: undefined }
 
@@ -106,6 +106,16 @@ export class MemoryRunNotices implements RunNotices {
   async claimReceipts(runId: string) {
     if (this.receipts.has(runId)) return false
     this.receipts.add(runId)
+    return true
+  }
+}
+
+/** InteractionLog in memory. */
+export class MemoryInteractionLog implements InteractionLog {
+  private ids = new Set<string>()
+  async firstSeen(interactionId: string) {
+    if (this.ids.has(interactionId)) return false
+    this.ids.add(interactionId)
     return true
   }
 }

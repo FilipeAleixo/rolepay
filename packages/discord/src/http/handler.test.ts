@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { MemoryInteractionLog } from '../testing/index.js'
 import { createTestSigner } from '../testing/signer.js'
 import { type Dispatch, createInteractionsHandler } from './handler.js'
 import { createSignatureVerifier } from './verify.js'
@@ -12,10 +13,11 @@ async function setup(dispatch: Dispatch) {
     verify: createSignatureVerifier(signer.publicKeyHex),
     dispatch,
     waitUntil: (p) => background.push(p),
+    seen: new MemoryInteractionLog(),
   })
-  const post = async (payload: unknown, opts: { sign?: boolean; raw?: string } = {}) => {
+  const post = async (payload: unknown, opts: { sign?: boolean; raw?: string; timestamp?: string } = {}) => {
     const body = opts.raw ?? JSON.stringify(payload)
-    const timestamp = String(Math.floor(Date.now() / 1000))
+    const timestamp = opts.timestamp ?? String(Math.floor(Date.now() / 1000))
     const headers: Record<string, string> = { 'content-type': 'application/json', 'x-signature-timestamp': timestamp }
     if (opts.sign !== false) headers['x-signature-ed25519'] = await signer.sign(timestamp + body)
     return handler(new Request(URL, { method: 'POST', headers, body }))
@@ -33,6 +35,19 @@ describe('createInteractionsHandler', () => {
     const res = await post({ type: 1 }, { sign: false })
     expect(res.status).toBe(401)
     expect(called).toBe(false)
+  })
+
+  it('a replayed signed request (same interaction ID, inside the 5-minute window) is refused and never dispatched again (L1)', async () => {
+    let calls = 0
+    const { post } = await setup(async () => (calls++, { kind: 'respond', body: { type: 4, data: { content: 'https://payrun.test/claim/secret' } } }))
+    const interaction = { id: '900000000000000001', type: 2 }
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    expect((await post(interaction, { timestamp })).status).toBe(200)
+    const replay = await post(interaction, { timestamp })
+    expect(replay.status).toBe(409)
+    expect(await replay.text()).not.toContain('claim')
+    expect(calls).toBe(1)
+    expect((await post({ id: '900000000000000002', type: 2 })).status).toBe(200)
   })
 
   it('answers a signed request with the dispatched JSON body', async () => {

@@ -2,6 +2,7 @@ import type { Clock, KeyValueStore, Payrun } from '@payrun/core'
 import {
   type DiscordRest,
   InProcessExecutionQueue,
+  KvInteractionLog,
   KvRunNotices,
   type MemberDirectory,
   RestMemberDirectory,
@@ -91,6 +92,7 @@ export function composeServer(deps: ServerDeps) {
       onError: (error) => log('interaction_error', errorFields(error)),
     },
     waitUntil,
+    interactionLog: new KvInteractionLog(deps.kv),
   })
 
   const notifyRecovered = createRecoveryNotifier({

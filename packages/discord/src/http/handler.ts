@@ -1,4 +1,5 @@
 import { type FileUpload, attachmentMeta, multipartBody } from '../api.js'
+import type { InteractionLog } from '../ports.js'
 import type { SignedRequest } from './verify.js'
 
 /**
@@ -17,6 +18,8 @@ export type InteractionsHandlerDeps = {
   /** Keeps background work alive past the response (Workers' ctx.waitUntil; on Node, a tracked promise). */
   waitUntil?: (work: Promise<unknown>) => void
   onError?: (error: unknown) => void
+  /** Answers each interaction ID once; a replayed signed request gets 409. */
+  seen?: InteractionLog
 }
 
 /**
@@ -41,6 +44,10 @@ export function createInteractionsHandler(deps: InteractionsHandlerDeps): (reque
       interaction = JSON.parse(body)
     } catch {
       return new Response('invalid JSON', { status: 400 })
+    }
+    const id = (interaction as { id?: unknown } | null)?.id
+    if (deps.seen && typeof id === 'string' && !(await deps.seen.firstSeen(id))) {
+      return new Response('interaction already handled', { status: 409 })
     }
 
     let result: Dispatched
