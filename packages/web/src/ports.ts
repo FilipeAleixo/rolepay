@@ -18,6 +18,12 @@ export interface PasskeySessions {
   current(req: Request): Promise<PasskeySession | null>
 }
 
+/** Request budgets by key (token buckets in memory: `TokenBucketLimiter`; a shared store later). */
+export interface RateLimiter {
+  /** Takes one request from `key`'s budget: false when it is spent for now. */
+  take(key: string): Promise<boolean>
+}
+
 /** The client bundle(s), by file name. */
 export interface Assets {
   get(name: string): Promise<string | null>

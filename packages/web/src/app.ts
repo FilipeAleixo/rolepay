@@ -2,7 +2,7 @@ import { type Clock, NETWORKS, type Payrun } from '@payrun/core'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
 import type { WebConfig } from './config.js'
-import type { Assets, PasskeySessions } from './ports.js'
+import type { Assets, PasskeySessions, RateLimiter } from './ports.js'
 import { claimRoutes } from './routes/claim.js'
 import { setupRoutes } from './routes/setup.js'
 
@@ -14,7 +14,18 @@ export type WebAppDeps = {
   assets: Assets
   /** The WebAuthn ceremony endpoints (Accounts SDK `Handler.webAuthn`), mounted at /webauthn. */
   passkeys?: { fetch: (req: Request) => Response | Promise<Response> }
+  /**
+   * Budgets for the public POST endpoints (/webauthn, /claim, /setup): each request takes one
+   * from its client's budget and one from that endpoint group's overall budget, so spoofing the
+   * client key cannot get past the second, and one group cannot starve another. `clientKey` defaults to the last X-Forwarded-For hop (the one the tunnel
+   * or proxy in front appended).
+   */
+  rateLimits?: { perClient: RateLimiter; overall: RateLimiter; clientKey?: (req: Request) => string }
 }
+
+/** The client as the proxy in front saw it: the last X-Forwarded-For hop, which it appended. */
+const lastForwardedHop = (req: Request) => req.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || 'direct'
+const RATE_LIMITED_PREFIXES = /^\/(webauthn|claim|setup)\//
 
 /**
  * The web pages: the recipient claim page and the treasurer setup page, their JSON
@@ -42,6 +53,18 @@ export function createWebApp(deps: WebAppDeps): Hono {
     c.header('x-content-type-options', 'nosniff')
     c.header('x-frame-options', 'DENY')
   })
+
+  if (deps.rateLimits) {
+    const { perClient, overall } = deps.rateLimits
+    const clientKey = deps.rateLimits.clientKey ?? lastForwardedHop
+    app.use(async (c, next) => {
+      const group = c.req.method === 'POST' ? RATE_LIMITED_PREFIXES.exec(c.req.path)?.[1] : undefined
+      if (group && (!(await perClient.take(`${group}:${clientKey(c.req.raw)}`)) || !(await overall.take(group)))) {
+        return c.json({ ok: false, error: { code: 'rate_limited' } }, 429, { 'retry-after': '30' })
+      }
+      await next()
+    })
+  }
 
   if (deps.passkeys) {
     const passkeys = deps.passkeys

@@ -6,5 +6,6 @@
 export { type WebAppDeps, createWebApp } from './app.js'
 export { bundledAssets } from './assets.js'
 export type { WebConfig } from './config.js'
-export { accountsKv, createPasskeys, passkeyAddress } from './passkeys.js'
+export { accountsKv, createPasskeys, passkeyAddress, withLoginProof } from './passkeys.js'
+export { TokenBucketLimiter } from './rateLimit.js'
 export type * from './ports.js'

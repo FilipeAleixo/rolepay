@@ -28,6 +28,17 @@ describe('server routes', () => {
     expect(await res.json()).toEqual({ type: 1 })
   })
 
+  it('rate limits the public page endpoints by default, per client', async () => {
+    const s = await testServer()
+    const post = (ip: string) =>
+      s.app.request('/claim/not-a-token', { method: 'POST', body: '{}', headers: { 'content-type': 'application/json', origin: 'https://payrun.test', 'x-forwarded-for': ip } })
+    const statuses = []
+    for (let i = 0; i < 31; i++) statuses.push((await post('203.0.113.7')).status)
+    expect(statuses.slice(0, 30).every((st) => st !== 429)).toBe(true)
+    expect(statuses[30]).toBe(429)
+    expect((await post('203.0.113.8')).status).not.toBe(429)
+  })
+
   it('anything else is 404', async () => {
     const s = await testServer()
     expect((await s.app.request('/nope')).status).toBe(404)

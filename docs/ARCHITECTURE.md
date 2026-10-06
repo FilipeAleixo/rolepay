@@ -174,13 +174,14 @@ const server = composeServer({ config, payrun, rest: new FetchDiscordRest({ botT
 The claim and setup pages, as an adapter over core like `packages/discord`: it calls core only through `@payrun/core` services, and everything external is a port with a fake in `@payrun/web/testing`.
 
 ```
-app.ts       the Hono app: security headers, same-origin POSTs only (CSRF), /webauthn, /assets, the routes
+app.ts       the Hono app: security headers, same-origin POSTs only (CSRF), rate limits, /webauthn, /assets, the routes
+rateLimit.ts TokenBucketLimiter, the in-memory RateLimiter
 routes/      claim.ts (/claim/:token) and setup.ts (/setup/:token and its JSON endpoints)
 views/       pure HTML builders; each page embeds a JSON config for the client
 passkeys.ts  the Accounts SDK's Handler.webAuthn over core's KeyValueStore, and the session reader
 assets.ts    the client bundle, built in memory with esbuild on first request and cached
 client/      browser code (its own tsconfig with DOM types): main, claim, setup, passkey, tempo, keychain, dom
-ports.ts     PasskeySessions, Assets
+ports.ts     PasskeySessions, Assets, RateLimiter
 ```
 
 **Why server-rendered HTML plus one client bundle**, not a separate `apps/web` with Vite: the pages are two forms, and passkeys bind to one origin, so the pages, the WebAuthn endpoints and the API must be served together anyway. Vite would add a second dev server and a proxy for the same result. esbuild is already installed (through tsx), bundles the Accounts SDK and viem for the browser in about a second, and `pnpm dev` keeps working with no build step. The bundle is about 1.5 MB (mostly viem's Tempo ABIs), served gzipped. A framework can come later behind the same routes if the pages grow.
@@ -280,4 +281,4 @@ The browser e2e proves the passkey paths for real: a recipient creates a passkey
 - A setup link is short-lived rather than single-use (see SetupLink). A recipient's claim link is single-use.
 - The setup page's code is served by the bot server itself (see "The page signs what the treasurer typed"): a separate static origin for it is a mainnet prerequisite.
 - The setup page signs with whatever passkey account the Accounts SDK has signed in on that browser; if it is not the treasury, the page asks for the treasury passkey and the server refuses the others anyway.
-- The WebAuthn endpoints are open (anyone can register a passkey with the server; a registration session never counts as the treasury's passkey, see Setup). Expired key-value rows are dropped lazily, not swept.
+- The WebAuthn endpoints are open (anyone can register a passkey with the server; a registration session never counts as the treasury's passkey, see Setup). POSTs to /webauthn, /claim and /setup are rate limited behind the `RateLimiter` port (`defaultRateLimits` in `apps/server/src/compose.ts`: per client, by the last X-Forwarded-For hop, and per endpoint group overall), in memory per process. Expired key-value rows are dropped lazily, not swept, and request bodies have no size cap yet.

@@ -9,7 +9,7 @@ import {
   createRecoveryNotifier,
   createRunExecutor,
 } from '@payrun/discord'
-import { type Assets, type PasskeySessions, createWebApp } from '@payrun/web'
+import { type Assets, type PasskeySessions, type RateLimiter, TokenBucketLimiter, createWebApp } from '@payrun/web'
 import { Hono } from 'hono'
 import type { ServerConfig } from './config.js'
 import { startRecovery } from './recovery.js'
@@ -25,10 +25,27 @@ export type ServerDeps = {
   kv: KeyValueStore
   members?: MemberDirectory
   /** The claim and setup pages: passkey sessions, the WebAuthn endpoints (production) and the client bundle. */
-  web: { sessions: PasskeySessions; assets: Assets; passkeys?: { fetch: (req: Request) => Response | Promise<Response> } }
+  web: {
+    sessions: PasskeySessions
+    assets: Assets
+    passkeys?: { fetch: (req: Request) => Response | Promise<Response> }
+    /** Default: in-memory token buckets (`defaultRateLimits`). */
+    rateLimits?: { perClient: RateLimiter; overall: RateLimiter }
+  }
   sleep?: (ms: number) => Promise<void>
   log?: Log
 }
+
+/**
+ * Budgets for the public page endpoints (/webauthn, /claim, /setup POSTs): a person clicking
+ * through the pages uses a handful; a loop filling the database with challenge rows does not
+ * get far. Per client a burst of 30 then one every 2 seconds; per endpoint group 300 then 5 a
+ * second, whatever client the requests claim to come from.
+ */
+export const defaultRateLimits = () => ({
+  perClient: new TokenBucketLimiter({ capacity: 30, refillPerSecond: 0.5 }),
+  overall: new TokenBucketLimiter({ capacity: 300, refillPerSecond: 5 }),
+})
 
 /**
  * Wires the HTTP app over the core services and the Discord adapter. Shared by main.ts
@@ -87,7 +104,7 @@ export function composeServer(deps: ServerDeps) {
   const app = new Hono()
   app.get('/health', (c) => c.json({ ok: true, network: config.core.network, jobsInFlight: queue.size }))
   app.post('/discord/interactions', (c) => interactions(c.req.raw))
-  app.route('/', createWebApp({ payrun, clock: deps.clock, config: config.web, ...deps.web }))
+  app.route('/', createWebApp({ payrun, clock: deps.clock, config: config.web, ...deps.web, rateLimits: deps.web.rateLimits ?? defaultRateLimits() }))
 
   return {
     app,
