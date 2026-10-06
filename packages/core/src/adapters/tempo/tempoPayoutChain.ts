@@ -75,26 +75,25 @@ export class TempoPayoutChain implements PayoutChain {
   }
 
   async keyState(input: { account: Address; accessKey: Address; token: Address; feeToken: Address | null }): Promise<KeyState> {
-    const remaining = (token: Address) =>
-      this.reader.accessKey
-        .getRemainingLimit({ account: input.account, accessKey: input.accessKey, token })
-        .catch(() => ({ remaining: 0n, periodEnd: undefined }))
-    const [meta, spend, block, fee] = await Promise.all([
+    const [meta, block] = await Promise.all([
       this.reader.accessKey.getMetadata({ account: input.account, accessKey: input.accessKey }),
-      remaining(input.token),
       this.reader.getBlock(),
-      input.feeToken ? remaining(input.feeToken) : Promise.resolve(null),
     ])
     const chainTime = Number(block.timestamp)
     const expiry = Number(meta.expiry)
     // The keychain zeroes expiry on revoke; an unknown key reads as expiry 0, not revoked.
     const status: KeyState['status'] = meta.isRevoked ? 'revoked' : expiry === 0 ? 'not_authorized' : chainTime >= expiry ? 'expired' : 'active'
-    const periodEnd = spend.periodEnd ? Number(spend.periodEnd) : null
+    if (status === 'revoked' || status === 'not_authorized') {
+      return { status, expiry, remaining: 0n, periodEnd: null, chainTime, feeBudgetRemaining: null }
+    }
+    // Limit reads are not swallowed: an RPC failure must not read as "no budget left".
+    const read = (token: Address) => this.reader.accessKey.getRemainingLimit({ account: input.account, accessKey: input.accessKey, token })
+    const [spend, fee] = await Promise.all([read(input.token), input.feeToken ? read(input.feeToken) : Promise.resolve(null)])
     return {
       status,
       expiry,
       remaining: spend.remaining,
-      periodEnd: periodEnd || null,
+      periodEnd: spend.periodEnd ? Number(spend.periodEnd) || null : null,
       chainTime,
       feeBudgetRemaining: fee ? fee.remaining : null,
     }
