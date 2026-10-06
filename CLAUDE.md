@@ -7,6 +7,7 @@ payrun: Discord-native pay runs on Tempo. A community's own Tempo account holds 
 ```bash
 pnpm typecheck     # strict TS, all packages
 pnpm test          # unit + SQLite integration + architecture guards + discord + web + server e2e (no network)
+pnpm test:coverage # the same with v8 coverage and per-package thresholds (what CI runs, .github/workflows/ci.yml)
 pnpm test:chain    # opt-in: full pay runs on the Moderato TESTNET (chain 42431), service level and over HTTP
 pnpm test:e2e      # opt-in: Playwright, real passkeys (virtual authenticator) on localhost, Moderato
 pnpm test:ai-live  # opt-in: three real Anthropic API calls (PAYRUN_AI_LIVE=true and ANTHROPIC_API_KEY)
