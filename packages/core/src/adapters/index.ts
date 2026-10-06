@@ -3,7 +3,20 @@
  * (apps/server, CLIs, chain tests) only. Services never import these.
  */
 export { AesGcmKeyVault, RandomIds, SystemClock } from './crypto/index.js'
-export { FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from './memory/index.js'
+export {
+  FakeActivityReader,
+  FakePayoutChain,
+  FakeRunProposer,
+  ManualClock,
+  MemoryKeyValueStore,
+  PlainKeyVault,
+  SequentialIds,
+  createMemoryRepositories,
+  emptyCriteria,
+  naiveMessageProposal,
+  unclearCriteria,
+} from './memory/index.js'
+export { KvProposalRepository } from './kv/proposals.js'
 export { openSqliteDatabase } from './sqlite/index.js'
 export {
   TempoPayoutChain,

@@ -1,6 +1,7 @@
 // Test fixtures: valid domain objects with overridable fields.
 import type { BotKey, Community, SetupLink } from '../../src/domain/community.js'
 import type { LinkToken, Payee } from '../../src/domain/payee.js'
+import type { Proposal } from '../../src/domain/proposal/proposal.js'
 import { type Run, type RunEvent, newRun, transition } from '../../src/domain/run.js'
 
 export const GUILD = '1094309218049937418'
@@ -31,6 +32,8 @@ export function community(over: Partial<Community> = {}): Community {
     feeToken: null,
     approverRoleId: null,
     requireSeparateApprover: false,
+    aiProposals: false,
+    proposerRoleId: null,
     createdAt: T0,
     updatedAt: T0,
     ...over,
@@ -111,4 +114,53 @@ export function advance(r: Run, ...events: RunEvent[]): Run {
     if (!n.ok) throw new Error(`fixture transition ${e.type}: ${n.error.code}`)
     return n.value
   }, r)
+}
+
+/** An open criteria-mode proposal with one line, one held line, one unregistered person and a scan. */
+export function proposal(over: Partial<Proposal> = {}): Proposal {
+  const line = { discordUserId: ALICE, amount: 20_000_000n, reason: null, metrics: { messages: null, activeDays: null, replies: 34 }, sources: [], flags: [] }
+  return {
+    id: 'prop_fixture01',
+    communityId: GUILD,
+    proposedBy: TREASURER,
+    mode: 'criteria',
+    token: TOKEN,
+    instruction: 'pay 20 to every Mod who answered at least 10 questions in #help this month',
+    note: 'October help desk',
+    source: null,
+    criteria: {
+      hasRole: ['400000000000000002'],
+      lacksRole: [],
+      joinedBefore: null,
+      joinedAfter: null,
+      messagesIn: null,
+      activeDaysIn: null,
+      repliesIn: { channelIds: ['700000000000000001'], since: at(-30 * 86_400), until: T0, min: 10 },
+      reactedTo: null,
+      mentionedIn: null,
+      postedIn: null,
+      paidInRun: null,
+      exclude: [],
+      excludeProposer: false,
+    },
+    amountPlan: { rule: { kind: 'flat', amount: 20_000_000n }, overrides: [], perPersonCap: null },
+    scans: [{ channelId: '700000000000000001', since: at(-30 * 86_400), until: T0, messages: 1234, truncated: false }],
+    lines: [line],
+    held: [{ ...line, discordUserId: BOB, amount: null, holds: ['amount_unreadable'] }],
+    unregistered: [{ ...line, discordUserId: CAROL }],
+    unresolved: [{ text: 'the new mod', why: 'not a member' }],
+    assumptions: ['"this month" means the last 30 days'],
+    suspicious: [],
+    total: 20_000_000n,
+    remaining: 100_000_000n,
+    problems: [],
+    status: 'open',
+    runId: null,
+    editedBy: null,
+    closedBy: null,
+    createdAt: T0,
+    updatedAt: T0,
+    expiresAt: at(86_400),
+    ...over,
+  }
 }

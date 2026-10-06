@@ -14,6 +14,9 @@ export interface CommunitiesTable {
   approver_role_id: string | null
   /** 0 or 1. */
   require_separate_approver: number
+  /** 0 or 1. */
+  ai_proposals: number
+  proposer_role_id: string | null
   created_at: string
   updated_at: string
 }

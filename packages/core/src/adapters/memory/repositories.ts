@@ -2,7 +2,10 @@ import type { BotKey, Community, SetupLink } from '../../domain/community.js'
 import type { LinkToken, Payee } from '../../domain/payee.js'
 import { err, ok } from '../../domain/result.js'
 import type { Run } from '../../domain/run.js'
+import type { Clock } from '../../ports/clock.js'
 import type { CommunityRepository, PayeeRepository, RunRepository } from '../../ports/repositories.js'
+import { KvProposalRepository } from '../kv/proposals.js'
+import { MemoryKeyValueStore } from './keyValue.js'
 
 /** In-memory repositories for unit tests. Same contract as SQLite (test/support/repositoryContracts.ts). */
 const copy = <T>(value: T): T => structuredClone(value)
@@ -100,10 +103,12 @@ export class MemoryRunRepository implements RunRepository {
   }
 }
 
-export function createMemoryRepositories() {
+export function createMemoryRepositories(opts: { clock?: Clock } = {}) {
+  const clock = opts.clock ?? { now: () => new Date() }
   return {
     communities: new MemoryCommunityRepository(),
     payees: new MemoryPayeeRepository(),
     runs: new MemoryRunRepository(),
+    proposals: new KvProposalRepository(new MemoryKeyValueStore(clock), clock),
   }
 }

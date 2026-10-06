@@ -349,6 +349,41 @@ describe('CommunityService', () => {
     })
   })
 
+  describe('AI proposals (off by default; a treasurer turns them on)', () => {
+    const ROLE = '400000000000000001'
+    const PROPOSERS = '400000000000000003'
+
+    it('are off by default with no proposer role', async () => {
+      const r = await register({ approverRoleId: ROLE })
+      expect(r.ok && { aiProposals: r.value.aiProposals, proposerRoleId: r.value.proposerRoleId }).toEqual({ aiProposals: false, proposerRoleId: null })
+    })
+
+    it('need the current approver role to switch on, off, or name a proposer role (Manage Server alone is not enough)', async () => {
+      await register({ approverRoleId: ROLE })
+      expect(await svc.setAiProposals({ guildId: GUILD, enabled: true, actorRoleIds: [] })).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await svc.setAiProposals({ guildId: GUILD, proposerRoleId: PROPOSERS, actorRoleIds: [PROPOSERS] })).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: false, proposerRoleId: null } })
+
+      expect(await svc.setAiProposals({ guildId: GUILD, enabled: true, proposerRoleId: PROPOSERS, actorRoleIds: [ROLE] })).toMatchObject({
+        ok: true,
+        value: { aiProposals: true, proposerRoleId: PROPOSERS },
+      })
+      expect(await svc.setAiProposals({ guildId: GUILD, enabled: false, actorRoleIds: [ROLE] })).toMatchObject({ ok: true, value: { aiProposals: false, proposerRoleId: PROPOSERS } })
+      expect(await svc.setAiProposals({ guildId: GUILD, proposerRoleId: null, actorRoleIds: [ROLE] })).toMatchObject({ ok: true, value: { proposerRoleId: null } })
+    })
+
+    it('a community without an approver role cannot switch them on (nobody could approve the runs)', async () => {
+      await register()
+      expect(await svc.setAiProposals({ guildId: GUILD, enabled: true, actorRoleIds: [ROLE] })).toEqual({ ok: false, error: { code: 'not_permitted' } })
+    })
+
+    it('refuses a malformed role and an unknown community', async () => {
+      await register({ approverRoleId: ROLE })
+      expect(await svc.setAiProposals({ guildId: GUILD, proposerRoleId: 'nope', actorRoleIds: [ROLE] })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await svc.setAiProposals({ guildId: '1094309218049937419', enabled: true, actorRoleIds: [ROLE] })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+    })
+  })
+
   describe('settings after registration', () => {
     it('stores the community name', async () => {
       await register({ name: null })

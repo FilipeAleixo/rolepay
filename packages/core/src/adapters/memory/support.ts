@@ -26,6 +26,9 @@ export class SequentialIds implements IdGenerator {
   linkToken() {
     return `link_${String(++this.n).padStart(6, '0')}`
   }
+  proposalId() {
+    return `prop_${String(++this.n).padStart(6, '0')}`
+  }
 }
 
 /** A transparent vault for unit tests: it binds context like the real one, without crypto. */

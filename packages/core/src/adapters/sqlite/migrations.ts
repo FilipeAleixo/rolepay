@@ -127,6 +127,13 @@ const migrations: Record<string, Migration> = {
         .execute()
     },
   },
+  '0005_ai_proposals': {
+    async up(db: Kysely<unknown>) {
+      // AI proposals per community (0/1, off for existing rows) and the optional proposer role.
+      await db.schema.alterTable('communities').addColumn('ai_proposals', 'integer', (c) => c.notNull().defaultTo(0)).execute()
+      await db.schema.alterTable('communities').addColumn('proposer_role_id', 'text').execute()
+    },
+  },
 }
 
 class InlineMigrations implements MigrationProvider {

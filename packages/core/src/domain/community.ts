@@ -24,6 +24,10 @@ export const CommunitySchema = z
     approverRoleId: DiscordIdSchema.nullable(),
     /** Four eyes: the person who created a run may not approve it. Off by default. */
     requireSeparateApprover: z.boolean().default(false),
+    /** AI-proposed pay runs: off until a treasurer turns them on (source messages go to Anthropic's API). */
+    aiProposals: z.boolean().default(false),
+    /** A role that may propose runs with AI besides the approver role. null = the approver role only. */
+    proposerRoleId: DiscordIdSchema.nullable().default(null),
     createdAt: z.date(),
     updatedAt: z.date(),
   })
@@ -59,6 +63,17 @@ export type SetupSettings = z.infer<typeof SetupSettingsSchema>
 export function canChangeApprovalRules(community: Pick<Community, 'approverRoleId'>, actorRoleIds: readonly string[], nextApproverRoleId?: string | null): boolean {
   if (community.approverRoleId !== null) return actorRoleIds.includes(community.approverRoleId)
   return nextApproverRoleId === undefined || nextApproverRoleId === null || actorRoleIds.includes(nextApproverRoleId)
+}
+
+/**
+ * Who may ask the AI for a pay run proposal: a member holding the approver role, or the optional
+ * proposer role. With no approver role nobody may, because nobody could approve the runs. A
+ * proposal is only a draft; turning it into a run and approving it follow the usual rules.
+ */
+export function canPropose(community: Pick<Community, 'approverRoleId' | 'proposerRoleId'>, actorRoleIds: readonly string[]): boolean {
+  if (community.approverRoleId === null) return false
+  if (actorRoleIds.includes(community.approverRoleId)) return true
+  return community.proposerRoleId !== null && actorRoleIds.includes(community.proposerRoleId)
 }
 
 /**

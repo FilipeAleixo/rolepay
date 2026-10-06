@@ -1,5 +1,6 @@
 import type { BotKey, Community, SetupLink } from '../domain/community.js'
 import type { LinkToken, Payee } from '../domain/payee.js'
+import type { Proposal } from '../domain/proposal/proposal.js'
 import type { Result } from '../domain/result.js'
 import type { Run, RunStatus } from '../domain/run.js'
 
@@ -40,4 +41,15 @@ export interface RunRepository {
    * `next.version - 1`. This is what stops two workers from executing one run.
    */
   update(next: Run): Promise<'updated' | 'conflict'>
+}
+
+/** Proposals are drafts that expire (a day): small records, kept where the key-value records are. */
+export interface ProposalRepository {
+  get(id: string): Promise<Proposal | null>
+  /** Upsert; the record expires at `proposal.expiresAt`. */
+  save(proposal: Proposal): Promise<void>
+  /** True exactly once per proposal: whoever gets true creates its run. */
+  claim(id: string): Promise<boolean>
+  /** Gives a claim back after creating the run failed, so it can be tried again. */
+  release(id: string): Promise<void>
 }

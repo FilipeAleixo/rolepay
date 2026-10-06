@@ -2,6 +2,7 @@ import BetterSqlite3 from 'better-sqlite3'
 import { Kysely, SqliteDialect } from 'kysely'
 import type { Clock } from '../../ports/clock.js'
 import { SystemClock } from '../crypto/index.js'
+import { KvProposalRepository } from '../kv/proposals.js'
 import { SqliteKeyValueStore } from './keyValue.js'
 import { migrateToLatest } from './migrations.js'
 import { SqliteCommunityRepository, SqlitePayeeRepository, SqliteRunRepository } from './repositories.js'
@@ -15,13 +16,17 @@ export async function openSqliteDatabase(path: string, options: { clock?: Clock 
   sqlite.pragma('busy_timeout = 5000')
   const db = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
   await migrateToLatest(db as unknown as Kysely<unknown>)
+  const clock = options.clock ?? new SystemClock()
+  const kv = new SqliteKeyValueStore(db, clock)
   return {
     repositories: {
       communities: new SqliteCommunityRepository(db),
       payees: new SqlitePayeeRepository(db),
       runs: new SqliteRunRepository(db),
+      // Drafts that expire within a day: kept in the key-value table, no migration needed.
+      proposals: new KvProposalRepository(kv, clock),
     },
-    kv: new SqliteKeyValueStore(db, options.clock ?? new SystemClock()),
+    kv,
     close: () => db.destroy(),
   }
 }

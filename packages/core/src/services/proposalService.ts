@@ -1,0 +1,483 @@
+import { z } from 'zod'
+import { MAX_LINES_PER_RUN, PROPOSAL_LIMITS } from '../constants/limits.js'
+import { TOKEN_SYMBOLS } from '../constants/tempo.js'
+import { type Community, canPropose } from '../domain/community.js'
+import { DiscordIdSchema } from '../domain/ids.js'
+import { type Micros, formatAmount } from '../domain/money.js'
+import { applyAmountPlan } from '../domain/proposal/amounts.js'
+import {
+  type CriteriaError,
+  type CriteriaEvidence,
+  type ScannedMessage,
+  evaluateCriteria,
+  needsMembers,
+  resolveCriteria,
+  scanPlan,
+  seenUsers,
+} from '../domain/proposal/criteria.js'
+import { amountsIn } from '../domain/proposal/numbers.js'
+import {
+  type ChannelScan,
+  type EditError,
+  type Problem,
+  type Proposal,
+  type ProposalLine,
+  type UnregisteredLine,
+  assembleProposal,
+  blockingProblems,
+  editProposal,
+  resolveMessageProposal,
+} from '../domain/proposal/proposal.js'
+import { type SourceMessage, SourceMessageSchema, pseudonymizeMessages, tokenizeInstruction } from '../domain/proposal/sources.js'
+import { type Result, err, ok } from '../domain/result.js'
+import type { Run } from '../domain/run.js'
+import type { ActivityReader, ReadError } from '../ports/activityReader.js'
+import type { Clock } from '../ports/clock.js'
+import type { IdGenerator } from '../ports/idGenerator.js'
+import type { ProposalLog, ProposalLogEntry } from '../ports/proposalLog.js'
+import type { CommunityRepository, PayeeRepository, ProposalRepository, RunRepository } from '../ports/repositories.js'
+import type { ProposerFailure, ProposerUsage, RunProposer } from '../ports/runProposer.js'
+import { type InvalidInput, invalidInput } from './common.js'
+import type { CommunityService } from './communityService.js'
+import type { PayRunService } from './payRunService.js'
+
+export type ProposalServiceDeps = {
+  communities: CommunityRepository
+  payees: PayeeRepository
+  runs: RunRepository
+  proposals: ProposalRepository
+  ids: IdGenerator
+  clock: Clock
+  /** null when no model is configured (no ANTHROPIC_API_KEY): every proposal answers `ai_not_configured`. */
+  proposer: RunProposer | null
+  /** Discord history, members and reactions. Needed for criteria mode and for reading a channel. */
+  activity: ActivityReader | null
+  communityService: CommunityService
+  payRuns: PayRunService
+  log?: ProposalLog
+}
+
+/** Who is asking, as Discord signed it into the interaction. Checked on every request. */
+type Actor = { guildId: string; actor: string; actorRoleIds: readonly string[] }
+
+export type MessageSource =
+  /** The message a context-menu command targets (it arrives in the interaction). */
+  | { kind: 'messages'; channelId: string; messages: SourceMessage[] }
+  /** The newest messages of a channel or thread since `since` (at most 31 days back). */
+  | { kind: 'history'; channelId: string; since: Date }
+
+type Gate = { code: 'ai_not_configured' } | { code: 'community_not_found' } | { code: 'ai_disabled' } | { code: 'not_permitted' }
+export type CouldNotPropose = { code: 'could_not_propose'; reason: ProposerFailure['reason'] }
+export type ProposeError =
+  | InvalidInput
+  | Gate
+  | ReadError
+  | CouldNotPropose
+  | CriteriaError
+  | { code: 'source_empty' }
+  | { code: 'no_message_content' }
+type Found = { code: 'proposal_not_found' }
+type ErrorOf<F extends (...args: never[]) => Promise<Result<unknown, { code: string }>>> = Extract<Awaited<ReturnType<F>>, { ok: false }>['error']
+type Closed = { code: 'proposal_closed'; status: Proposal['status']; runId: string | null }
+
+export type CreateRunError =
+  | Found
+  | Closed
+  | Gate
+  | { code: 'proposal_blocked'; problems: Problem[] }
+  | ErrorOf<PayRunService['create']>
+  | ErrorOf<PayRunService['submit']>
+
+const InstructionSchema = z.string().trim().min(1, 'say what to pay').max(PROPOSAL_LIMITS.maxInstructionLength)
+const EditLinesSchema = z.array(z.object({ discordUserId: DiscordIdSchema, amount: z.bigint().positive() })).max(MAX_LINES_PER_RUN)
+const DAY_MS = 86_400_000
+
+/**
+ * AI-proposed pay runs: AI proposes, the protocol limits, a human approves. A proposal is a draft;
+ * `createRun` turns it into a normal run through `PayRunService.create` and `submit`, so approval,
+ * the never-pay-twice machinery and the bot key's on-chain limit are untouched. Only the approver
+ * role, or the community's optional proposer role, may propose, edit, discard or create, checked
+ * from the roles the caller passes on every request. The model sees tokens, never Discord IDs; in
+ * criteria mode it never sees members at all, only the instruction and role and channel names.
+ */
+export class ProposalService {
+  constructor(private readonly deps: ProposalServiceDeps) {}
+
+  /** Whether this server has a model configured (an Anthropic API key). */
+  isConfigured(): boolean {
+    return this.deps.proposer !== null
+  }
+
+  /** Message mode: one message (the context-menu target) or a channel's recent history. */
+  async proposeFromMessages(input: Actor & { instruction: string; source: MessageSource }): Promise<Result<Proposal, ProposeError>> {
+    const instruction = InstructionSchema.safeParse(input.instruction)
+    if (!instruction.success) return invalidInput(instruction.error)
+    const gate = await this.gate(input)
+    if (!gate.ok) return gate
+    const { community, proposer } = gate.value
+    const now = this.deps.clock.now()
+
+    let messages: SourceMessage[]
+    let truncated = false
+    if (input.source.kind === 'messages') {
+      const parsed = z.array(SourceMessageSchema).max(PROPOSAL_LIMITS.maxSourceMessages).safeParse(input.source.messages)
+      if (!parsed.success) return invalidInput(parsed.error)
+      messages = parsed.data
+    } else {
+      if (!this.deps.activity) return err({ code: 'ai_not_configured' })
+      const earliest = new Date(now.getTime() - PROPOSAL_LIMITS.maxLookbackDays * DAY_MS)
+      const read = await this.deps.activity.history({
+        channelId: input.source.channelId,
+        since: input.source.since < earliest ? earliest : input.source.since,
+        until: now,
+        limit: PROPOSAL_LIMITS.maxSourceMessages,
+      })
+      if (!read.ok) return this.fail('messages', read.error, { sourceMessages: 0 })
+      messages = read.value.messages
+      truncated = read.value.truncated
+    }
+    if (messages.length === 0) return err({ code: 'source_empty' })
+    if (messages.every((m) => m.content.trim() === '')) return err({ code: 'no_message_content' })
+
+    const pseudo = pseudonymizeMessages({ instruction: instruction.data, messages })
+    const remaining = await this.remaining(community.id)
+    const answer = await proposer.fromMessages({
+      instruction: pseudo.instruction,
+      messages: pseudo.messages,
+      token: symbol(community),
+      remaining: remaining === null ? null : formatAmount(remaining),
+      maxLines: MAX_LINES_PER_RUN,
+    })
+    if (!answer.ok) return this.fail('messages', { code: 'could_not_propose', reason: answer.error.reason }, { sourceMessages: messages.length, usage: answer.error.usage })
+
+    const resolved = resolveMessageProposal(answer.value.raw, { map: pseudo.map, instruction: instruction.data })
+    const registered = await this.registered(community.id)
+    const assembled = assembleProposal({
+      candidates: resolved.candidates,
+      held: resolved.held,
+      isRegistered: (id) => registered.has(id),
+      remaining,
+      holdOverRemaining: true,
+      problems: truncated ? ['source_truncated'] : [],
+    })
+    const proposal = this.draft(input, community, now, {
+      mode: 'messages',
+      instruction: instruction.data,
+      note: resolved.note,
+      source: { channelId: input.source.channelId, messageIds: pseudo.messages.map((m) => pseudo.map.messages[m.ref]?.messageId as string), truncated },
+      criteria: null,
+      amountPlan: null,
+      scans: [],
+      unresolved: resolved.unresolved,
+      assumptions: resolved.assumptions,
+      suspicious: resolved.suspicious,
+      remaining,
+      ...assembled,
+    })
+    await this.deps.proposals.save(proposal)
+    this.record(proposal, { sourceMessages: messages.length, scannedMessages: 0, usage: answer.value.usage })
+    return ok(proposal)
+  }
+
+  /**
+   * Criteria mode, "pay X to people who Y": the model turns the instruction into a filter and an
+   * amount rule; code reads what the filter needs (within 31 days, 10,000 messages, 5 channels)
+   * and runs it over the registered payees. People who match but are not registered are listed.
+   */
+  async proposeFromCriteria(input: Actor & { instruction: string }): Promise<Result<Proposal, ProposeError>> {
+    const instruction = InstructionSchema.safeParse(input.instruction)
+    if (!instruction.success) return invalidInput(instruction.error)
+    const gate = await this.gate(input)
+    if (!gate.ok) return gate
+    const { community, proposer } = gate.value
+    const activity = this.deps.activity
+    if (!activity) return err({ code: 'ai_not_configured' })
+    const now = this.deps.clock.now()
+
+    const names = await activity.guildNames(community.id)
+    const tokens = tokenizeInstruction(instruction.data, { guildId: community.id, roles: names.roles, channels: names.channels })
+    const remaining = await this.remaining(community.id)
+    const answer = await proposer.fromCriteria({
+      instruction: tokens.text,
+      today: now.toISOString().slice(0, 10),
+      maxLookbackDays: PROPOSAL_LIMITS.maxLookbackDays,
+      roles: tokens.roles,
+      channels: tokens.channels,
+      token: symbol(community),
+      remaining: remaining === null ? null : formatAmount(remaining),
+    })
+    if (!answer.ok) return this.fail('criteria', { code: 'could_not_propose', reason: answer.error.reason }, { usage: answer.error.usage })
+    const usage = answer.value.usage
+
+    const resolved = resolveCriteria(answer.value.raw, { refs: tokens.refs, now, instructionAmounts: amountsIn(instruction.data) })
+    if (!resolved.ok) return this.fail('criteria', resolved.error, { usage })
+    const { criteria, plan } = resolved.value
+
+    // Read what the criteria need, within the bounds.
+    const scans: ChannelScan[] = []
+    const scanned: ScannedMessage[] = []
+    let budget = PROPOSAL_LIMITS.maxScannedMessages
+    const read = async (channelId: string, since: Date, until: Date) => {
+      const r = await activity.history({ channelId, since, until, limit: budget })
+      if (!r.ok) return r
+      budget -= r.value.messages.length
+      scans.push({ channelId, since, until, messages: r.value.messages.length, truncated: r.value.truncated })
+      return ok(r.value.messages.filter((m) => !m.authorIsBot))
+    }
+    const span = scanPlan(criteria)
+    for (const channelId of span?.channelIds ?? []) {
+      const r = await read(channelId, span?.since as Date, span?.until as Date)
+      if (!r.ok) return this.fail('criteria', r.error, { usage, scannedMessages: scanned.length })
+      scanned.push(...r.value.map((m) => ({ channelId: m.channelId, authorId: m.authorId, at: m.at, replyToAuthorId: m.replyTo?.authorId ?? null })))
+    }
+    const evidence: { -readonly [K in keyof CriteriaEvidence]: CriteriaEvidence[K] } = { messages: scanned, reactors: null, mentioned: null, threadPosters: null, paidUserIds: null, members: {} }
+    if (criteria.postedIn) {
+      const r = await read(criteria.postedIn.threadId, new Date(now.getTime() - PROPOSAL_LIMITS.maxLookbackDays * DAY_MS), now)
+      if (!r.ok) return this.fail('criteria', r.error, { usage, scannedMessages: scanned.length })
+      evidence.threadPosters = [...new Set(r.value.map((m) => m.authorId))]
+    }
+    if (criteria.reactedTo) {
+      const r = await activity.reactions({ ...criteria.reactedTo, limit: 1000 })
+      if (!r.ok) return this.fail('criteria', r.error, { usage, scannedMessages: scanned.length })
+      evidence.reactors = r.value.userIds
+    }
+    if (criteria.mentionedIn) {
+      const r = await activity.message(criteria.mentionedIn)
+      if (!r.ok) return this.fail('criteria', r.error, { usage, scannedMessages: scanned.length })
+      evidence.mentioned = r.value.mentionIds
+    }
+    if (criteria.paidInRun) {
+      const run = criteria.paidInRun.last
+        ? (await this.deps.runs.listByCommunity(community.id, { limit: 50 })).find((r) => r.status === 'paid')
+        : await this.deps.runs.get(criteria.paidInRun.runId as string)
+      const paid = run && run.communityId === community.id && run.status === 'paid' ? run : null
+      criteria.paidInRun = { ...criteria.paidInRun, runId: paid?.id ?? criteria.paidInRun.runId }
+      evidence.paidUserIds = paid ? paid.lines.map((l) => l.payeeDiscordId) : []
+    }
+
+    // Candidates: the registered payees, plus (to list them) people the evidence shows who are not.
+    const registered = await this.registered(community.id)
+    const others = seenUsers(criteria, evidence)
+      .filter((u) => !registered.has(u))
+      .slice(0, PROPOSAL_LIMITS.maxUnregisteredCandidates)
+    const candidates = [...[...registered].sort(byId), ...others]
+    if (needsMembers(criteria)) evidence.members = await activity.members(community.id, candidates)
+    const matched = evaluateCriteria(criteria, evidence, candidates, input.actor).filter((v) => v.matched)
+
+    const amounts = applyAmountPlan(
+      plan,
+      matched.filter((v) => registered.has(v.userId)),
+    )
+    if (!amounts.ok) {
+      const issue = amounts.error.code === 'overrides_exceed_pool' ? 'the overrides add up to more than the pool' : 'the amount depends on a count the criteria do not make'
+      return this.fail('criteria', { code: 'criteria_invalid', issues: [issue] }, { usage, scannedMessages: scanned.length })
+    }
+    const amountOf = new Map(amounts.value.map((a) => [a.userId, a]))
+    const sources = [criteria.reactedTo, criteria.mentionedIn].filter((s) => s !== null).map(({ channelId, messageId }) => ({ channelId, messageId }))
+    const lines: ProposalLine[] = []
+    const unregistered: UnregisteredLine[] = []
+    for (const v of matched) {
+      const base = { discordUserId: v.userId, reason: null, metrics: v.metrics, sources, flags: [] }
+      const a = amountOf.get(v.userId)
+      if (a && a.amount > 0n) lines.push({ ...base, amount: a.amount, flags: a.capped ? ['capped'] : [] })
+      else if (!registered.has(v.userId)) unregistered.push({ ...base, amount: unregisteredAmount(plan.rule, v.metrics, plan.perPersonCap) })
+    }
+    lines.sort((a, b) => (a.amount === b.amount ? byId(a.discordUserId, b.discordUserId) : a.amount > b.amount ? -1 : 1))
+    const ignoredOverrides = plan.overrides.filter((o) => !matched.some((v) => v.userId === o.discordUserId)).length
+
+    const problems: Problem[] = []
+    if (scans.some((s) => s.truncated)) problems.push('scan_truncated')
+    if (resolved.value.lookbackClamped) problems.push('lookback_clamped')
+    if (!resolved.value.amountsInInstruction) problems.push('amount_not_in_instruction')
+    const assembled = assembleProposal({ candidates: lines, held: [], unregistered, isRegistered: (id) => registered.has(id), remaining, holdOverRemaining: true, problems })
+    const proposal = this.draft(input, community, now, {
+      mode: 'criteria',
+      instruction: instruction.data,
+      note: resolved.value.note,
+      source: null,
+      criteria,
+      amountPlan: plan,
+      scans,
+      unresolved: [],
+      assumptions: [
+        ...resolved.value.assumptions,
+        ...(ignoredOverrides ? [`${ignoredOverrides === 1 ? 'An amount was' : `${ignoredOverrides} amounts were`} given for someone who does not match, so nobody is paid for it.`] : []),
+      ].slice(0, 10),
+      suspicious: [],
+      remaining,
+      ...assembled,
+    })
+    await this.deps.proposals.save(proposal)
+    this.record(proposal, { sourceMessages: 0, scannedMessages: scanned.length, usage })
+    return ok(proposal)
+  }
+
+  async get(input: { guildId: string; proposalId: string }): Promise<Result<Proposal, Found>> {
+    const p = await this.deps.proposals.get(input.proposalId)
+    if (!p || p.communityId !== input.guildId || p.expiresAt <= this.deps.clock.now()) return err({ code: 'proposal_not_found' })
+    return ok(p)
+  }
+
+  /** The treasurer's Edit: the lines become exactly what they typed. */
+  async edit(
+    input: Actor & { proposalId: string; lines: readonly { discordUserId: string; amount: Micros }[] },
+  ): Promise<Result<Proposal, Found | Closed | InvalidInput | Gate | EditError>> {
+    const loaded = await this.openForActor(input)
+    if (!loaded.ok) return loaded
+    const lines = EditLinesSchema.safeParse(input.lines)
+    if (!lines.success) return invalidInput(lines.error)
+    const registered = await this.registered(input.guildId)
+    const edited = editProposal(loaded.value, lines.data, {
+      actor: input.actor,
+      isRegistered: (id) => registered.has(id),
+      remaining: await this.remaining(input.guildId),
+      now: this.deps.clock.now(),
+    })
+    if (!edited.ok) return edited
+    await this.deps.proposals.save(edited.value)
+    return edited
+  }
+
+  async discard(input: Actor & { proposalId: string }): Promise<Result<Proposal, Found | Closed | Gate>> {
+    const loaded = await this.openForActor(input)
+    if (!loaded.ok) return loaded
+    const discarded: Proposal = { ...loaded.value, status: 'discarded', closedBy: input.actor, updatedAt: this.deps.clock.now() }
+    await this.deps.proposals.save(discarded)
+    return ok(discarded)
+  }
+
+  /**
+   * "Create pay run": the existing create and submit, so the run waits for the treasurer's
+   * approval exactly like one from /payrun new. A claim makes it once per proposal, however many
+   * clicks arrive.
+   */
+  async createRun(
+    input: Actor & { proposalId: string },
+  ): Promise<Result<{ proposal: Proposal; run: Run }, CreateRunError>> {
+    const loaded = await this.openForActor(input)
+    if (!loaded.ok) return loaded
+    const p = loaded.value
+    const blocking = blockingProblems(p)
+    if (blocking.length) return err({ code: 'proposal_blocked', problems: blocking })
+    if (!(await this.deps.proposals.claim(p.id))) return err({ code: 'proposal_closed', status: 'run_created', runId: null })
+    try {
+      const created = await this.deps.payRuns.create({
+        guildId: p.communityId,
+        createdBy: input.actor,
+        note: p.note,
+        lines: p.lines.map((l) => ({ discordUserId: l.discordUserId, amount: l.amount })),
+      })
+      if (!created.ok) {
+        await this.deps.proposals.release(p.id)
+        return created
+      }
+      const submitted = await this.deps.payRuns.submit({ guildId: p.communityId, runId: created.value.id, actor: input.actor })
+      const proposal: Proposal = { ...p, status: 'run_created', runId: created.value.id, closedBy: input.actor, updatedAt: this.deps.clock.now() }
+      await this.deps.proposals.save(proposal)
+      if (!submitted.ok) return submitted
+      return ok({ proposal, run: submitted.value })
+    } catch (e) {
+      await this.deps.proposals.release(p.id)
+      throw e
+    }
+  }
+
+  // ---- internals -------------------------------------------------------------------------
+
+  /** Configured, registered, permitted, switched on: in that order, on every request. */
+  private async gate(input: Actor): Promise<Result<{ community: Community; proposer: RunProposer }, Gate>> {
+    const proposer = this.deps.proposer
+    if (!proposer) return err({ code: 'ai_not_configured' })
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    if (!canPropose(community, input.actorRoleIds)) return err({ code: 'not_permitted' })
+    if (!community.aiProposals) return err({ code: 'ai_disabled' })
+    return ok({ community, proposer })
+  }
+
+  /** An open proposal of this server, for a caller allowed to propose. Edits work with AI off too (no model call). */
+  private async openForActor(input: Actor & { proposalId: string }): Promise<Result<Proposal, Found | Closed | Gate>> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    if (!canPropose(community, input.actorRoleIds)) return err({ code: 'not_permitted' })
+    const p = await this.get(input)
+    if (!p.ok) return p
+    if (p.value.status !== 'open') return err({ code: 'proposal_closed', status: p.value.status, runId: p.value.runId })
+    return p
+  }
+
+  private async registered(guildId: string): Promise<Set<string>> {
+    return new Set((await this.deps.payees.list(guildId)).map((p) => p.discordUserId))
+  }
+
+  /** What the active bot key has left, read from the chain; null without an active key. */
+  private async remaining(guildId: string): Promise<Micros | null> {
+    const status = await this.deps.communityService.keyStatus({ guildId })
+    return status.ok && status.value.key.status === 'active' && status.value.state.status === 'active' ? status.value.state.remaining : null
+  }
+
+  private draft(
+    who: Actor,
+    community: Community,
+    now: Date,
+    body: Omit<Proposal, 'id' | 'communityId' | 'proposedBy' | 'token' | 'status' | 'runId' | 'editedBy' | 'closedBy' | 'createdAt' | 'updatedAt' | 'expiresAt'>,
+  ): Proposal {
+    return {
+      id: this.deps.ids.proposalId(),
+      communityId: community.id,
+      proposedBy: who.actor,
+      token: community.payoutToken,
+      status: 'open',
+      runId: null,
+      editedBy: null,
+      closedBy: null,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt: new Date(now.getTime() + PROPOSAL_LIMITS.ttlSeconds * 1000),
+      ...body,
+    }
+  }
+
+  private fail<E extends { code: string }>(
+    mode: Proposal['mode'],
+    error: E,
+    counts: { sourceMessages?: number; scannedMessages?: number; usage?: ProposerUsage | null },
+  ): { ok: false; error: E } {
+    this.log({ proposalId: null, mode, outcome: error.code, lines: 0, held: 0, unregistered: 0, ...counts })
+    return err(error)
+  }
+
+  private record(p: Proposal, counts: { sourceMessages: number; scannedMessages: number; usage: ProposerUsage }) {
+    this.log({ proposalId: p.id, mode: p.mode, outcome: 'proposed', lines: p.lines.length, held: p.held.length, unregistered: p.unregistered.length, ...counts })
+  }
+
+  private log(e: Omit<ProposalLogEntry, 'model' | 'inputTokens' | 'outputTokens' | 'costUsd' | 'latencyMs' | 'sourceMessages' | 'scannedMessages'> & {
+    sourceMessages?: number
+    scannedMessages?: number
+    usage?: ProposerUsage | null
+  }) {
+    const { usage, ...rest } = e
+    this.deps.log?.({
+      sourceMessages: 0,
+      scannedMessages: 0,
+      ...rest,
+      model: usage?.model ?? this.deps.proposer?.model ?? null,
+      inputTokens: usage?.inputTokens ?? null,
+      outputTokens: usage?.outputTokens ?? null,
+      costUsd: usage?.costMicroUsd == null ? null : formatAmount(BigInt(usage.costMicroUsd)),
+      latencyMs: usage?.latencyMs ?? null,
+    })
+  }
+}
+
+const symbol = (c: Community) => TOKEN_SYMBOLS[c.payoutToken] ?? 'tokens'
+const byId = (a: string, b: string) => (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0)
+
+/** For a person who matched but is not registered: what the rule would give them (a pool share is not defined). */
+function unregisteredAmount(rule: NonNullable<Proposal['amountPlan']>['rule'], metrics: ProposalLine['metrics'], cap: Micros | null): Micros | null {
+  if (rule.kind === 'pool') return null
+  const raw = rule.kind === 'flat' ? rule.amount : rule.amount * BigInt(metrics?.[rule.per] ?? 0)
+  const capped = rule.kind === 'perUnit' && rule.cap !== null && raw > rule.cap ? rule.cap : raw
+  return cap !== null && capped > cap ? cap : capped
+}
+

@@ -3,16 +3,25 @@ import type { Clock } from './clock.js'
 import type { IdGenerator } from './idGenerator.js'
 import type { KeyVault } from './keyVault.js'
 import type { PayoutChain } from './payoutChain.js'
-import type { CommunityRepository, PayeeRepository, RunRepository } from './repositories.js'
+import type { ActivityReader } from './activityReader.js'
+import type { ProposalLog } from './proposalLog.js'
+import type { CommunityRepository, PayeeRepository, ProposalRepository, RunRepository } from './repositories.js'
+import type { RunProposer } from './runProposer.js'
 
 /** Everything `createPayrun` needs: one implementation of each port. */
 export type PayrunDeps = {
   chain: PayoutChain
-  repositories: { communities: CommunityRepository; payees: PayeeRepository; runs: RunRepository }
+  repositories: { communities: CommunityRepository; payees: PayeeRepository; runs: RunRepository; proposals: ProposalRepository }
   vault: KeyVault
   ids: IdGenerator
   clock: Clock
   network: NetworkName
   /** How long a `/payee link` stays valid. Default 30 minutes. */
   linkTtlSeconds?: number
+  /** AI proposals: the model. Without it (no ANTHROPIC_API_KEY) proposing answers `ai_not_configured`. */
+  proposer?: RunProposer | null
+  /** AI proposals: Discord channel history, members and reactions (`@payrun/discord`). */
+  activity?: ActivityReader | null
+  /** One line per proposal: counts, latency, cost. */
+  proposalLog?: ProposalLog
 }

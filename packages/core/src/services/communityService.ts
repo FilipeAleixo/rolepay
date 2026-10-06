@@ -149,6 +149,34 @@ export class CommunityService {
     return ok(updated)
   }
 
+  /**
+   * AI proposals on or off, and the optional role that may propose besides the approver role.
+   * The same rule as the approver role: proposing sends source messages to Anthropic's API and
+   * widens who may draft runs, so Manage Server alone cannot change it. Turning them on needs an
+   * approver role (otherwise no run could be approved).
+   */
+  async setAiProposals(input: {
+    guildId: string
+    enabled?: boolean
+    proposerRoleId?: string | null
+    actorRoleIds: readonly string[]
+  }): Promise<Result<Community, InvalidInput | NotFound | NotPermitted>> {
+    const role = DiscordIdSchema.nullable().optional().safeParse(input.proposerRoleId)
+    if (!role.success) return invalidInput(role.error)
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    if (community.approverRoleId === null || !canChangeApprovalRules(community, input.actorRoleIds)) return err({ code: 'not_permitted' })
+    const updated: Community = {
+      ...community,
+      aiProposals: input.enabled ?? community.aiProposals,
+      // Naming the approver role itself as the proposer role means "the approver role only".
+      proposerRoleId: role.data === undefined ? community.proposerRoleId : role.data === community.approverRoleId ? null : role.data,
+      updatedAt: this.deps.clock.now(),
+    }
+    await this.deps.communities.update(updated)
+    return ok(updated)
+  }
+
   async setName(input: { guildId: string; name: string | null }): Promise<Result<Community, InvalidInput | NotFound>> {
     const name = z.string().max(100).nullable().safeParse(input.name)
     if (!name.success) return invalidInput(name.error)

@@ -27,6 +27,9 @@ export class RandomIds implements IdGenerator {
   linkToken() {
     return randomBytes(32).toString('base64url')
   }
+  proposalId() {
+    return `prop_${base32(randomBytes(10))}`
+  }
 }
 
 export class SystemClock implements Clock {

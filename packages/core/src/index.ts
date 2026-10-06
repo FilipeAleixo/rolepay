@@ -7,27 +7,32 @@ import type { PayrunDeps } from './ports/deps.js'
 import { CommunityService } from './services/communityService.js'
 import { PayeeService } from './services/payeeService.js'
 import { PayRunService } from './services/payRunService.js'
+import { ProposalService } from './services/proposalService.js'
 
 export type Payrun = {
   communities: CommunityService
   payees: PayeeService
   payRuns: PayRunService
+  /** AI-proposed pay runs (drafts that become normal runs). */
+  proposals: ProposalService
 }
 
 export const DEFAULT_LINK_TTL_SECONDS = 1800
 
 export function createPayrun(deps: PayrunDeps): Payrun {
   const { chain, repositories: r, vault, ids, clock, network } = deps
+  const communities = new CommunityService({
+    communities: r.communities,
+    chain,
+    vault,
+    clock,
+    network,
+    ids,
+    setupLinkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
+  })
+  const payRuns = new PayRunService({ runs: r.runs, payees: r.payees, communities: r.communities, chain, vault, ids, clock, network })
   return {
-    communities: new CommunityService({
-      communities: r.communities,
-      chain,
-      vault,
-      clock,
-      network,
-      ids,
-      setupLinkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
-    }),
+    communities,
     payees: new PayeeService({
       communities: r.communities,
       payees: r.payees,
@@ -36,7 +41,20 @@ export function createPayrun(deps: PayrunDeps): Payrun {
       clock,
       linkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
     }),
-    payRuns: new PayRunService({ runs: r.runs, payees: r.payees, communities: r.communities, chain, vault, ids, clock, network }),
+    payRuns,
+    proposals: new ProposalService({
+      communities: r.communities,
+      payees: r.payees,
+      runs: r.runs,
+      proposals: r.proposals,
+      ids,
+      clock,
+      proposer: deps.proposer ?? null,
+      activity: deps.activity ?? null,
+      communityService: communities,
+      payRuns,
+      ...(deps.proposalLog ? { log: deps.proposalLog } : {}),
+    }),
   }
 }
 

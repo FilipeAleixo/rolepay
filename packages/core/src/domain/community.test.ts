@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TRANSFER_WITH_MEMO_SIGNATURE } from '../constants/tempo.js'
-import { type KeyPolicy, type KeyState, checkKeyForRun, keyAuthorization } from './community.js'
+import { type KeyPolicy, type KeyState, canPropose, checkKeyForRun, keyAuthorization } from './community.js'
 
 const TOKEN = '0x20c0000000000000000000000000000000000001'
 const FEE_TOKEN = '0x20c0000000000000000000000000000000000000'
@@ -15,6 +15,26 @@ const policy: KeyPolicy = {
   feeToken: null,
   feeBudget: null,
 }
+
+describe('canPropose (who may ask the AI for a pay run proposal)', () => {
+  const APPROVER = '400000000000000001'
+  const PROPOSERS = '400000000000000003'
+  const c = { approverRoleId: APPROVER, proposerRoleId: null as string | null }
+
+  it('the approver role may; someone without it may not', () => {
+    expect(canPropose(c, [APPROVER])).toBe(true)
+    expect(canPropose(c, [])).toBe(false)
+    expect(canPropose(c, [PROPOSERS])).toBe(false)
+  })
+
+  it('the optional proposer role may too', () => {
+    expect(canPropose({ ...c, proposerRoleId: PROPOSERS }, [PROPOSERS])).toBe(true)
+  })
+
+  it('nobody may in a community with no approver role (its runs could never be approved)', () => {
+    expect(canPropose({ approverRoleId: null, proposerRoleId: PROPOSERS }, [PROPOSERS])).toBe(false)
+  })
+})
 
 describe('keyAuthorization (what the root key signs)', () => {
   it('scopes the bot to transferWithMemo on the payout token, any recipient when there is no allowlist', () => {
