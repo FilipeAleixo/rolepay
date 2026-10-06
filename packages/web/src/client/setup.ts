@@ -37,6 +37,8 @@ type State = {
   keys: KeyView[]
   session: { address: string } | null
   isTreasurer: boolean
+  /** Signed in as the treasury's address, but not with a passkey login: sign in to act. */
+  signInRequired: boolean
 }
 
 const LINK_ERRORS: Record<string, string> = {
@@ -45,6 +47,7 @@ const LINK_ERRORS: Record<string, string> = {
   treasury_mismatch: 'This passkey is not the treasury of this server.',
   not_the_treasury: 'This passkey is not the treasury of this server. Sign in with the treasury passkey.',
   no_passkey_session: 'Sign in with your passkey first.',
+  sign_in_required: 'Sign in with the treasury passkey first: this session does not prove it.',
 }
 const explain = (e: { code: string } & Record<string, unknown>) =>
   e.code === 'treasury_mismatch' && typeof e.treasuryAddress === 'string'

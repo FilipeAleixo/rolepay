@@ -30,6 +30,16 @@ const KeyRefBody = z.object({ keyAddress: AddressSchema })
 
 type Treasurer = { community: Community; session: PasskeySession }
 
+/**
+ * Whether a session proves the treasury's passkey (M4). A login session does: it signed a server
+ * challenge. A registration session proves nothing (anyone can register a public key, and the
+ * treasury's is public on chain once it signs), except the one that created the treasury: it was
+ * issued before the community existed, when nobody else could have known that public key. So the
+ * treasurer who just created the treasury authorises the key without a second prompt, and anyone
+ * replaying the public key later must sign in, which they cannot.
+ */
+const provesPasskey = (s: PasskeySession, c: Community) => s.proof === 'login' || s.issuedAt * 1000 <= c.createdAt.getTime()
+
 const keyJson = (s: KeyStatusView) => ({ address: s.key.address, status: s.key.status, policy: s.key.policy, chain: s.state })
 
 /**
@@ -54,6 +64,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     if (session.address !== community.treasuryAddress) {
       return { ok: false, response: failure(403, { code: 'not_the_treasury', treasuryAddress: community.treasuryAddress }) }
     }
+    if (!provesPasskey(session, community)) return { ok: false, response: failure(401, { code: 'sign_in_required' }) }
     return { ok: true, value: { community, session } }
   }
 
@@ -111,7 +122,8 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
       key: status?.ok ? keyJson(status.value) : null,
       keys: keys?.ok ? keys.value.map(keyJson) : [],
       session: session ? { address: session.address } : null,
-      isTreasurer: Boolean(community && session && session.address === community.treasuryAddress),
+      isTreasurer: Boolean(community && session && session.address === community.treasuryAddress && provesPasskey(session, community)),
+      signInRequired: Boolean(community && session && session.address === community.treasuryAddress && !provesPasskey(session, community)),
     })
   })
 

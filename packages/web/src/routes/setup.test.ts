@@ -245,6 +245,32 @@ describe('the treasurer setup page', () => {
     expect((await json(await h.send(`/setup/${token}/state`, { passkey: PASSKEY }))).keys.map((k: { address: string }) => k.address)).toEqual([second.keyAddress])
   })
 
+  it('a registration session minted after the treasury existed is no proof of its passkey: sign in first (M4)', async () => {
+    const h = webHarness()
+    const token = await setupLink(h)
+    const now = Math.floor(h.clock.now().getTime() / 1000)
+    // The passkey that creates the treasury: its registration session predates the community.
+    const creator = { address: PASSKEY, proof: 'registration' as const, issuedAt: now - 1 }
+    expect((await h.post(`/setup/${token}/treasury`, {}, creator)).status).toBe(200)
+    h.clock.advance(120)
+    // Anyone can "register" the treasury's public key (it is public on chain) with attestation none.
+    const forged = { address: PASSKEY, proof: 'registration' as const, issuedAt: now + 60 }
+    const policy = { limit: '1', periodDays: 1, expiresAt: inDays(h, 1) }
+    for (const path of ['key', 'key/confirm', 'key/revoked']) {
+      const res = await h.post(`/setup/${token}/${path}`, { ...policy, keyAddress: PASSKEY }, forged)
+      expect(res.status).toBe(401)
+      expect(await res.json()).toEqual({ ok: false, error: { code: 'sign_in_required' } })
+    }
+    expect(await json(await h.send(`/setup/${token}/state`, { passkey: forged }))).toMatchObject({ isTreasurer: false, signInRequired: true })
+    expect((await h.payrun.communities.keyStatus({ guildId: GUILD })).ok).toBe(false)
+
+    // The creator's own registration session goes on (create, then authorise: one prompt each),
+    // and a session from a passkey login (a signature over a server challenge) always does.
+    expect((await h.post(`/setup/${token}/key`, policy, creator)).status).toBe(200)
+    expect((await h.post(`/setup/${token}/key`, policy, { address: PASSKEY, proof: 'login', issuedAt: now + 60 })).status).toBe(200)
+    expect(await json(await h.send(`/setup/${token}/state`, { passkey: creator }))).toMatchObject({ isTreasurer: true, signInRequired: false })
+  })
+
   it('the setup link stops working when it expires, even for the treasury passkey', async () => {
     const h = webHarness()
     const token = await setupLink(h)

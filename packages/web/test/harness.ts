@@ -15,6 +15,8 @@ export const PASSKEY = '0x7777777777777777777777777777777777777777'
 export const OTHER_PASSKEY = '0x8888888888888888888888888888888888888888'
 export const DEV_TREASURY = '0x9999999999999999999999999999999999999999'
 
+type Passkey = string | { address: string; proof: 'login' | 'registration'; issuedAt: number }
+
 export function webHarness() {
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
@@ -42,14 +44,19 @@ export function webHarness() {
       botKeyDefaults: { limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400, feeBudget: 1_000_000n },
     },
   })
-  /** A request as a browser signed in with the passkey whose account is `address` (or none). */
-  const send = (path: string, init: RequestInit & { passkey?: string } = {}) => {
+  /**
+   * A request as a browser signed in with the passkey whose account is `address` (or none). A
+   * plain address is a session from a passkey login; pass `{ proof: 'registration', issuedAt }`
+   * for one minted by a registration.
+   */
+  const send = (path: string, init: RequestInit & { passkey?: Passkey } = {}) => {
     const headers = new Headers(init.headers)
-    if (init.passkey) headers.set('cookie', sessions.cookieFor(init.passkey))
+    if (typeof init.passkey === 'string') headers.set('cookie', sessions.cookieFor(init.passkey))
+    else if (init.passkey) headers.set('cookie', sessions.cookieFor(init.passkey.address, init.passkey))
     if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json')
     return app.request(path, { ...init, headers })
   }
-  const post = (path: string, body: unknown = {}, passkey?: string) =>
+  const post = (path: string, body: unknown = {}, passkey?: Passkey) =>
     send(path, { method: 'POST', body: JSON.stringify(body), ...(passkey ? { passkey } : {}) })
   return { app, payrun, chain, clock, sessions, send, post }
 }
