@@ -187,27 +187,30 @@ function fields(p: Proposal): NonNullable<Embed['fields']> {
 export type ProposalViewContext = { approverRoleId: string | null }
 
 export function proposalMessage(p: Proposal, ctx: ProposalViewContext): Message {
-  const head = header(p)
+  const title = p.editedBy ? 'Pay run proposal (edited)' : 'Pay run proposal'
+  const head = header(p).join('\n')
   const fs = fields(p)
   const footer = `Proposal ${p.id}. A draft: nothing is paid until a member with the approver role approves the run.`
-  const used = head.join('\n').length + fs.reduce((s, x) => s + x.name.length + x.value.length, 0) + footer.length + 40
-  const room = Math.min(DESCRIPTION_MAX, EMBED_MAX - used) - head.join('\n').length - 40
+  const expires = `Expires ${relativeTime(p.expiresAt)}.${ctx.approverRoleId ? ` Create posts the run for ${roleMention(ctx.approverRoleId)} to approve.` : ''}`
+  // The lines get whatever room the header, the expiry line, the fields and the footer leave.
+  const fixed = head.length + expires.length + 8
+  const others = title.length + footer.length + fs.reduce((s, x) => s + x.name.length + x.value.length, 0)
+  const room = Math.min(DESCRIPTION_MAX - fixed, EMBED_MAX - others - fixed)
   const lines: string[] = []
   let size = 0
   for (const [i, l] of p.lines.entries()) {
     const t = lineText(p, l, i)
-    if (size + t.length + 1 > room) {
+    if (size + t.length + 1 > room - 50) {
       lines.push(`…and ${p.lines.length - i} more (Edit shows every line)`)
       break
     }
     lines.push(t)
     size += t.length + 1
   }
-  const expires = `Expires ${relativeTime(p.expiresAt)}.${ctx.approverRoleId ? ` Create posts the run for ${roleMention(ctx.approverRoleId)} to approve.` : ''}`
   const embed: Embed = {
-    title: p.editedBy ? 'Pay run proposal (edited)' : 'Pay run proposal',
+    title,
     color: blockingProblems(p).length ? COLORS.failed : COLORS.pending,
-    description: clip([...head, '', ...(lines.length ? lines : ['Nobody to pay.']), '', expires].join('\n'), DESCRIPTION_MAX),
+    description: clip([head, '', ...(lines.length ? lines : ['Nobody to pay.']), '', expires].join('\n'), DESCRIPTION_MAX),
     fields: fs,
     footer: { text: footer },
   }

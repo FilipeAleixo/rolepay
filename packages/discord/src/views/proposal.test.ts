@@ -59,7 +59,7 @@ describe('proposalMessage', () => {
     const m = proposalMessage(proposal({ lines: many, held: Array.from({ length: 40 }, () => proposal().held[0]) as ReturnType<typeof proposal>['held'] }), ctx)
     expect(embedOf(m).description?.length).toBeLessThanOrEqual(4096)
     expect(size(m)).toBeLessThanOrEqual(6000)
-    expect(embedOf(m).description).toMatch(/…and \d+ more \(Edit shows every line\)/)
+    expect(embedOf(m).description).toMatch(/…and \d+ more \(Edit shows every line\)\n\nExpires <t:\d+:R>\. Create posts the run/)
     for (const f of embedOf(m).fields ?? []) expect(f.value.length).toBeLessThanOrEqual(1024)
   })
 
