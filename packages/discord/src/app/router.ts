@@ -1,5 +1,6 @@
 import { ResponseType } from '../api.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
+import { setupCommand } from '../commands/setup.js'
 import { decodeCustomId } from '../components/customId.js'
 import type { Dispatch } from '../http/handler.js'
 import type { DiscordAppDeps } from './deps.js'
@@ -9,6 +10,7 @@ import { type Outcome, ephemeralReply, renderOutcome } from './outcome.js'
 
 /** `${command} ${subcommand}` -> handler. Kept in step with COMMAND_DEFINITIONS by a test. */
 const COMMANDS: Record<string, CommandHandler> = {
+  'payrun setup': setupCommand,
   'payee link': payeeLinkCommand,
 }
 
