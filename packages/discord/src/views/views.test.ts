@@ -7,7 +7,7 @@ import { explainError } from './errors.js'
 import { count, money, shortAddress, tokenLabel } from './format.js'
 import { keyText } from './key.js'
 import { receiptDm, runMessage } from './run.js'
-import { runSummary } from './status.js'
+import { runSummary, statusMessage } from './status.js'
 
 const ctx = { network: 'moderato' as const }
 const buttons = (m: Message) => (m.components ?? []).flatMap((row) => row.components)
@@ -173,6 +173,31 @@ describe('runMessage', () => {
 
   it('a run without a note still renders', () => {
     expect(() => runMessage(run({ note: null }), ctx)).not.toThrow()
+  })
+})
+
+describe('run notes are shown as text, never as Discord markdown (L6)', () => {
+  const phishing = '[Claim your bonus](https://evil.example/claim) **now** <@&123> `x` ||spoiler||'
+  const escaped = (t: string) => {
+    // No unescaped markdown left: every formatting character has a backslash before it.
+    expect(t).not.toMatch(/(?<!\\)\[Claim/)
+    expect(t).not.toMatch(/(?<!\\)\]\(/)
+    expect(t).not.toMatch(/(?<!\\)\*\*now/)
+    expect(t).not.toMatch(/(?<!\\)<@&/)
+    expect(t).not.toMatch(/https:\/\//)
+  }
+  const r = run({ note: phishing })
+  it('on the run message, in the receipt DM, and in the status list', () => {
+    escaped(runMessage(r, ctx).embeds?.[0]?.description ?? '')
+    escaped(receiptDm(r, r.lines[0] as (typeof r.lines)[number], { ...ctx, communityName: 'Test guild' }).embeds?.[0]?.description ?? '')
+    const community = { id: GUILD, name: 'g', network: 'moderato', treasuryAddress: TOKEN, payoutToken: TOKEN, feeMode: 'sponsor', feeToken: null, approverRoleId: null, requireSeparateApprover: false, createdAt: T0, updatedAt: T0 } as const
+    const recent = statusMessage({ community, runs: [r], key: null }).embeds?.[0]?.fields?.find((f) => f.name === 'Recent runs')?.value ?? ''
+    expect(recent).toContain('Claim your bonus')
+    escaped(recent)
+  })
+
+  it('autocomplete choices are plain text, so the summary there stays unescaped', () => {
+    expect(runSummary(r)).toContain(phishing)
   })
 })
 

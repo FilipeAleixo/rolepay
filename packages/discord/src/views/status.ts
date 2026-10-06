@@ -1,6 +1,6 @@
 import type { Community, KeyStatusView, Run, RunStatus } from '@payrun/core'
 import type { Message } from '../api.js'
-import { COLORS, NO_PINGS, count, money, relativeTime, roleMention } from './format.js'
+import { COLORS, NO_PINGS, count, escapeMarkdown, money, relativeTime, roleMention } from './format.js'
 import { keyText } from './key.js'
 
 export const STATUS_LABELS: Record<RunStatus, string> = {
@@ -13,7 +13,7 @@ export const STATUS_LABELS: Record<RunStatus, string> = {
   cancelled: 'Cancelled',
 }
 
-/** One line per run, for lists and autocomplete. */
+/** One line per run, for lists and autocomplete (plain text: callers that render markdown escape the note). */
 export const runSummary = (r: Run) =>
   [r.id, STATUS_LABELS[r.status], money(r.total, r.token), count(r.lines.length, 'person', 'people'), r.note]
     .filter(Boolean)
@@ -22,7 +22,7 @@ export const runSummary = (r: Run) =>
 /** /payrun status without a run: recent runs, the approver role and the bot key. */
 export function statusMessage(v: { community: Community; runs: Run[]; key: KeyStatusView | null }): Message {
   const runs = v.runs.length
-    ? v.runs.map((r) => `• ${runSummary(r)} · ${relativeTime(r.createdAt)}`).join('\n')
+    ? v.runs.map((r) => `• ${runSummary({ ...r, note: r.note === null ? null : escapeMarkdown(r.note) })} · ${relativeTime(r.createdAt)}`).join('\n')
     : 'No pay runs yet. Create one with `/payrun new`.'
   return {
     embeds: [

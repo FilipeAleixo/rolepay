@@ -23,3 +23,10 @@ export const roleMention = (roleId: string) => `<@&${roleId}>`
 export const NO_PINGS = { parse: [] as never[] }
 
 export const COLORS = { pending: 0xf0b232, working: 0x5865f2, paid: 0x23a55a, failed: 0xda373c, muted: 0x80848e } as const
+
+/**
+ * Text a person typed (a run note), shown inside Discord markdown (embeds, DMs): every character
+ * that could format it is escaped, so a note can never become a masked link, a bold claim, a
+ * mention, a spoiler or a clickable URL delivered by the bot (L6).
+ */
+export const escapeMarkdown = (text: string) => text.replace(/[\\*_~`|>#[\]()<@:-]/g, '\\$&')

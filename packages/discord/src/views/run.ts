@@ -1,7 +1,7 @@
 import type { Failure, NetworkName, Run, RunLine } from '@payrun/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
 import { type RunAction, encodeCustomId } from '../components/customId.js'
-import { COLORS, NO_PINGS, count, mention, money, relativeTime, roleMention, shortAddress, txUrl } from './format.js'
+import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention, shortAddress, txUrl } from './format.js'
 
 export type RunViewContext = {
   network: NetworkName
@@ -44,7 +44,7 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
   const embed: Embed = {
     title: head.title,
     color: head.color,
-    description: [run.note ? `**${run.note}**` : null, ...run.lines.map((l) => lineText(l, run.token))].filter(Boolean).join('\n'),
+    description: [run.note ? `**${escapeMarkdown(run.note)}**` : null, ...run.lines.map((l) => lineText(l, run.token))].filter(Boolean).join('\n'),
     fields,
     footer: { text: `Run ${run.id}` },
   }
@@ -57,7 +57,7 @@ export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; 
   const embed: Embed = {
     title: `You were paid ${money(line.amount, run.token)}`,
     color: COLORS.paid,
-    description: [`From **${ctx.communityName ?? 'your Discord server'}**, through payrun on Tempo.`, run.note ? `Note: ${run.note}` : null]
+    description: [`From **${escapeMarkdown(ctx.communityName ?? 'your Discord server')}**, through payrun on Tempo.`, run.note ? `Note: ${escapeMarkdown(run.note)}` : null]
       .filter(Boolean)
       .join('\n'),
     fields: [
