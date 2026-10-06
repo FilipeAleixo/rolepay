@@ -98,7 +98,7 @@ export class PayRunService {
   /** The caller (the Discord layer) asserts whether `actor` holds the approver role. */
   async approve(
     input: RunRef & { actor: string; actorCanApprove: boolean },
-  ): Promise<Result<Run, StepError | { code: 'not_retryable' } | { code: 'not_permitted' }>> {
+  ): Promise<Result<Run, StepError | InvalidInput | { code: 'not_retryable' } | { code: 'not_permitted' }>> {
     if (!input.actorCanApprove) return err({ code: 'not_permitted' })
     return this.step(input, { type: 'approve', actor: input.actor })
   }
@@ -277,7 +277,9 @@ export class PayRunService {
     return ok({ status: 'pending', run: r, retryAfter: null })
   }
 
-  private async step(ref: RunRef, event: RunEvent): Promise<Result<Run, StepError | { code: 'not_retryable' }>> {
+  private async step(ref: RunRef, event: RunEvent & { actor: string }): Promise<Result<Run, StepError | InvalidInput | { code: 'not_retryable' }>> {
+    const actor = DiscordIdSchema.safeParse(event.actor)
+    if (!actor.success) return invalidInput(actor.error)
     const run = await this.get(ref)
     if (!run.ok) return run
     return this.save(run.value, event)

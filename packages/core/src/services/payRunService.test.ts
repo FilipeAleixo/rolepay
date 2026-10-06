@@ -129,6 +129,17 @@ describe('PayRunService: building and approving runs', () => {
     })
   })
 
+  it('rejects actors that are not Discord user IDs (they are persisted on the run)', async () => {
+    const created = await w.svc.create({ guildId: GUILD, createdBy: ALICE, note: null, lines: LINES })
+    if (!created.ok) throw new Error()
+    expect(await w.svc.submit({ guildId: GUILD, runId: created.value.id, actor: 'someone' })).toMatchObject({
+      ok: false,
+      error: { code: 'invalid_input' },
+    })
+    expect(await w.svc.cancel({ guildId: GUILD, runId: created.value.id, actor: '' })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+    expect((await w.repos.runs.get(created.value.id))?.status).toBe('draft')
+  })
+
   it('reports illegal steps with the current status', async () => {
     const created = await w.svc.create({ guildId: GUILD, createdBy: ALICE, note: null, lines: LINES })
     if (!created.ok) throw new Error()
