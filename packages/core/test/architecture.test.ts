@@ -90,6 +90,26 @@ describe('public surface', () => {
   })
 })
 
+describe('composition roots', () => {
+  it('only apps/server imports @payrun/core/adapters (every other package uses the services)', () => {
+    const others = [
+      ...readdirSync(join(REPO, 'packages')).filter((p) => p !== 'core').map((p) => join(REPO, 'packages', p)),
+      ...(statSync(join(REPO, 'apps'), { throwIfNoEntry: false })?.isDirectory()
+        ? readdirSync(join(REPO, 'apps')).filter((p) => p !== 'server').map((p) => join(REPO, 'apps', p))
+        : []),
+    ]
+    // Production source only: test support may wire core's in-memory fakes on purpose.
+    const bad = others.flatMap((pkg) =>
+      files(join(pkg, 'src')).flatMap((f) =>
+        importsOf(f)
+          .filter((spec) => spec === '@payrun/core/adapters')
+          .map((spec) => `${relative(REPO, f)} imports ${spec}`),
+      ),
+    )
+    expect(bad).toEqual([])
+  })
+})
+
 describe('money', () => {
   it('is never handled as a float in src/ (no parseFloat, toFixed, or Number() on amounts)', () => {
     const bad = files(SRC).flatMap((f) => {
