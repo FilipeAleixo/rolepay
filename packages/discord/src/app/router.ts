@@ -1,7 +1,10 @@
 import { ResponseType } from '../api.js'
+import { exportCommand } from '../commands/export.js'
 import { newRunCommand } from '../commands/newRun.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
+import { runChoices } from '../commands/runChoices.js'
 import { setupCommand } from '../commands/setup.js'
+import { statusCommand } from '../commands/status.js'
 import { type RunAction, decodeCustomId } from '../components/customId.js'
 import { approveButton, cancelButton, retryButton } from '../components/runButtons.js'
 import type { Dispatch } from '../http/handler.js'
@@ -14,10 +17,12 @@ import { type Outcome, ephemeralReply, renderOutcome } from './outcome.js'
 const COMMANDS: Record<string, CommandHandler> = {
   'payrun setup': setupCommand,
   'payrun new': newRunCommand,
+  'payrun status': statusCommand,
+  'payrun export': exportCommand,
   'payee link': payeeLinkCommand,
 }
 
-const AUTOCOMPLETE: Record<string, AutocompleteHandler> = {}
+const AUTOCOMPLETE: Record<string, AutocompleteHandler> = { 'payrun status': runChoices, 'payrun export': runChoices }
 
 const BUTTONS: Record<RunAction, ButtonHandler> = { approve: approveButton, cancel: cancelButton, retry: retryButton }
 

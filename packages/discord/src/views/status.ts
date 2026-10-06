@@ -1,0 +1,42 @@
+import type { Community, KeyStatusView, Run, RunStatus } from '@payrun/core'
+import type { Message } from '../api.js'
+import { COLORS, NO_PINGS, money, relativeTime, roleMention } from './format.js'
+import { keyText } from './key.js'
+
+export const STATUS_LABELS: Record<RunStatus, string> = {
+  draft: 'Draft',
+  pending_approval: 'Awaiting approval',
+  approved: 'Approved',
+  executing: 'Paying',
+  paid: 'Paid',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+}
+
+/** One line per run, for lists and autocomplete. */
+export const runSummary = (r: Run) =>
+  [r.id, STATUS_LABELS[r.status], money(r.total, r.token), `${r.lines.length} ${r.lines.length === 1 ? 'person' : 'people'}`, r.note]
+    .filter(Boolean)
+    .join(' · ')
+
+/** /payrun status without a run: recent runs, the approver role and the bot key. */
+export function statusMessage(v: { community: Community; runs: Run[]; key: KeyStatusView | null }): Message {
+  const runs = v.runs.length
+    ? v.runs.map((r) => `• ${runSummary(r)} · ${relativeTime(r.createdAt)}`).join('\n')
+    : 'No pay runs yet. Create one with `/payrun new`.'
+  return {
+    embeds: [
+      {
+        title: 'payrun status',
+        color: COLORS.working,
+        fields: [
+          { name: 'Approver role', value: v.community.approverRoleId ? roleMention(v.community.approverRoleId) : 'Not set (`/payrun setup approver_role:`)' },
+          { name: 'Bot key', value: v.key ? keyText(v.key) : 'None yet. Run `/payrun setup`.' },
+          { name: 'Recent runs', value: runs.slice(0, 1024) },
+        ],
+        footer: { text: 'Details of one run: /payrun status run:<id>' },
+      },
+    ],
+    allowed_mentions: NO_PINGS,
+  }
+}

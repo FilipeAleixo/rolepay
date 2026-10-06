@@ -2,10 +2,10 @@ import { DiscordIdSchema, MAX_NOTE_LENGTH, parseAmount } from '@payrun/core'
 import { z } from 'zod'
 import { type CommandHandler, parseOptions, replyError } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'
-import { canOperate } from '../app/permissions.js'
 import { explainError } from '../views/errors.js'
 import { roleMention } from '../views/format.js'
 import { runMessage } from '../views/run.js'
+import { requireOperator } from './guards.js'
 import { parseRecipients } from './recipients.js'
 
 const NewRunOptions = z.object({
@@ -24,9 +24,9 @@ const fail = (content: string): DeferredResult => ({ ok: false, message: { conte
  * Deferred, because role lookups go through Discord.
  */
 export const newRunCommand: CommandHandler = async ({ options, ctx }, { payrun, members, config }) => {
-  const community = await payrun.communities.get(ctx.guildId)
-  if (!community.ok) return replyError(community.error)
-  if (!canOperate(ctx.caller, community.value)) return ephemeralReply('Creating a pay run needs Manage Server or the approver role.')
+  const guard = await requireOperator(ctx, payrun, 'Creating a pay run')
+  if (!guard.ok) return guard.reply
+  const community = guard.community
   const parsed = parseOptions(NewRunOptions, options)
   if (!parsed.ok) return parsed.reply
   const o = parsed.value
@@ -54,10 +54,10 @@ export const newRunCommand: CommandHandler = async ({ options, ctx }, { payrun, 
       }
 
       const created = await payrun.payRuns.create({ guildId, createdBy: caller, note: o.note ?? null, lines })
-      if (!created.ok) return fail(explainError(created.error, { token: community.value.payoutToken }))
+      if (!created.ok) return fail(explainError(created.error, { token: community.payoutToken }))
       const submitted = await payrun.payRuns.submit({ guildId, runId: created.value.id, actor: caller })
       if (!submitted.ok) return fail(explainError(submitted.error))
-      return { ok: true, message: runMessage(submitted.value, { network: config.network, approverRoleId: community.value.approverRoleId }) }
+      return { ok: true, message: runMessage(submitted.value, { network: config.network, approverRoleId: community.approverRoleId }) }
     },
   }
 }
