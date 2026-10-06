@@ -8,6 +8,7 @@ import type { Result } from '../domain/result.js'
 /** Why the chain (or the sponsor) definitively refused a transaction. */
 export type ChainRejectReason =
   | 'spending_limit_exceeded'
+  | 'key_not_authorized'
   | 'key_revoked'
   | 'key_expired'
   | 'call_not_allowed'
