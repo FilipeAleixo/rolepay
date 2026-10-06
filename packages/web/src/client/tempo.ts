@@ -2,7 +2,7 @@
 // straight to Tempo. Fees go through the sponsor when one is configured (testnet: the public
 // Moderato sponsor), otherwise the treasury pays them in its fee token.
 import { Abis, type Account, createClient, http, withRelay } from 'viem/tempo'
-import { type WireAuthorization, authorizeKeyCall } from './keychain.js'
+import { type WireAuthorization, authorizeKeyCall, rotationCalls } from './keychain.js'
 
 export type { WireAuthorization }
 export type ChainConfig = { rpcUrl: string; sponsorUrl: string | null; testnet: boolean; feeToken: string }
@@ -22,9 +22,12 @@ const feeFields = (c: ChainConfig) =>
 /**
  * Root (passkey) authorises the bot's access key on the Account Keychain: expiry, limits, call
  * scope. One transaction from the root calling authorizeKey, so one passkey prompt (keychain.ts).
+ * Replacing a key: the same transaction first revokes every key in `revoke` (still one prompt).
  */
-export async function authorizeAccessKey(c: ChainConfig, root: Account.Account, keyAddress: string, auth: WireAuthorization) {
-  const receipt = await client(c, root).writeContractSync({ ...authorizeKeyCall(keyAddress, auth), throwOnReceiptRevert: true, ...feeFields(c) } as never)
+export async function authorizeAccessKey(c: ChainConfig, root: Account.Account, keyAddress: string, auth: WireAuthorization, revoke: readonly string[] = []) {
+  const receipt = revoke.length
+    ? await client(c, root).sendTransactionSync({ calls: rotationCalls(keyAddress, auth, revoke), throwOnReceiptRevert: true, ...feeFields(c) } as never)
+    : await client(c, root).writeContractSync({ ...authorizeKeyCall(keyAddress, auth), throwOnReceiptRevert: true, ...feeFields(c) } as never)
   if (receipt.status !== 'success') throw new Error(`the authorisation transaction ${receipt.transactionHash} reverted`)
   return receipt.transactionHash as string
 }

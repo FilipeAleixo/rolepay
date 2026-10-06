@@ -1,4 +1,4 @@
-import { type Clock, type Community, type Payrun, TOKEN_SYMBOLS, formatAmount, parseAmount } from '@payrun/core'
+import { AddressSchema, type Clock, type Community, type KeyStatusView, type Payrun, TOKEN_SYMBOLS, formatAmount, parseAmount } from '@payrun/core'
 import { type Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { WebConfig } from '../config.js'
@@ -20,13 +20,19 @@ const KeyPolicyBody = z.object({
   feeBudget: z.string().min(1).optional(),
 })
 
+/** confirm and revoked name the key they are about: the one this browser just signed for. */
+const KeyRefBody = z.object({ keyAddress: AddressSchema })
+
 type Treasurer = { community: Community; session: PasskeySession }
+
+const keyJson = (s: KeyStatusView) => ({ address: s.key.address, status: s.key.status, policy: s.key.policy, chain: s.state })
 
 /**
  * /setup/:token: the treasurer page and its JSON endpoints. The link (from /payrun setup)
  * names the guild; binding a treasury takes the passkey session; everything after that
  * takes the session of the passkey that IS the treasury. The bot key authorisation and
  * the revoke are signed in the browser; the server only reads the result from the chain.
+ * Replacing a key revokes every live old key in the same transaction (one passkey prompt).
  */
 export function setupRoutes(deps: SetupRoutesDeps): Hono {
   const { payrun, config } = deps
@@ -89,12 +95,16 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     const community = link.value.community
     const session = await deps.sessions.current(c.req.raw)
     const status = community ? await payrun.communities.keyStatus({ guildId: community.id }) : null
+    const keys = community ? await payrun.communities.listKeys({ guildId: community.id }) : null
     return jsonResponse(200, {
       ok: true,
       community: community
         ? { treasury: community.treasuryAddress, payoutToken: community.payoutToken, feeMode: community.feeMode, feeToken: community.feeToken, name: community.name }
         : null,
-      key: status?.ok ? { address: status.value.key.address, status: status.value.key.status, policy: status.value.key.policy, chain: status.value.state } : null,
+      // The key that matters (the active one, never hidden by a pending one), and every key not
+      // yet revoked: the page offers to revoke each one that is live on chain.
+      key: status?.ok ? keyJson(status.value) : null,
+      keys: keys?.ok ? keys.value.map(keyJson) : [],
       session: session ? { address: session.address } : null,
       isTreasurer: Boolean(community && session && session.address === community.treasuryAddress),
     })
@@ -136,10 +146,17 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     return jsonResponse(200, { ok: true, keyAddress: provisioned.value.keyAddress, treasury: provisioned.value.account, authorization: provisioned.value.authorization })
   })
 
+  const keyRef = async (c: Context) => {
+    const body = KeyRefBody.safeParse(await c.req.json().catch(() => null))
+    return body.success ? body.data.keyAddress : null
+  }
+
   app.post('/setup/:token/key/confirm', async (c) => {
     const t = await treasurer(c)
     if (!t.ok) return t.response
-    const confirmed = await payrun.communities.confirmBotKey({ guildId: t.value.community.id })
+    const keyAddress = await keyRef(c)
+    if (!keyAddress) return failure(400, { code: 'invalid_input', issues: ['keyAddress: the key this page authorised'] })
+    const confirmed = await payrun.communities.confirmBotKey({ guildId: t.value.community.id, keyAddress })
     if (!confirmed.ok) return failure(409, confirmed.error)
     return jsonResponse(200, { ok: true, key: confirmed.value })
   })
@@ -147,7 +164,9 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
   app.post('/setup/:token/key/revoked', async (c) => {
     const t = await treasurer(c)
     if (!t.ok) return t.response
-    const revoked = await payrun.communities.confirmRevocation({ guildId: t.value.community.id })
+    const keyAddress = await keyRef(c)
+    if (!keyAddress) return failure(400, { code: 'invalid_input', issues: ['keyAddress: the key this page revoked'] })
+    const revoked = await payrun.communities.confirmRevocation({ guildId: t.value.community.id, keyAddress })
     if (!revoked.ok) return failure(409, revoked.error)
     return jsonResponse(200, { ok: true, key: revoked.value })
   })

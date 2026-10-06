@@ -5,7 +5,7 @@
 // runs the same function for a signed key authorization, so the result on chain is the same
 // with one signature.
 import { Abis, Addresses } from 'viem/tempo'
-import { toFunctionSelector } from 'viem/utils'
+import { encodeFunctionData, toFunctionSelector } from 'viem/utils'
 
 /** The authorisation exactly as the server returned it (amounts as decimal strings). */
 export type WireAuthorization = {
@@ -51,4 +51,19 @@ export function authorizeKeyCall(keyAddress: string, auth: WireAuthorization) {
       },
     ],
   } as const
+}
+
+/** `revokeKey(keyId)`: the key can never sign for the account again (a revoked key ID never returns). */
+export function revokeKeyCall(keyAddress: string) {
+  return { address: Addresses.accountKeychain, abi: Abis.accountKeychain, functionName: 'revokeKey', args: [keyAddress as Hex] } as const
+}
+
+/**
+ * Replacing the bot key, as the calls of ONE Tempo transaction from the root: revoke every key
+ * still live on chain, then authorise the new one. Atomic (if any call reverts, none happen) and
+ * one signature, so one passkey prompt, and no old key is ever left spendable.
+ */
+export function rotationCalls(keyAddress: string, auth: WireAuthorization, revoke: readonly string[]): { to: Hex; data: Hex }[] {
+  const asCall = (c: { address: Hex; abi: unknown; functionName: string; args: readonly unknown[] }) => ({ to: c.address, data: encodeFunctionData(c as never) })
+  return [...revoke.map((k) => asCall(revokeKeyCall(k))), asCall(authorizeKeyCall(keyAddress, auth))]
 }

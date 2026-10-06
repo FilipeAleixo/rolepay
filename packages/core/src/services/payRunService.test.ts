@@ -302,7 +302,7 @@ describe('PayRunService: execution', () => {
     const status = await w.communitySvc.keyStatus({ guildId: GUILD })
     if (!status.ok) throw new Error()
     const stored = await w.repos.runs.get(run.id)
-    const secret = (await w.repos.communities.getBotKey(status.value.key.address))?.sealedSecret.split(':').at(-1) ?? ''
+    const secret = (await w.repos.communities.getBotKey(status.value.key.address))?.sealedSecret?.split(':').at(-1) ?? ''
     const manual = await w.chain.signBatch({
       account: TREASURY,
       accessKeySecret: secret,
@@ -336,7 +336,7 @@ describe('PayRunService: telling the truth about failed and unsure runs', () => 
     const status = await w.communitySvc.keyStatus({ guildId: GUILD })
     if (!status.ok) throw new Error()
     const stored = await w.repos.runs.get(runId)
-    const secret = (await w.repos.communities.getBotKey(status.value.key.address))?.sealedSecret.split(':').at(-1) ?? ''
+    const secret = (await w.repos.communities.getBotKey(status.value.key.address))?.sealedSecret?.split(':').at(-1) ?? ''
     const manual = await w.chain.signBatch({
       account: TREASURY,
       accessKeySecret: secret,

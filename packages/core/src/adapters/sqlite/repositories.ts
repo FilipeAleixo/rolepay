@@ -42,7 +42,8 @@ export class SqliteCommunityRepository implements CommunityRepository {
     const row = {
       address: k.address,
       community_id: k.communityId,
-      sealed_secret: k.sealedSecret,
+      // The column predates destroyed secrets and stays NOT NULL: '' stands for none.
+      sealed_secret: k.sealedSecret ?? '',
       status: k.status,
       policy: json(k.policy),
       created_at: iso(k.createdAt),
@@ -134,7 +135,7 @@ function toBotKey(r: Selectable<Database['bot_keys']>): BotKey {
   return BotKeySchema.parse({
     address: r.address,
     communityId: r.community_id,
-    sealedSecret: r.sealed_secret,
+    sealedSecret: r.sealed_secret === '' ? null : r.sealed_secret,
     status: r.status,
     policy: { ...p, limit: BigInt(p.limit), feeBudget: p.feeBudget === null ? null : BigInt(p.feeBudget) },
     createdAt: date(r.created_at),

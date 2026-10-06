@@ -162,23 +162,83 @@ describe('the treasurer setup page', () => {
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
     const provisioned = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, validityDays: 30 }, PASSKEY))
 
-    const early = await h.post(`/setup/${token}/key/confirm`, {}, PASSKEY)
+    const keyAddress = provisioned.keyAddress
+    const early = await h.post(`/setup/${token}/key/confirm`, { keyAddress }, PASSKEY)
     expect(early.status).toBe(409)
     expect(await early.json()).toEqual({ ok: false, error: { code: 'key_not_authorized_on_chain' } })
 
     await signOnChain(h, provisioned)
-    const confirmed = await h.post(`/setup/${token}/key/confirm`, {}, PASSKEY)
+    const confirmed = await h.post(`/setup/${token}/key/confirm`, { keyAddress }, PASSKEY)
     expect(confirmed.status).toBe(200)
     expect(await confirmed.json()).toMatchObject({ ok: true, key: { address: provisioned.keyAddress, status: 'active' } })
     expect(await (await h.send(`/setup/${token}/state`, { passkey: PASSKEY })).json()).toMatchObject({
       key: { address: provisioned.keyAddress, status: 'active', chain: { status: 'active', remaining: '50000000' }, policy: { limit: '50000000' } },
     })
 
-    expect((await h.post(`/setup/${token}/key/revoked`, {}, PASSKEY)).status).toBe(409)
+    expect((await h.post(`/setup/${token}/key/revoked`, { keyAddress }, PASSKEY)).status).toBe(409)
     await h.chain.revokeKey({ root: h.chain.rootSigner(PASSKEY), accessKey: provisioned.keyAddress })
-    const revoked = await h.post(`/setup/${token}/key/revoked`, {}, PASSKEY)
+    const revoked = await h.post(`/setup/${token}/key/revoked`, { keyAddress }, PASSKEY)
     expect(await revoked.json()).toMatchObject({ ok: true, key: { status: 'revoked' } })
     expect(await h.payrun.communities.keyStatus({ guildId: GUILD })).toMatchObject({ ok: true, value: { key: { status: 'revoked' } } })
+  })
+
+  it('confirm and revoked name the key they are about; without it they do nothing', async () => {
+    const h = webHarness()
+    const token = await setupLink(h)
+    await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
+    for (const path of ['key/confirm', 'key/revoked']) {
+      const res = await h.post(`/setup/${token}/${path}`, {}, PASSKEY)
+      expect(res.status).toBe(400)
+      expect(await res.json()).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+    }
+  })
+
+  it('replacing the key: the state lists every live key; once the old one is revoked in the same transaction it leaves the list', async () => {
+    const h = webHarness()
+    const token = await setupLink(h)
+    await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
+    const first = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, validityDays: 30 }, PASSKEY))
+    await signOnChain(h, first)
+    await h.post(`/setup/${token}/key/confirm`, { keyAddress: first.keyAddress }, PASSKEY)
+    h.clock.advance(60)
+
+    const second = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, validityDays: 30 }, PASSKEY))
+    const during = await json(await h.send(`/setup/${token}/state`, { passkey: PASSKEY }))
+    // A pending key never hides the active one (M5): the state still describes it, and lists both.
+    expect(during.key).toMatchObject({ address: first.keyAddress, status: 'active' })
+    expect(during.keys).toMatchObject([
+      { address: second.keyAddress, status: 'pending_authorization', chain: { status: 'not_authorized' } },
+      { address: first.keyAddress, status: 'active', chain: { status: 'active' } },
+    ])
+
+    await h.chain.revokeKey({ root: h.chain.rootSigner(PASSKEY), accessKey: first.keyAddress })
+    await signOnChain(h, second)
+    expect((await h.post(`/setup/${token}/key/confirm`, { keyAddress: second.keyAddress }, PASSKEY)).status).toBe(200)
+    const after = await json(await h.send(`/setup/${token}/state`, { passkey: PASSKEY }))
+    expect(after.key).toMatchObject({ address: second.keyAddress, status: 'active' })
+    expect(after.keys.map((k: { address: string }) => k.address)).toEqual([second.keyAddress])
+  })
+
+  it('a replaced key still live on chain stays listed, and the page can revoke it by address', async () => {
+    const h = webHarness()
+    const token = await setupLink(h)
+    await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
+    const first = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, validityDays: 30 }, PASSKEY))
+    await signOnChain(h, first)
+    await h.post(`/setup/${token}/key/confirm`, { keyAddress: first.keyAddress }, PASSKEY)
+    h.clock.advance(60)
+    const second = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, validityDays: 30 }, PASSKEY))
+    await signOnChain(h, second)
+    await h.post(`/setup/${token}/key/confirm`, { keyAddress: second.keyAddress }, PASSKEY)
+
+    const state = await json(await h.send(`/setup/${token}/state`, { passkey: PASSKEY }))
+    expect(state.keys).toMatchObject([
+      { address: second.keyAddress, status: 'active', chain: { status: 'active' } },
+      { address: first.keyAddress, status: 'superseded', chain: { status: 'active' } },
+    ])
+    await h.chain.revokeKey({ root: h.chain.rootSigner(PASSKEY), accessKey: first.keyAddress })
+    expect(await json(await h.post(`/setup/${token}/key/revoked`, { keyAddress: first.keyAddress }, PASSKEY))).toMatchObject({ ok: true, key: { status: 'revoked' } })
+    expect((await json(await h.send(`/setup/${token}/state`, { passkey: PASSKEY }))).keys.map((k: { address: string }) => k.address)).toEqual([second.keyAddress])
   })
 
   it('the setup link stops working when it expires, even for the treasury passkey', async () => {

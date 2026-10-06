@@ -23,7 +23,8 @@ export type SetupPageConfig = {
 /**
  * The treasurer's page: create the community's Tempo account with a passkey as its root
  * (or sign in to it), fund it, choose what the bot key may spend, sign that with the
- * passkey, or revoke the key.
+ * passkey, or revoke the key. Every key live on chain gets its own Revoke button (#live-keys,
+ * filled by the client).
  */
 export function setupPage(c: SetupPageConfig): string {
   const name = esc(c.guildName)
@@ -71,10 +72,11 @@ export function setupPage(c: SetupPageConfig): string {
       ${feeField}
     </div>
     <p class="muted">The bot can only call transferWithMemo on ${token}, up to this limit, until it expires. Fees are ${c.feeMode === 'sponsor' ? 'paid by the sponsor' : `paid from the fee budget in ${esc(c.feeTokenLabel ?? 'the fee token')}`}.</p>
+    <p data-field="key-replaces" class="muted"></p>
     <p data-field="key-prompts"></p>
     <button id="authorize" type="submit">Authorise the bot key with my passkey</button>
   </form>
-  <button id="revoke" type="button" class="danger" hidden>Revoke the bot key</button>
+  <div id="live-keys"></div>
 </section>
 <p id="status" role="status" aria-live="polite"></p>
 <noscript><p>This page needs JavaScript for the passkey.</p></noscript>`,

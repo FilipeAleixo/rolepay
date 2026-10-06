@@ -1,7 +1,7 @@
 import { decodeFunctionData, encodeFunctionData, getAddress, toFunctionSelector } from 'viem'
 import { Abis, Addresses } from 'viem/tempo'
 import { describe, expect, it } from 'vitest'
-import { authorizeKeyCall } from './keychain.js'
+import { authorizeKeyCall, rotationCalls } from './keychain.js'
 
 const TOKEN = '0x20c0000000000000000000000000000000000001'
 const FEE_TOKEN = '0x20c0000000000000000000000000000000000000'
@@ -73,5 +73,27 @@ describe('authorizeKeyCall: the root calls the Account Keychain directly, so one
         ],
       },
     ])
+  })
+})
+
+describe('rotationCalls: replacing the bot key is ONE root transaction that revokes the old keys and authorises the new one', () => {
+  const OLD = '0x3333333333333333333333333333333333333333'
+  const OLDER = '0x5555555555555555555555555555555555555555'
+  const auth = { expiry: 1_900_000_000, limits: [{ token: TOKEN, limit: '5000000', period: 86_400 }], scopes: [{ address: TOKEN, selector: 'transferWithMemo(address,uint256,bytes32)' }] }
+
+  it('revokes every live old key first, then authorises the new key, all on the keychain', () => {
+    const calls = rotationCalls(KEY, auth, [OLD, OLDER])
+    expect(calls.map((c) => c.to)).toEqual([Addresses.accountKeychain, Addresses.accountKeychain, Addresses.accountKeychain])
+    const decodedCalls = calls.map((c) => decodeFunctionData({ abi: Abis.accountKeychain, data: c.data }))
+    expect(decodedCalls.map((d) => d.functionName)).toEqual(['revokeKey', 'revokeKey', 'authorizeKey'])
+    expect(decodedCalls[0]?.args).toEqual([getAddress(OLD)])
+    expect(decodedCalls[1]?.args).toEqual([getAddress(OLDER)])
+    expect(decodedCalls[2]?.args?.[0]).toBe(KEY)
+  })
+
+  it('with nothing to revoke it is the authorisation alone', () => {
+    const calls = rotationCalls(KEY, auth, [])
+    expect(calls).toHaveLength(1)
+    expect(decodeFunctionData({ abi: Abis.accountKeychain, data: calls[0]?.data as `0x${string}` }).functionName).toBe('authorizeKey')
   })
 })

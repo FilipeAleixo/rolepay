@@ -15,9 +15,9 @@ The community's own Tempo account holds the money. The bot never does.
 - The treasurer's passkey is the root of the community account.
 - The bot holds only a Tempo access key with an expiry, a per-period spending limit, and a scope that allows nothing but memo'd transfers of the payout token.
 - The limit is enforced by the protocol, including inside batched transactions. A run that would exceed it is refused whole, and nothing moves.
-- The treasurer can revoke the key at any time.
+- The treasurer can revoke the key at any time. Replacing it revokes the old key on chain in the same transaction, and the server destroys the old key's secret.
 
-So a compromised bot can lose at most one period's budget, to scoped transfers, until the key expires or is revoked.
+So a compromised bot can lose at most the key's budget for each period, to scoped transfers, until the key expires or is revoked. A key valid for longer than its period can spend one budget per period until then, so keep the validity short.
 
 ## Repository
 

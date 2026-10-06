@@ -1,7 +1,8 @@
 // Browser end to end on Moderato: a recipient claims with a real passkey; a treasurer creates the
 // community account with a passkey as root, funds it, authorises the bot key with the passkey,
-// the bot pays a run from that account, and the treasurer revokes the key with the passkey. Every
-// WebAuthn call is counted: one prompt per action, two only when the browser must sign in first.
+// the bot pays a run from that account, the treasurer replaces the key (the old one revoked in the
+// same transaction) and revokes the new one with the passkey. Every WebAuthn call is counted: one
+// prompt per action, two only when the browser must sign in first.
 import { expect, test } from '@playwright/test'
 import { createPublicClient, http, toFunctionSelector } from 'viem'
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts'
@@ -126,13 +127,34 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await page.reload()
   await expect(page.locator('[data-field="key-status"]')).toContainText('3.5 of 5 AlphaUSD left')
 
-  // 5. Revoke with the passkey; the server confirms it from the chain.
+  // 5. Replace the key with new limits: still ONE prompt, because the same root transaction revokes
+  // the old key and authorises the new one. The old key is revoked on chain, not just in our database.
+  const oldKey = status.value.key.address as `0x${string}`
+  await page.locator('#limit').fill('4')
+  await expect(page.locator('[data-field="key-replaces"]')).toContainText('revokes the current key')
+  await page.getByRole('button', { name: 'Replace the bot key with these limits' }).click()
+  await expect(page.locator('#status')).toContainText('The bot key is active')
+  expect(await prompts()).toEqual({ create: 0, get: 1 })
+  const replaced = await server.payrun.communities.keyStatus({ guildId })
+  expect(replaced).toMatchObject({ ok: true, value: { key: { status: 'active' }, state: { status: 'active', remaining: 4_000_000n } } })
+  expect(replaced.ok && replaced.value.key.address).not.toBe(oldKey)
+  const oldOnChain = (await createPublicClient({ transport: http(NET.rpcUrl) }).readContract({
+    address: Addresses.accountKeychain,
+    abi: Abis.accountKeychain,
+    functionName: 'getKey',
+    args: [treasury as `0x${string}`, oldKey],
+  })) as { isRevoked: boolean }
+  expect(oldOnChain.isRevoked).toBe(true)
+  await expect(page.locator('#live-keys button')).toHaveCount(1) // only the new key is live
+  await page.reload()
+
+  // 6. Revoke with the passkey; the server confirms it from the chain.
   await page.getByRole('button', { name: 'Revoke the bot key' }).click()
   await expect(page.locator('#status')).toHaveText('The bot key is revoked.')
   expect(await prompts()).toEqual({ create: 0, get: 1 })
   expect(await server.payrun.communities.keyStatus({ guildId })).toMatchObject({ ok: true, value: { key: { status: 'revoked' }, state: { status: 'revoked' } } })
 
-  // 6. This browser forgets the passkey account (site data cleared) while the treasury session
+  // 7. This browser forgets the passkey account (site data cleared) while the treasury session
   // is still live: the page must sign in before it can sign, and says so before the click.
   await page.goto(`${server.url}/health`)
   await page.evaluate(async () => {

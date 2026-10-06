@@ -101,7 +101,8 @@ export type BotKeyStatus = z.infer<typeof BotKeyStatusSchema>
 export const BotKeySchema = z.object({
   address: AddressSchema,
   communityId: DiscordIdSchema,
-  sealedSecret: z.string().min(1),
+  /** null once the key is revoked or replaced: payrun destroys a secret it will never use again. */
+  sealedSecret: z.string().min(1).nullable(),
   status: BotKeyStatusSchema,
   policy: KeyPolicySchema,
   createdAt: z.date(),

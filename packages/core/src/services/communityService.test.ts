@@ -128,33 +128,88 @@ describe('CommunityService', () => {
     })
 
     it('confirm leaves the key pending while the chain does not show it authorised', async () => {
-      await svc.provisionBotKey(policy())
-      expect(await svc.confirmBotKey({ guildId: GUILD })).toEqual({ ok: false, error: { code: 'key_not_authorized_on_chain' } })
-      expect(await svc.confirmBotKey({ guildId: '1094309218049937499' })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+      const p = await svc.provisionBotKey(policy())
+      if (!p.ok) throw new Error()
+      const keyAddress = p.value.keyAddress
+      expect(await svc.confirmBotKey({ guildId: GUILD, keyAddress })).toEqual({ ok: false, error: { code: 'key_not_authorized_on_chain' } })
+      expect(await svc.confirmBotKey({ guildId: '1094309218049937499', keyAddress })).toEqual({ ok: false, error: { code: 'community_not_found' } })
     })
 
-    it('a newly confirmed key supersedes the previous active key (rotation)', async () => {
+    it('confirm takes the key the treasurer authorised, never "the newest pending one" (H2)', async () => {
+      const pending = await svc.provisionBotKey(policy())
+      if (!pending.ok) throw new Error()
+      await chain.authorizeKey({ root: chain.rootSigner(TREASURY), accessKey: pending.value.keyAddress, authorization: pending.value.authorization })
+      // A confirm for some other key does not pick up the pending one, even though it is on chain.
+      expect(await svc.confirmBotKey({ guildId: GUILD, keyAddress: '0x4444444444444444444444444444444444444444' })).toEqual({ ok: false, error: { code: 'no_pending_key' } })
+      expect((await communities.getBotKey(pending.value.keyAddress))?.status).toBe('pending_authorization')
+      expect(await svc.confirmBotKey({ guildId: GUILD, keyAddress: pending.value.keyAddress })).toMatchObject({ ok: true, value: { address: pending.value.keyAddress, status: 'active' } })
+    })
+
+    it('rotation on the setup page: the old key is revoked in the same transaction; confirm marks it revoked and destroys its secret', async () => {
       const first = await svc.provisionBotKey(policy())
       await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
-      const second = await svc.provisionBotKey(policy())
-      await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+      clock.advance(60)
+      const second = await svc.provisionBotKey(policy({ limit: 1_000_000n }))
       if (!first.ok || !second.ok) throw new Error()
-      expect((await communities.getBotKey(first.value.keyAddress))?.status).toBe('superseded')
+      // What the page's one root-signed transaction does: revoke the old key, authorise the new one.
+      await chain.revokeKey({ root: chain.rootSigner(TREASURY), accessKey: first.value.keyAddress })
+      await chain.authorizeKey({ root: chain.rootSigner(TREASURY), accessKey: second.value.keyAddress, authorization: second.value.authorization })
+      expect(await svc.confirmBotKey({ guildId: GUILD, keyAddress: second.value.keyAddress })).toMatchObject({ ok: true, value: { status: 'active' } })
+      expect(await communities.getBotKey(first.value.keyAddress)).toMatchObject({ status: 'revoked', revokedAt: clock.now(), sealedSecret: null })
+      expect((await communities.getBotKey(second.value.keyAddress))?.sealedSecret).toEqual(expect.any(String))
+    })
+
+    it('a key replaced while still live on chain is superseded, its secret destroyed, and it stays listed as live so it can be revoked', async () => {
+      const first = await svc.provisionBotKey(policy())
+      await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+      clock.advance(60)
+      const second = await svc.provisionBotKey(policy())
+      if (!first.ok || !second.ok) throw new Error()
+      await chain.authorizeKey({ root: chain.rootSigner(TREASURY), accessKey: second.value.keyAddress, authorization: second.value.authorization })
+      await svc.confirmBotKey({ guildId: GUILD, keyAddress: second.value.keyAddress })
+      expect(await communities.getBotKey(first.value.keyAddress)).toMatchObject({ status: 'superseded', sealedSecret: null })
+      const keys = await svc.listKeys({ guildId: GUILD })
+      expect(keys).toMatchObject({ ok: true, value: [{ key: { address: second.value.keyAddress } }, { key: { address: first.value.keyAddress, status: 'superseded' }, state: { status: 'active' } }] })
+      await chain.revokeKey({ root: chain.rootSigner(TREASURY), accessKey: first.value.keyAddress })
+      expect(await svc.confirmRevocation({ guildId: GUILD, keyAddress: first.value.keyAddress })).toMatchObject({ ok: true, value: { status: 'revoked' } })
       expect((await communities.getBotKey(second.value.keyAddress))?.status).toBe('active')
     })
 
-    it('re-provisioning supersedes a key still waiting for authorisation', async () => {
+    it('the dev path (a root signer) revokes the old live key on chain too when it authorises a new one', async () => {
       const first = await svc.provisionBotKey(policy())
+      await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+      clock.advance(60)
       await svc.provisionBotKey(policy())
+      await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
       if (!first.ok) throw new Error()
-      expect((await communities.getBotKey(first.value.keyAddress))?.status).toBe('superseded')
+      expect(await chain.keyState({ account: TREASURY, accessKey: first.value.keyAddress, token: TOKEN, feeToken: null })).toMatchObject({ status: 'revoked' })
+      expect(await communities.getBotKey(first.value.keyAddress)).toMatchObject({ status: 'revoked', sealedSecret: null })
     })
 
-    it('revokes on chain with the root signer; status then reports it revoked', async () => {
+    it('re-provisioning supersedes a key still waiting for authorisation and destroys its secret', async () => {
+      const first = await svc.provisionBotKey(policy())
+      clock.advance(60)
       await svc.provisionBotKey(policy())
+      if (!first.ok) throw new Error()
+      expect(await communities.getBotKey(first.value.keyAddress)).toMatchObject({ status: 'superseded', sealedSecret: null })
+    })
+
+    it('keyStatus describes the active key even while a newer key waits for authorisation (M5)', async () => {
+      const active = await svc.provisionBotKey(policy())
+      await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+      clock.advance(60)
+      await svc.provisionBotKey(policy())
+      if (!active.ok) throw new Error()
+      expect(await svc.keyStatus({ guildId: GUILD })).toMatchObject({ ok: true, value: { key: { address: active.value.keyAddress, status: 'active' } } })
+    })
+
+    it('revokes on chain with the root signer; status then reports it revoked, and its secret is gone', async () => {
+      const p = await svc.provisionBotKey(policy())
       await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
       const r = await svc.revokeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
       expect(r).toMatchObject({ ok: true, value: { key: { status: 'revoked' } } })
+      if (!p.ok) throw new Error()
+      expect((await communities.getBotKey(p.value.keyAddress))?.sealedSecret).toBeNull()
       expect(await svc.keyStatus({ guildId: GUILD })).toMatchObject({ ok: true, value: { key: { status: 'revoked' }, state: { status: 'revoked' } } })
     })
 
@@ -332,16 +387,18 @@ describe('CommunityService', () => {
   })
 
   describe('revocation by the treasury from elsewhere (the setup page)', () => {
-    it('confirmRevocation marks the active key revoked once the chain shows it', async () => {
+    it('confirmRevocation marks the named key revoked once the chain shows it, and destroys its secret', async () => {
       await register()
       await svc.provisionBotKey(policy())
       const auth = await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
       if (!auth.ok) throw new Error()
-      expect(await svc.confirmRevocation({ guildId: GUILD })).toEqual({ ok: false, error: { code: 'key_not_revoked_on_chain' } })
-      await chain.revokeKey({ root: chain.rootSigner(TREASURY), accessKey: auth.value.key.address })
-      expect(await svc.confirmRevocation({ guildId: GUILD })).toMatchObject({ ok: true, value: { status: 'revoked', revokedAt: clock.now() } })
-      expect(await svc.confirmRevocation({ guildId: GUILD })).toEqual({ ok: false, error: { code: 'no_active_key' } })
-      expect(await svc.confirmRevocation({ guildId: '1094309218049937419' })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+      const keyAddress = auth.value.key.address
+      expect(await svc.confirmRevocation({ guildId: GUILD, keyAddress })).toEqual({ ok: false, error: { code: 'key_not_revoked_on_chain' } })
+      await chain.revokeKey({ root: chain.rootSigner(TREASURY), accessKey: keyAddress })
+      expect(await svc.confirmRevocation({ guildId: GUILD, keyAddress })).toMatchObject({ ok: true, value: { status: 'revoked', revokedAt: clock.now() } })
+      expect((await communities.getBotKey(keyAddress))?.sealedSecret).toBeNull()
+      expect(await svc.confirmRevocation({ guildId: GUILD, keyAddress })).toEqual({ ok: false, error: { code: 'key_not_found' } })
+      expect(await svc.confirmRevocation({ guildId: '1094309218049937419', keyAddress })).toEqual({ ok: false, error: { code: 'community_not_found' } })
     })
   })
 })

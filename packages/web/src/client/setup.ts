@@ -32,6 +32,8 @@ type KeyView = {
 type State = {
   community: { treasury: string; payoutToken: string; feeMode: string; feeToken: string | null } | null
   key: KeyView | null
+  /** Every key not yet revoked; the ones live on chain are listed with a Revoke button each. */
+  keys: KeyView[]
   session: { address: string } | null
   isTreasurer: boolean
 }
@@ -63,7 +65,12 @@ export function startSetup(config: SetupConfig) {
   const base = `/setup/${encodeURIComponent(config.token)}`
   const chain: ChainConfig = { rpcUrl: config.rpcUrl, sponsorUrl: config.sponsorUrl, testnet: config.testnet, feeToken: config.feeToken ?? config.payoutToken }
   let state: State | null = null
-  const buttons = ['#create', '#signin', '#signin-bound', '#faucet', '#authorize', '#revoke'].map((s) => $<HTMLButtonElement>(s))
+  const fixed = ['#create', '#signin', '#signin-bound', '#faucet', '#authorize'].map((s) => $<HTMLButtonElement>(s))
+  /** The page's buttons right now: the fixed ones and one Revoke per live key. */
+  const buttons = () => [...fixed, ...document.querySelectorAll<HTMLButtonElement>('#live-keys button')]
+  const action = (work: () => Promise<void>) => () => busy(buttons(), work, explainPasskeyError)()
+  /** Keys the chain says can still sign for the treasury (active, or replaced but not revoked). */
+  const liveKeys = (s: State | null) => (s?.keys ?? []).filter((k) => k.chain.status === 'active')
 
   /** Whether this browser holds the treasury's passkey account, so it can sign without signing in. */
   const holdsTreasury = (treasury: string) => keys.account()?.address.toLowerCase() === treasury
@@ -72,7 +79,7 @@ export function startSetup(config: SetupConfig) {
     const [s] = await Promise.all([get<State>(`${base}/state`), keys.ready()])
     if (!s.ok) {
       status(explain(s.error), 'bad')
-      for (const b of buttons) if (b) b.disabled = true
+      for (const b of buttons()) if (b) b.disabled = true
       return
     }
     state = s
@@ -97,10 +104,32 @@ export function startSetup(config: SetupConfig) {
       .catch(() => fill('balance', 'unknown'))
     fill('key-status', keyText(s.key))
     fill('key-prompts', holdsTreasury(s.community.treasury) ? PROMPTS_ONCE : PROMPTS_TWICE)
-    const active = s.key?.status === 'active' && s.key.chain.status === 'active'
-    show('#revoke', active)
+    const live = liveKeys(s)
+    fill('key-replaces', live.length ? `The same transaction revokes ${live.length === 1 ? 'the current key' : `all ${live.length} live keys`}, so no old key stays spendable.` : '')
     const authorize = $<HTMLButtonElement>('#authorize')
-    if (authorize) authorize.textContent = active ? 'Replace the bot key with these limits' : 'Authorise the bot key with my passkey'
+    if (authorize) authorize.textContent = live.length ? 'Replace the bot key with these limits' : 'Authorise the bot key with my passkey'
+    renderLiveKeys(live)
+  }
+
+  /** One line and one Revoke button per key live on chain. Built with the DOM, never HTML strings. */
+  function renderLiveKeys(live: KeyView[]) {
+    const box = $('#live-keys')
+    if (!box) return
+    box.replaceChildren(
+      ...live.map((k) => {
+        const row = document.createElement('p')
+        const label = document.createElement('span')
+        const left = `${formatMicros(k.chain.remaining)} of ${formatMicros(k.policy.limit)} ${config.tokenLabel} left, expires ${date(k.chain.expiry)}`
+        label.textContent = `${k.status === 'active' ? 'Bot key' : 'Old bot key, still live'} ${shortAddress(k.address)}: ${left}. `
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = 'danger'
+        button.textContent = live.length === 1 ? 'Revoke the bot key' : `Revoke the bot key ${shortAddress(k.address)}`
+        button.addEventListener('click', action(() => revoke(k.address)))
+        row.append(label, button)
+        return row
+      }),
+    )
   }
 
   function keyText(k: KeyView | null): string {
@@ -142,25 +171,26 @@ export function startSetup(config: SetupConfig) {
     const account = await treasuryAccount()
     status('Preparing the bot key...')
     const body = { limit: input('limit'), periodDays: Number(input('periodDays')), validityDays: Number(input('validityDays')), ...(config.feeMode === 'fee_budget' ? { feeBudget: input('feeBudget') } : {}) }
+    const revoke = liveKeys(state).map((k) => k.address)
     const p = await post<{ keyAddress: string; authorization: WireAuthorization }>(`${base}/key`, body)
     if (!p.ok) return status(explain(p.error), 'bad')
-    status('Confirm with your passkey to authorise the bot key...')
-    const tx = await authorizeAccessKey(chain, account, p.keyAddress, p.authorization)
+    status(revoke.length ? 'Confirm with your passkey to replace the bot key (one signature)...' : 'Confirm with your passkey to authorise the bot key...')
+    const tx = await authorizeAccessKey(chain, account, p.keyAddress, p.authorization, revoke.filter((a) => a !== p.keyAddress))
     status('Authorised on chain. Checking...')
-    const c = await post<{ key: unknown }>(`${base}/key/confirm`)
+    const c = await post<{ key: unknown }>(`${base}/key/confirm`, { keyAddress: p.keyAddress })
     if (!c.ok) return status(explain(c.error), 'bad')
     await refresh()
     status(`The bot key is active. Transaction: ${config.explorerUrl}/tx/${tx}`, 'ok')
   }
 
-  async function revoke() {
-    const key = state?.key
-    if (!key) return
-    if (!window.confirm('Revoke the bot key? The bot cannot pay anyone until you authorise a new one.')) return
+  async function revoke(keyAddress: string) {
+    const isActive = state?.key?.address === keyAddress && state.key.status === 'active'
+    const question = isActive ? 'Revoke the bot key? The bot cannot pay anyone until you authorise a new one.' : `Revoke the old bot key ${shortAddress(keyAddress)}?`
+    if (!window.confirm(question)) return
     const account = await treasuryAccount()
     status('Confirm with your passkey to revoke the bot key...')
-    await revokeAccessKey(chain, account, key.address)
-    const r = await post<{ key: unknown }>(`${base}/key/revoked`)
+    await revokeAccessKey(chain, account, keyAddress)
+    const r = await post<{ key: unknown }>(`${base}/key/revoked`, { keyAddress })
     if (!r.ok) return status(explain(r.error), 'bad')
     await refresh()
     status('The bot key is revoked.', 'ok')
@@ -175,16 +205,14 @@ export function startSetup(config: SetupConfig) {
     status('Testnet funds arrived.', 'ok')
   }
 
-  const [create, signin, signinBound, faucetButton, authorizeButton, revokeButton] = buttons
-  create?.addEventListener('click', busy(buttons, () => bind(() => keys.create(config.passkeyName)), explainPasskeyError))
-  signin?.addEventListener('click', busy(buttons, () => bind(() => keys.signIn()), explainPasskeyError))
-  signinBound?.addEventListener('click', busy(buttons, () => bind(() => keys.signIn()), explainPasskeyError))
-  faucetButton?.addEventListener('click', busy(buttons, fund, explainPasskeyError))
-  revokeButton?.addEventListener('click', busy(buttons, revoke, explainPasskeyError))
+  const [create, signin, signinBound, faucetButton] = fixed
+  create?.addEventListener('click', action(() => bind(() => keys.create(config.passkeyName))))
+  signin?.addEventListener('click', action(() => bind(() => keys.signIn())))
+  signinBound?.addEventListener('click', action(() => bind(() => keys.signIn())))
+  faucetButton?.addEventListener('click', action(fund))
   $('#key-form')?.addEventListener('submit', (e) => {
     e.preventDefault()
-    void busy(buttons, authorize, explainPasskeyError)()
+    void action(authorize)()
   })
-  void authorizeButton
   void refresh()
 }

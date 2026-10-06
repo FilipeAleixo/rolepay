@@ -292,51 +292,89 @@ export class CommunityService {
       revokedAt: null,
     }
     for (const old of await this.deps.communities.listBotKeys(community.id)) {
-      if (old.status === 'pending_authorization') await this.deps.communities.saveBotKey({ ...old, status: 'superseded' })
+      if (old.status === 'pending_authorization') await this.deps.communities.saveBotKey({ ...old, status: 'superseded', sealedSecret: null })
     }
     await this.deps.communities.saveBotKey(key)
     return ok({ keyAddress: address, account: community.treasuryAddress, authorization: keyAuthorization(key.policy) })
   }
 
-  /** Dev/CLI path: the root signer authorises the pending key on chain, then it is confirmed. */
+  /**
+   * Dev/CLI path: the root signer revokes every other key still live on chain, authorises the
+   * newest pending key, then it is confirmed. (The setup page does both in one transaction.)
+   */
   async authorizeBotKey(input: {
     guildId: string
     root: RootSigner
   }): Promise<Result<{ key: BotKeyView; txHash: Hex }, NotFound | { code: 'no_pending_key' } | ChainRejection | ConfirmError>> {
     const community = await this.deps.communities.get(input.guildId)
     if (!community) return err({ code: 'community_not_found' })
-    const pending = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'pending_authorization')
-    if (!pending) return err({ code: 'no_pending_key' })
-    const tx = await this.deps.chain.authorizeKey({ root: input.root, accessKey: pending.address, authorization: keyAuthorization(pending.policy) })
-    if (!tx.ok) return tx
-    const confirmed = await this.confirmBotKey({ guildId: community.id })
-    return confirmed.ok ? ok({ key: confirmed.value, txHash: tx.value.txHash }) : confirmed
-  }
-
-  /** Marks the pending key active once the chain shows it authorised; supersedes the old active key. */
-  async confirmBotKey(input: { guildId: string }): Promise<Result<BotKeyView, NotFound | ConfirmError>> {
-    const community = await this.deps.communities.get(input.guildId)
-    if (!community) return err({ code: 'community_not_found' })
     const keys = await this.deps.communities.listBotKeys(community.id)
     const pending = keys.find((k) => k.status === 'pending_authorization')
     if (!pending) return err({ code: 'no_pending_key' })
+    for (const old of keys) {
+      if (old === pending || old.status === 'revoked' || (await this.readState(community, old)).status !== 'active') continue
+      const revoked = await this.deps.chain.revokeKey({ root: input.root, accessKey: old.address })
+      if (!revoked.ok) return revoked
+    }
+    const tx = await this.deps.chain.authorizeKey({ root: input.root, accessKey: pending.address, authorization: keyAuthorization(pending.policy) })
+    if (!tx.ok) return tx
+    const confirmed = await this.confirmBotKey({ guildId: community.id, keyAddress: pending.address })
+    return confirmed.ok ? ok({ key: confirmed.value, txHash: tx.value.txHash }) : confirmed
+  }
+
+  /**
+   * Marks the pending key the treasurer authorised (named by address, never "the newest") active
+   * once the chain shows it. Every other key is retired: revoked if the chain shows it revoked
+   * (the setup page revokes the old key in the same transaction), otherwise superseded. Either
+   * way its sealed secret is destroyed, so the server can never sign with it again. A superseded
+   * key that is still live on chain stays in `listKeys`, for the treasurer to revoke.
+   */
+  async confirmBotKey(input: { guildId: string; keyAddress: string }): Promise<Result<BotKeyView, NotFound | ConfirmError>> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const keys = await this.deps.communities.listBotKeys(community.id)
+    const pending = keys.find((k) => k.status === 'pending_authorization' && k.address === input.keyAddress.toLowerCase())
+    if (!pending) return err({ code: 'no_pending_key' })
     const state = await this.readState(community, pending)
     if (state.status !== 'active') return err({ code: 'key_not_authorized_on_chain' })
+    const now = this.deps.clock.now()
     for (const old of keys) {
-      if (old.status === 'active') await this.deps.communities.saveBotKey({ ...old, status: 'superseded' })
+      if (old === pending || old.status === 'revoked') continue
+      const revokedOnChain = (await this.readState(community, old)).status === 'revoked'
+      await this.deps.communities.saveBotKey({
+        ...old,
+        status: revokedOnChain ? 'revoked' : 'superseded',
+        revokedAt: revokedOnChain ? now : old.revokedAt,
+        sealedSecret: null,
+      })
     }
-    const active: BotKey = { ...pending, status: 'active', authorizedAt: this.deps.clock.now() }
+    const active: BotKey = { ...pending, status: 'active', authorizedAt: now }
     await this.deps.communities.saveBotKey(active)
     return ok(toBotKeyView(active))
   }
 
-  /** The current bot key (latest not superseded) and what the chain says about it. */
+  /**
+   * The bot key that matters, and what the chain says about it: the active key if there is one
+   * (a newer key waiting for authorisation never hides it), else the newest one not superseded.
+   */
   async keyStatus(input: { guildId: string }): Promise<Result<KeyStatusView, NotFound | { code: 'no_bot_key' }>> {
     const community = await this.deps.communities.get(input.guildId)
     if (!community) return err({ code: 'community_not_found' })
-    const key = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status !== 'superseded')
+    const keys = await this.deps.communities.listBotKeys(community.id)
+    const key = keys.find((k) => k.status === 'active') ?? keys.find((k) => k.status !== 'superseded')
     if (!key) return err({ code: 'no_bot_key' })
     return ok({ key: toBotKeyView(key), state: await this.readState(community, key) })
+  }
+
+  /**
+   * Every key not yet known to be revoked, newest first, each with what the chain says now. The
+   * setup page lists the ones live on chain (active, or superseded but not revoked) for revoking.
+   */
+  async listKeys(input: { guildId: string }): Promise<Result<KeyStatusView[], NotFound>> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const keys = (await this.deps.communities.listBotKeys(community.id)).filter((k) => k.status !== 'revoked')
+    return ok(await Promise.all(keys.map(async (k) => ({ key: toBotKeyView(k), state: await this.readState(community, k) }))))
   }
 
   /** Dev/CLI path: the root signer revokes the active key on chain. Revoked key IDs can never return. */
@@ -350,25 +388,27 @@ export class CommunityService {
     if (!active) return err({ code: 'no_active_key' })
     const tx = await this.deps.chain.revokeKey({ root: input.root, accessKey: active.address })
     if (!tx.ok) return tx
-    const revoked: BotKey = { ...active, status: 'revoked', revokedAt: this.deps.clock.now() }
+    const revoked: BotKey = { ...active, status: 'revoked', revokedAt: this.deps.clock.now(), sealedSecret: null }
     await this.deps.communities.saveBotKey(revoked)
     return ok({ key: toBotKeyView(revoked), txHash: tx.value.txHash })
   }
 
   /**
-   * The treasury revoked the active key itself (the setup page signs the revoke with the
-   * passkey). Marks it revoked once the chain shows it; never trusts the caller's word.
+   * The treasury revoked one of the community's keys itself (the setup page signs the revoke
+   * with the passkey): the active key or any other one still live on chain. Marks it revoked
+   * once the chain shows it, never on the caller's word, and destroys its sealed secret.
    */
   async confirmRevocation(input: {
     guildId: string
-  }): Promise<Result<BotKeyView, NotFound | { code: 'no_active_key' } | { code: 'key_not_revoked_on_chain' }>> {
+    keyAddress: string
+  }): Promise<Result<BotKeyView, NotFound | { code: 'key_not_found' } | { code: 'key_not_revoked_on_chain' }>> {
     const community = await this.deps.communities.get(input.guildId)
     if (!community) return err({ code: 'community_not_found' })
-    const active = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
-    if (!active) return err({ code: 'no_active_key' })
-    const state = await this.readState(community, active)
+    const key = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.address === input.keyAddress.toLowerCase() && k.status !== 'revoked')
+    if (!key) return err({ code: 'key_not_found' })
+    const state = await this.readState(community, key)
     if (state.status !== 'revoked') return err({ code: 'key_not_revoked_on_chain' })
-    const revoked: BotKey = { ...active, status: 'revoked', revokedAt: this.deps.clock.now() }
+    const revoked: BotKey = { ...key, status: 'revoked', revokedAt: this.deps.clock.now(), sealedSecret: null }
     await this.deps.communities.saveBotKey(revoked)
     return ok(toBotKeyView(revoked))
   }

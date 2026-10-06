@@ -178,7 +178,7 @@ describe('pay run end to end through the HTTP endpoint', () => {
     }
     const authorization = { ...provisioned.authorization, limits: provisioned.authorization.limits.map((l) => ({ ...l, limit: BigInt(l.limit) })) }
     expect((await s.chain.authorizeKey({ root: s.chain.rootSigner(passkey), accessKey: provisioned.keyAddress, authorization: authorization as never })).ok).toBe(true)
-    expect((await s.browserPost(`${path}/key/confirm`, passkey)).status).toBe(200)
+    expect((await s.browserPost(`${path}/key/confirm`, passkey, { keyAddress: provisioned.keyAddress })).status).toBe(200)
 
     await s.interact(slashCommand(SCOPE, 'payrun', 'setup', {}, treasurerAdmin, 'tok-setup-2'))
     await s.drain()

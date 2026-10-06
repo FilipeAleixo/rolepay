@@ -201,6 +201,7 @@ export class PayRunService {
     })
     const check = checkKeyForRun(state, { total: run.total, needsFeeBudget: community.feeMode === 'fee_budget' })
     if (!check.ok) return check
+    if (!key.sealedSecret) return err({ code: 'unseal_failed' })
     const secret = await this.deps.vault.open(key.sealedSecret, botKeyContext(community.id, key.address))
     if (!secret.ok) return secret
 
