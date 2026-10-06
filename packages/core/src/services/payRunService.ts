@@ -39,7 +39,11 @@ type IllegalState = { code: 'illegal_state'; status: RunStatus }
 type Conflict = { code: 'concurrent_update' }
 type StepError = NotFound | IllegalState | Conflict
 
-/** Where a run stands after an execute or reconcile call. `pending` = check again after `retryAfter`. */
+/**
+ * Where a run stands after an execute or reconcile call. `pending` = check again after
+ * `retryAfter`: reconcile an executing run; call execute again for a failed run that is waiting
+ * for its last attempt's deadline before a new one.
+ */
 export type ExecuteOutcome =
   | { status: 'paid'; run: Run }
   | { status: 'pending'; run: Run; retryAfter: Date | null }
@@ -56,6 +60,8 @@ export type ExecuteError =
 
 /** A failed run's memos are on chain: payrun records what the chain shows and sends nothing. */
 export type ChainShowsPayments = { code: 'chain_shows_payments'; detail: 'all_paid' | 'partial' | 'mismatch' }
+/** A failed run's last signed tx could still land until `retryAfter`: nothing can be decided before. */
+export type AttemptMayStillLand = { code: 'attempt_may_still_land'; retryAfter: Date }
 
 /**
  * Pay runs: build, approve, execute, reconcile, export.
@@ -120,16 +126,19 @@ export class PayRunService {
    */
   async cancel(
     input: RunRef & { actor: string },
-  ): Promise<Result<Run, StepError | InvalidInput | { code: 'not_retryable' } | { code: 'community_not_found' } | ChainShowsPayments>> {
+  ): Promise<
+    Result<Run, StepError | InvalidInput | { code: 'not_retryable' } | { code: 'community_not_found' } | ChainShowsPayments | AttemptMayStillLand>
+  > {
     const loaded = await this.get(input)
     if (!loaded.ok) return loaded
     if (loaded.value.status === 'failed') {
       const community = await this.deps.communities.get(loaded.value.communityId)
       if (!community) return err({ code: 'community_not_found' })
-      const seen = await this.matchOnChain(loaded.value, community, (await this.deps.chain.head()).number)
-      if (seen.kind !== 'none') {
-        await this.applyMatch(loaded.value, seen)
-        return err({ code: 'chain_shows_payments', detail: seen.kind })
+      const settled = await this.settledFailure(loaded.value, community)
+      if (settled.kind === 'may_still_land') return err({ code: 'attempt_may_still_land', retryAfter: settled.retryAfter })
+      if (settled.match.kind !== 'none') {
+        await this.applyMatch(loaded.value, settled.match)
+        return err({ code: 'chain_shows_payments', detail: settled.match.kind })
       }
     }
     return this.step(input, { type: 'cancel', actor: input.actor })
@@ -168,9 +177,12 @@ export class PayRunService {
     if (!community) return err({ code: 'community_not_found' })
 
     if (run.status === 'failed') {
-      // Belt and braces before any re-send: if the chain shows ANY of this run's memos, stop and
-      // record what it shows (all of them: the run is paid; some or wrong ones: a human looks).
-      const seen = await this.matchOnChain(run, community, (await this.deps.chain.head()).number)
+      // Before any new attempt: wait until the last one can no longer land (so "never pay twice"
+      // does not depend on how a node's error text was read), then, if the chain shows ANY of this
+      // run's memos, stop and record what it shows (all: paid; some or wrong ones: a human looks).
+      const settled = await this.settledFailure(run, community)
+      if (settled.kind === 'may_still_land') return ok({ status: 'pending', run, retryAfter: settled.retryAfter })
+      const seen = settled.match
       if (seen.kind !== 'none') {
         const recorded = await this.applyMatch(run, seen)
         if (seen.kind === 'all_paid' && recorded.ok) return recorded
@@ -260,6 +272,21 @@ export class PayRunService {
     }
     if (attempt.rawTx) return this.settle(run, await this.deps.chain.broadcast(attempt.rawTx), community)
     return ok({ status: 'pending', run, retryAfter: deadline(attempt.validBefore) })
+  }
+
+  /**
+   * For a failed run: whether its last attempt's tx could still land (chain time not yet past its
+   * validBefore plus the margin), or else what the chain shows for the run up to a head that is
+   * past that deadline, so nothing from any earlier attempt can appear after the answer.
+   */
+  private async settledFailure(
+    run: Run,
+    community: Community,
+  ): Promise<{ kind: 'may_still_land'; retryAfter: Date } | { kind: 'settled'; match: MatchResult }> {
+    const head = await this.deps.chain.head()
+    const last = currentAttempt(run)
+    if (last && head.timestamp <= last.validBefore + VALID_BEFORE_MARGIN_SECONDS) return { kind: 'may_still_land', retryAfter: deadline(last.validBefore) }
+    return { kind: 'settled', match: await this.matchOnChain(run, community, head.number) }
   }
 
   /** The run's memo transfers from its first attempt up to `toBlock` (a head the caller read). */

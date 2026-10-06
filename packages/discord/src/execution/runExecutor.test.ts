@@ -112,6 +112,29 @@ describe('createRunExecutor', () => {
     expect(h.rest.dms).toHaveLength(2)
   })
 
+  it('Retry pressed right after a "rejected" failure waits out the old deadline, then finds that payment landed: paid once', async () => {
+    const h = await ready()
+    h.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    await h.execute(job(h.run.id))
+    // While the job waits, the "rejected" tx lands from the mempool inside its window.
+    const execute = createRunExecutor({
+      payrun: h.payrun,
+      rest: h.rest,
+      notices: h.notices,
+      network: 'moderato',
+      now: () => h.clock.now(),
+      sleep: async (ms) => {
+        await h.chain.mine()
+        await h.sleep(ms)
+      },
+    })
+    await execute(job(h.run.id, 'tok-retry'))
+    expect(text(h.rest.lastEdit('tok-retry'))).toMatch(/"title":"Paid"/)
+    expect(h.chain.landedTxCount).toBe(1)
+    const r = await h.payrun.payRuns.get({ guildId: GUILD, runId: h.run.id })
+    expect(r.ok && r.value.attempts).toHaveLength(1) // no second attempt was ever signed
+  })
+
   it('stops polling after a bounded number of checks and says payrun keeps checking', async () => {
     const h = await harness()
     await h.setupCommunity()

@@ -39,6 +39,8 @@ export function explainError(error: CodedError, ctx: { token?: string } = {}): s
       return 'In this server the person who created a run cannot approve it. Another member with the approver role approves it.'
     case 'not_retryable':
       return 'This run cannot be retried automatically, because money may already have moved. Check the explorer before doing anything else.'
+    case 'attempt_may_still_land':
+      return `The last payment attempt for this run could still land until ${error.retryAfter instanceof Date ? relativeTime(error.retryAfter) : 'about two minutes from now'}. Try again after that: payrun then checks the chain first.`
     case 'chain_shows_payments':
       return 'The chain already shows payments from this run, so payrun will not send it again. Check the explorer.'
     case 'no_active_key':

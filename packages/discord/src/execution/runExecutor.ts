@@ -52,14 +52,18 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
 
       let outcome = await payRuns.execute(ref)
       for (let checks = 0; checks < maxChecks; checks++) {
+        // A failed run reported pending is waiting for its last attempt's deadline before a new
+        // one: ask execute again then (it re-checks the chain). Anything in flight is reconciled.
+        let next = payRuns.reconcile.bind(payRuns)
         if (outcome.ok && outcome.value.status === 'pending') {
           const retryAfter = outcome.value.retryAfter
+          if (outcome.value.run.status === 'failed') next = payRuns.execute.bind(payRuns)
           await deps.sleep(retryAfter ? Math.max(0, retryAfter.getTime() - deps.now().getTime()) + DEADLINE_SLACK_MS : RECHECK_MS)
         } else if (!outcome.ok && outcome.error.code === 'concurrent_update') {
           // Another worker (the recovery sweep) owns this attempt: follow it, never re-send.
           await deps.sleep(RECHECK_MS)
         } else break
-        outcome = await payRuns.reconcile(ref)
+        outcome = await next(ref)
       }
 
       if (!outcome.ok) {

@@ -254,12 +254,14 @@ describe('PayRunService: execution', () => {
     expect(w.chain.broadcastCount).toBe(0)
   })
 
-  it('a definitive chain refusal fails the run (retryable); after a top-up the retry pays once', async () => {
+  it('a definitive chain refusal fails the run (retryable); after a top-up and the old deadline, the retry pays once', async () => {
     w = await world({ fund: 1_000_000n })
     const run = await approvedRun(w)
     const r = await w.svc.execute({ guildId: GUILD, runId: run.id })
     expect(r).toMatchObject({ ok: true, value: { status: 'failed', failure: { reason: 'rejected', retryable: true } } })
     w.chain.fund(TOKEN, TREASURY, 10_000_000n)
+    w.chain.advance(200)
+    w.clock.advance(200)
     const retry = await w.svc.execute({ guildId: GUILD, runId: run.id })
     expect(retry).toMatchObject({ ok: true, value: { status: 'paid', run: { attempts: [{ number: 1 }, { number: 2 }] } } })
     expect(paidTo(w)).toEqual([1_500_000n, 2_000_000n])
@@ -420,6 +422,65 @@ describe('PayRunService: telling the truth about failed and unsure runs', () => 
     pastDeadline()
     await w.svc.reconcile({ guildId: GUILD, runId: run.id })
     expect(await w.svc.cancel({ guildId: GUILD, runId: run.id, actor: TREASURER })).toMatchObject({ ok: true, value: { status: 'cancelled' } })
+  })
+})
+
+describe('PayRunService: a new attempt waits until the last one can no longer land', () => {
+  let w: World
+  beforeEach(async () => {
+    w = await world()
+  })
+
+  it('a retry right after a broadcast "rejected" (misread while the tx sat in a mempool) waits, so the old and a new tx never both land', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    expect(await w.svc.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'failed', failure: { reason: 'rejected' } } })
+    const prior = (await w.repos.runs.get(run.id))?.attempts[0]
+    if (!prior) throw new Error('no attempt')
+
+    const early = await w.svc.execute({ guildId: GUILD, runId: run.id })
+    expect(early).toEqual({ ok: true, value: { status: 'pending', run: expect.objectContaining({ status: 'failed' }), retryAfter: new Date((prior.validBefore + 10) * 1000) } })
+    expect(w.chain.broadcastCount).toBe(1)
+    expect((await w.repos.runs.get(run.id))?.attempts).toHaveLength(1)
+
+    await w.chain.mine() // the old tx lands inside its window
+    w.chain.advance(prior.validBefore + 11 - w.chain.time)
+    w.clock.advance(200)
+    expect(await w.svc.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'paid' } })
+    expect(w.chain.landedTxCount).toBe(1)
+    expect(paidTo(w)).toEqual([1_500_000n, 2_000_000n])
+  })
+
+  it('the wait is by chain time: exactly at the deadline plus margin it still waits, one second later it goes', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    await w.svc.execute({ guildId: GUILD, runId: run.id })
+    const prior = (await w.repos.runs.get(run.id))?.attempts[0]
+    if (!prior) throw new Error('no attempt')
+    w.clock.advance(3600) // the server clock alone does not count
+    w.chain.advance(prior.validBefore + 10 - w.chain.time)
+    expect(await w.svc.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'pending' } })
+    w.chain.advance(1)
+    expect(await w.svc.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'paid', run: { attempts: [{ number: 1 }, { number: 2 }] } } })
+    await w.chain.mine() // the old tx is past its deadline: it can never land now
+    expect(w.chain.landedTxCount).toBe(1)
+    expect(paidTo(w)).toEqual([1_500_000n, 2_000_000n])
+  })
+
+  it('cancelling a failed run also waits until its last tx can no longer land, then checks the chain', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    await w.svc.execute({ guildId: GUILD, runId: run.id })
+    const prior = (await w.repos.runs.get(run.id))?.attempts[0]
+    if (!prior) throw new Error('no attempt')
+    expect(await w.svc.cancel({ guildId: GUILD, runId: run.id, actor: TREASURER })).toEqual({
+      ok: false,
+      error: { code: 'attempt_may_still_land', retryAfter: new Date((prior.validBefore + 10) * 1000) },
+    })
+    await w.chain.mine()
+    w.chain.advance(200)
+    expect(await w.svc.cancel({ guildId: GUILD, runId: run.id, actor: TREASURER })).toMatchObject({ ok: false, error: { code: 'chain_shows_payments' } })
+    expect((await w.repos.runs.get(run.id))?.status).toBe('paid')
   })
 })
 

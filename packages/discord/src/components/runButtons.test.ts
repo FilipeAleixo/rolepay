@@ -129,6 +129,17 @@ describe('Cancel button', () => {
     expect(await status(a)).toBe('paid')
   })
 
+  it('a failed run whose last transaction could still land cannot be cancelled yet, and says until when', async () => {
+    const a = await withPendingRun()
+    await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
+    a.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    await a.payrun.payRuns.execute({ guildId: GUILD, runId: a.runId })
+    const d = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, treasurer))
+    expect(isEphemeral(d)).toBe(true)
+    expect(body(d).data?.content).toMatch(/could still land/)
+    expect(await status(a)).toBe('failed')
+  })
+
   it('an approver can cancel; a bystander cannot', async () => {
     const a = await withPendingRun()
     const nope = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, { userId: CAROL }))
