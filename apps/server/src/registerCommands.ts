@@ -1,0 +1,26 @@
+import { type Result, err, ok } from '@payrun/core'
+import { COMMAND_DEFINITIONS, FetchDiscordRest } from '@payrun/discord'
+
+type Fetch = (input: string, init?: RequestInit) => Promise<Response>
+
+/**
+ * Registers (overwrites) payrun's slash commands. With DISCORD_DEV_GUILD_ID they are
+ * registered for that one server and show up at once; otherwise globally.
+ * Needs only DISCORD_APP_ID and DISCORD_BOT_TOKEN, so it works before the rest is configured.
+ */
+export async function registerCommands(
+  env: Record<string, string | undefined>,
+  fetch?: Fetch,
+): Promise<Result<{ count: number; scope: string }, { code: 'missing_env' | 'discord_refused'; detail: string }>> {
+  const missing = ['DISCORD_APP_ID', 'DISCORD_BOT_TOKEN'].filter((k) => !env[k])
+  if (missing.length) return err({ code: 'missing_env', detail: missing.join(', ') })
+  const applicationId = env.DISCORD_APP_ID as string
+  const guildId = env.DISCORD_DEV_GUILD_ID || undefined
+  const rest = new FetchDiscordRest({ botToken: env.DISCORD_BOT_TOKEN as string, ...(fetch ? { fetch } : {}) })
+  const put = await rest.putCommands({ applicationId, commands: COMMAND_DEFINITIONS, ...(guildId ? { guildId } : {}) })
+  if (!put.ok) {
+    const status = put.error.code === 'http_error' ? put.error.status : put.error.code === 'forbidden' ? 403 : 404
+    return err({ code: 'discord_refused', detail: `HTTP ${status} (check DISCORD_APP_ID and DISCORD_BOT_TOKEN)` })
+  }
+  return ok({ count: COMMAND_DEFINITIONS.length, scope: guildId ? `guild ${guildId}` : 'global' })
+}
