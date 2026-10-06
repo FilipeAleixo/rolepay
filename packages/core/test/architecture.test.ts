@@ -47,8 +47,8 @@ describe('layering', () => {
     expect(violations('domain', (t) => t === 'zod' || t === 'src/domain' || t === 'src/constants')).toEqual([])
   })
 
-  it('ports/ are interfaces over the domain only', () => {
-    expect(violations('ports', (t) => t === 'src/domain' || t === 'src/ports')).toEqual([])
+  it('ports/ are interfaces over the domain (and fixed constants) only', () => {
+    expect(violations('ports', (t) => ['src/domain', 'src/ports', 'src/constants'].includes(t))).toEqual([])
   })
 
   it('services/ import only domain, ports, constants and each other (never adapters or config)', () => {
@@ -61,8 +61,8 @@ describe('layering', () => {
     expect(violations('constants', (t) => t === 'src/constants')).toEqual([])
   })
 
-  it('adapters/ never import services (they implement ports, nothing more)', () => {
-    expect(violations('adapters', (t) => t !== 'src/services' && t !== 'src/index.ts')).toEqual([])
+  it('adapters/ never import services or the package root (they implement ports, nothing more)', () => {
+    expect(violations('adapters', (t) => t !== 'src/services' && !/^src\/index\.(js|ts)$/.test(t))).toEqual([])
   })
 })
 

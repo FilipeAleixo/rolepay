@@ -12,3 +12,4 @@ export {
   idempotentSend,
   rootSignerFromPrivateKey,
 } from './tempo/index.js'
+export { openPayrunAdapters } from './wiring.js'
