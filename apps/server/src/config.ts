@@ -18,6 +18,8 @@ const ServerEnvSchema = z.object({
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8787),
   PAYRUN_PAYOUT_TOKEN: AddressSchema.optional(),
+  /** The fee token for `/payrun setup fees:fee_budget` without `fee_token` (default pathUSD on testnet). */
+  PAYRUN_FEE_TOKEN: AddressSchema.optional(),
   PAYRUN_BOT_KEY_LIMIT: z
     .string()
     .default('100')
@@ -42,8 +44,7 @@ export type ServerConfig = {
 }
 
 const TESTNET_AUTHORIZE_HINT =
-  'Testnet: run `pnpm dev:authorize-key {guildId}` on the machine running payrun (it signs with PAYRUN_TEST_ROOT_PRIVATE_KEY). The passkey signing page comes in a later build.'
-const MAINNET_AUTHORIZE_HINT = 'The treasury signs it with its passkey on the setup page (coming in a later build).'
+  'Testnet, with the dev treasury (`/payrun setup treasury:`): `pnpm dev:authorize-key {guildId}` on the machine running payrun signs it instead.'
 
 /** Throws a ConfigError naming the bad variables. Never includes their values. */
 export function parseServerConfig(raw: Record<string, string | undefined>): ServerConfig {
@@ -71,9 +72,11 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
     app: {
       network: core.network,
       claimBaseUrl: `${origin}/claim`,
+      setupBaseUrl: `${origin}/setup`,
+      defaultFeeToken: e.PAYRUN_FEE_TOKEN ?? (testnet ? TESTNET_TOKENS.path_usd : null),
       defaultPayoutToken: e.PAYRUN_PAYOUT_TOKEN ?? TESTNET_TOKENS.alpha_usd,
       botKey,
-      authorizeHint: testnet ? TESTNET_AUTHORIZE_HINT : MAINNET_AUTHORIZE_HINT,
+      authorizeHint: testnet ? TESTNET_AUTHORIZE_HINT : null,
     },
     http: { host: e.HOST, port: e.PORT },
     recoveryIntervalMs: e.PAYRUN_RECOVERY_INTERVAL_SECONDS * 1000,

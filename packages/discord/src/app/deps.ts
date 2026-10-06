@@ -6,11 +6,15 @@ export type DiscordAppConfig = {
   network: NetworkName
   /** `/payee link` replies with `${claimBaseUrl}/${token}`. The claim page itself lives elsewhere. */
   claimBaseUrl: string
+  /** `/payrun setup` hands the treasurer `${setupBaseUrl}/${token}`: the treasury page. */
+  setupBaseUrl: string
+  /** The fee token when `/payrun setup fees:fee_budget` names none (pathUSD on testnet). null = it must be named. */
+  defaultFeeToken: string | null
   /** Payout token for a community registered without an explicit `token` option. */
   defaultPayoutToken: string
   /** The bot key `/payrun setup` provisions when the community has none. */
   botKey: { limit: bigint; periodSeconds: number; validitySeconds: number }
-  /** How the treasury authorises a pending key, shown in /payrun setup (for example the dev script on testnet). `{guildId}` is filled in. */
+  /** A second way to authorise a pending key, shown in /payrun setup (the dev script on testnet). `{guildId}` is filled in. */
   authorizeHint: string | null
 }
 

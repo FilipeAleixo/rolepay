@@ -1,6 +1,7 @@
 // pnpm dev:authorize-key <guildId> (TESTNET ONLY): the treasury root authorises the bot key
 // that /payrun setup provisioned, signing in-process with PAYRUN_TEST_ROOT_PRIVATE_KEY.
-// In production the treasurer signs this with a passkey in the browser (a later work package).
+// The production path is the treasury page: /payrun setup hands a treasurer the link, and the
+// passkey signs the authorisation in the browser.
 import { NETWORKS, createPayrun, parseConfig } from '@payrun/core'
 import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@payrun/core/adapters'
 import { loadEnvironment } from '../src/env.js'

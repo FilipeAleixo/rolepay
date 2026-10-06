@@ -148,4 +148,33 @@ describe('pay run end to end through the HTTP endpoint', () => {
     await again.stop()
     expect(after.rest.dms).toHaveLength(1)
   })
+
+  it('the production setup: a treasurer gets the treasury page link, the passkey binds the treasury and authorises the key', async () => {
+    const s = await testServer()
+    s.rest.guilds.set(GUILD, 'Mods guild')
+    const treasurerAdmin = { ...TREASURER, manageGuild: true }
+    await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { approver_role: TREASURER_ROLE }, treasurerAdmin, 'tok-setup'))
+    await s.drain()
+    const path = /https:\/\/payrun\.test(\/setup\/[A-Za-z0-9_-]+)/.exec(text(s.rest.lastEdit('tok-setup')))?.[1] as string
+    expect(path).toBeDefined()
+    expect((await s.app.request(path)).status).toBe(200)
+
+    // On the page (the passkey session is faked here; the browser e2e uses a real one).
+    const passkey = '0x7777777777777777777777777777777777777777'
+    expect((await s.browserPost(`${path}/treasury`, passkey)).status).toBe(200)
+    const provisioned = (await (await s.browserPost(`${path}/key`, passkey, { limit: '20', periodDays: 30, validityDays: 30 })).json()) as {
+      keyAddress: `0x${string}`
+      authorization: { expiry: number; limits: { token: string; limit: string; period?: number }[]; scopes: never }
+    }
+    const authorization = { ...provisioned.authorization, limits: provisioned.authorization.limits.map((l) => ({ ...l, limit: BigInt(l.limit) })) }
+    expect((await s.chain.authorizeKey({ root: s.chain.rootSigner(passkey), accessKey: provisioned.keyAddress, authorization: authorization as never })).ok).toBe(true)
+    expect((await s.browserPost(`${path}/key/confirm`, passkey)).status).toBe(200)
+
+    await s.interact(slashCommand(SCOPE, 'payrun', 'setup', {}, treasurerAdmin, 'tok-setup-2'))
+    await s.drain()
+    const card = text(s.rest.lastEdit('tok-setup-2'))
+    expect(card).toContain('payrun setup: Mods guild')
+    expect(card).toContain('20 AlphaUSD of 20 AlphaUSD left')
+    expect(card).toMatch(/Ready/)
+  })
 })

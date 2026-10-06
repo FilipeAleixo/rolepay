@@ -19,6 +19,8 @@ describe('parseServerConfig', () => {
     expect(c.discord).toEqual({ applicationId: '500000000000000001', publicKey: 'cd'.repeat(32), botToken: SECRET_TOKEN, devGuildId: null })
     expect(c.http).toEqual({ host: '127.0.0.1', port: 8787 })
     expect(c.app.claimBaseUrl).toBe('https://pay.example.org/claim')
+    expect(c.app.setupBaseUrl).toBe('https://pay.example.org/setup')
+    expect(c.app.defaultFeeToken).toBe(TESTNET_TOKENS.path_usd)
     expect(c.web).toEqual({
       origin: 'https://pay.example.org',
       rpId: 'pay.example.org',
@@ -64,9 +66,15 @@ describe('parseServerConfig', () => {
     expect(message).not.toContain('nope')
   })
 
-  it('on mainnet needs an explicit payout token', () => {
+  it('on mainnet needs an explicit payout token, has no dev hint, and a fee token only if configured', () => {
     const mainnet = { PAYRUN_NETWORK: 'mainnet', PAYRUN_ALLOW_MAINNET: 'true' }
     expect(() => parseServerConfig(env(mainnet))).toThrow(/PAYRUN_PAYOUT_TOKEN/)
+    const c = parseServerConfig(env({ ...mainnet, PAYRUN_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001' }))
+    expect(c.app.authorizeHint).toBeNull()
+    expect(c.app.defaultFeeToken).toBeNull()
+    expect(parseServerConfig(env({ ...mainnet, PAYRUN_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001', PAYRUN_FEE_TOKEN: '0x20c0000000000000000000000000000000000000' })).app.defaultFeeToken).toBe(
+      '0x20c0000000000000000000000000000000000000',
+    )
   })
 
   it('the passkey domain is config only: the origin from PUBLIC_URL, the rpId its host unless PAYRUN_RP_ID says otherwise', () => {

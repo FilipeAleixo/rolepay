@@ -24,11 +24,21 @@ export const COMMAND_DEFINITIONS = [
         name: 'setup',
         description: 'Register this server, set the approver role, check the bot key',
         options: [
-          { type: OptionType.String, name: 'treasury', description: "The community's Tempo account address (needed the first time)" },
-          { type: OptionType.Role, name: 'approver_role', description: 'The role allowed to approve pay runs (the Treasurer)' },
-          { type: OptionType.String, name: 'token', description: 'Payout token address (default: AlphaUSD on testnet)' },
-          { type: OptionType.String, name: 'key_limit', description: 'Bot key spend limit per 30 days, for a new key (default 100)' },
-          { type: OptionType.Boolean, name: 'new_key', description: 'Issue a fresh bot key (for example to change its limit)' },
+          { type: OptionType.Role, name: 'approver_role', description: 'The role allowed to approve pay runs (the Treasurer); needed the first time' },
+          {
+            type: OptionType.String,
+            name: 'fees',
+            description: 'Who pays the network fee of each run',
+            choices: [
+              { name: 'Sponsored (default)', value: 'sponsor' },
+              { name: 'From a fee budget the bot key carries', value: 'fee_budget' },
+            ],
+          },
+          { type: OptionType.String, name: 'fee_token', description: 'Fee budget token address (default: pathUSD on testnet)' },
+          { type: OptionType.String, name: 'token', description: 'Payout token address, the first time (default: AlphaUSD on testnet)' },
+          { type: OptionType.String, name: 'treasury', description: 'Dev shortcut: an existing treasury address instead of the passkey page' },
+          { type: OptionType.String, name: 'key_limit', description: 'Dev shortcut: spend limit for a new key issued here (default 100)' },
+          { type: OptionType.Boolean, name: 'new_key', description: 'Dev shortcut: issue a fresh key here, for pnpm dev:authorize-key' },
         ],
       },
       {
