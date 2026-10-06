@@ -1,0 +1,71 @@
+/**
+ * Builders for raw interaction bodies, shaped like what Discord sends, for tests of
+ * the router and of the HTTP endpoint end to end.
+ */
+type OptionValue = string | number | boolean
+
+export type Who = { userId: string; roles?: string[]; manageGuild?: boolean }
+
+const APP = '500000000000000001'
+let seq = 0
+const nextId = () => `8${String(++seq).padStart(17, '0')}`
+
+function member(who: Who) {
+  return { user: { id: who.userId, username: `user${who.userId.slice(-3)}` }, roles: who.roles ?? [], permissions: who.manageGuild ? String(1n << 5n) : '0' }
+}
+
+function options(values: Record<string, OptionValue | undefined>, focused?: string) {
+  return Object.entries(values)
+    .filter(([, v]) => v !== undefined)
+    .map(([name, value]) => ({
+      name,
+      type: typeof value === 'boolean' ? 5 : typeof value === 'number' ? 4 : 3,
+      value,
+      ...(name === focused ? { focused: true } : {}),
+    }))
+}
+
+export type InteractionScope = { guildId: string | null; channelId?: string; applicationId?: string }
+
+export function slashCommand(
+  scope: InteractionScope,
+  command: string,
+  sub: string,
+  values: Record<string, OptionValue | undefined>,
+  who: Who,
+  token = `tok-${command}-${sub}-${seq + 1}`,
+) {
+  return {
+    id: nextId(),
+    application_id: scope.applicationId ?? APP,
+    type: 2,
+    token,
+    ...(scope.guildId ? { guild_id: scope.guildId, member: member(who) } : { user: { id: who.userId, username: 'dm' } }),
+    ...(scope.channelId ? { channel_id: scope.channelId } : {}),
+    data: { id: '900000000000000001', name: command, type: 1, options: [{ type: 1, name: sub, options: options(values) }] },
+  }
+}
+
+export function autocomplete(scope: InteractionScope, command: string, sub: string, values: Record<string, OptionValue>, focused: string, who: Who) {
+  return {
+    ...slashCommand(scope, command, sub, {}, who),
+    type: 4,
+    data: { id: '900000000000000001', name: command, type: 1, options: [{ type: 1, name: sub, options: options(values, focused) }] },
+  }
+}
+
+export function buttonClick(scope: InteractionScope, customId: string, who: Who, token = `tok-click-${seq + 1}`) {
+  return {
+    id: nextId(),
+    application_id: scope.applicationId ?? APP,
+    type: 3,
+    token,
+    guild_id: scope.guildId,
+    channel_id: scope.channelId ?? '700000000000000001',
+    member: member(who),
+    message: { id: '810000000000000001' },
+    data: { custom_id: customId, component_type: 2 },
+  }
+}
+
+export const ping = () => ({ id: nextId(), application_id: APP, type: 1, token: 'tok-ping', version: 1 })
