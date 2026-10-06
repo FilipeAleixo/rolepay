@@ -39,7 +39,9 @@ const TESTNET_AUTHORIZE_HINT =
 const MAINNET_AUTHORIZE_HINT = 'The treasury signs it with its passkey on the setup page (coming in a later build).'
 
 /** Throws a ConfigError naming the bad variables. Never includes their values. */
-export function parseServerConfig(env: Record<string, string | undefined>): ServerConfig {
+export function parseServerConfig(raw: Record<string, string | undefined>): ServerConfig {
+  // `NAME=` (a blank line copied from .env.example) means unset, not invalid.
+  const env = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined && v.trim() !== ''))
   const parsed = ServerEnvSchema.safeParse(env)
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.code === 'invalid_type' ? 'required' : i.message.replace(/received .*/i, 'invalid value')}`)

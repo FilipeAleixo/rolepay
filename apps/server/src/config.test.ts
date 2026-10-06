@@ -37,6 +37,13 @@ describe('parseServerConfig', () => {
     expect(c.discord.devGuildId).toBe('1094309218049937418')
   })
 
+  it('treats blank values (copied from .env.example) as unset', () => {
+    const c = parseServerConfig(env({ DISCORD_DEV_GUILD_ID: '', PAYRUN_PAYOUT_TOKEN: '', PORT: '', PAYRUN_RPC_URL: '' }))
+    expect(c.discord.devGuildId).toBeNull()
+    expect(c.app.defaultPayoutToken).toBe(TESTNET_TOKENS.alpha_usd)
+    expect(c.http.port).toBe(8787)
+  })
+
   it('names every missing or bad variable, and never prints a value', () => {
     let message = ''
     try {
