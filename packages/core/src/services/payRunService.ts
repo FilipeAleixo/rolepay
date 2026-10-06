@@ -237,13 +237,21 @@ export class PayRunService {
     return this.reconcileRun(run)
   }
 
-  /** Startup sweep: reconcile every run a crash may have left in `executing`. */
+  /**
+   * Startup sweep: reconcile every run a crash may have left in `executing`. Each run is on its
+   * own: one that throws (an RPC outage, a log range the node refuses) is reported as an error
+   * and the sweep carries on, so one bad run cannot stall every run after it.
+   */
   async recoverInFlight(): Promise<RecoveryResult[]> {
     const results: RecoveryResult[] = []
     for (const run of await this.deps.runs.listByStatus('executing')) {
       const ref = { guildId: run.communityId, runId: run.id }
-      const r = await this.reconcileRun(run)
-      results.push(r.ok ? { ...ref, status: r.value.status } : { ...ref, status: 'error', error: r.error.code })
+      try {
+        const r = await this.reconcileRun(run)
+        results.push(r.ok ? { ...ref, status: r.value.status } : { ...ref, status: 'error', error: r.error.code })
+      } catch (e) {
+        results.push({ ...ref, status: 'error', error: 'unexpected', detail: redactUrls(e instanceof Error ? e.message : String(e)) })
+      }
     }
     return results
   }
@@ -361,8 +369,11 @@ export class PayRunService {
   }
 }
 
-/** One run the recovery sweep looked at; the guild is there so callers can report it. */
-export type RecoveryResult = { guildId: string; runId: string; status: ExecuteOutcome['status'] | 'error'; error?: string }
+/** One run the recovery sweep looked at; the guild is there so callers can report it. `detail` is for logs only. */
+export type RecoveryResult = { guildId: string; runId: string; status: ExecuteOutcome['status'] | 'error'; error?: string; detail?: string }
+
+/** RPC errors carry their request URL, which may hold an API key: never pass one on. */
+const redactUrls = (text: string) => text.replace(/https?:\/\/\S+/g, '<url>').slice(0, 300)
 
 function feePayment(community: Community, key: BotKey): FeePayment {
   return community.feeMode === 'fee_budget' && key.policy.feeToken ? { mode: 'fee_budget', feeToken: key.policy.feeToken } : { mode: 'sponsor' }

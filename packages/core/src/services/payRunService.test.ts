@@ -505,6 +505,26 @@ describe('PayRunService: crash recovery (a crash mid-run never pays twice)', () 
     expect(paidTo(w)).toEqual([1_500_000n, 2_000_000n])
   })
 
+  it('one run whose reconcile throws (an RPC refusing an old log range, say) does not stop the sweep for the others', async () => {
+    const stuck = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'drop'
+    await w.svc.execute({ guildId: GUILD, runId: stuck.id })
+    w.clock.advance(1)
+    const fine = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'land_then_lose_response'
+    await w.svc.execute({ guildId: GUILD, runId: fine.id })
+    const lookup = w.chain.lookupTx.bind(w.chain)
+    const stuckHash = (await w.repos.runs.get(stuck.id))?.attempts[0]?.txHash
+    w.chain.lookupTx = async (hash) => {
+      if (hash === stuckHash) throw new Error('HTTP request failed. URL: https://rpc.example/key-abc123 details: range too large')
+      return lookup(hash)
+    }
+    const results = await w.svc.recoverInFlight()
+    expect(results).toContainEqual({ guildId: GUILD, runId: fine.id, status: 'paid' })
+    expect(results).toContainEqual({ guildId: GUILD, runId: stuck.id, status: 'error', error: 'unexpected', detail: 'HTTP request failed. URL: <url> details: range too large' })
+    expect((await w.repos.runs.get(stuck.id))?.status).toBe('executing')
+  })
+
   it('response lost after landing (no crash): reconcile finds the memos and marks paid', async () => {
     const run = await approvedRun(w)
     w.chain.faults.nextBroadcast = 'land_then_lose_response'
