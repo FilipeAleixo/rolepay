@@ -11,7 +11,8 @@
     "dev:treasury": "tsx scripts/devTreasury.ts",
     "dev:authorize-key": "tsx scripts/devAuthorizeKey.ts",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:chain": "vitest run --config vitest.chain.config.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",
