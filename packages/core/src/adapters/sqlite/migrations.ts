@@ -93,6 +93,17 @@ const migrations: Record<string, Migration> = {
         .execute()
     },
   },
+  '0002_key_value': {
+    async up(db: Kysely<unknown>) {
+      // Small JSON records with an optional expiry (KeyValueStore). expires_at is ISO text or null.
+      await db.schema
+        .createTable('kv')
+        .addColumn('key', 'text', (c) => c.primaryKey())
+        .addColumn('value', 'text', (c) => c.notNull())
+        .addColumn('expires_at', 'text')
+        .execute()
+    },
+  },
 }
 
 class InlineMigrations implements MigrationProvider {

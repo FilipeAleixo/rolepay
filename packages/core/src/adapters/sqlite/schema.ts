@@ -76,7 +76,14 @@ export interface RunLinesTable {
   memo: string
 }
 
+export interface KvTable {
+  key: string
+  value: string
+  expires_at: string | null
+}
+
 export interface Database {
+  kv: KvTable
   communities: CommunitiesTable
   bot_keys: BotKeysTable
   payees: PayeesTable

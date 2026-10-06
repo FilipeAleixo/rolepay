@@ -1,4 +1,5 @@
 export { FakePayoutChain } from './fakeChain.js'
+export { MemoryKeyValueStore } from './keyValue.js'
 export {
   MemoryCommunityRepository,
   MemoryPayeeRepository,

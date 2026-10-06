@@ -12,7 +12,7 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }))
 describe('openPayrunAdapters', () => {
   it('opens production adapters from config and composes working services', async () => {
     const config = parseConfig({ PAYRUN_MASTER_KEY: 'c'.repeat(64), PAYRUN_DB_PATH: join(dir, 'p.db') })
-    const { deps, close } = await openPayrunAdapters(config)
+    const { deps, kv, close } = await openPayrunAdapters(config)
     expect(deps.chain).toBeInstanceOf(TempoPayoutChain)
     expect(deps.network).toBe('moderato')
     const payrun = createPayrun(deps)
@@ -24,6 +24,9 @@ describe('openPayrunAdapters', () => {
       feeMode: 'sponsor',
     })
     expect(r.ok).toBe(true)
+    // The key-value store lives in the same database file.
+    await kv.set('k', { v: 1 })
+    expect(await kv.get('k')).toEqual({ v: 1 })
     await close()
   })
 })

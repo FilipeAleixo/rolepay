@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
+import { keyValueContract } from '../../../test/support/keyValueContract.js'
 import { repositoryContracts } from '../../../test/support/repositoryContracts.js'
 import * as f from '../../../test/support/fixtures.js'
 import { openSqliteDatabase } from './index.js'
@@ -15,13 +16,14 @@ afterAll(async () => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-async function fresh() {
-  const db = await openSqliteDatabase(join(dir, `t${++n}.db`))
+async function fresh(options: Parameters<typeof openSqliteDatabase>[1] = {}) {
+  const db = await openSqliteDatabase(join(dir, `t${++n}.db`), options)
   opened.push(db)
   return db
 }
 
 repositoryContracts('sqlite', async () => (await fresh()).repositories)
+keyValueContract('sqlite', async (clock) => (await fresh({ clock })).kv)
 
 describe('sqlite: migrations and persistence', () => {
   it('migrates idempotently and keeps data across reopen', async () => {
@@ -34,6 +36,16 @@ describe('sqlite: migrations and persistence', () => {
     opened.push(b)
     expect(await b.repositories.communities.get(f.GUILD)).toEqual(f.community())
     expect(await b.repositories.runs.get('run_fixture01')).toEqual(f.run())
+  })
+
+  it('keeps key-value records across reopen', async () => {
+    const path = join(dir, 'reopen-kv.db')
+    const a = await openSqliteDatabase(path)
+    await a.kv.set('credential:abc', { publicKey: '0x04ab' })
+    await a.close()
+    const b = await openSqliteDatabase(path)
+    opened.push(b)
+    expect(await b.kv.get('credential:abc')).toEqual({ publicKey: '0x04ab' })
   })
 
   it('enforces foreign keys: a run for an unknown community is refused', async () => {
