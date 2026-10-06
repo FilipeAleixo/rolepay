@@ -6,11 +6,12 @@ payrun: Discord-native pay runs on Tempo. A community's own Tempo account holds 
 
 ```bash
 pnpm typecheck     # strict TS, all packages
-pnpm test          # unit + SQLite integration + architecture guards + discord + server e2e (no network)
+pnpm test          # unit + SQLite integration + architecture guards + discord + web + server e2e (no network)
 pnpm test:chain    # opt-in: full pay runs on the Moderato TESTNET (chain 42431), service level and over HTTP
+pnpm test:e2e      # opt-in: Playwright, real passkeys (virtual authenticator) on localhost, Moderato
 pnpm dev           # the server (apps/server/README.md: Discord setup and the manual test)
 pnpm register-commands                 # PUT the slash commands to Discord (needs DISCORD_APP_ID, DISCORD_BOT_TOKEN)
-pnpm dev:treasury / dev:authorize-key  # testnet only: fund the dev treasury, authorise a pending bot key
+pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut: fund a dev treasury, authorise its pending bot key (production: the setup page)
 ```
 
 ## Rules
@@ -25,6 +26,7 @@ pnpm dev:treasury / dev:authorize-key  # testnet only: fund the dev treasury, au
 8. **Config vs constants.** `config/` = operational settings from env. `constants/` = fixed facts (chain IDs, token decimals, memo layout).
 9. **Migrations are append-only** once shipped (`adapters/sqlite/migrations.ts`). Keep the schema portable to Postgres.
 10. **Discord layer (enforced by `packages/discord/test/architecture.test.ts`).** `packages/discord` imports only `@payrun/core` and `zod`. A handler parses options with Zod, checks permissions from the signed interaction, calls a service and returns an outcome; it never calls Discord itself. Views are pure builders. Everything external (Discord REST, the execution queue, member lookup) is a port with a fake in `@payrun/discord/testing`. Only `apps/server` imports `@payrun/core/adapters`.
+11. **Web layer (enforced by `packages/web/test/architecture.test.ts`).** `packages/web` server code imports only `@payrun/core`, hono, zod, `accounts/server`, `viem/tempo`, esbuild and node; `src/client/` (the browser bundle) imports only `accounts` and `viem`. An address is always derived from the verified passkey session, never taken from the page. POSTs must be same-origin.
 
 ## Secrets and networks
 
@@ -39,6 +41,7 @@ pnpm dev:treasury / dev:authorize-key  # testnet only: fund the dev treasury, au
 - The public RPC sometimes returns a receipt about 60 s late, an HTML error page, or `-32002 no healthy upstreams`: `idempotentSend` recovers receipts by hash and `retryUnavailable` retries -32002. Never re-sign on an ambiguous error.
 - Revoked or expired keys fail late as "Missing or invalid parameters": check key state before every run (`checkKeyForRun`).
 - Fees from the payout token come off the payout limit: use the sponsor or a separate fee budget.
+- Passkeys (WebAuthn) bind to the rpId for good, need https or `http://localhost` (never an IP), and a returning sign-in does not return the public key: the server keeps it (`Handler.webAuthn` over the KeyValueStore). A WebAuthn P256 root can authorise and revoke access keys exactly like a secp256k1 one (proven on Moderato).
 
 ## Writing
 

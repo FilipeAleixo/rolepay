@@ -2,30 +2,31 @@
 
 payrun runs pay runs for the people who run a Discord community (mods, staff, bounty winners) on Tempo. An admin builds a run, a treasurer approves it with one button, and everyone is paid in one batched stablecoin transaction. Each payout line carries a memo, recipients pay no gas, and the run exports to CSV.
 
-This document covers the whole system. `packages/core`, `packages/discord` and `apps/server` exist and are tested end to end, in process and on Moderato. The passkey claim page and the browser signing flow for the bot key are later work packages.
+This document covers the whole system. `packages/core`, `packages/discord`, `packages/web` and `apps/server` exist and are tested end to end: in process, on Moderato, and in a real browser with a virtual passkey authenticator (recipients claim with a passkey; the treasurer's passkey creates the treasury and signs the bot key's authorisation and its revocation).
 
 ## Trust model
 
-- **The community's own Tempo account (the treasury) holds the funds.** Its root key is the treasurer's passkey (or a multisig later). payrun never holds it in production.
+- **The community's own Tempo account (the treasury) holds the funds.** Its root key is the treasurer's passkey (or a multisig later), created on the setup page. payrun never holds it in production: the browser signs with it, the server only reads the result from the chain.
 - **The bot holds only an access key**, authorised by the root through the Account Keychain precompile with three restrictions:
   - an expiry,
   - a per-token spend limit (one-time or per period),
   - a call scope: only `transferWithMemo` on the payout token, optionally only to an allowlist of recipients.
 - A leaked bot key can therefore spend at most the remaining period budget, only through `transferWithMemo`, until it expires or the root revokes it. The feasibility spike proved these limits hold inside a batch (`../tempo-payrun-spike/RESULTS.md`, summarised in the brief).
 - **Fees** are paid by a sponsor (the public sponsor on testnet) or from a separate fee-budget token with its own limit. Never from the payout token under the payout limit: the fee would silently eat the payout budget.
-- **Recipients register before they are paid.** `/payee link` issues a one-time link; the claim page creates a passkey account and registers its address. There are no pre-funded claim links.
+- **Recipients register before they are paid.** `/payee link` issues a one-time link; the claim page creates a passkey account and registers its address (taken from the passkey session the server verified, never from the page). There are no pre-funded claim links.
 
 ## Repository layout
 
 ```
 packages/core        @payrun/core: domain, ports, services, adapters
 packages/discord     @payrun/discord: the Discord adapter over HTTP interactions
+packages/web         @payrun/web: the claim and treasurer setup pages, WebAuthn ceremonies, the client bundle
 apps/server          @payrun/server: Hono on Node, the composition root (README: how to run it)
 docs/tempo           Tempo and viem docs snapshot from the spike
 docs/ARCHITECTURE.md this file
 ```
 
-Dependencies point one way: `apps/server` -> `packages/discord` -> `@payrun/core` (services only). Only `apps/server` (its `src/` and `scripts/`) imports `@payrun/core/adapters`; a guard in core's architecture test fails the build otherwise.
+Dependencies point one way: `apps/server` -> `packages/discord` and `packages/web` -> `@payrun/core` (services only). Discord and web never import each other. Only `apps/server` (its `src/` and `scripts/`) imports `@payrun/core/adapters`; a guard in core's architecture test fails the build otherwise.
 
 ## packages/core layers
 
@@ -37,7 +38,7 @@ services/      CommunityService, PayeeService, PayRunService   (the ONLY public 
    |  uses
    v
 domain/        pure: Zod schemas, types, state machine, money, memo, reconcile, CSV
-ports/         interfaces: PayoutChain, *Repository, KeyVault, Clock, IdGenerator
+ports/         interfaces: PayoutChain, *Repository, KeyValueStore, KeyVault, Clock, IdGenerator
    ^
    |  implement
 adapters/      tempo/ (viem), sqlite/ (Kysely), crypto/ (node:crypto), memory/ (fakes)
@@ -54,7 +55,7 @@ adapters/      tempo/ (viem), sqlite/ (Kysely), crypto/ (node:crypto), memory/ (
 
 These rules are enforced by `packages/core/test/architecture.test.ts`, not by memory. The same file checks that the package root exports no adapter and that nothing outside core reaches into core internals.
 
-**Public surface.** `@payrun/core` exports `createPayrun(deps)` (returns the three services), the services' types and input schemas, domain types and schemas, port types, config and constants. `@payrun/core/adapters` exports the implementations, for composition roots only. `openPayrunAdapters(parseConfig(process.env))` opens the production set (SQLite file, AES vault, Tempo chain, random IDs, system clock).
+**Public surface.** `@payrun/core` exports `createPayrun(deps)` (returns the three services), the services' types and input schemas, domain types and schemas, port types, config and constants. `@payrun/core/adapters` exports the implementations, for composition roots only. `openPayrunAdapters(parseConfig(process.env))` opens the production set (SQLite file, AES vault, Tempo chain, random IDs, system clock) and returns `{ deps, kv, close }`: `kv` is the KeyValueStore in the same database file.
 
 **Results, not throws.** Every expected failure is a value: `{ ok: false, error: { code: 'snake_case', ... } }`. Services throw only for the unexpected (a database or RPC outage), which the caller treats as "try again".
 
@@ -64,7 +65,8 @@ These rules are enforced by `packages/core/test/architecture.test.ts`, not by me
 
 Everything is keyed by the Discord guild ID: a guild is a community.
 
-- **Community**: guild ID, name, network, treasury address, payout token, fee mode (`sponsor` or `fee_budget`, with a fee token), approver role ID (the Treasurer role the Discord layer checks).
+- **Community**: guild ID, name (read from Discord by `/payrun setup`), network, treasury address, payout token, fee mode (`sponsor` or `fee_budget`, with a fee token), approver role ID (the Treasurer role the Discord layer checks).
+- **SetupLink**: a short-lived (30 minute) link to the treasurer's setup page for one guild, issued by `/payrun setup` to a member with Manage Server and the approver role. Only a fingerprint is stored. It carries the settings that first setup chose (name, payout token, fee mode, approver role), because the community cannot be registered until its treasury exists. It is not consumed on use (the page takes several steps); instead `bindTreasury` registers the treasury once and refuses any other address afterwards, and every later change also needs the treasury's own passkey session (checked by the web layer) or its signature on chain.
 - **BotKey**: the bot's access key for one community. Address, sealed secret (encrypted by the KeyVault, bound to the community and key), status (`pending_authorization`, `active`, `revoked`, `superseded`), and the policy the root signed: limit, period, expiry, optional recipient allowlist (`null` = none, the v1 default), optional fee budget.
 - **Payee**: (guild, Discord user) to the address of their passkey account.
 - **LinkToken**: a one-time registration link. Only an HMAC fingerprint of the token is stored, so a database reader cannot hijack a link and redirect someone's pay.
@@ -117,10 +119,10 @@ Before signing, `execute` reads the key from the chain (`checkKeyForRun`): revok
 
 ## Bot key lifecycle
 
-1. `CommunityService.provisionBotKey` mints a fresh secp256k1 key, seals the secret, stores it as `pending_authorization`, and returns the exact authorisation for the root to sign (expiry, limits, scope).
-2. **Production:** the treasurer signs that authorisation with their passkey on the setup page (a later WP), and `confirmBotKey` marks the key active once the chain shows it. **Dev, CLI and tests:** `authorizeBotKey({ root })` signs with an in-process `RootSigner` (`rootSignerFromPrivateKey`), then confirms.
+1. `CommunityService.provisionBotKey` mints a fresh secp256k1 key, seals the secret, stores it as `pending_authorization`, and returns the exact authorisation for the root to sign (expiry, limits, scope). On the setup page the treasurer chooses the limit, the period and the expiry (and the fee budget in `fee_budget` mode).
+2. **Production:** the browser sends a Tempo transaction from the treasury to the Account Keychain (`accessKey.authorize`), signed with the treasurer's passkey (WebAuthn P256) and sponsored on testnet; then `confirmBotKey` marks the key active once the chain shows it. **Dev, CLI and tests:** `authorizeBotKey({ root })` signs with an in-process `RootSigner` (`rootSignerFromPrivateKey`), then confirms (`pnpm dev:authorize-key`).
 3. Rotation: a newly confirmed key supersedes the old active key. A revoked key ID can never be re-authorised, so rotation always mints a fresh key.
-4. `revokeBotKey({ root })` (dev path) or a root revoke from anywhere; `keyStatus` always reads the chain.
+4. Revoke: the setup page signs `accessKey.revoke` with the passkey and `confirmRevocation` marks the key revoked once the chain shows it (it never trusts the caller's word). Dev path: `revokeBotKey({ root })`. `keyStatus` always reads the chain.
 
 A recurring limit's period is anchored at authorisation time, not at calendar months.
 
@@ -128,6 +130,7 @@ A recurring limit's period is anchored at authorisation time, not at calendar mo
 
 - **`sponsor`**: the tx carries `feePayer: true` and is filled through a relay (`withRelay`). Testnet: the public sponsor `https://sponsor.moderato.tempo.xyz`. Mainnet: Tempo's hosted relay (API key) or a self-hosted relay; neither is configured yet, so mainnet defaults to no sponsor.
 - **`fee_budget`**: the bot pays fees in a separate token (for example pathUSD) under its own small limit, authorised alongside the payout limit. The budget must cover gas limit times price up front (the keychain pre-charges, then nets back).
+- `/payrun setup fees:fee_budget` (or `fees:sponsor`) switches the mode; `setFeeMode` says when the active key has no fee budget for it, and the card asks the treasurer to authorise a new key with one on the setup page. A key with a fee budget keeps working after switching back to sponsored. Proven on Moderato by `packages/core/test/feeBudget.chain.test.ts` (fee paid in pathUSD, payout limit exact).
 - "Sponsor down" is not automatic yet: a run fails as `rejected` (retryable), and switching the community to `fee_budget` is the fallback.
 
 ## Persistence
@@ -136,23 +139,53 @@ SQLite through Kysely and better-sqlite3 (`adapters/sqlite/`). The schema is por
 
 The repository contract (`test/support/repositoryContracts.ts`) runs against both the in-memory fakes and SQLite, so unit tests on fakes can be trusted.
 
+**KeyValueStore** (`ports/keyValueStore.ts`, migration `0002_key_value`): small JSON records with an optional expiry, with atomic create-if-absent and read-and-delete, for state that is not a domain entity. The web layer keeps the passkey credentials, challenges and sessions there (through the Accounts SDK's `Handler.webAuthn`, keys under `webauthn:`), and the Discord layer keeps where a run's review message is and whether its receipts went out (`discord:`). The shape matches the Accounts SDK's `Kv`. `create` is one upsert guarded by expiry and `take` is one `DELETE ... RETURNING`, so both stay atomic on Postgres. Its own contract (`test/support/keyValueContract.ts`) runs against memory and SQLite.
+
 ## apps/server (Hono on Node)
 
-The composition root (`src/main.ts`). It parses config (`src/config.ts`: the server's own `DISCORD_*`, `CLAIM_BASE_URL`, `HOST`/`PORT` and bot-key defaults, plus core's `PAYRUN_*` through `parseConfig`), opens the production adapters, creates the services and serves:
+The composition root (`src/main.ts`). It parses config (`src/config.ts`: the server's own `DISCORD_*`, `PUBLIC_URL` and `PAYRUN_RP_ID`, `HOST`/`PORT` and bot-key defaults, plus core's `PAYRUN_*` through `parseConfig`), opens the production adapters, creates the services and serves:
 
 - `POST /discord/interactions`: the Discord interactions endpoint (HTTP interactions, no gateway bot).
 - `GET /health`: `{ ok, network, jobsInFlight }`.
-- `GET|POST /claim/:token`: a throwaway **testnet-only** claim page (`PAYRUN_DEV_CLAIM=true`, refused on mainnet by config) that registers a pasted or random address, so `/payee link` works end to end before the passkey claim page exists.
-- The recovery sweep: `payRuns.recoverInFlight()` on start and every 30 seconds (`src/recovery.ts`), never two at once.
+- `/claim/:token`, `/setup/:token`, `/webauthn/*`, `/assets/payrun.js`: the web pages (`@payrun/web`, below).
+- The recovery sweep: `payRuns.recoverInFlight()` on start and every 30 seconds (`src/recovery.ts`), never two at once. Runs it settles are reported in Discord as part of the sweep (`createRecoveryNotifier`).
+
+**The passkey domain is config only.** `PUBLIC_URL` is the public origin (the tunnel URL while developing); the WebAuthn rpId defaults to its host, or `PAYRUN_RP_ID` names a parent domain. Config refuses what browsers refuse for passkeys: plain http off localhost, an IP address, a path, an rpId that is not the host or a parent of it. Moving to the production domain means changing these two values, and passkeys made on the old host do not carry over.
 
 ```ts
 const config = parseServerConfig(loadEnvironment())        // root .env, DB path anchored at the repo root
-const { deps, close } = await openPayrunAdapters(config.core)
+const { deps, kv, close } = await openPayrunAdapters(config.core)
 const payrun = createPayrun(deps)
-const server = composeServer({ config, payrun, rest: new FetchDiscordRest({ botToken }), clock: deps.clock })
+const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
+const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() }
+const server = composeServer({ config, payrun, rest: new FetchDiscordRest({ botToken }), clock: deps.clock, kv, web })
 ```
 
-`composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters and a fake Discord and drive the real Hono app over HTTP. Scripts: `pnpm register-commands`, and on testnet `pnpm dev:treasury` (print and fund the dev treasury) and `pnpm dev:authorize-key <guildId>` (the in-process root signs the pending bot key; in production the treasurer signs it with a passkey in a later work package). How to run it: `apps/server/README.md`.
+`composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters, a fake Discord and fake passkey sessions and drive the real Hono app over HTTP; the Playwright e2e passes the production set with real passkeys. Scripts: `pnpm register-commands`, and on testnet the dev shortcut `pnpm dev:treasury` (print and fund a dev treasury whose key is in `.env`) and `pnpm dev:authorize-key <guildId>` (that in-process root signs the pending bot key). How to run it: `apps/server/README.md`.
+
+## packages/web
+
+The claim and setup pages, as an adapter over core like `packages/discord`: it calls core only through `@payrun/core` services, and everything external is a port with a fake in `@payrun/web/testing`.
+
+```
+app.ts       the Hono app: security headers, same-origin POSTs only (CSRF), /webauthn, /assets, the routes
+routes/      claim.ts (/claim/:token) and setup.ts (/setup/:token and its JSON endpoints)
+views/       pure HTML builders; each page embeds a JSON config for the client
+passkeys.ts  the Accounts SDK's Handler.webAuthn over core's KeyValueStore, and the session reader
+assets.ts    the client bundle, built in memory with esbuild on first request and cached
+client/      browser code (its own tsconfig with DOM types): main, claim, setup, passkey, tempo, dom
+ports.ts     PasskeySessions, Assets
+```
+
+**Why server-rendered HTML plus one client bundle**, not a separate `apps/web` with Vite: the pages are two forms, and passkeys bind to one origin, so the pages, the WebAuthn endpoints and the API must be served together anyway. Vite would add a second dev server and a proxy for the same result. esbuild is already installed (through tsx), bundles the Accounts SDK and viem for the browser in about a second, and `pnpm dev` keeps working with no build step. The bundle is about 1.5 MB (mostly viem's Tempo ABIs), served gzipped. A framework can come later behind the same routes if the pages grow.
+
+**Passkeys.** The browser uses the Tempo Accounts SDK's `webAuthn` adapter (`Provider.create({ adapter: webAuthn({ auth: '/webauthn' }) })`) and `wallet_connect` to register or sign in. The ceremonies run against `Handler.webAuthn` on this server, which checks the origin and rpId from config, stores each credential's public key (WebAuthn sign-in does not return it, so returning users need the server to remember it) and issues a session cookie. The store is core's KeyValueStore, so credentials survive restarts and move to Postgres with the rest. The server derives the Tempo address from the session's public key; a page never tells the server an address.
+
+**Claim.** `GET /claim/:token` describes the link; `POST /claim/:token` with a passkey session registers that session's address (`payees.register`, which consumes the link once).
+
+**Setup.** `GET /setup/:token` (page), `GET /setup/:token/state` (community, key and chain state, who is signed in), `POST .../treasury` (bind the signed-in passkey as the treasury, registering the community the first time), `POST .../key` (provision a key with the chosen limit, period, expiry and fee budget; returns the exact authorisation), `POST .../key/confirm` and `POST .../key/revoked` (read the result from the chain). Everything after binding needs the session of the passkey that is the treasury. The browser itself signs the keychain transactions (`client/tempo.ts`: viem's `accessKey.authorizeSync` and `revokeSync` with the passkey account, sponsored through the public sponsor on testnet; without a sponsor the treasury pays its own fee in its fee token). On testnet a faucet button funds the treasury.
+
+Layering is enforced by `packages/web/test/architecture.test.ts`: server code imports only `@payrun/core`, hono, zod, the Accounts SDK server, `viem/tempo`, esbuild and node; client code imports only the Accounts SDK and viem; views are pure; nothing imports the fakes.
 
 ## packages/discord
 
@@ -173,8 +206,8 @@ A handler is a thin route: parse options with Zod, check permissions, call a ser
 
 | Command / component | Who | Service calls |
 | --- | --- | --- |
-| `/payrun setup` | Manage Server | `communities.register` (first time, needs `treasury`), `setApproverRole`, `keyStatus`, `provisionBotKey` when there is no usable key (none, revoked, expired, or `new_key`) |
-| `/payee link` | anyone | `payees.issueLink`, replied ephemerally with `${CLAIM_BASE_URL}/${token}` |
+| `/payrun setup` | Manage Server (the treasury page link only with the approver role too) | first time: `issueSetupLink` with the chosen settings (nothing is registered until the passkey creates the treasury); after that `setName`, `setApproverRole`, `setFeeMode` (`fees`), `keyStatus`, and a fresh `issueSetupLink` for a treasurer. Dev path (testnet): `treasury` registers an existing account and `new_key` provisions a key for `pnpm dev:authorize-key` |
+| `/payee link` | anyone | `payees.issueLink`, replied ephemerally with `${PUBLIC_URL}/claim/${token}` |
 | `/payrun new` | Manage Server or approver | `payees.list` + member lookup for `role`, `payRuns.create`, `payRuns.submit`; the review embed is posted publicly |
 | Approve | approver role only | `payRuns.approve({ actorCanApprove: true })`, then enqueue execution |
 | Cancel | creator, Manage Server or approver | `payRuns.cancel` |
@@ -198,7 +231,7 @@ type ExecutionJob = { kind: 'execute_run'; guildId: string; runId: string; reply
 interface ExecutionQueue { enqueue(job: ExecutionJob): Promise<void> }
 ```
 
-`InProcessExecutionQueue` runs jobs in the background, one at a time per run, different runs in parallel. The job (`createRunExecutor`) calls `payRuns.execute`; while the outcome is `pending` it waits until `retryAfter` (plus a second of slack) and calls `reconcile`, up to 12 checks, then hands over to the recovery sweep; on `concurrent_update` it follows the other worker with `reconcile` and never re-sends. It edits the message through the interaction webhook (tokens last 15 minutes; after that it posts to the channel as the bot), and once paid it DMs each payee a receipt through `DiscordRest`. A pre-flight failure (no active key, over the limit, revoked) leaves the run `approved` and shows the reason with a Retry button. Because `execute` is idempotent and the boot sweep recovers anything in flight, losing the in-process queue in a crash loses no money and pays nothing twice. A durable queue can replace it behind the same port.
+`InProcessExecutionQueue` runs jobs in the background, one at a time per run, different runs in parallel. The job carries the review message's channel and ID too. The job (`createRunExecutor`) remembers where that message is (the **`RunNotices` port**, on core's KeyValueStore so it survives a restart), then calls `payRuns.execute`; while the outcome is `pending` it waits until `retryAfter` (plus a second of slack) and calls `reconcile`, up to 12 checks, then hands over to the recovery sweep; on `concurrent_update` it follows the other worker with `reconcile` and never re-sends. It edits the message through the interaction webhook (tokens last 15 minutes; after that it posts to the channel as the bot), and once paid it DMs each payee a receipt through `DiscordRest`. Receipts go out at most once per run: whoever sends them first claims them in `RunNotices`. **After a restart** the job is gone, so the recovery sweep reports instead (`createRecoveryNotifier`): for each run it settled, it DMs the receipts (if nobody has) and edits the review message in its channel as the bot, or posts the result there if the message cannot be edited. A pre-flight failure (no active key, over the limit, revoked) leaves the run `approved` and shows the reason with a Retry button. Because `execute` is idempotent and the boot sweep recovers anything in flight, losing the in-process queue in a crash loses no money and pays nothing twice. A durable queue can replace it behind the same port.
 
 ## Testing
 
@@ -209,12 +242,16 @@ interface ExecutionQueue { enqueue(job: ExecutionJob): Promise<void> }
 | SQLite integration (temp file DB) | `packages/core/**/*.integration.test.ts` | `pnpm test` |
 | Architecture guards | `packages/core/test/architecture.test.ts`, `packages/discord/test/architecture.test.ts` | `pnpm test` |
 | Discord: verification, routing, every handler, views, executor, queue, REST adapter | `packages/discord/src/**/*.test.ts` (real core on in-memory fakes, fake Discord REST) | `pnpm test` |
-| Server: config, routes, dev claim page, recovery loop, in-process end to end over signed HTTP | `apps/server/**/*.test.ts` | `pnpm test` |
-| Chain, Moderato testnet, opt-in | `packages/core/test/payrun.chain.test.ts`, `apps/server/test/server.chain.test.ts` | `pnpm test:chain` |
+| Web: claim and setup routes (fake passkey sessions), Handler.webAuthn over KeyValueStore, the real client bundle builds, architecture guards | `packages/web/**/*.test.ts` | `pnpm test` |
+| Server: config, routes, web pages, recovery loop and its Discord report, in-process end to end over signed HTTP | `apps/server/**/*.test.ts` | `pnpm test` |
+| Chain, Moderato testnet, opt-in | `packages/core/test/*.chain.test.ts` (incl. fee budget), `apps/server/test/server.chain.test.ts` | `pnpm test:chain` |
+| Browser, Moderato testnet, opt-in | `apps/server/e2e/passkeys.spec.ts` (Playwright, Chromium's virtual WebAuthn authenticator, the real server on `localhost`) | `pnpm test:e2e` |
 
 The core chain test generates throwaway keys into the gitignored `.env`, funds the treasury from the faucet, and runs a full service-level pay run: register, key authorised with a limit, three payees via links, a 3-line sponsored batch, reconcile from memo events, idempotent re-execute, crash recovery from a restarted process, an over-limit run refused before signing, revoke, CSV export. The server chain test reuses those keys and drives the whole Discord flow through the signed HTTP endpoint with production adapters and a fake Discord REST: setup, links claimed on the dev page, `/payrun new`, Approve, one sponsored batch, receipts. Both refuse any chain but Moderato.
 
-The in-process end to end (`apps/server/test/e2e.test.ts`) does the same over HTTP with in-memory adapters, and also covers a crash between approval and execution (status offers Retry; still one payment).
+The in-process end to end (`apps/server/test/e2e.test.ts`) does the same over HTTP with in-memory adapters, and also covers a crash between approval and execution (status offers Retry; still one payment), a process that dies while a payment is in flight (the next process's sweep finishes it, updates the message and sends the receipts once), and the production setup through Discord and the setup endpoints.
+
+The browser e2e proves the passkey paths for real: a recipient creates a passkey on the claim page and a returning one signs in with it; a treasurer creates the treasury with a passkey, funds it from the faucet, authorises the bot key with the passkey (a WebAuthn-signed keychain transaction on Moderato), the bot pays a run from that account, and the passkey revokes the key.
 
 ## Known limits and open decisions
 
@@ -222,8 +259,10 @@ The in-process end to end (`apps/server/test/e2e.test.ts`) does the same over HT
 - One active bot key per community. Payees are per community (the same person in two guilds registers twice).
 - The run creator may also approve it (if they hold the approver role). A four-eyes rule would be a community setting.
 - No recipient allowlist by default; adding a payee to an allowlist needs a root-signed `setAllowedCalls` (a passkey prompt), which is why it is off in v1.
-- Mainnet: guarded by `PAYRUN_ALLOW_MAINNET=true`; no sponsor configured, so communities there use `fee_budget`. `/payrun setup` registers sponsored communities only; a `fee_token` option is WP7 work.
+- Mainnet: guarded by `PAYRUN_ALLOW_MAINNET=true`; no sponsor configured, so communities there use `fee_budget` (`/payrun setup fees:fee_budget fee_token:<address>`, or `PAYRUN_FEE_TOKEN`), and the treasurer's own transactions on the setup page pay their fee in the fee token. A self-hosted relay (`Handler.relay`) would sponsor them.
 - One amount per person in `/payrun new` (with per-user overrides). A CSV or modal for many different amounts is later.
-- A run the recovery sweep finishes after a restart does not update its Discord message or send receipts; `/payrun status` shows the truth. Receipts are best effort and not recorded, so they are never re-sent.
-- The community's name is not stored from Discord yet (interactions carry no guild name); the claim page and receipts show the guild ID or "your Discord server".
+- Receipts are best effort: one that fails (closed DMs) is counted, not retried, and never sent twice.
 - The treasury and payout token cannot be changed after registration (no service method for it yet).
+- **The passkey domain (rpId) is the open decision.** Passkeys bind to it for good; a quick tunnel host is fine for testing only.
+- A setup link is short-lived rather than single-use (see SetupLink). A recipient's claim link is single-use.
+- The setup page signs with whatever passkey account the Accounts SDK has signed in on that browser; if it is not the treasury, the page asks for the treasury passkey and the server refuses the others anyway.
