@@ -9,6 +9,7 @@
   "scripts": {
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
+    "test:coverage": "pnpm -r --if-present test:coverage",
     "test:chain": "pnpm -r --if-present test:chain",
     "test:e2e": "pnpm --filter @payrun/server test:e2e",
     "test:ai-live": "pnpm --filter @payrun/core test:ai-live",

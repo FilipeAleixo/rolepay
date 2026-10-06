@@ -11,6 +11,7 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:chain": "vitest run --config vitest.chain.config.ts",
     "test:ai-live": "vitest run --config vitest.live.config.ts"
   },
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.6.4",
+    "@vitest/coverage-v8": "5.0.3",
     "dotenv": "^18.0.5",
     "tsx": "^4.23.15",
     "typescript": "7.0.2",
