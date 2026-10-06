@@ -266,3 +266,4 @@ The browser e2e proves the passkey paths for real: a recipient creates a passkey
 - **The passkey domain (rpId) is the open decision.** Passkeys bind to it for good; a quick tunnel host is fine for testing only.
 - A setup link is short-lived rather than single-use (see SetupLink). A recipient's claim link is single-use.
 - The setup page signs with whatever passkey account the Accounts SDK has signed in on that browser; if it is not the treasury, the page asks for the treasury passkey and the server refuses the others anyway.
+- The WebAuthn endpoints are open (anyone can register a passkey with the server; it only matters together with a valid link) and nothing is rate limited yet. Expired key-value rows are dropped lazily, not swept.
