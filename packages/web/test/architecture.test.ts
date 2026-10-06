@@ -36,7 +36,7 @@ const violations = (list: string[], allowed: (t: string) => boolean) =>
 describe('@payrun/web layering', () => {
   it('server code reaches core only through @payrun/core, plus hono, zod, the Accounts SDK server, viem/tempo, esbuild and node', () => {
     const ok = (t: string) =>
-      t === '@payrun/core' || ['hono', 'zod', 'accounts/server', 'viem/tempo', 'esbuild'].includes(t) || t.startsWith('node:') || (t.startsWith('src/') && t !== 'src/client')
+      t === '@payrun/core' || ['hono', 'hono/compress', 'zod', 'accounts/server', 'viem/tempo', 'esbuild'].includes(t) || t.startsWith('node:') || (t.startsWith('src/') && t !== 'src/client')
     expect(violations(server(), ok)).toEqual([])
   })
 

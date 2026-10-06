@@ -31,7 +31,7 @@ export function webHarness() {
     payrun,
     clock,
     sessions,
-    assets: staticAssets({ 'payrun.js': 'console.log("payrun")' }),
+    assets: staticAssets({ 'payrun.js': 'console.log("payrun");'.repeat(100) }),
     config: {
       origin: 'http://localhost:8787',
       rpId: 'localhost',

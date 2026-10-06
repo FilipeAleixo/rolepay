@@ -1,5 +1,6 @@
 import { type Clock, NETWORKS, type Payrun } from '@payrun/core'
 import { Hono } from 'hono'
+import { compress } from 'hono/compress'
 import type { WebConfig } from './config.js'
 import type { Assets, PasskeySessions } from './ports.js'
 import { claimRoutes } from './routes/claim.js'
@@ -47,6 +48,8 @@ export function createWebApp(deps: WebAppDeps): Hono {
     app.all('/webauthn/*', (c) => passkeys.fetch(c.req.raw))
   }
 
+  // The bundle is about 1.5 MB (viem's Tempo ABIs, the Accounts SDK); gzip takes it to a fraction.
+  app.use('/assets/*', compress())
   app.get('/assets/:name', async (c) => {
     const body = await deps.assets.get(c.req.param('name'))
     if (body === null) return c.notFound()
