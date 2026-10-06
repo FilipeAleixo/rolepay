@@ -45,8 +45,8 @@ function apply(run: Run, ...events: RunEvent[]): Run {
 
 const submit: RunEvent = { type: 'submit', actor: ALICE }
 const approve: RunEvent = { type: 'approve', actor: TREASURER }
-const start: RunEvent = { type: 'start_attempt', fromBlock: 100n }
-const signed: RunEvent = { type: 'record_signed', txHash: HASH, rawTx: RAW, validBefore: 1_800_000_000 }
+const start: RunEvent = { type: 'start_attempt', fromBlock: 100n, validBefore: 1_800_000_000 }
+const signed: RunEvent = { type: 'record_signed', txHash: HASH, rawTx: RAW }
 const paid: RunEvent = { type: 'mark_paid', txHash: HASH, blockNumber: 101n }
 const failed = (reason: 'rejected' | 'reverted' | 'not_landed' | 'partial_match' | 'transfer_mismatch'): RunEvent => ({
   type: 'mark_failed',
@@ -154,6 +154,13 @@ describe('transition: every illegal (status, event) pair is rejected', () => {
 })
 
 describe('transition: execution attempts and retries', () => {
+  it('fixes the expiring-nonce deadline when the attempt opens, before anything is signed', () => {
+    const r = apply(draft(), submit, approve, start)
+    expect(r.attempts).toEqual([
+      { number: 1, startedAt: later(3), fromBlock: 100n, validBefore: 1_800_000_000, txHash: null, rawTx: null },
+    ])
+  })
+
   it('records the signed tx on the current attempt only once', () => {
     const r = apply(draft(), submit, approve, start, signed)
     expect(transition(r, signed, later(9))).toEqual({ ok: false, error: { code: 'attempt_already_signed' } })
@@ -170,12 +177,12 @@ describe('transition: execution attempts and retries', () => {
   })
 
   it('a retry opens attempt 2 and clears the failure; history keeps attempt 1', () => {
-    const r = apply(draft(), submit, approve, start, signed, failed('not_landed'), { type: 'start_attempt', fromBlock: 200n })
+    const r = apply(draft(), submit, approve, start, signed, failed('not_landed'), { type: 'start_attempt', fromBlock: 200n, validBefore: 1_800_000_300 })
     expect(r.status).toBe('executing')
     expect(r.failure).toBeNull()
-    expect(r.attempts.map((a) => [a.number, a.fromBlock, a.txHash])).toEqual([
-      [1, 100n, HASH],
-      [2, 200n, null],
+    expect(r.attempts.map((a) => [a.number, a.fromBlock, a.validBefore, a.txHash])).toEqual([
+      [1, 100n, 1_800_000_000, HASH],
+      [2, 200n, 1_800_000_300, null],
     ])
   })
 

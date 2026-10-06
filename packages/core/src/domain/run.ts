@@ -34,9 +34,10 @@ export type RunLine = z.infer<typeof RunLineSchema>
 
 /**
  * One try at paying the run. `fromBlock` is the chain head when the attempt opened (the
- * tx cannot land earlier, so memo searches start there). `validBefore` is the expiring
- * nonce deadline: after it passes, the signed tx can never land, which is what makes a
- * re-send provably safe.
+ * tx cannot land earlier, so memo searches start there). `validBefore` (unix seconds) is
+ * the expiring-nonce deadline, fixed BEFORE signing: once chain time passes it, the
+ * attempt's tx can never land, which is what makes a re-send provably safe even when
+ * the process crashed before recording anything.
  */
 export const AttemptSchema = z.object({
   number: z.number().int().min(1),
@@ -44,7 +45,7 @@ export const AttemptSchema = z.object({
   fromBlock: z.bigint().nonnegative(),
   txHash: TxHashSchema.nullable(),
   rawTx: HexDataSchema.nullable(),
-  validBefore: z.number().int().positive().nullable(),
+  validBefore: z.number().int().positive(),
 })
 export type Attempt = z.infer<typeof AttemptSchema>
 
@@ -139,8 +140,8 @@ export type RunEvent =
   | { type: 'submit'; actor: string }
   | { type: 'approve'; actor: string }
   | { type: 'cancel'; actor: string }
-  | { type: 'start_attempt'; fromBlock: bigint }
-  | { type: 'record_signed'; txHash: Hex; rawTx: Hex; validBefore: number }
+  | { type: 'start_attempt'; fromBlock: bigint; validBefore: number }
+  | { type: 'record_signed'; txHash: Hex; rawTx: Hex }
   | { type: 'mark_paid'; txHash: Hex; blockNumber: bigint }
   | { type: 'mark_failed'; reason: FailureReason; detail: string }
 
@@ -181,9 +182,9 @@ export function transition(run: Run, event: RunEvent, now: Date): Result<Run, Tr
         number: run.attempts.length + 1,
         startedAt: now,
         fromBlock: event.fromBlock,
+        validBefore: event.validBefore,
         txHash: null,
         rawTx: null,
-        validBefore: null,
       }
       return next({ status: 'executing', failure: null, attempts: [...run.attempts, attempt] })
     }
@@ -191,7 +192,7 @@ export function transition(run: Run, event: RunEvent, now: Date): Result<Run, Tr
       if (run.status !== 'executing') return illegal()
       const current = run.attempts.at(-1)
       if (!current || current.txHash !== null) return err({ code: 'attempt_already_signed' })
-      const signed: Attempt = { ...current, txHash: event.txHash, rawTx: event.rawTx, validBefore: event.validBefore }
+      const signed: Attempt = { ...current, txHash: event.txHash, rawTx: event.rawTx }
       return next({ attempts: [...run.attempts.slice(0, -1), signed] })
     }
     case 'mark_paid':

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { csvCell, runToCsv } from './csv.js'
-import { type Run, newRun, transition } from './run.js'
+import { type Run, type RunEvent, newRun, transition } from './run.js'
 
 const HASH = `0x${'ab'.repeat(32)}` as const
 
@@ -23,9 +23,9 @@ function paidRun(note: string | null): Run {
   for (const e of [
     { type: 'submit', actor: '200000000000000001' },
     { type: 'approve', actor: '300000000000000001' },
-    { type: 'start_attempt', fromBlock: 1n },
+    { type: 'start_attempt', fromBlock: 1n, validBefore: 1_800_000_000 },
     { type: 'mark_paid', txHash: HASH, blockNumber: 2n },
-  ] as const) {
+  ] satisfies RunEvent[]) {
     const n = transition(run, e, at)
     if (!n.ok) throw new Error('fixture')
     run = n.value
