@@ -1,0 +1,54 @@
+// The treasurer's transactions, signed in the browser with the passkey (WebAuthn P256), sent
+// straight to Tempo. Fees go through the sponsor when one is configured (testnet: the public
+// Moderato sponsor), otherwise the treasury pays them in its fee token.
+import { Abis, type Account, createClient, http, withRelay } from 'viem/tempo'
+
+export type ChainConfig = { rpcUrl: string; sponsorUrl: string | null; testnet: boolean; feeToken: string }
+
+/** The authorisation exactly as the server returned it (amounts as decimal strings). */
+export type WireAuthorization = {
+  expiry: number
+  limits: { token: string; limit: string; period?: number }[]
+  scopes: { address: string; selector: string; recipients?: string[] }[]
+}
+
+/** viem's default 25 s validBefore goes stale on a slow passkey prompt plus RPC retries. */
+const VALID_BEFORE_SECONDS = 120
+
+function client(c: ChainConfig, account?: Account.Account) {
+  const rpc = http(c.rpcUrl, { retryCount: 4, retryDelay: 400 })
+  const transport = c.sponsorUrl ? withRelay(rpc, http(c.sponsorUrl, { retryCount: 0 })) : rpc
+  return createClient({ ...(account ? { account } : {}), testnet: c.testnet, transport })
+}
+
+const feeFields = (c: ChainConfig) =>
+  c.sponsorUrl ? { feePayer: true, validBefore: Math.floor(Date.now() / 1000) + VALID_BEFORE_SECONDS } : { feeToken: c.feeToken }
+
+/** Root (passkey) authorises the bot's access key on the Account Keychain: expiry, limits, call scope. */
+export async function authorizeAccessKey(c: ChainConfig, root: Account.Account, keyAddress: string, auth: WireAuthorization) {
+  const { receipt } = await client(c, root).accessKey.authorizeSync({
+    accessKey: { accessKeyAddress: keyAddress as `0x${string}`, keyType: 'secp256k1' },
+    expiry: auth.expiry,
+    limits: auth.limits.map((l) => ({ token: l.token as `0x${string}`, limit: BigInt(l.limit), ...(l.period ? { period: l.period } : {}) })),
+    scopes: auth.scopes as never,
+    ...feeFields(c),
+  } as never)
+  if (receipt.status !== 'success') throw new Error(`the authorisation transaction ${receipt.transactionHash} reverted`)
+  return receipt.transactionHash as string
+}
+
+export async function revokeAccessKey(c: ChainConfig, root: Account.Account, keyAddress: string) {
+  const { receipt } = await client(c, root).accessKey.revokeSync({ accessKey: keyAddress as `0x${string}`, ...feeFields(c) } as never)
+  if (receipt.status !== 'success') throw new Error(`the revoke transaction ${receipt.transactionHash} reverted`)
+  return receipt.transactionHash as string
+}
+
+export async function balanceOf(c: ChainConfig, token: string, address: string): Promise<bigint> {
+  return (await client(c).readContract({ address: token as `0x${string}`, abi: Abis.tip20, functionName: 'balanceOf', args: [address as `0x${string}`] })) as bigint
+}
+
+/** Testnet only: the public faucet funds the address with every testnet stablecoin. */
+export async function faucet(c: ChainConfig, address: string) {
+  if (!c.testnet) throw new Error('the faucet is testnet only')
+  await client(c).faucet.fundSync({ account: address as `0x${string}`, timeout: 60_000 })
+}

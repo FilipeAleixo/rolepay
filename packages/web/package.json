@@ -1,0 +1,28 @@
+{
+  "name": "@payrun/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.client.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@payrun/core": "workspace:*",
+    "accounts": "0.19.1",
+    "esbuild": "0.28.2",
+    "hono": "^4.13.13",
+    "viem": "2.57.3",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

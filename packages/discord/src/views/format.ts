@@ -1,14 +1,8 @@
-import { NETWORKS, type NetworkName, TESTNET_TOKENS, formatAmount } from '@payrun/core'
-
-const TOKEN_NAMES: Record<string, string> = {
-  [TESTNET_TOKENS.path_usd]: 'pathUSD',
-  [TESTNET_TOKENS.alpha_usd]: 'AlphaUSD',
-  [TESTNET_TOKENS.beta_usd]: 'BetaUSD',
-}
+import { NETWORKS, type NetworkName, TOKEN_SYMBOLS, formatAmount } from '@payrun/core'
 
 export const shortAddress = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`
 
-export const tokenLabel = (token: string) => TOKEN_NAMES[token.toLowerCase()] ?? shortAddress(token)
+export const tokenLabel = (token: string) => TOKEN_SYMBOLS[token.toLowerCase()] ?? shortAddress(token)
 
 /** Money for people: bigint micro-units in, "1.5 AlphaUSD" out. */
 export const money = (micros: bigint, token: string) => `${formatAmount(micros)} ${tokenLabel(token)}`

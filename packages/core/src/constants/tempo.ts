@@ -31,6 +31,13 @@ export const TESTNET_TOKENS = {
   beta_usd: '0x20c0000000000000000000000000000000000002',
 } as const
 
+/** Display names of the tokens payrun knows, by lowercase address. */
+export const TOKEN_SYMBOLS: Readonly<Record<string, string>> = {
+  [TESTNET_TOKENS.path_usd]: 'pathUSD',
+  [TESTNET_TOKENS.alpha_usd]: 'AlphaUSD',
+  [TESTNET_TOKENS.beta_usd]: 'BetaUSD',
+}
+
 /** Account Keychain precompile. Lowercase: the docs' mixed-case form fails viem's checksum check. */
 export const KEYCHAIN_ADDRESS = '0xaaaaaaaa00000000000000000000000000000000'
 
