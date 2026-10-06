@@ -1,0 +1,28 @@
+import { NETWORKS, type NetworkName, TESTNET_TOKENS, formatAmount } from '@payrun/core'
+
+const TOKEN_NAMES: Record<string, string> = {
+  [TESTNET_TOKENS.path_usd]: 'pathUSD',
+  [TESTNET_TOKENS.alpha_usd]: 'AlphaUSD',
+  [TESTNET_TOKENS.beta_usd]: 'BetaUSD',
+}
+
+export const shortAddress = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`
+
+export const tokenLabel = (token: string) => TOKEN_NAMES[token.toLowerCase()] ?? shortAddress(token)
+
+/** Money for people: bigint micro-units in, "1.5 AlphaUSD" out. */
+export const money = (micros: bigint, token: string) => `${formatAmount(micros)} ${tokenLabel(token)}`
+
+export const txUrl = (network: NetworkName, txHash: string) => `${NETWORKS[network].explorerUrl}/tx/${txHash}`
+export const addressUrl = (network: NetworkName, address: string) => `${NETWORKS[network].explorerUrl}/address/${address}`
+
+/** Discord renders `<t:unix:R>` as "in 5 minutes" / "2 hours ago" in the reader's locale. */
+export const relativeTime = (at: Date | number) => `<t:${Math.floor((typeof at === 'number' ? at * 1000 : at.getTime()) / 1000)}:R>`
+
+export const mention = (userId: string) => `<@${userId}>`
+export const roleMention = (roleId: string) => `<@&${roleId}>`
+
+/** Mentions in payrun's messages are for reading, never for pinging. */
+export const NO_PINGS = { parse: [] as never[] }
+
+export const COLORS = { pending: 0xf0b232, working: 0x5865f2, paid: 0x23a55a, failed: 0xda373c, muted: 0x80848e } as const

@@ -1,0 +1,56 @@
+// Domain fixtures built with core's public domain functions (never its internals).
+import { type Run, type RunEvent, TESTNET_TOKENS, newRun, transition } from '@payrun/core'
+
+export const GUILD = '1094309218049937418'
+export const APP_ID = '500000000000000001'
+export const CHANNEL = '700000000000000001'
+export const ALICE = '200000000000000001'
+export const BOB = '200000000000000002'
+export const CAROL = '200000000000000003'
+export const TREASURER = '300000000000000001'
+export const ADMIN = '300000000000000002'
+export const TREASURER_ROLE = '400000000000000001'
+export const MODS_ROLE = '400000000000000002'
+export const TOKEN = TESTNET_TOKENS.alpha_usd
+export const TREASURY = '0x9999999999999999999999999999999999999999'
+export const ADDR = {
+  alice: '0x1111111111111111111111111111111111111111',
+  bob: '0x2222222222222222222222222222222222222222',
+  carol: '0x3333333333333333333333333333333333333333',
+} as const
+export const T0 = new Date('2026-10-06T12:00:00.000Z')
+export const TX = `0x${'ab'.repeat(32)}` as const
+
+export function run(over: { id?: string; note?: string | null } = {}): Run {
+  const r = newRun({
+    id: over.id ?? 'run_view01',
+    communityId: GUILD,
+    token: TOKEN,
+    note: over.note === undefined ? 'October mods' : over.note,
+    createdBy: ADMIN,
+    lines: [
+      { payeeDiscordId: ALICE, address: ADDR.alice, amount: 1_500_000n },
+      { payeeDiscordId: BOB, address: ADDR.bob, amount: 25_000_000n },
+    ],
+    now: T0,
+  })
+  if (!r.ok) throw new Error(`fixture run: ${r.error.code}`)
+  return r.value
+}
+
+/** Applies events with core's state machine, throwing on the first illegal one. */
+export function advance(r: Run, ...events: RunEvent[]): Run {
+  return events.reduce((current, e, i) => {
+    const n = transition(current, e, new Date(T0.getTime() + (i + 1) * 1000))
+    if (!n.ok) throw new Error(`fixture transition ${e.type}: ${n.error.code}`)
+    return n.value
+  }, r)
+}
+
+export const pending = () => advance(run(), { type: 'submit', actor: ADMIN })
+export const approved = () => advance(pending(), { type: 'approve', actor: TREASURER })
+export const executing = () => advance(approved(), { type: 'start_attempt', fromBlock: 1n, validBefore: 1_800_000_000 })
+export const paid = () => advance(executing(), { type: 'mark_paid', txHash: TX, blockNumber: 7n })
+export const failed = (reason: 'rejected' | 'partial_match' = 'rejected') =>
+  advance(executing(), { type: 'mark_failed', reason, detail: reason === 'rejected' ? 'spending_limit_exceeded: over limit' : 'paid lines 1; missing 2' })
+export const cancelled = () => advance(pending(), { type: 'cancel', actor: ADMIN })
