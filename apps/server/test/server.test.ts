@@ -1,5 +1,5 @@
 import { slashCommand } from '@payrun/discord/testing'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer } from './support.js'
 
 const ALICE = '200000000000000001'
@@ -48,6 +48,17 @@ describe('server routes', () => {
     const replay = await s.interact(link)
     expect(replay.status).toBe(409)
     expect(await replay.text()).not.toContain('/claim/')
+  })
+
+  it('the recovery interval also sweeps expired key-value records off the disk (abandoned proposal forms, old proposals)', async () => {
+    const s = await testServer()
+    await s.kv.set('discord:pending-source:x:y', { content: 'Winners' }, { ttl: 60 })
+    s.clock.advance(61)
+    const sweep = vi.spyOn(s.kv, 'sweep')
+    const recovery = s.startRecovery()
+    await vi.waitFor(() => expect(sweep).toHaveBeenCalled())
+    await recovery.stop()
+    expect(await sweep.mock.results[0]?.value).toBe(1)
   })
 
   it('anything else is 404', async () => {

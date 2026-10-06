@@ -150,11 +150,12 @@ export class ProposalService {
     })
     if (!answer.ok) return this.fail('messages', { code: 'could_not_propose', reason: answer.error.reason }, { sourceMessages: messages.length, usage: answer.error.usage })
 
-    const resolved = resolveMessageProposal(answer.value.raw, { map: pseudo.map, instruction: instruction.data })
     const registered = await this.registered(community.id)
+    const resolved = resolveMessageProposal(answer.value.raw, { map: pseudo.map, instruction: instruction.data, isRegistered: (id) => registered.has(id) })
     const assembled = assembleProposal({
       candidates: resolved.candidates,
       held: resolved.held,
+      unregistered: resolved.unregistered,
       isRegistered: (id) => registered.has(id),
       remaining,
       holdOverRemaining: true,
@@ -360,24 +361,29 @@ export class ProposalService {
     const blocking = blockingProblems(p)
     if (blocking.length) return err({ code: 'proposal_blocked', problems: blocking })
     if (!(await this.deps.proposals.claim(p.id))) return err({ code: 'proposal_closed', status: 'run_created', runId: null })
+    // The claim is given back only while no run exists: after `create` succeeds, nothing that fails
+    // later (a write, the submit) may let a second click create a second run.
+    let created: Run | null = null
     try {
-      const created = await this.deps.payRuns.create({
+      const made = await this.deps.payRuns.create({
         guildId: p.communityId,
         createdBy: input.actor,
         note: p.note,
         lines: p.lines.map((l) => ({ discordUserId: l.discordUserId, amount: l.amount })),
       })
-      if (!created.ok) {
+      if (!made.ok) {
         await this.deps.proposals.release(p.id)
-        return created
+        return made
       }
-      const submitted = await this.deps.payRuns.submit({ guildId: p.communityId, runId: created.value.id, actor: input.actor })
-      const proposal: Proposal = { ...p, status: 'run_created', runId: created.value.id, closedBy: input.actor, updatedAt: this.deps.clock.now() }
+      created = made.value
+      const proposal: Proposal = { ...p, status: 'run_created', runId: created.id, closedBy: input.actor, updatedAt: this.deps.clock.now() }
       await this.deps.proposals.save(proposal)
+      // If the submit fails the run stays a draft (it shows in /payrun status and can be cancelled), never a second run.
+      const submitted = await this.deps.payRuns.submit({ guildId: p.communityId, runId: created.id, actor: input.actor })
       if (!submitted.ok) return submitted
       return ok({ proposal, run: submitted.value })
     } catch (e) {
-      await this.deps.proposals.release(p.id)
+      if (!created) await this.deps.proposals.release(p.id)
       throw e
     }
   }

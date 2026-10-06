@@ -9,10 +9,27 @@ import type { Result } from '../result.js'
  */
 const AMOUNT = /(?<![\w.]|\d,)\$?(\d{1,3}(?:,\d{3})+|\d{1,15})(\.\d+)?(?!\w|[.,]\d)/g
 
-/** Every amount a text states, in order, as micro-units. Zero and unreadable numbers are skipped. */
+const MONTH = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*'
+/** A count with its unit ("10 replies", "7 days"), a percentage: a number, but not an amount. */
+const COUNT_AFTER = /^\s*(?:replies|reply|messages?|days?|times?|hours?|weeks?|months?|years?|minutes?|people|persons?|members?|posts?|reactions?|answers?|questions?|threads?|issues?|prs?|commits?|bugs?|tickets?|points?|places?|percent)\b|^\s*%/i
+/** Part of a date ("2026-10-01", "6/9"), or a day or year next to a month ("1 October", "October 2026"). */
+const DATE_AFTER = new RegExp(`^(?:[-/]\\d|\\s*${MONTH}\\b)`, 'i')
+const DATE_BEFORE = new RegExp(`(?:\\d[-/]|\\b${MONTH}\\s*)$`, 'i')
+/** A rank or a reference: "top 3", "last 7", "#4521". */
+const RANK_BEFORE = /(?:\b(?:top|first|last|past|next|issue|pr|no\.?)\s+|#)$/i
+
+/**
+ * Every amount a text states, in order, as micro-units. Numbers that are counts, dates, years
+ * next to a month, ranks or references are not amounts ("10 replies", "2026-10-01", "October
+ * 2026", "top 3", "#4521"), so a line cannot borrow them; zero and unreadable numbers are skipped.
+ * When in doubt a number is left out: the line is then held for the treasurer, never paid on a guess.
+ */
 export function amountsIn(text: string): Micros[] {
   const out: Micros[] = []
   for (const m of text.matchAll(AMOUNT)) {
+    const before = text.slice(0, m.index)
+    const after = text.slice((m.index ?? 0) + m[0].length)
+    if (COUNT_AFTER.test(after) || DATE_AFTER.test(after) || DATE_BEFORE.test(before) || RANK_BEFORE.test(before)) continue
     const parsed = parseAmount(`${(m[1] as string).replaceAll(',', '')}${m[2] ?? ''}`)
     if (parsed.ok) out.push(parsed.value)
   }

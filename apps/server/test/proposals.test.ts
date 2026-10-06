@@ -3,7 +3,7 @@
 // proposal -> Create pay run -> the normal review -> Approve -> one batch on the fake chain ->
 // receipts. The model is the deterministic fake proposer; Discord REST and the chain are fakes.
 import { emptyCriteria, naiveMessageProposal } from '@payrun/core/adapters'
-import { buttonClick, messageCommand, modalSubmit, slashCommand, wireMessage } from '@payrun/discord/testing'
+import { READ_HISTORY, buttonClick, messageCommand, modalSubmit, slashCommand, wireMessage } from '@payrun/discord/testing'
 import { describe, expect, it } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer, usd } from './support.js'
 
@@ -12,7 +12,7 @@ const HELP = '700000000000000002'
 const SCOPE = { guildId: GUILD, channelId: CHANNEL }
 const TREASURER_ROLE = '400000000000000001'
 const MODS_ROLE = '400000000000000002'
-const TREASURER = { userId: '300000000000000001', roles: [TREASURER_ROLE], manageGuild: true }
+const TREASURER = { userId: '300000000000000001', roles: [TREASURER_ROLE], manageGuild: true, channels: { '700000000000000001': READ_HISTORY } }
 const ANA = '200000000000000001'
 const RUI = '200000000000000002'
 const LI = '200000000000000003'

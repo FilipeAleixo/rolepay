@@ -2,6 +2,7 @@ import { DiscordIdSchema, PROPOSAL_LIMITS } from '@payrun/core'
 import { z } from 'zod'
 import { type CommandHandler, parseOptions } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'
+import { canReadHistory } from '../app/permissions.js'
 import { explainProposalError } from '../views/errors.js'
 import { proposalMessage } from '../views/proposal.js'
 import { requireProposer } from './guards.js'
@@ -26,13 +27,15 @@ const DEFAULT_SINCE_MS = 7 * UNIT_MS.d
  * mode). Either way the answer is a proposal, only for the caller, with Create, Edit and Discard.
  * Deferred: reading history and the model take longer than Discord's 3 seconds.
  */
-export const proposeCommand: CommandHandler = async ({ options, ctx }, { payrun, clock }) => {
+export const proposeCommand: CommandHandler = async ({ options, ctx, channels }, { payrun, clock }) => {
   const guard = await requireProposer(ctx, payrun, { ai: true })
   if (!guard.ok) return guard.reply
   const parsed = parseOptions(ProposeOptions, options)
   if (!parsed.ok) return parsed.reply
   const o = parsed.value
   if (o.since && !o.source) return ephemeralReply('`since` goes with `source`: it says how far back to read that channel.')
+  // The bot may read more than the caller: never propose from a channel the caller cannot read themselves.
+  if (o.source && !canReadHistory(channels?.[o.source]?.permissions)) return ephemeralReply(explainProposalError({ code: 'source_not_readable' }))
   const community = guard.community
   const who = { guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles }
   const sinceMs = o.since ? Number.parseInt(o.since, 10) * UNIT_MS[o.since.slice(-1).toLowerCase() as keyof typeof UNIT_MS] : DEFAULT_SINCE_MS

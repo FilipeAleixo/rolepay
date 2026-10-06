@@ -7,7 +7,7 @@ import { AmountPlanSchema, MetricsSchema, splitPool } from './amounts.js'
 import { CriteriaSchema } from './criteria.js'
 import { amountsIn, parseLooseAmount } from './numbers.js'
 import type { RawMessageProposal } from './raw.js'
-import type { MessageTokenMap } from './sources.js'
+import { type MessageTokenMap, own } from './sources.js'
 
 /**
  * A pay run proposal: a draft the AI helped write, never a run. Code decides every line from the
@@ -45,10 +45,23 @@ export const LineFlagSchema = z.enum(LINE_FLAGS)
 export type LineFlag = z.infer<typeof LineFlagSchema>
 
 /** About the whole proposal. The blocking ones stop "Create pay run" until an edit fixes them. */
-export const PROBLEMS = ['no_lines', 'too_many_lines', 'amount_not_in_instruction', 'over_budget', 'no_active_key', 'scan_truncated', 'source_truncated', 'lookback_clamped'] as const
+export const PROBLEMS = [
+  'no_lines',
+  'too_many_lines',
+  'amount_not_in_instruction',
+  /** Some amounts come from messages (anyone could have written them): the treasurer confirms them with Edit. */
+  'amount_from_message',
+  'over_budget',
+  'no_active_key',
+  'scan_truncated',
+  'source_truncated',
+  'lookback_clamped',
+] as const
 export const ProblemSchema = z.enum(PROBLEMS)
 export type Problem = z.infer<typeof ProblemSchema>
-export const BLOCKING_PROBLEMS: ReadonlySet<Problem> = new Set(['no_lines', 'too_many_lines', 'amount_not_in_instruction'])
+export const BLOCKING_PROBLEMS: ReadonlySet<Problem> = new Set(['no_lines', 'too_many_lines', 'amount_not_in_instruction', 'amount_from_message'])
+/** The most of each list a stored proposal keeps (a criteria match can be the whole server). */
+export const MAX_STORED_LINES = 1000
 export const blockingProblems = (p: { problems: readonly Problem[] }) => p.problems.filter((x) => BLOCKING_PROBLEMS.has(x))
 
 export const SourceRefSchema = z.object({ channelId: DiscordIdSchema, messageId: DiscordIdSchema })
@@ -113,9 +126,9 @@ export const ProposalSchema = z.object({
   amountPlan: AmountPlanSchema.nullable(),
   scans: z.array(ChannelScanSchema).max(PROPOSAL_LIMITS.maxChannels),
   /** More than 50 is possible in criteria mode; such a proposal cannot be created until it is edited down. */
-  lines: z.array(ProposalLineSchema).max(1000),
-  held: z.array(HeldLineSchema).max(200),
-  unregistered: z.array(UnregisteredLineSchema).max(PROPOSAL_LIMITS.maxUnregisteredCandidates),
+  lines: z.array(ProposalLineSchema).max(MAX_STORED_LINES),
+  held: z.array(HeldLineSchema).max(MAX_STORED_LINES),
+  unregistered: z.array(UnregisteredLineSchema).max(MAX_STORED_LINES),
   unresolved: z.array(UnresolvedSchema).max(20),
   assumptions: z.array(z.string().max(300)).max(10),
   suspicious: z.array(SuspiciousSchema).max(20),
@@ -143,6 +156,8 @@ const clean = (text: string, max: number) => {
 export type ResolvedMessageProposal = {
   candidates: ProposalLine[]
   held: HeldLine[]
+  /** People in a "split" who are not registered payees: listed, with no share. */
+  unregistered: UnregisteredLine[]
   unresolved: Unresolved[]
   assumptions: string[]
   suspicious: Suspicious[]
@@ -157,9 +172,12 @@ export type ResolvedMessageProposal = {
  * equal split itself (the pool rounding rule). The model's words are cut and stripped of control
  * characters; the view escapes them.
  */
-export function resolveMessageProposal(raw: RawMessageProposal, ctx: { map: MessageTokenMap; instruction: string }): ResolvedMessageProposal {
+export function resolveMessageProposal(
+  raw: RawMessageProposal,
+  ctx: { map: MessageTokenMap; instruction: string; isRegistered?: (discordUserId: string) => boolean },
+): ResolvedMessageProposal {
   const stated = new Set(amountsIn(ctx.instruction))
-  const messageOf = (ref: string) => ctx.map.messages[ref.trim()]
+  const messageOf = (ref: string) => own(ctx.map.messages, ref.trim())
   const suspicious: Suspicious[] = []
   const suspiciousRefs = new Set<string>()
   for (const s of raw.ignoredInstructions) {
@@ -173,7 +191,7 @@ export function resolveMessageProposal(raw: RawMessageProposal, ctx: { map: Mess
   const candidates: (ProposalLine & { holds: HoldReason[]; split: boolean; rawAmount: Micros | null })[] = []
   const seen = new Set<string>()
   for (const line of raw.lines) {
-    const userId = ctx.map.users[line.user.trim().replace(/^@/, '')]
+    const userId = own(ctx.map.users, line.user.trim().replace(/^@/, ''))
     if (!userId) {
       unresolved.push({ text: clean(line.reason || line.user, 200), why: 'The AI named someone who is not in the messages.' })
       continue
@@ -209,7 +227,14 @@ export function resolveMessageProposal(raw: RawMessageProposal, ctx: { map: Mess
     })
   }
 
-  // "Split 300 between the winners": code computes the shares, from a total the instruction states.
+  // "Split 300 between the winners": code computes the shares, from a total the instruction states,
+  // among the registered winners only (the pool rule); the others are listed with no share.
+  const isRegistered = ctx.isRegistered ?? (() => true)
+  const unregistered: UnregisteredLine[] = []
+  for (const c of candidates.filter((x) => x.split && x.holds.length === 0 && !isRegistered(x.discordUserId))) {
+    candidates.splice(candidates.indexOf(c), 1)
+    unregistered.push({ discordUserId: c.discordUserId, amount: null, reason: c.reason, metrics: null, sources: c.sources, flags: [] })
+  }
   const split = candidates.filter((c) => c.split && c.holds.length === 0)
   const total = raw.splitTotal === null ? null : parseLooseAmount(raw.splitTotal)
   if (split.length) {
@@ -223,6 +248,7 @@ export function resolveMessageProposal(raw: RawMessageProposal, ctx: { map: Mess
   const out: ResolvedMessageProposal = {
     candidates: [],
     held: [],
+    unregistered,
     unresolved: unresolved.slice(0, 20),
     assumptions: raw.assumptions.map((a) => clean(a, 300)).filter(Boolean).slice(0, 10),
     suspicious: suspicious.slice(0, 20),
@@ -262,13 +288,15 @@ export function assembleProposal(input: {
     else if (input.holdOverRemaining && input.remaining !== null && c.amount > input.remaining) held.push({ ...c, holds: ['over_remaining_budget'] })
     else lines.push(c)
   }
-  const total = sumAmounts(lines.map((l) => l.amount))
-  const problems = new Set<Problem>(input.problems.filter((p) => !['no_lines', 'too_many_lines', 'over_budget', 'no_active_key'].includes(p)))
-  if (lines.length === 0) problems.add('no_lines')
+  const kept = lines.slice(0, MAX_STORED_LINES)
+  const total = sumAmounts(kept.map((l) => l.amount))
+  const problems = new Set<Problem>(input.problems.filter((p) => !['no_lines', 'too_many_lines', 'over_budget', 'no_active_key', 'amount_from_message'].includes(p)))
+  if (kept.length === 0) problems.add('no_lines')
   if (lines.length > MAX_LINES_PER_RUN) problems.add('too_many_lines')
+  if (kept.some((l) => l.flags.includes('amount_from_message'))) problems.add('amount_from_message')
   if (input.remaining === null) problems.add('no_active_key')
   else if (total > input.remaining) problems.add('over_budget')
-  return { lines, held, unregistered, total, problems: PROBLEMS.filter((p) => problems.has(p)) }
+  return { lines: kept, held: held.slice(0, MAX_STORED_LINES), unregistered: unregistered.slice(0, MAX_STORED_LINES), total, problems: PROBLEMS.filter((p) => problems.has(p)) }
 }
 
 export type EditError = { code: 'duplicate_payee'; payeeDiscordId: string } | { code: 'too_many_lines' }
@@ -300,7 +328,8 @@ export function editProposal(
     isRegistered: ctx.isRegistered,
     remaining: ctx.remaining,
     holdOverRemaining: false,
-    problems: p.problems.filter((x) => x !== 'amount_not_in_instruction'),
+    // The treasurer typed every amount: none is "not in the instruction" or "from a message" any more.
+    problems: p.problems.filter((x) => x !== 'amount_not_in_instruction' && x !== 'amount_from_message'),
   })
   return ok({ ...p, ...assembled, editedBy: ctx.actor, updatedAt: ctx.now })
 }

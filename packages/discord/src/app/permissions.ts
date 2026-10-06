@@ -13,3 +13,11 @@ export const holdsApproverRole = (c: Caller, community: Community) => community.
 
 /** Creating runs, reading status and exporting: admins and treasurers. */
 export const canOperate = (c: Caller, community: Community) => canManageGuild(c) || holdsApproverRole(c, community)
+
+/**
+ * Whether the caller may read a channel's history themselves: Discord computes their permissions
+ * in a channel picked in an option. Without them (Discord always sends them) the answer is no.
+ */
+export const canReadHistory = (permissions: bigint | null | undefined) =>
+  permissions != null &&
+  ((permissions & Permission.Administrator) !== 0n || (permissions & (Permission.ViewChannel | Permission.ReadMessageHistory)) === (Permission.ViewChannel | Permission.ReadMessageHistory))

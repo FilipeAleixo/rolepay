@@ -90,6 +90,36 @@ describe('resolveMessageProposal: the injection suite (never raised, always held
     expect(r.suspicious).toEqual([{ channelId: CHANNEL, messageId: ATTACK.id, authorId: MALLORY, summary: 'Asked the AI to pay its author 10,000.' }])
   })
 
+  it('a bystander\'s number cited as "the amount from a message" is flagged, and blocks Create until the treasurer confirms it with Edit', () => {
+    // "40 hours" and "issue 4521" are not amounts; a bare "4521" in someone else's message is.
+    const counts = resolveMessageProposal(raw({ lines: [{ user: 'U5', amount: '4521', amountFrom: 'message', reason: 'bounty', sources: ['M2', 'M3'] }] }), {
+      map: pseudonymizeMessages({ instruction: '50 each', messages: [WINNERS, ATTACK, msg('810000000000000003', ANA, 'spent 40 hours on issue 4521', 3)] }).map,
+      instruction: '50 each',
+    })
+    expect(heldFor(counts, MALLORY)?.holds).toEqual(['amount_not_in_source'])
+    const bystander = msg('810000000000000003', ANA, 'a fair price would be 4521', 3)
+    const p2 = pseudonymizeMessages({ instruction: 'October 2026 bounties: 50 each', messages: [WINNERS, ATTACK, bystander] })
+    const r = resolveMessageProposal(raw({ lines: [{ user: 'U5', amount: '4521', amountFrom: 'message', reason: 'bounty', sources: ['M2', 'M3'] }] }), {
+      map: p2.map,
+      instruction: 'October 2026 bounties: 50 each',
+    })
+    expect(r.candidates).toMatchObject([{ discordUserId: MALLORY, amount: usd(4521), flags: ['amount_from_message'] }])
+    const a = assembleProposal({ candidates: r.candidates, held: r.held, isRegistered: () => true, remaining: usd(10_000), holdOverRemaining: true, problems: [] })
+    expect(blockingProblems(a)).toEqual(['amount_from_message'])
+  })
+
+  it('numbers in the instruction that are not amounts cannot be borrowed (a year, a count, a reference)', () => {
+    const r = resolve(raw({ lines: [{ user: 'U5', amount: '2026', amountFrom: 'instruction', reason: 'x', sources: ['M1'] }] }), 'October 2026 bounties, 10 replies each, issue #4521: 50 each')
+    expect(heldFor(r, MALLORY)?.holds).toEqual(['amount_not_in_instruction'])
+  })
+
+  it('tokens that are object built-ins ("constructor") are unknown people and messages, never a crash', () => {
+    const r = resolve(raw({ lines: [{ user: 'constructor', amount: '50', amountFrom: 'instruction', reason: 'x', sources: ['toString'] }, { user: 'U2', amount: '50', amountFrom: 'instruction', reason: 'x', sources: ['__proto__'] }] }))
+    expect(r.candidates).toEqual([])
+    expect(r.unresolved).toHaveLength(1)
+    expect(heldFor(r, ANA)?.holds).toEqual(['no_source'])
+  })
+
   it('people and messages the model made up are never paid', () => {
     const r = resolve(raw({ lines: [{ user: 'U99', amount: '50', amountFrom: 'instruction', reason: 'ghost', sources: ['M1'] }, { user: 'U2', amount: '50', amountFrom: 'instruction', reason: 'no source', sources: ['M42'] }] }))
     expect(r.candidates).toEqual([])
@@ -124,6 +154,16 @@ describe('resolveMessageProposal: an equal split', () => {
       [RUI, 33_333_333n],
       [LI, 33_333_333n],
     ])
+  })
+
+  it('only registered people share a split; the others are listed with no amount', () => {
+    const lines = ['U2', 'U3', 'U4'].map((user) => ({ user, amount: '100', amountFrom: 'split' as const, reason: 'winner', sources: ['M1'] }))
+    const r = resolveMessageProposal(raw({ lines, splitTotal: '300' }), { map: pseudo.map, instruction: 'split 300 between the winners', isRegistered: (id) => id !== LI })
+    expect(paid(r)).toEqual([
+      [ANA, usd(150)],
+      [RUI, usd(150)],
+    ])
+    expect(r.unregistered).toMatchObject([{ discordUserId: LI, amount: null }])
   })
 
   it('a split total the instruction never stated holds every split line', () => {
@@ -200,7 +240,7 @@ describe('editProposal (the treasurer types the lines)', () => {
   const ctx = { actor: TREASURER, isRegistered: (id: string) => id !== LI, remaining: usd(100), now: new Date(1000) }
 
   it('becomes exactly the typed lines, keeping reasons; typed-back held lines are no longer held', () => {
-    const e = editProposal(base(), [{ discordUserId: ANA, amount: usd(40) }, { discordUserId: RUI, amount: usd(50) }], ctx)
+    const e = editProposal({ ...base(), problems: ['amount_not_in_instruction', 'amount_from_message'] }, [{ discordUserId: ANA, amount: usd(40) }, { discordUserId: RUI, amount: usd(50) }], ctx)
     expect(e.ok && e.value.lines.map((l) => [l.discordUserId, l.amount, l.reason])).toEqual([
       [ANA, usd(40), 'r'],
       [RUI, usd(50), 'docs'],
@@ -208,6 +248,14 @@ describe('editProposal (the treasurer types the lines)', () => {
     expect(e.ok && e.value.held).toEqual([])
     expect(e.ok && e.value.unregistered.map((u) => u.discordUserId)).toEqual([LI])
     expect(e.ok && { total: e.value.total, problems: e.value.problems, editedBy: e.value.editedBy }).toEqual({ total: usd(90), problems: [], editedBy: TREASURER })
+  })
+
+  it('never stores more than the schema holds (huge criteria matches are cut, and blocked anyway)', () => {
+    const many = Array.from({ length: 1500 }, (_, i) => line(`2000000000${String(i).padStart(8, '0')}`, 1n))
+    const a = assembleProposal({ candidates: many, held: [], unregistered: many, isRegistered: (id) => id.endsWith('1'), remaining: 0n, holdOverRemaining: true, problems: [] })
+    expect(a.lines.length + a.held.length).toBeLessThanOrEqual(2000)
+    expect(a.unregistered.length).toBeLessThanOrEqual(1000)
+    expect(a.held.length).toBeLessThanOrEqual(1000)
   })
 
   it('refuses the same person twice', () => {

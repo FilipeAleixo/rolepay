@@ -33,9 +33,11 @@ export function explainProposalError(error: CodedError, ctx: { token?: string; c
     case 'criteria_invalid':
       return `The filter the AI wrote does not work: ${escapeMarkdown(((error.issues as string[] | undefined) ?? []).join('; '))}. Try rewording. Nothing was created.`
     case 'cannot_read':
-      return error.reason === 'not_found'
-        ? `payrun cannot find that in <#${String(error.channelId)}>. Check the channel or the message link.`
-        : `payrun cannot read <#${String(error.channelId)}>: the bot needs View Channel and Read Message History there.`
+      if (error.reason === 'not_found') return `payrun cannot find that in <#${String(error.channelId)}>. Check the channel or the message link.`
+      if (error.reason === 'unsupported') return `Discord would not let payrun read that in <#${String(error.channelId)}>: pick a text channel or a thread (not a forum or voice channel), and an emoji the server has.`
+      return `payrun cannot read <#${String(error.channelId)}>: the bot needs View Channel and Read Message History there.`
+    case 'source_not_readable':
+      return 'You can only propose from a channel you can read yourself (View Channel and Read Message History).'
     case 'no_message_content':
       return 'payrun can see those messages but not their text. Turn on the Message Content intent (Developer Portal, Bot), or right-click a message and use Apps > Propose pay run, which needs no intent.'
     case 'source_empty':

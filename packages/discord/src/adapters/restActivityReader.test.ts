@@ -58,6 +58,15 @@ describe('RestActivityReader.history (bounded, newest first, 100 per page)', () 
     ])
   })
 
+  it('Discord refusing the read itself (a forum channel, an unknown emoji: HTTP 400) is a result, not a crash', async () => {
+    const rest = new FakeDiscordRest()
+    rest.getChannelMessages = async () => ({ ok: false, error: { code: 'http_error', status: 400 } })
+    rest.getReactions = async () => ({ ok: false, error: { code: 'http_error', status: 400 } })
+    const reader = new RestActivityReader(rest)
+    expect(await reader.history({ channelId: HELP, since: minutesAgo(60), until: NOW, limit: 10 })).toEqual({ ok: false, error: { code: 'cannot_read', channelId: HELP, reason: 'unsupported' } })
+    expect(await reader.reactions({ channelId: HELP, messageId: '810000000000000001', emoji: '🦄', limit: 10 })).toEqual({ ok: false, error: { code: 'cannot_read', channelId: HELP, reason: 'unsupported' } })
+  })
+
   it('a channel the bot cannot read is a clear error', async () => {
     const { rest, reader } = withHistory(5)
     rest.forbiddenChannels.add(HELP)

@@ -16,9 +16,12 @@ export type InteractionContext = {
 
 export type OptionValue = string | number | boolean
 
+/** A channel picked in a command option, with the caller's own permissions in it (Discord computes them). */
+export type ResolvedChannel = { permissions: bigint | null }
+
 export type ParsedInteraction =
   | { kind: 'ping' }
-  | { kind: 'command'; command: string; sub: string | null; options: Record<string, OptionValue>; focused: null; ctx: InteractionContext }
+  | { kind: 'command'; command: string; sub: string | null; options: Record<string, OptionValue>; channels: Record<string, ResolvedChannel>; focused: null; ctx: InteractionContext }
   | { kind: 'autocomplete'; command: string; sub: string | null; options: Record<string, OptionValue>; focused: string | null; ctx: InteractionContext }
   | { kind: 'component'; customId: string; messageId: string | null; ctx: InteractionContext }
   /** A right-click command on a message (Apps > ...): the message arrives in the interaction, text included, with no intent. */
@@ -47,7 +50,14 @@ const common = {
   member: MemberSchema.optional(),
   user: UserSchema.optional(),
 }
-const CommandDataSchema = z.object({ name: z.string(), type: z.number().int().optional(), options: z.array(OptionSchema).optional() })
+const CommandDataSchema = z.object({
+  name: z.string(),
+  type: z.number().int().optional(),
+  options: z.array(OptionSchema).optional(),
+  resolved: z
+    .object({ channels: z.record(z.string(), z.object({ id: DiscordIdSchema, permissions: z.string().regex(/^\d+$/).optional() })).optional() })
+    .optional(),
+})
 const MessageCommandDataSchema = z.object({
   name: z.string(),
   type: z.literal(CommandType.Message),
@@ -127,7 +137,8 @@ export function parseInteraction(body: unknown): Result<ParsedInteraction, { cod
   const options: Record<string, OptionValue> = {}
   for (const o of leaves) if (o.value !== undefined) options[o.name] = o.value
   const base = { command: i.data.name, sub: sub?.name ?? null, options, ctx }
-  return i.type === InteractionType.Autocomplete
-    ? ok({ kind: 'autocomplete', ...base, focused: leaves.find((o) => o.focused)?.name ?? null })
-    : ok({ kind: 'command', ...base, focused: null })
+  if (i.type === InteractionType.Autocomplete) return ok({ kind: 'autocomplete', ...base, focused: leaves.find((o) => o.focused)?.name ?? null })
+  const resolved = 'resolved' in i.data ? (i.data.resolved as { channels?: Record<string, { permissions?: string }> } | undefined) : undefined
+  const channels = Object.fromEntries(Object.entries(resolved?.channels ?? {}).map(([id, c]) => [id, { permissions: c.permissions === undefined ? null : BigInt(c.permissions) }]))
+  return ok({ kind: 'command', ...base, channels, focused: null })
 }

@@ -6,7 +6,7 @@ import { type Result, err, ok } from '../result.js'
 import { type AmountPlan, type Metric, type Metrics } from './amounts.js'
 import { parseLooseAmount } from './numbers.js'
 import type { RawCriteriaProposal } from './raw.js'
-import type { InstructionRefs } from './sources.js'
+import { type InstructionRefs, own } from './sources.js'
 
 /**
  * Criteria mode, "pay X to people who Y": the model turns Y into these conditions and code runs
@@ -99,7 +99,7 @@ export function resolveCriteria(
   let lookbackClamped = false
 
   const lookup = (table: Record<string, string>, what: string) => (t: string) => {
-    const id = table[t.trim().replace(/^[@#]/, '')]
+    const id = own(table, t.trim().replace(/^[@#]/, ''))
     if (!id) issues.push(`${what} "${t}" is not one the instruction or the server names`)
     return id ?? null
   }
@@ -107,7 +107,7 @@ export function resolveCriteria(
   const channel = lookup(refs.channels, 'the channel')
   const user = lookup(refs.users, 'the person')
   const message = (t: string) => {
-    const m = refs.messages[t.trim()]
+    const m = own(refs.messages, t.trim())
     if (!m) issues.push(`the message "${t}" is not linked in the instruction (paste the message link)`)
     return m ?? null
   }
@@ -129,6 +129,11 @@ export function resolveCriteria(
     return { channelIds: [...new Set(channelIds)], since, until, min: Math.max(1, w.min) }
   }
 
+  // A custom emoji the model saw as ":name:" maps back to Discord's form; any emoji is cut to fit.
+  const emoji = (e: string | null) => {
+    const t = e?.trim()
+    return t ? (own(refs.emojis, t) ?? t).slice(0, 100) : null
+  }
   const k = raw.conditions
   const reactedMessage = k.reactedTo ? message(k.reactedTo.message) : null
   const mentionedMessage = k.mentionedIn ? message(k.mentionedIn.message) : null
@@ -148,7 +153,7 @@ export function resolveCriteria(
     messagesIn: k.messagesIn ? window(k.messagesIn, 'messages') : null,
     activeDaysIn: k.activeDaysIn ? window(k.activeDaysIn, 'active days') : null,
     repliesIn: k.repliesIn ? window(k.repliesIn, 'replies') : null,
-    reactedTo: k.reactedTo && reactedMessage ? { ...reactedMessage, emoji: k.reactedTo.emoji?.trim() || null } : null,
+    reactedTo: k.reactedTo && reactedMessage ? { ...reactedMessage, emoji: emoji(k.reactedTo.emoji) } : null,
     mentionedIn: mentionedMessage,
     postedIn: thread ? { threadId: thread } : null,
     paidInRun: paid === null ? null : paid === 'last' ? { last: true, runId: null } : { last: false, runId: paid },

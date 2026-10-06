@@ -30,7 +30,7 @@ export const ChannelType = { Text: 0, Voice: 2, Category: 4, Announcement: 5, An
 export const ButtonStyle = { Primary: 1, Secondary: 2, Success: 3, Danger: 4, Link: 5 } as const
 
 /** Permission bits payrun checks (from the interaction's member.permissions bitfield). */
-export const Permission = { Administrator: 1n << 3n, ManageGuild: 1n << 5n } as const
+export const Permission = { Administrator: 1n << 3n, ManageGuild: 1n << 5n, ViewChannel: 1n << 10n, ReadMessageHistory: 1n << 16n } as const
 
 export type Embed = {
   title?: string

@@ -2,13 +2,13 @@ import type { SourceMessage } from '@payrun/core'
 import type { z } from 'zod'
 import { explainError } from '../views/errors.js'
 import type { DiscordAppDeps } from './deps.js'
-import type { InteractionContext, OptionValue } from './interaction.js'
+import type { InteractionContext, OptionValue, ResolvedChannel } from './interaction.js'
 import { type Outcome, ephemeralReply } from './outcome.js'
 
 /** Handlers only ever run inside a server. */
 export type GuildContext = InteractionContext & { guildId: string }
 
-export type CommandInput = { options: Record<string, OptionValue>; ctx: GuildContext }
+export type CommandInput = { options: Record<string, OptionValue>; ctx: GuildContext; channels?: Record<string, ResolvedChannel> }
 export type CommandHandler = (input: CommandInput, deps: DiscordAppDeps) => Promise<Outcome>
 export type AutocompleteHandler = (input: CommandInput & { focused: string | null }, deps: DiscordAppDeps) => Promise<Outcome>
 export type ButtonHandler = (input: { runId: string; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>

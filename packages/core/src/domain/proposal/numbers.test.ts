@@ -18,6 +18,22 @@ describe('amountsIn (the amounts a text states, as micro-units)', () => {
   })
 })
 
+describe('amountsIn: numbers that are not amounts (counts, dates, years, references)', () => {
+  it('skips counts with their unit, ranks and references', () => {
+    expect(amountsIn('pay 20 to every Mod with 10 replies, 3 messages a day for 7 days, top 3, issue #4521, 2nd place, 10% more')).toEqual([20_000_000n])
+  })
+
+  it('skips dates and years next to a month', () => {
+    expect(amountsIn('October 2026 bounties since 2026-10-01 and 6/9: 50 each')).toEqual([50_000_000n])
+    expect(amountsIn('since 1 October, 5 each')).toEqual([5_000_000n])
+  })
+
+  it('keeps amounts next to money words and the demo phrasing', () => {
+    expect(amountsIn('50 each, the indexer one 200, note: October bounties')).toEqual([50_000_000n, 200_000_000n])
+    expect(amountsIn('split 300 between the winners, 25 AlphaUSD for docs, 1,000 USD pool')).toEqual([300_000_000n, 25_000_000n, 1_000_000_000n])
+  })
+})
+
 describe('parseLooseAmount (an amount the model wrote)', () => {
   it.each([
     ['50', 50_000_000n],

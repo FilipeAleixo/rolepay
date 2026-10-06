@@ -121,6 +121,8 @@ export function composeServer(deps: ServerDeps) {
         recover: async () => {
           const results = await payrun.payRuns.recoverInFlight()
           await notifyRecovered(results)
+          // Expired records (an abandoned proposal modal's message, old proposals) leave the disk too.
+          await deps.kv.sweep().catch((error) => log('kv_sweep_error', errorFields(error)))
           return results
         },
         intervalMs: config.recoveryIntervalMs,

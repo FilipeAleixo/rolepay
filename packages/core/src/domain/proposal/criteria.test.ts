@@ -19,6 +19,7 @@ const refs = {
   roles: { R1: '400000000000000001', R2: MODS, R3: ADMINS },
   channels: { C1: HELP, C2: GENERAL, C3: THREAD },
   messages: { M1: MSG },
+  emojis: { ':pepe:': '<:pepe:123456789012345678>' },
 }
 
 const raw = (over: Partial<RawCriteriaProposal> = {}, conditions: Partial<RawCriteriaProposal['conditions']> = {}): RawCriteriaProposal => ({
@@ -126,6 +127,18 @@ describe('resolveCriteria (the model writes the filter, code checks it)', () => 
   it('notes an amount the instruction never stated (a model error a person must check)', () => {
     const r = resolve(raw({ amount: { kind: 'flat', amount: '25', per: null, cap: null, total: null, splitBy: null } }))
     expect(r.ok && r.value.amountsInInstruction).toBe(false)
+  })
+
+  it('tokens that are object built-ins ("constructor", "__proto__") are unknown, never a function', () => {
+    const r = resolve(raw({ exclude: ['constructor'] }, { hasRole: ['__proto__'], reactedTo: { message: 'toString', emoji: null } }))
+    expect(r.ok).toBe(false)
+    expect(!r.ok && r.error.code === 'criteria_invalid' && r.error.issues.length).toBe(3)
+  })
+
+  it('a custom emoji maps back to its Discord form; a long one is cut', () => {
+    expect(resolve(raw({}, { reactedTo: { message: 'M1', emoji: ':pepe:' } }))).toMatchObject({ ok: true, value: { criteria: { reactedTo: { emoji: '<:pepe:123456789012345678>' } } } })
+    const long = resolve(raw({}, { reactedTo: { message: 'M1', emoji: 'x'.repeat(500) } }))
+    expect(long.ok && long.value.criteria.reactedTo?.emoji?.length).toBe(100)
   })
 
   it('reactions, mentions, threads and past runs', () => {

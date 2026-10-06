@@ -39,6 +39,18 @@ export class MemoryKeyValueStore implements KeyValueStore {
     this.entries.set(key, this.entry(value, options?.ttl))
     return true
   }
+  async sweep() {
+    let n = 0
+    for (const key of [...this.entries.keys()]) {
+      const e = this.entries.get(key)
+      if (e && e.expiresAt !== null && this.clock.now().getTime() >= e.expiresAt) {
+        this.entries.delete(key)
+        n++
+      }
+    }
+    return n
+  }
+
   async take<T>(key: string) {
     const e = this.live(key)
     this.entries.delete(key)

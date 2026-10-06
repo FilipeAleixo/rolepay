@@ -93,7 +93,14 @@ describe('tokenizeInstruction (criteria mode: roles, channels, people and messag
       roles: { R1: '400000000000000001', R2: '400000000000000002' },
       channels: { C1: '700000000000000001', C2: '700000000000000002' },
       messages: { M1: { channelId: '700000000000000002', messageId: '810000000000000009' } },
+      emojis: {},
     })
+  })
+
+  it('custom emoji reach the model by name and map back in code', () => {
+    const t = tokenizeInstruction('5 to everyone who reacted <:pepe:123456789012345678> to it', { guildId: GUILD, roles: [], channels: [] })
+    expect(t.text).toBe('5 to everyone who reacted :pepe: to it')
+    expect(t.refs.emojis).toEqual({ ':pepe:': '<:pepe:123456789012345678>' })
   })
 
   it('gives unknown mentioned roles and channels (a thread, say) their own tokens, and refuses links into other servers', () => {

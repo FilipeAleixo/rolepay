@@ -63,6 +63,42 @@ describe('proposalMessage', () => {
     for (const f of embedOf(m).fields ?? []) expect(f.value.length).toBeLessThanOrEqual(1024)
   })
 
+  it('stays inside 6,000 characters whatever the lists hold: the longest fields shrink first', () => {
+    const many = (n: number) => Array.from({ length: n }, (_, i) => `2000000000000${String(i).padStart(5, '0')}`)
+    const p = proposal({
+      lines: many(50).map((id) => ({ ...proposal().lines[0], discordUserId: id, reason: 'y'.repeat(150) }) as ReturnType<typeof proposal>['lines'][number]),
+      held: many(100).map((id) => ({ ...proposal().held[0], discordUserId: id }) as ReturnType<typeof proposal>['held'][number]),
+      unregistered: many(100).map((id) => ({ ...proposal().unregistered[0], discordUserId: id }) as ReturnType<typeof proposal>['unregistered'][number]),
+      unresolved: Array.from({ length: 20 }, () => ({ text: 'z'.repeat(200), why: 'w'.repeat(300) })),
+      assumptions: Array.from({ length: 10 }, () => 'a'.repeat(300)),
+      suspicious: many(20).map((id) => ({ channelId: CHANNEL, messageId: '810000000000000002', authorId: id, summary: 's'.repeat(300) })),
+      problems: ['over_budget', 'scan_truncated', 'amount_from_message'],
+    })
+    const criteria: Criteria = {
+      hasRole: many(20),
+      lacksRole: [],
+      joinedBefore: null,
+      joinedAfter: null,
+      messagesIn: null,
+      activeDaysIn: null,
+      repliesIn: null,
+      reactedTo: null,
+      mentionedIn: null,
+      postedIn: null,
+      paidInRun: null,
+      exclude: many(50),
+      excludeProposer: true,
+    }
+    for (const q of [p, { ...p, mode: 'criteria' as const, criteria, amountPlan: { rule: { kind: 'flat' as const, amount: 1n }, overrides: many(50).map((discordUserId) => ({ discordUserId, amount: 5n })), perPersonCap: null } }]) {
+      const m = proposalMessage(q, ctx)
+      expect(size(m)).toBeLessThanOrEqual(6000)
+      expect(embedOf(m).fields?.slice(0, 2).map((f) => f.name)).toEqual(['Total', 'Bot key'])
+      // The lines keep their room: the fields gave way, not the people being paid.
+      expect(embedOf(m).description).toContain('1. <@200000000000000000>')
+      expect(embedOf(m).description).toMatch(/Expires <t:\d+:R>/)
+    }
+  })
+
   it('criteria mode: the criteria and the amount in plain words, what was scanned, and each match explained', () => {
     const criteria: Criteria = {
       hasRole: [MODS_ROLE],
@@ -130,6 +166,11 @@ describe('the modals', () => {
     expect(editText(proposal())).toBe(
       [`<@${ALICE}>=50  # bug in the claim page`, `<@${BOB}>=200  # the indexer`, '# <@200000000000000666>=10000  (left out: their own message is the only source; the amount is not in your instruction)', `# <@${CAROL}>  (not registered)`].join('\n'),
     )
+    // Fifty long lines: every payable line is there in full; comments go first.
+    const fifty = proposal({ lines: Array.from({ length: 50 }, (_, i) => ({ ...proposal().lines[0], discordUserId: `2000000000000000${String(i).padStart(4, '0')}`, amount: 1_234_567_123_456n, reason: 'r'.repeat(200) }) as ReturnType<typeof proposal>['lines'][number]) })
+    const text = editText(fifty)
+    expect(text.length).toBeLessThanOrEqual(4000)
+    expect(text.split('\n').filter((l) => !l.startsWith('#'))).toHaveLength(50)
     const m = editModal(proposal())
     expect(m.custom_id).toBe('proposal-modal:edit:prop_view01')
     expect(m.components[0]?.components[0]?.label.length).toBeLessThanOrEqual(45)

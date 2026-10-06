@@ -74,6 +74,25 @@ describe('renderOutcome', () => {
     expect(rest.channelPosts).toEqual([{ channelId: '700000000000000001', message: { content: 'review' } }])
   })
 
+  it('an answer Discord refuses (too long) is replaced by a short message, and reported', async () => {
+    const rest = new FakeDiscordRest()
+    const editOriginal = rest.editOriginal.bind(rest)
+    let first = true
+    rest.editOriginal = async (reply, message) => {
+      if (first) {
+        first = false
+        return { ok: false, error: { code: 'http_error', status: 400 } }
+      }
+      return editOriginal(reply, message)
+    }
+    const errors: unknown[] = []
+    const d = renderOutcome({ kind: 'defer', ephemeral: true, work: async () => ({ ok: true, message: { content: 'x'.repeat(9000) } }) }, ctx, rest, (e) => errors.push(e))
+    if (d.kind !== 'respond') throw new Error('expected a response')
+    await d.background?.()
+    expect(rest.lastEdit('tok')?.content).toMatch(/could not show this answer/)
+    expect(errors).toHaveLength(1)
+  })
+
   it('autocomplete choices', async () => {
     const { d } = await render({ kind: 'choices', choices: [{ name: 'run_1 · paid', value: 'run_1' }] })
     expect(d.body).toEqual({ type: 8, data: { choices: [{ name: 'run_1 · paid', value: 'run_1' }] } })

@@ -3,10 +3,10 @@ import { describe, expect, it } from 'vitest'
 import { SCOPE, appHarness, body, isEphemeral, text } from '../../test/app.js'
 import { ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
 import { usd } from '../../test/harness.js'
-import { buttonClick, messageCommand, modalSubmit, slashCommand } from '../testing/interactions.js'
+import { READ_HISTORY, buttonClick, messageCommand, modalSubmit, slashCommand } from '../testing/interactions.js'
 import { wireMessage } from '../testing/messages.js'
 
-const treasurer = { userId: TREASURER, roles: [TREASURER_ROLE] }
+const treasurer = { userId: TREASURER, roles: [TREASURER_ROLE], channels: { [CHANNEL]: READ_HISTORY } }
 const PROPOSERS = '400000000000000003'
 const HELP = '700000000000000002'
 const MALLORY = '200000000000000666'
@@ -139,6 +139,17 @@ describe('/payrun propose', () => {
     const a = await ready()
     expect(body(await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: 'x', since: '7d' }, treasurer))).data?.content).toMatch(/goes with `source`/)
     expect(body(await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: 'x', source: CHANNEL, since: 'last week' }, treasurer))).data?.content).toMatch(/24h, 7d or 2w/)
+  })
+
+  it('never reads a channel the caller cannot read themselves', async () => {
+    const a = await ready()
+    a.rest.addChannelMessages(WINNERS)
+    for (const channels of [{ [CHANNEL]: 1n << 10n }, {}] as Record<string, bigint>[]) {
+      const d = await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: '50 each', source: CHANNEL }, { ...treasurer, channels }))
+      expect(isEphemeral(d) && body(d).data?.content).toMatch(/channel you can read yourself/)
+    }
+    expect(a.rest.reads).toEqual([])
+    expect(a.proposer.requests).toEqual([])
   })
 
   it('a channel the bot cannot read says which permissions it needs', async () => {

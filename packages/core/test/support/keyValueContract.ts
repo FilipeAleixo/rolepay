@@ -83,6 +83,16 @@ export function keyValueContract(name: string, make: KvFactory) {
       expect(await kv.take('t')).toBeUndefined()
     })
 
+    it('sweep deletes expired records only, and counts them', async () => {
+      await kv.set('old', 'x', { ttl: 5 })
+      await kv.set('young', 'y', { ttl: 60 })
+      await kv.set('forever', 'z')
+      clock.advance(10)
+      expect(await kv.sweep()).toBe(1)
+      expect(await kv.sweep()).toBe(0)
+      expect([await kv.get('young'), await kv.get('forever')]).toEqual(['y', 'z'])
+    })
+
     it('hands out copies', async () => {
       await kv.set('o', { list: [1] })
       const got = await kv.get<{ list: number[] }>('o')

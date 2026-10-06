@@ -95,6 +95,13 @@ export type InstructionRefs = {
   roles: Record<string, string>
   channels: Record<string, string>
   messages: Record<string, { channelId: string; messageId: string }>
+  /** Custom emoji as the model sees them (":pepe:") to Discord's form ("<:pepe:123...>"). */
+  emojis: Record<string, string>
+}
+
+/** A token's entry, never an inherited property: "constructor" or "__proto__" from an injected text finds nothing. */
+export function own<T>(table: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined
 }
 
 const MESSAGE_LINK = /https?:\/\/(?:ptb\.|canary\.)?discord(?:app)?\.com\/channels\/(\d{17,20})\/(\d{17,20})\/(\d{17,20})/g
@@ -111,7 +118,7 @@ export function tokenizeInstruction(
   instruction: string,
   guild: { guildId: string; roles: readonly NamedRole[]; channels: readonly NamedChannel[] },
 ): { text: string; refs: InstructionRefs; roles: { ref: string; name: string }[]; channels: { ref: string; name: string; kind: ChannelKind }[] } {
-  const refs: InstructionRefs = { users: {}, roles: {}, channels: {}, messages: {} }
+  const refs: InstructionRefs = { users: {}, roles: {}, channels: {}, messages: {}, emojis: {} }
   const roles = guild.roles.map((r, i) => ({ ref: `R${i + 1}`, id: r.id, name: cut(r.name, 100) }))
   const channels = guild.channels.map((c, i) => ({ ref: `C${i + 1}`, id: c.id, name: cut(c.name, 100), kind: c.kind }))
   const roleRef = (id: string) => {
@@ -141,6 +148,10 @@ export function tokenizeInstruction(
     .replace(ROLE_ID, (_m, id: string) => `@${roleRef(id)}`)
     .replace(CHANNEL_ID, (_m, id: string) => `#${channelRef(id)}`)
     .replace(USER_MENTION, (_m, id: string) => `@${userRef(id)}`)
+    .replace(CUSTOM_EMOJI, (m: string, name: string) => {
+      refs.emojis[`:${name}:`] = m
+      return `:${name}:`
+    })
     .replace(SNOWFLAKE, '[id]')
   for (const r of roles) refs.roles[r.ref] = r.id
   for (const c of channels) refs.channels[c.ref] = c.id

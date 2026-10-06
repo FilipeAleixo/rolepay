@@ -5,7 +5,7 @@ import type { Database } from './schema.js'
 
 /**
  * KeyValueStore on the `kv` table. Expiry is lazy: expired rows read as absent and are
- * replaced or removed on the next write. `create` and `take` are single statements
+ * replaced or removed on the next write, or by `sweep`. `create` and `take` are single statements
  * (an upsert guarded by expiry, a DELETE ... RETURNING), so they stay atomic on Postgres too.
  */
 export class SqliteKeyValueStore implements KeyValueStore {
@@ -50,6 +50,11 @@ export class SqliteKeyValueStore implements KeyValueStore {
       )
       .executeTakeFirst()
     return Number(result.numInsertedOrUpdatedRows ?? 0n) === 1
+  }
+
+  async sweep() {
+    const result = await this.db.deleteFrom('kv').where('expires_at', 'is not', null).where('expires_at', '<=', this.now()).executeTakeFirst()
+    return Number(result.numDeletedRows ?? 0n)
   }
 
   async take<T>(key: string) {

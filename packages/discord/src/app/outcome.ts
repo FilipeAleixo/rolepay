@@ -22,6 +22,8 @@ export type Outcome =
 export const ephemeralReply = (content: string): Outcome => ({ kind: 'reply', ephemeral: true, message: { content } })
 
 const GENERIC_FAILURE = 'Something went wrong on our side. Nothing was paid by this action; try again in a moment.'
+/** Discord refused the finished answer itself (too long, say): a short message instead of "thinking..." forever. */
+const UNSHOWABLE = 'payrun could not show this answer in Discord. Nothing was created or paid; try again with a narrower request.'
 
 export function renderOutcome(outcome: Outcome, ctx: InteractionContext, rest: DiscordRest, onError?: (e: unknown) => void): Dispatched {
   switch (outcome.kind) {
@@ -60,7 +62,11 @@ export function renderOutcome(outcome: Outcome, ctx: InteractionContext, rest: D
           result = { ok: false, message: { content: GENERIC_FAILURE } }
         }
         if (result.ok || outcome.ephemeral) {
-          await rest.editOriginal(reply, result.message)
+          const edited = await rest.editOriginal(reply, result.message)
+          if (!edited.ok && edited.error.code === 'http_error') {
+            onError?.(new Error(`Discord refused the reply edit: HTTP ${edited.error.status}`))
+            await rest.editOriginal(reply, { content: UNSHOWABLE })
+          }
           return
         }
         // A public placeholder must not turn into a public error: remove it, tell only the caller.

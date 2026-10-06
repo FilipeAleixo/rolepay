@@ -70,7 +70,7 @@ async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: Disc
   switch (i.kind) {
     case 'command': {
       const handler = COMMANDS[`${i.command} ${i.sub}`]
-      return handler ? handler({ options: i.options, ctx }, deps) : ephemeralReply('Sorry, I do not know that command. Try /payrun status.')
+      return handler ? handler({ options: i.options, ctx, channels: i.channels }, deps) : ephemeralReply('Sorry, I do not know that command. Try /payrun status.')
     }
     case 'autocomplete': {
       const handler = AUTOCOMPLETE[`${i.command} ${i.sub}`]

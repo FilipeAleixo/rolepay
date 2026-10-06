@@ -6,7 +6,8 @@ import type { WireMessage } from './messages.js'
 
 type OptionValue = string | number | boolean
 
-export type Who = { userId: string; roles?: string[]; manageGuild?: boolean }
+/** `channels`: the caller's permissions in channels picked in options (Discord sends them as `resolved.channels`). */
+export type Who = { userId: string; roles?: string[]; manageGuild?: boolean; channels?: Record<string, bigint> }
 
 const APP = '500000000000000001'
 let seq = 0
@@ -44,9 +45,18 @@ export function slashCommand(
     token,
     ...(scope.guildId ? { guild_id: scope.guildId, member: member(who) } : { user: { id: who.userId, username: 'dm' } }),
     ...(scope.channelId ? { channel_id: scope.channelId } : {}),
-    data: { id: '900000000000000001', name: command, type: 1, options: [{ type: 1, name: sub, options: options(values) }] },
+    data: {
+      id: '900000000000000001',
+      name: command,
+      type: 1,
+      options: [{ type: 1, name: sub, options: options(values) }],
+      ...(who.channels ? { resolved: { channels: Object.fromEntries(Object.entries(who.channels).map(([id, p]) => [id, { id, type: 0, permissions: String(p) }])) } } : {}),
+    },
   }
 }
+
+/** View Channel and Read Message History: what a member needs to read a channel's history. */
+export const READ_HISTORY = (1n << 10n) | (1n << 16n)
 
 export function autocomplete(scope: InteractionScope, command: string, sub: string, values: Record<string, OptionValue>, focused: string, who: Who) {
   return {

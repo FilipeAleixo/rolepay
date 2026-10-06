@@ -23,8 +23,13 @@ const KIND: Partial<Record<number, ChannelKind>> = {
   [ChannelType.PrivateThread]: 'thread',
 }
 
+/** Expected refusals become results; anything else (an outage) is thrown. A 400 is Discord refusing the read itself. */
 const readError = (channelId: string, e: RestError): ReadError | null =>
-  e.code === 'forbidden' || e.code === 'not_found' ? { code: 'cannot_read', channelId, reason: e.code } : null
+  e.code === 'forbidden' || e.code === 'not_found'
+    ? { code: 'cannot_read', channelId, reason: e.code }
+    : e.code === 'http_error' && e.status === 400
+      ? { code: 'cannot_read', channelId, reason: 'unsupported' }
+      : null
 
 /**
  * Core's ActivityReader over Discord's REST API, for AI proposals. History is paged newest first

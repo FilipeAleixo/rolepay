@@ -28,6 +28,7 @@ describe('parseInteraction', () => {
         command: 'payrun',
         sub: 'new',
         options: { amount: '25', role: '400000000000000002' },
+        channels: {},
         focused: null,
         ctx: {
           applicationId: '500000000000000001',
@@ -92,6 +93,17 @@ describe('parseInteraction', () => {
         replyTo: { messageId: '810000000000000000', authorId: '200000000000000002' },
       },
     })
+  })
+
+  it('keeps the caller\'s permissions in a channel picked in an option', () => {
+    const r = parseInteraction({
+      ...base,
+      type: 2,
+      guild_id: '1094309218049937418',
+      member,
+      data: { name: 'payrun', options: [{ type: 1, name: 'propose', options: [{ type: 7, name: 'source', value: '700000000000000001' }] }], resolved: { channels: { '700000000000000001': { id: '700000000000000001', type: 0, permissions: '66560' } } } },
+    })
+    expect(r.ok && r.value.kind === 'command' && r.value.channels).toEqual({ '700000000000000001': { permissions: 66560n } })
   })
 
   it('a message command whose target is missing is refused', () => {

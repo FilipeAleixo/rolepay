@@ -2,7 +2,8 @@ import type { MemberFacts } from '../domain/proposal/criteria.js'
 import type { NamedChannel, NamedRole, SourceMessage } from '../domain/proposal/sources.js'
 import type { Result } from '../domain/result.js'
 
-export type ReadError = { code: 'cannot_read'; channelId: string; reason: 'forbidden' | 'not_found' }
+/** `unsupported`: Discord refused the read itself (not a text channel or thread, or an unknown emoji). */
+export type ReadError = { code: 'cannot_read'; channelId: string; reason: 'forbidden' | 'not_found' | 'unsupported' }
 
 /**
  * What members of a community did, read from Discord (REST, no gateway). The implementation lives

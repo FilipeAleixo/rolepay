@@ -457,6 +457,36 @@ describe('ProposalService: edit, discard, create', () => {
     expect(await w.payRuns.list({ guildId: GUILD })).toHaveLength(1)
   })
 
+  it('a failure after the run exists never lets a second click create a second run', async () => {
+    for (const fault of ['save', 'submit'] as const) {
+      const w = await world()
+      demoAnswer(w)
+      const p = await fromMessage(w)
+      if (!p.ok) throw new Error(p.error.code)
+      if (fault === 'save') {
+        const save = w.repos.proposals.save.bind(w.repos.proposals)
+        w.repos.proposals.save = async (x) => (x.status === 'run_created' ? Promise.reject(new Error('disk full')) : save(x))
+      } else {
+        w.payRuns.submit = async () => Promise.reject(new Error('database is down'))
+      }
+      await expect(w.proposals.createRun({ ...asTreasurer, proposalId: p.value.id })).rejects.toThrow()
+      expect(await w.proposals.createRun({ ...asTreasurer, proposalId: p.value.id })).toMatchObject({ ok: false, error: { code: 'proposal_closed' } })
+      expect(await w.payRuns.list({ guildId: GUILD })).toHaveLength(1)
+    }
+  })
+
+  it('a run that could not be created gives the proposal back (it can be created later)', async () => {
+    const w = await world()
+    demoAnswer(w)
+    const p = await fromMessage(w)
+    if (!p.ok) throw new Error(p.error.code)
+    const create = w.payRuns.create.bind(w.payRuns)
+    w.payRuns.create = async () => ({ ok: false, error: { code: 'community_not_found' } })
+    expect(await w.proposals.createRun({ ...asTreasurer, proposalId: p.value.id })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+    w.payRuns.create = create
+    expect((await w.proposals.createRun({ ...asTreasurer, proposalId: p.value.id })).ok).toBe(true)
+  })
+
   it('edit, discard and create need the proposer rules too, and work only on an open proposal of this server', async () => {
     const w = await world()
     demoAnswer(w)

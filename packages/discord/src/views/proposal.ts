@@ -46,6 +46,7 @@ const PROBLEMS: Record<Problem, string> = {
   no_lines: 'Nobody to pay yet. Edit adds people.',
   too_many_lines: `More than ${MAX_LINES_PER_RUN} people: a run pays at most ${MAX_LINES_PER_RUN}. Edit it down.`,
   amount_not_in_instruction: 'The amount rule uses an amount your instruction does not state. Check it and use Edit: the lines you type are exactly what gets paid.',
+  amount_from_message: 'Some amounts come from messages, which anyone in the channel could have written. Check them, then confirm with Edit (submit the lines as they should be).',
   over_budget: 'The total is more than the bot key has left: the run will be refused until the limit resets or the treasury authorises a larger key.',
   no_active_key: 'The bot key is not active: the run cannot be paid until the treasury authorises one.',
   scan_truncated: `The ${PROPOSAL_LIMITS.maxScannedMessages.toLocaleString('en-US')}-message bound was reached: counts may be low for the oldest days.`,
@@ -143,6 +144,21 @@ function header(p: Proposal): string[] {
   }
   out.push(`**Instruction:** ${escapeMarkdown(clip(p.instruction, 300))}`)
   if (p.note) out.push(`**Note on the run:** ${escapeMarkdown(p.note)}`)
+  // Many exclusions or overrides could make the criteria long: each part has a bound.
+  return out.map((x) => clip(x, 900))
+}
+
+/** Shrinks the longest list fields (never Total and Bot key) until they fit `budget` characters. */
+function fitFields(fs: NonNullable<Embed['fields']>, budget: number): NonNullable<Embed['fields']> {
+  const out = [...fs]
+  const size = () => out.reduce((n, f) => n + f.name.length + f.value.length, 0)
+  while (size() > budget && out.length > 2) {
+    const rest = out.slice(2)
+    const longest = rest.reduce((a, b) => (b.value.length > a.value.length ? b : a))
+    const i = out.indexOf(longest)
+    if (longest.value.length <= 120) out.splice(i, 1)
+    else out[i] = { ...longest, value: clip(longest.value, Math.floor(longest.value.length / 2)) }
+  }
   return out
 }
 
@@ -189,11 +205,12 @@ export type ProposalViewContext = { approverRoleId: string | null }
 export function proposalMessage(p: Proposal, ctx: ProposalViewContext): Message {
   const title = p.editedBy ? 'Pay run proposal (edited)' : 'Pay run proposal'
   const head = header(p).join('\n')
-  const fs = fields(p)
   const footer = `Proposal ${p.id}. A draft: nothing is paid until a member with the approver role approves the run.`
   const expires = `Expires ${relativeTime(p.expiresAt)}.${ctx.approverRoleId ? ` Create posts the run for ${roleMention(ctx.approverRoleId)} to approve.` : ''}`
-  // The lines get whatever room the header, the expiry line, the fields and the footer leave.
+  // The lines get whatever room the header, the expiry line, the fields and the footer leave,
+  // and at least 1,000 characters: the fields shrink first (Discord refuses an embed over 6,000).
   const fixed = head.length + expires.length + 8
+  const fs = fitFields(fields(p), EMBED_MAX - title.length - footer.length - fixed - 1000)
   const others = title.length + footer.length + fs.reduce((s, x) => s + x.name.length + x.value.length, 0)
   const room = Math.min(DESCRIPTION_MAX - fixed, EMBED_MAX - others - fixed)
   const lines: string[] = []
@@ -274,20 +291,35 @@ export function instructionModal(messageId: string): Modal {
   }
 }
 
-/** The lines as text for Edit: `<@id>=amount`, one per line; held and unregistered people as comments to copy in. */
+/**
+ * The lines as text for Edit: `<@id>=amount`, one per line; held and unregistered people as
+ * comments to copy in. The payable lines always come first and in full (comments are dropped
+ * before any of them would be), because submitting the form makes them exactly the run.
+ */
 export function editText(p: Proposal): string {
+  const LIMIT = 3900
   const note = (text: string | null) => (text ? `  # ${text.replace(/[\r\n#]+/g, ' ').slice(0, 40)}` : '')
-  const rows = [
-    ...p.lines.map((l) => `<@${l.discordUserId}>=${formatAmount(l.amount)}${note(l.reason ?? metricsText(l))}`),
+  const bare = p.lines.map((l) => `<@${l.discordUserId}>=${formatAmount(l.amount)}`)
+  const noted = p.lines.map((l, i) => `${bare[i]}${note(l.reason ?? metricsText(l))}`)
+  let rows = noted.join('\n').length <= LIMIT ? noted : bare
+  if (rows.join('\n').length > LIMIT) {
+    // Only a proposal over the run limit (more than 50 people) gets here: say what is missing.
+    const kept: string[] = []
+    for (const r of rows) {
+      if ([...kept, r].join('\n').length > LIMIT - 80) break
+      kept.push(r)
+    }
+    return [...kept, `# ${rows.length - kept.length} more lines are not shown: submitting keeps only the lines above`].join('\n')
+  }
+  const comments = [
     ...p.held.map((h) => `# <@${h.discordUserId}>=${h.amount !== null ? formatAmount(h.amount) : '?'}  (left out: ${h.holds.map((x) => HOLDS[x]).join('; ')})`),
     ...p.unregistered.map((u) => `# <@${u.discordUserId}>  (not registered)`),
   ]
-  let out = ''
-  for (const r of rows) {
-    if (out.length + r.length + 1 > 3900) break
-    out += `${r}\n`
+  for (const c of comments) {
+    if ([...rows, c].join('\n').length > LIMIT) break
+    rows = [...rows, c]
   }
-  return out.trimEnd()
+  return rows.join('\n')
 }
 
 export function editModal(p: Proposal): Modal {

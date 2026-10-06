@@ -14,4 +14,10 @@ export interface KeyValueStore {
   create(key: string, value: unknown, options?: { ttl?: number }): Promise<boolean>
   /** Atomic read-and-delete: across concurrent callers exactly one gets the value. */
   take<T = unknown>(key: string): Promise<T | undefined>
+  /**
+   * Deletes every expired record and says how many. Expiry is otherwise lazy (an expired record
+   * reads as absent), so records nobody reads again (an abandoned modal's message, a proposal)
+   * would stay on disk; the server sweeps on its recovery interval.
+   */
+  sweep(): Promise<number>
 }
