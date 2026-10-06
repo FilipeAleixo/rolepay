@@ -1,4 +1,4 @@
-import type { BotKey, Community } from '../domain/community.js'
+import type { BotKey, Community, SetupLink } from '../domain/community.js'
 import type { LinkToken, Payee } from '../domain/payee.js'
 import type { Result } from '../domain/result.js'
 import type { Run, RunStatus } from '../domain/run.js'
@@ -13,6 +13,9 @@ export interface CommunityRepository {
   getBotKey(address: string): Promise<BotKey | null>
   /** Newest first. */
   listBotKeys(communityId: string): Promise<BotKey[]>
+  /** Setup links exist before the community does (no foreign key). */
+  insertSetupLink(link: SetupLink): Promise<void>
+  getSetupLink(tokenHash: string): Promise<SetupLink | null>
 }
 
 export interface PayeeRepository {

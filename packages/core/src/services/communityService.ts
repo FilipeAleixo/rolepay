@@ -8,6 +8,9 @@ import {
   FeeModeSchema,
   type KeyAuthorization,
   type KeyState,
+  type SetupLink,
+  type SetupSettings,
+  SetupSettingsSchema,
   botKeyContext,
   keyAuthorization,
   toBotKeyView,
@@ -16,6 +19,7 @@ import type { Hex } from '../domain/hex.js'
 import { type Address, AddressSchema, DiscordIdSchema } from '../domain/ids.js'
 import { type Result, err, ok } from '../domain/result.js'
 import type { Clock } from '../ports/clock.js'
+import type { IdGenerator } from '../ports/idGenerator.js'
 import type { KeyVault } from '../ports/keyVault.js'
 import type { ChainRejection, PayoutChain, RootSigner } from '../ports/payoutChain.js'
 import type { CommunityRepository } from '../ports/repositories.js'
@@ -27,6 +31,9 @@ export type CommunityServiceDeps = {
   vault: KeyVault
   clock: Clock
   network: NetworkName
+  ids: IdGenerator
+  /** How long a setup link stays valid. */
+  setupLinkTtlSeconds: number
 }
 
 export const RegisterCommunityInputSchema = z.object({
@@ -54,7 +61,23 @@ export const ProvisionBotKeyInputSchema = z.object({
 })
 export type ProvisionBotKeyInput = z.input<typeof ProvisionBotKeyInputSchema>
 
+export const IssueSetupLinkInputSchema = z.object({
+  guildId: DiscordIdSchema,
+  discordUserId: DiscordIdSchema,
+  settings: SetupSettingsSchema,
+})
+export type IssueSetupLinkInput = z.input<typeof IssueSetupLinkInputSchema>
+
 export type NotFound = { code: 'community_not_found' }
+export type SetupLinkError = { code: 'link_not_found' } | { code: 'link_expired' }
+export type SetupLinkView = {
+  guildId: string
+  discordUserId: string
+  expiresAt: Date
+  settings: SetupSettings
+  /** null until the treasurer binds the treasury on the setup page. */
+  community: Community | null
+}
 export type KeyStatusView = { key: BotKeyView; state: KeyState }
 
 /**
@@ -96,6 +119,103 @@ export class CommunityService {
     const updated: Community = { ...community, approverRoleId: role.data, updatedAt: this.deps.clock.now() }
     await this.deps.communities.update(updated)
     return ok(updated)
+  }
+
+  async setName(input: { guildId: string; name: string | null }): Promise<Result<Community, InvalidInput | NotFound>> {
+    const name = z.string().max(100).nullable().safeParse(input.name)
+    if (!name.success) return invalidInput(name.error)
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const updated: Community = { ...community, name: name.data, updatedAt: this.deps.clock.now() }
+    await this.deps.communities.update(updated)
+    return ok(updated)
+  }
+
+  /**
+   * Switches how the bot's transactions pay fees. A key authorised without a fee budget
+   * cannot pay fees itself, so `keyNeedsFeeBudget` says when the treasury must authorise
+   * a new key (the old one keeps working in sponsor mode).
+   */
+  async setFeeMode(input: {
+    guildId: string
+    feeMode: string
+    feeToken: string | null
+  }): Promise<Result<{ community: Community; keyNeedsFeeBudget: boolean }, InvalidInput | NotFound>> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const candidate = CommunitySchema.safeParse({
+      ...community,
+      feeMode: input.feeMode,
+      feeToken: input.feeMode === 'sponsor' ? null : input.feeToken,
+      updatedAt: this.deps.clock.now(),
+    })
+    if (!candidate.success) return invalidInput(candidate.error)
+    await this.deps.communities.update(candidate.data)
+    const active = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
+    const keyNeedsFeeBudget =
+      candidate.data.feeMode === 'fee_budget' && (!active || active.policy.feeToken !== candidate.data.feeToken || active.policy.feeBudget === null)
+    return ok({ community: candidate.data, keyNeedsFeeBudget })
+  }
+
+  /**
+   * A short-lived link to the treasurer's setup page. The settings register the community
+   * when the treasurer binds the treasury there (it has no address until then).
+   */
+  async issueSetupLink(input: IssueSetupLinkInput): Promise<Result<{ token: string; expiresAt: Date }, InvalidInput>> {
+    const parsed = IssueSetupLinkInputSchema.safeParse(input)
+    if (!parsed.success) return invalidInput(parsed.error)
+    const { guildId, discordUserId, settings } = parsed.data
+    const now = this.deps.clock.now()
+    const token = this.deps.ids.linkToken()
+    const expiresAt = new Date(now.getTime() + this.deps.setupLinkTtlSeconds * 1000)
+    const link: SetupLink = { tokenHash: await this.deps.vault.fingerprint(token), communityId: guildId, discordUserId, settings, createdAt: now, expiresAt }
+    await this.deps.communities.insertSetupLink(link)
+    return ok({ token, expiresAt })
+  }
+
+  async describeSetupLink(input: { token: string }): Promise<Result<SetupLinkView, SetupLinkError>> {
+    const link = await this.usableSetupLink(input.token)
+    if (!link.ok) return link
+    const community = await this.deps.communities.get(link.value.communityId)
+    const { communityId, discordUserId, expiresAt, settings } = link.value
+    return ok({ guildId: communityId, discordUserId, expiresAt, settings, community })
+  }
+
+  /**
+   * Binds the treasury the treasurer just created (or signed in to) on the setup page.
+   * Registers the community from the link's settings the first time; after that only the
+   * same treasury is accepted. The caller (the web layer) proves the address belongs to
+   * the passkey in front of it.
+   */
+  async bindTreasury(input: {
+    token: string
+    treasuryAddress: string
+  }): Promise<Result<Community, SetupLinkError | InvalidInput | { code: 'treasury_mismatch'; treasuryAddress: Address }>> {
+    const address = AddressSchema.safeParse(input.treasuryAddress)
+    if (!address.success) {
+      const link = await this.usableSetupLink(input.token)
+      return link.ok ? invalidInput(address.error) : link
+    }
+    const link = await this.usableSetupLink(input.token)
+    if (!link.ok) return link
+    const guildId = link.value.communityId
+    const existing = await this.deps.communities.get(guildId)
+    if (!existing) {
+      const registered = await this.register({ guildId, treasuryAddress: address.data, ...link.value.settings })
+      if (registered.ok) return registered
+      if (registered.error.code !== 'already_registered') return err(registered.error)
+    }
+    const current = existing ?? (await this.deps.communities.get(guildId))
+    if (!current) throw new Error(`community ${guildId} vanished while binding its treasury`)
+    if (current.treasuryAddress !== address.data) return err({ code: 'treasury_mismatch', treasuryAddress: current.treasuryAddress })
+    return ok(current)
+  }
+
+  private async usableSetupLink(token: string): Promise<Result<SetupLink, SetupLinkError>> {
+    const link = await this.deps.communities.getSetupLink(await this.deps.vault.fingerprint(token))
+    if (!link) return err({ code: 'link_not_found' })
+    if (this.deps.clock.now().getTime() >= link.expiresAt.getTime()) return err({ code: 'link_expired' })
+    return ok(link)
   }
 
   async get(guildId: string): Promise<Result<Community, NotFound>> {
@@ -202,6 +322,24 @@ export class CommunityService {
     const revoked: BotKey = { ...active, status: 'revoked', revokedAt: this.deps.clock.now() }
     await this.deps.communities.saveBotKey(revoked)
     return ok({ key: toBotKeyView(revoked), txHash: tx.value.txHash })
+  }
+
+  /**
+   * The treasury revoked the active key itself (the setup page signs the revoke with the
+   * passkey). Marks it revoked once the chain shows it; never trusts the caller's word.
+   */
+  async confirmRevocation(input: {
+    guildId: string
+  }): Promise<Result<BotKeyView, NotFound | { code: 'no_active_key' } | { code: 'key_not_revoked_on_chain' }>> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const active = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
+    if (!active) return err({ code: 'no_active_key' })
+    const state = await this.readState(community, active)
+    if (state.status !== 'revoked') return err({ code: 'key_not_revoked_on_chain' })
+    const revoked: BotKey = { ...active, status: 'revoked', revokedAt: this.deps.clock.now() }
+    await this.deps.communities.saveBotKey(revoked)
+    return ok(toBotKeyView(revoked))
   }
 
   private readState(community: Community, key: BotKey) {

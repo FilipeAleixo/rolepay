@@ -55,6 +55,16 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       expect(await repo.getBotKey('0x4444444444444444444444444444444444444449')).toBeNull()
     })
 
+    it('stores setup links by fingerprint, for guilds that are not registered yet too', async () => {
+      const link = f.setupLink({ communityId: f.OTHER_GUILD })
+      await repo.insertSetupLink(link)
+      expect(await repo.getSetupLink(link.tokenHash)).toEqual(link)
+      const withFees = f.setupLink({ tokenHash: 'fp_setup_2', settings: { ...link.settings, feeMode: 'fee_budget', feeToken: f.FEE_TOKEN, name: null } })
+      await repo.insertSetupLink(withFees)
+      expect(await repo.getSetupLink('fp_setup_2')).toEqual(withFees)
+      expect(await repo.getSetupLink('fp_unknown')).toBeNull()
+    })
+
     it('hands out copies: mutating a returned object does not change the store', async () => {
       await repo.insert(f.community())
       const got = await repo.get(f.GUILD)

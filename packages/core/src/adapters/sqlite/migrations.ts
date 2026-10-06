@@ -104,6 +104,20 @@ const migrations: Record<string, Migration> = {
         .execute()
     },
   },
+  '0003_setup_links': {
+    async up(db: Kysely<unknown>) {
+      // No foreign key: a first setup link exists before its community is registered.
+      await db.schema
+        .createTable('setup_links')
+        .addColumn('token_hash', 'text', (c) => c.primaryKey())
+        .addColumn('community_id', 'text', (c) => c.notNull())
+        .addColumn('discord_user_id', 'text', (c) => c.notNull())
+        .addColumn('settings', 'text', (c) => c.notNull())
+        .addColumn('created_at', 'text', (c) => c.notNull())
+        .addColumn('expires_at', 'text', (c) => c.notNull())
+        .execute()
+    },
+  },
 }
 
 class InlineMigrations implements MigrationProvider {

@@ -1,5 +1,5 @@
 import type { Kysely, Selectable } from 'kysely'
-import { type BotKey, BotKeySchema, type Community, CommunitySchema } from '../../domain/community.js'
+import { type BotKey, BotKeySchema, type Community, CommunitySchema, type SetupLink, SetupLinkSchema } from '../../domain/community.js'
 import { type LinkToken, LinkTokenSchema, type Payee, PayeeSchema } from '../../domain/payee.js'
 import { err, ok } from '../../domain/result.js'
 import { type Run, RunSchema, type RunStatus } from '../../domain/run.js'
@@ -67,6 +67,33 @@ export class SqliteCommunityRepository implements CommunityRepository {
       .orderBy('address', 'desc')
       .execute()
     return rows.map(toBotKey)
+  }
+
+  async insertSetupLink(l: SetupLink) {
+    await this.db
+      .insertInto('setup_links')
+      .values({
+        token_hash: l.tokenHash,
+        community_id: l.communityId,
+        discord_user_id: l.discordUserId,
+        settings: json(l.settings),
+        created_at: iso(l.createdAt),
+        expires_at: iso(l.expiresAt),
+      })
+      .execute()
+  }
+
+  async getSetupLink(tokenHash: string) {
+    const row = await this.db.selectFrom('setup_links').selectAll().where('token_hash', '=', tokenHash).executeTakeFirst()
+    if (!row) return null
+    return SetupLinkSchema.parse({
+      tokenHash: row.token_hash,
+      communityId: row.community_id,
+      discordUserId: row.discord_user_id,
+      settings: JSON.parse(row.settings),
+      createdAt: date(row.created_at),
+      expiresAt: date(row.expires_at),
+    })
   }
 }
 

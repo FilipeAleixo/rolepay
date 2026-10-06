@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { FakePayoutChain } from '../adapters/memory/fakeChain.js'
 import { MemoryCommunityRepository } from '../adapters/memory/repositories.js'
-import { ManualClock, PlainKeyVault } from '../adapters/memory/support.js'
+import { ManualClock, PlainKeyVault, SequentialIds } from '../adapters/memory/support.js'
 import { TRANSFER_WITH_MEMO_SIGNATURE } from '../constants/tempo.js'
 import { CommunityService } from './communityService.js'
 
@@ -23,7 +23,7 @@ describe('CommunityService', () => {
     chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
     communities = new MemoryCommunityRepository()
     vault = new PlainKeyVault()
-    svc = new CommunityService({ communities, chain, vault, clock, network: 'moderato' })
+    svc = new CommunityService({ communities, chain, vault, clock, network: 'moderato', ids: new SequentialIds(), setupLinkTtlSeconds: 1800 })
   })
 
   const register = (over: Record<string, unknown> = {}) =>
@@ -161,6 +161,141 @@ describe('CommunityService', () => {
         ok: false,
         error: { code: 'no_pending_key' },
       })
+    })
+  })
+
+  describe('setup links (the treasurer page)', () => {
+    const TREASURER = '300000000000000001'
+    const ROLE = '400000000000000001'
+    const PASSKEY_TREASURY = '0x7777777777777777777777777777777777777777'
+    const settings = (over: Record<string, unknown> = {}) => ({ name: 'Mods guild', payoutToken: TOKEN, feeMode: 'sponsor' as const, approverRoleId: ROLE, ...over })
+    const issue = (over: Record<string, unknown> = {}) => svc.issueSetupLink({ guildId: GUILD, discordUserId: TREASURER, settings: settings(over) })
+
+    it('issues a short-lived token and stores only its fingerprint', async () => {
+      const r = await issue()
+      if (!r.ok) throw new Error(JSON.stringify(r.error))
+      expect(r.value.expiresAt).toEqual(new Date(clock.now().getTime() + 1800_000))
+      expect(await communities.getSetupLink(r.value.token)).toBeNull()
+      expect(await communities.getSetupLink(`fp:${r.value.token}`)).toMatchObject({ communityId: GUILD, discordUserId: TREASURER })
+    })
+
+    it('refuses settings a community could never be registered with', async () => {
+      expect(await issue({ feeMode: 'fee_budget' })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await issue({ feeMode: 'fee_budget', feeToken: TOKEN })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await svc.issueSetupLink({ guildId: 'nope', discordUserId: TREASURER, settings: settings() })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+    })
+
+    it('describes a link: the guild, who it is for, and the community once registered', async () => {
+      const r = await issue()
+      if (!r.ok) throw new Error()
+      expect(await svc.describeSetupLink({ token: r.value.token })).toMatchObject({
+        ok: true,
+        value: { guildId: GUILD, discordUserId: TREASURER, community: null, settings: { name: 'Mods guild', approverRoleId: ROLE } },
+      })
+      await register()
+      expect(await svc.describeSetupLink({ token: r.value.token })).toMatchObject({ ok: true, value: { community: { treasuryAddress: TREASURY } } })
+    })
+
+    it('an unknown or expired link does nothing', async () => {
+      expect(await svc.describeSetupLink({ token: 'nope' })).toEqual({ ok: false, error: { code: 'link_not_found' } })
+      expect(await svc.bindTreasury({ token: 'nope', treasuryAddress: PASSKEY_TREASURY })).toEqual({ ok: false, error: { code: 'link_not_found' } })
+      const r = await issue()
+      if (!r.ok) throw new Error()
+      clock.advance(1800)
+      expect(await svc.describeSetupLink({ token: r.value.token })).toEqual({ ok: false, error: { code: 'link_expired' } })
+      expect(await svc.bindTreasury({ token: r.value.token, treasuryAddress: PASSKEY_TREASURY })).toEqual({ ok: false, error: { code: 'link_expired' } })
+      expect((await svc.get(GUILD)).ok).toBe(false)
+    })
+
+    it('binding the treasury registers the community with the link settings', async () => {
+      const r = await issue({ feeMode: 'fee_budget', feeToken: FEE_TOKEN })
+      if (!r.ok) throw new Error()
+      const bound = await svc.bindTreasury({ token: r.value.token, treasuryAddress: PASSKEY_TREASURY.toUpperCase().replace('0X', '0x') })
+      expect(bound).toMatchObject({
+        ok: true,
+        value: { id: GUILD, name: 'Mods guild', treasuryAddress: PASSKEY_TREASURY, payoutToken: TOKEN, feeMode: 'fee_budget', feeToken: FEE_TOKEN, approverRoleId: ROLE },
+      })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { treasuryAddress: PASSKEY_TREASURY } })
+    })
+
+    it('binds once: the same treasury again is fine, a different one is refused', async () => {
+      const r = await issue()
+      if (!r.ok) throw new Error()
+      await svc.bindTreasury({ token: r.value.token, treasuryAddress: PASSKEY_TREASURY })
+      expect((await svc.bindTreasury({ token: r.value.token, treasuryAddress: PASSKEY_TREASURY })).ok).toBe(true)
+      expect(await svc.bindTreasury({ token: r.value.token, treasuryAddress: TREASURY })).toEqual({
+        ok: false,
+        error: { code: 'treasury_mismatch', treasuryAddress: PASSKEY_TREASURY },
+      })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { treasuryAddress: PASSKEY_TREASURY } })
+    })
+
+    it('a community already registered (the dev path) keeps its treasury', async () => {
+      await register()
+      const r = await issue()
+      if (!r.ok) throw new Error()
+      expect(await svc.bindTreasury({ token: r.value.token, treasuryAddress: PASSKEY_TREASURY })).toEqual({
+        ok: false,
+        error: { code: 'treasury_mismatch', treasuryAddress: TREASURY },
+      })
+      expect(await svc.bindTreasury({ token: r.value.token, treasuryAddress: TREASURY })).toMatchObject({ ok: true })
+    })
+
+    it('refuses a malformed treasury address', async () => {
+      const r = await issue()
+      if (!r.ok) throw new Error()
+      expect(await svc.bindTreasury({ token: r.value.token, treasuryAddress: '0x12' })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+    })
+  })
+
+  describe('settings after registration', () => {
+    it('stores the community name', async () => {
+      await register({ name: null })
+      expect(await svc.setName({ guildId: GUILD, name: 'Renamed guild' })).toMatchObject({ ok: true, value: { name: 'Renamed guild' } })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { name: 'Renamed guild' } })
+      expect(await svc.setName({ guildId: GUILD, name: 'x'.repeat(101) })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await svc.setName({ guildId: '1094309218049937419', name: 'n' })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+    })
+
+    it('switches fee mode, and says when the bot key has no fee budget for it', async () => {
+      await register()
+      await svc.provisionBotKey(policy())
+      await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+      const toBudget = await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: FEE_TOKEN })
+      expect(toBudget).toMatchObject({ ok: true, value: { community: { feeMode: 'fee_budget', feeToken: FEE_TOKEN }, keyNeedsFeeBudget: true } })
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'sponsor', feeToken: null })).toMatchObject({
+        ok: true,
+        value: { community: { feeMode: 'sponsor', feeToken: null }, keyNeedsFeeBudget: false },
+      })
+    })
+
+    it('a key provisioned in fee_budget mode carries the budget, so no new key is needed', async () => {
+      await register({ feeMode: 'fee_budget', feeToken: FEE_TOKEN })
+      await svc.provisionBotKey(policy({ feeBudget: 1_000_000n }))
+      await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+      await svc.setFeeMode({ guildId: GUILD, feeMode: 'sponsor', feeToken: null })
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: FEE_TOKEN })).toMatchObject({ ok: true, value: { keyNeedsFeeBudget: false } })
+    })
+
+    it('refuses fee_budget without a fee token, or with the payout token', async () => {
+      await register()
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: null })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await svc.setFeeMode({ guildId: GUILD, feeMode: 'fee_budget', feeToken: TOKEN })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor' } })
+    })
+  })
+
+  describe('revocation by the treasury from elsewhere (the setup page)', () => {
+    it('confirmRevocation marks the active key revoked once the chain shows it', async () => {
+      await register()
+      await svc.provisionBotKey(policy())
+      const auth = await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+      if (!auth.ok) throw new Error()
+      expect(await svc.confirmRevocation({ guildId: GUILD })).toEqual({ ok: false, error: { code: 'key_not_revoked_on_chain' } })
+      await chain.revokeKey({ root: chain.rootSigner(TREASURY), accessKey: auth.value.key.address })
+      expect(await svc.confirmRevocation({ guildId: GUILD })).toMatchObject({ ok: true, value: { status: 'revoked', revokedAt: clock.now() } })
+      expect(await svc.confirmRevocation({ guildId: GUILD })).toEqual({ ok: false, error: { code: 'no_active_key' } })
+      expect(await svc.confirmRevocation({ guildId: '1094309218049937419' })).toEqual({ ok: false, error: { code: 'community_not_found' } })
     })
   })
 })

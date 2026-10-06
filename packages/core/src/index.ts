@@ -19,7 +19,15 @@ export const DEFAULT_LINK_TTL_SECONDS = 1800
 export function createPayrun(deps: PayrunDeps): Payrun {
   const { chain, repositories: r, vault, ids, clock, network } = deps
   return {
-    communities: new CommunityService({ communities: r.communities, chain, vault, clock, network }),
+    communities: new CommunityService({
+      communities: r.communities,
+      chain,
+      vault,
+      clock,
+      network,
+      ids,
+      setupLinkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
+    }),
     payees: new PayeeService({
       communities: r.communities,
       payees: r.payees,

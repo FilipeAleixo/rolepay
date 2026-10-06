@@ -82,8 +82,18 @@ export interface KvTable {
   expires_at: string | null
 }
 
+export interface SetupLinksTable {
+  token_hash: string
+  community_id: string
+  discord_user_id: string
+  settings: string
+  created_at: string
+  expires_at: string
+}
+
 export interface Database {
   kv: KvTable
+  setup_links: SetupLinksTable
   communities: CommunitiesTable
   bot_keys: BotKeysTable
   payees: PayeesTable

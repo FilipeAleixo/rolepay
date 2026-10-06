@@ -1,4 +1,4 @@
-import type { BotKey, Community } from '../../domain/community.js'
+import type { BotKey, Community, SetupLink } from '../../domain/community.js'
 import type { LinkToken, Payee } from '../../domain/payee.js'
 import { err, ok } from '../../domain/result.js'
 import type { Run } from '../../domain/run.js'
@@ -11,6 +11,7 @@ const newestFirst = <T extends { createdAt: Date }>(a: T, b: T) => b.createdAt.g
 export class MemoryCommunityRepository implements CommunityRepository {
   private communities = new Map<string, Community>()
   private keys = new Map<string, BotKey>()
+  private setupLinks = new Map<string, SetupLink>()
 
   async get(id: string) {
     const c = this.communities.get(id)
@@ -33,6 +34,13 @@ export class MemoryCommunityRepository implements CommunityRepository {
   }
   async listBotKeys(communityId: string) {
     return [...this.keys.values()].filter((k) => k.communityId === communityId).sort(newestFirst).map(copy)
+  }
+  async insertSetupLink(link: SetupLink) {
+    this.setupLinks.set(link.tokenHash, copy(link))
+  }
+  async getSetupLink(tokenHash: string) {
+    const l = this.setupLinks.get(tokenHash)
+    return l ? copy(l) : null
   }
 }
 

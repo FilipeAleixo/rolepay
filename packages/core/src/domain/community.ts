@@ -30,6 +30,41 @@ export const CommunitySchema = z
 export type Community = z.infer<typeof CommunitySchema>
 
 /**
+ * The settings a /payrun setup chose. For a community that is not registered yet (its
+ * treasury does not exist until the treasurer creates it on the setup page), they travel
+ * with the setup link and are applied when the treasury is bound.
+ */
+export const SetupSettingsSchema = z
+  .object({
+    name: z.string().max(100).nullable().default(null),
+    payoutToken: AddressSchema,
+    feeMode: FeeModeSchema,
+    feeToken: AddressSchema.nullable().default(null),
+    approverRoleId: DiscordIdSchema.nullable(),
+  })
+  // The same fee rules as CommunitySchema, so binding the treasury can never fail on them later.
+  .refine((s) => s.feeMode !== 'fee_budget' || s.feeToken !== null, 'fee_budget mode needs a fee token')
+  .refine((s) => s.feeToken === null || s.feeToken !== s.payoutToken, 'the fee token must differ from the payout token')
+export type SetupSettings = z.infer<typeof SetupSettingsSchema>
+
+/**
+ * A short-lived link to the treasurer's setup page for one guild. Only a keyed fingerprint
+ * of the token is stored. It is not consumed on use (the page takes several steps); what it
+ * can do is limited instead: bind a treasury once, and every later change also needs the
+ * treasury's own passkey (checked by the web layer) or its signature on chain.
+ */
+export const SetupLinkSchema = z.object({
+  tokenHash: z.string().min(1),
+  communityId: DiscordIdSchema,
+  /** Who ran /payrun setup (Manage Server and the approver role). */
+  discordUserId: DiscordIdSchema,
+  settings: SetupSettingsSchema,
+  createdAt: z.date(),
+  expiresAt: z.date(),
+})
+export type SetupLink = z.infer<typeof SetupLinkSchema>
+
+/**
  * What the bot's access key is allowed to do, as authorised by the treasury's root key.
  * `recipients: null` means no on-chain allowlist (v1 default); a list turns it on.
  */

@@ -197,7 +197,7 @@ describe('pay run end to end on Moderato (service level)', () => {
     expect((await db.repositories.runs.get(id))?.status).toBe('executing')
 
     const recovered = await restart().payRuns.recoverInFlight()
-    expect(recovered).toEqual([{ runId: id, status: 'paid' }])
+    expect(recovered).toEqual([{ guildId, runId: id, status: 'paid' }])
     const run = await db.repositories.runs.get(id)
     record({ step: 'crash-recovery', runId: id, tx: run?.paidTxHash, url: `${NET.explorerUrl}/tx/${run?.paidTxHash}` })
     expect(await testnet.balance(TOKEN, addresses[0] as string)).toBe((before[0] as bigint) + usd('0.5'))

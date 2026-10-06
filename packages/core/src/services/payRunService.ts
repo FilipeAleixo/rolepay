@@ -191,11 +191,12 @@ export class PayRunService {
   }
 
   /** Startup sweep: reconcile every run a crash may have left in `executing`. */
-  async recoverInFlight(): Promise<{ runId: string; status: ExecuteOutcome['status'] | 'error'; error?: string }[]> {
-    const results = []
+  async recoverInFlight(): Promise<RecoveryResult[]> {
+    const results: RecoveryResult[] = []
     for (const run of await this.deps.runs.listByStatus('executing')) {
+      const ref = { guildId: run.communityId, runId: run.id }
       const r = await this.reconcileRun(run)
-      results.push(r.ok ? { runId: run.id, status: r.value.status } : { runId: run.id, status: 'error' as const, error: r.error.code })
+      results.push(r.ok ? { ...ref, status: r.value.status } : { ...ref, status: 'error', error: r.error.code })
     }
     return results
   }
@@ -292,6 +293,9 @@ export class PayRunService {
     return next
   }
 }
+
+/** One run the recovery sweep looked at; the guild is there so callers can report it. */
+export type RecoveryResult = { guildId: string; runId: string; status: ExecuteOutcome['status'] | 'error'; error?: string }
 
 function feePayment(community: Community, key: BotKey): FeePayment {
   return community.feeMode === 'fee_budget' && key.policy.feeToken ? { mode: 'fee_budget', feeToken: key.policy.feeToken } : { mode: 'sponsor' }

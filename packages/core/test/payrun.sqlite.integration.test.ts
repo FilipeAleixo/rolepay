@@ -95,7 +95,7 @@ describe('PayRunService on SQLite', () => {
     runs.crashOn = (next) => next.status === 'paid'
     await expect(payrun.payRuns.execute({ guildId: GUILD, runId: id })).rejects.toThrow('simulated crash')
     const restarted = await compose()
-    expect(await restarted.payRuns.recoverInFlight()).toEqual([{ runId: id, status: 'paid' }])
+    expect(await restarted.payRuns.recoverInFlight()).toEqual([{ guildId: GUILD, runId: id, status: 'paid' }])
     expect(await restarted.payRuns.execute({ guildId: GUILD, runId: id })).toMatchObject({ ok: true, value: { status: 'paid' } })
     expect(chain.landedTxCount).toBe(1)
     expect(chain.balance(TOKEN, ADDRS[1])).toBe(1_000_000n)

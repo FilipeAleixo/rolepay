@@ -1,5 +1,5 @@
 // Test fixtures: valid domain objects with overridable fields.
-import type { BotKey, Community } from '../../src/domain/community.js'
+import type { BotKey, Community, SetupLink } from '../../src/domain/community.js'
 import type { LinkToken, Payee } from '../../src/domain/payee.js'
 import { type Run, type RunEvent, newRun, transition } from '../../src/domain/run.js'
 
@@ -54,6 +54,18 @@ export function botKey(over: Partial<BotKey> = {}): BotKey {
     createdAt: T0,
     authorizedAt: null,
     revokedAt: null,
+    ...over,
+  }
+}
+
+export function setupLink(over: Partial<SetupLink> = {}): SetupLink {
+  return {
+    tokenHash: 'fp_setup_1',
+    communityId: GUILD,
+    discordUserId: TREASURER,
+    settings: { name: 'Test guild', payoutToken: TOKEN, feeMode: 'sponsor', feeToken: null, approverRoleId: '400000000000000001' },
+    createdAt: T0,
+    expiresAt: at(1800),
     ...over,
   }
 }
