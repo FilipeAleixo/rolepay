@@ -85,6 +85,22 @@ describe('runMessage', () => {
     expect(actions(m)).toEqual(['retry', 'cancel'])
   })
 
+  it('a retry in progress shows as paying, with no buttons, even while the run still reads failed', () => {
+    const m = runMessage(failed('rejected'), { ...ctx, paying: true })
+    expect(text(m)).toMatch(/Paying/)
+    expect(buttons(m)).toEqual([])
+  })
+
+  it('a paid run reports how many receipts went out by DM', () => {
+    expect(text(runMessage(paid(), { ...ctx, receipts: 'sending' }))).toMatch(/Sending receipts/)
+    expect(text(runMessage(paid(), { ...ctx, receipts: { sent: 1, total: 2 } }))).toMatch(/1 of 2 people.*1 do not accept DMs/)
+    expect(text(runMessage(paid(), { ...ctx, receipts: { sent: 2, total: 2 } }))).toMatch(/to all 2 people/)
+  })
+
+  it('a run still confirming on chain says payrun keeps checking', () => {
+    expect(text(runMessage(executing(), { ...ctx, stillConfirming: true }))).toMatch(/keeps checking/)
+  })
+
   it('a run without a note still renders', () => {
     expect(() => runMessage(run({ note: null }), ctx)).not.toThrow()
   })

@@ -9,6 +9,12 @@ export type RunViewContext = {
   approverRoleId?: string | null
   /** Why an approved run has not been paid yet (a pre-flight failure such as a revoked key). */
   problem?: string
+  /** A payment (or retry) is in progress: show it as paying whatever the stored status says. */
+  paying?: boolean
+  /** On a paid run: DM receipts being sent, or how many went out. */
+  receipts?: 'sending' | { sent: number; total: number }
+  /** On an executing run: the transaction is out but not confirmed yet. */
+  stillConfirming?: boolean
 }
 
 /**
@@ -24,7 +30,11 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
     { name: 'Created by', value: mention(run.createdBy), inline: true },
     { name: 'Status', value: head.status },
   ]
-  if (ctx.problem && run.status === 'approved') fields.push({ name: 'Not paid yet', value: ctx.problem })
+  if (ctx.problem && run.status === 'approved' && !ctx.paying) fields.push({ name: 'Not paid yet', value: ctx.problem })
+  if (ctx.receipts && run.status === 'paid') fields.push({ name: 'Receipts', value: receiptsText(ctx.receipts) })
+  if (ctx.stillConfirming && run.status === 'executing') {
+    fields.push({ name: 'Confirming', value: 'The transaction is out but not confirmed yet. payrun keeps checking; /payrun status shows the result.' })
+  }
   const embed: Embed = {
     title: head.title,
     color: head.color,
@@ -74,6 +84,7 @@ export function explainFailure(failure: Failure): string {
 
 function header(run: Run, ctx: RunViewContext): { title: string; color: number; status: string } {
   const approvedBy = run.approvedBy ? mention(run.approvedBy) : 'the treasurer'
+  if (ctx.paying && run.status !== 'paid') return { title: 'Approved, paying…', color: COLORS.working, status: `Approved by ${approvedBy}. Paying…` }
   switch (run.status) {
     case 'draft':
     case 'pending_approval':
@@ -102,6 +113,7 @@ function header(run: Run, ctx: RunViewContext): { title: string; color: number; 
 
 function buttonsFor(run: Run, ctx: RunViewContext): Button[] {
   const action = (a: RunAction, label: string, style: 1 | 3 | 4): Button => ({ type: ComponentType.Button, style, label, custom_id: encodeCustomId(a, run.id) })
+  if (ctx.paying && run.status !== 'paid') return []
   switch (run.status) {
     case 'draft':
     case 'pending_approval':
@@ -115,6 +127,12 @@ function buttonsFor(run: Run, ctx: RunViewContext): Button[] {
     default:
       return []
   }
+}
+
+function receiptsText(r: NonNullable<RunViewContext['receipts']>): string {
+  if (r === 'sending') return 'Sending receipts by DM…'
+  if (r.sent === r.total) return `Sent by DM to all ${r.total} people.`
+  return `Sent by DM to ${r.sent} of ${r.total} people (${r.total - r.sent} do not accept DMs from this server).`
 }
 
 const rows = (buttons: Button[]): ActionRow[] => (buttons.length ? [{ type: ComponentType.ActionRow, components: buttons }] : [])
