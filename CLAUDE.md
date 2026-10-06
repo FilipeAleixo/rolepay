@@ -6,8 +6,11 @@ payrun: Discord-native pay runs on Tempo. A community's own Tempo account holds 
 
 ```bash
 pnpm typecheck     # strict TS, all packages
-pnpm test          # unit + SQLite integration + architecture guards (no network)
-pnpm test:chain    # opt-in: full pay run on the Moderato TESTNET (chain 42431)
+pnpm test          # unit + SQLite integration + architecture guards + discord + server e2e (no network)
+pnpm test:chain    # opt-in: full pay runs on the Moderato TESTNET (chain 42431), service level and over HTTP
+pnpm dev           # the server (apps/server/README.md: Discord setup and the manual test)
+pnpm register-commands                 # PUT the slash commands to Discord (needs DISCORD_APP_ID, DISCORD_BOT_TOKEN)
+pnpm dev:treasury / dev:authorize-key  # testnet only: fund the dev treasury, authorise a pending bot key
 ```
 
 ## Rules
@@ -21,6 +24,7 @@ pnpm test:chain    # opt-in: full pay run on the Moderato TESTNET (chain 42431)
 7. **Find a sibling first.** New service, adapter or repository: copy the shape of an existing one. New repository behaviour goes into the shared contract (`test/support/repositoryContracts.ts`) so fakes and SQLite stay equal.
 8. **Config vs constants.** `config/` = operational settings from env. `constants/` = fixed facts (chain IDs, token decimals, memo layout).
 9. **Migrations are append-only** once shipped (`adapters/sqlite/migrations.ts`). Keep the schema portable to Postgres.
+10. **Discord layer (enforced by `packages/discord/test/architecture.test.ts`).** `packages/discord` imports only `@payrun/core` and `zod`. A handler parses options with Zod, checks permissions from the signed interaction, calls a service and returns an outcome; it never calls Discord itself. Views are pure builders. Everything external (Discord REST, the execution queue, member lookup) is a port with a fake in `@payrun/discord/testing`. Only `apps/server` imports `@payrun/core/adapters`.
 
 ## Secrets and networks
 

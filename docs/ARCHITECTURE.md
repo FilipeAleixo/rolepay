@@ -2,7 +2,7 @@
 
 payrun runs pay runs for the people who run a Discord community (mods, staff, bounty winners) on Tempo. An admin builds a run, a treasurer approves it with one button, and everyone is paid in one batched stablecoin transaction. Each payout line carries a memo, recipients pay no gas, and the run exports to CSV.
 
-This document covers the whole system. Today `packages/core` exists and is tested end to end on Moderato. `packages/discord` and `apps/server` are described here as the plan for the next work package (WP4).
+This document covers the whole system. `packages/core`, `packages/discord` and `apps/server` exist and are tested end to end, in process and on Moderato. The passkey claim page and the browser signing flow for the bot key are later work packages.
 
 ## Trust model
 
@@ -18,12 +18,14 @@ This document covers the whole system. Today `packages/core` exists and is teste
 ## Repository layout
 
 ```
-packages/core        @payrun/core: domain, ports, services, adapters (this is built)
-packages/discord     @payrun/discord: interaction handlers (WP4, planned)
-apps/server          Hono HTTP server, the composition root (WP4, planned)
+packages/core        @payrun/core: domain, ports, services, adapters
+packages/discord     @payrun/discord: the Discord adapter over HTTP interactions
+apps/server          @payrun/server: Hono on Node, the composition root (README: how to run it)
 docs/tempo           Tempo and viem docs snapshot from the spike
 docs/ARCHITECTURE.md this file
 ```
+
+Dependencies point one way: `apps/server` -> `packages/discord` -> `@payrun/core` (services only). Only `apps/server` (its `src/` and `scripts/`) imports `@payrun/core/adapters`; a guard in core's architecture test fails the build otherwise.
 
 ## packages/core layers
 
@@ -134,60 +136,94 @@ SQLite through Kysely and better-sqlite3 (`adapters/sqlite/`). The schema is por
 
 The repository contract (`test/support/repositoryContracts.ts`) runs against both the in-memory fakes and SQLite, so unit tests on fakes can be trusted.
 
-## The rest of the system (WP4 and later)
+## apps/server (Hono on Node)
 
-### apps/server (Hono)
+The composition root (`src/main.ts`). It parses config (`src/config.ts`: the server's own `DISCORD_*`, `CLAIM_BASE_URL`, `HOST`/`PORT` and bot-key defaults, plus core's `PAYRUN_*` through `parseConfig`), opens the production adapters, creates the services and serves:
 
-The composition root. It parses config, opens the adapters, creates the services, and mounts:
-
-- `POST /discord/interactions`: the Discord interactions endpoint (HTTP interactions, not a gateway bot). Verifies the Ed25519 signature on every request, answers `PING`, and hands everything else to `packages/discord`.
-- Later: `GET /claim/:token` and `POST /claim/:token` for the passkey claim page (backed by `PayeeService.describeLink` and `register`), and a setup flow where the treasurer signs the bot key authorisation in the browser, then `confirmBotKey`.
-- On boot and on an interval (about 30 s): `payRuns.recoverInFlight()`.
+- `POST /discord/interactions`: the Discord interactions endpoint (HTTP interactions, no gateway bot).
+- `GET /health`: `{ ok, network, jobsInFlight }`.
+- `GET|POST /claim/:token`: a throwaway **testnet-only** claim page (`PAYRUN_DEV_CLAIM=true`, refused on mainnet by config) that registers a pasted or random address, so `/payee link` works end to end before the passkey claim page exists.
+- The recovery sweep: `payRuns.recoverInFlight()` on start and every 30 seconds (`src/recovery.ts`), never two at once.
 
 ```ts
-const config = parseConfig(process.env)
-const { deps, close } = await openPayrunAdapters(config)
+const config = parseServerConfig(loadEnvironment())        // root .env, DB path anchored at the repo root
+const { deps, close } = await openPayrunAdapters(config.core)
 const payrun = createPayrun(deps)
+const server = composeServer({ config, payrun, rest: new FetchDiscordRest({ botToken }), clock: deps.clock })
 ```
 
-### packages/discord
+`composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters and a fake Discord and drive the real Hono app over HTTP. Scripts: `pnpm register-commands`, and on testnet `pnpm dev:treasury` (print and fund the dev treasury) and `pnpm dev:authorize-key <guildId>` (the in-process root signs the pending bot key; in production the treasurer signs it with a passkey in a later work package). How to run it: `apps/server/README.md`.
 
-Pure handlers: interaction in, service call, interaction response out. No business logic, no database, no chain: core services only, via `@payrun/core`.
+## packages/discord
 
-| Command / component | Service call |
-| --- | --- |
-| `/payrun setup` (admin) | `communities.register`, `communities.setApproverRole`, `communities.provisionBotKey` (returns the link to sign) |
-| `/payee link` | `payees.issueLink`, replied ephemerally with the claim URL |
-| `/payrun new` (from a role or a list) | `payRuns.create`, then a review embed with an Approve button |
-| Approve button | check the member holds `community.approverRoleId`, then `payRuns.submit` + `payRuns.approve({ actorCanApprove: true })`, then enqueue execution |
-| `/payrun status` | `payRuns.get` / `payRuns.list`, `communities.keyStatus` |
-| `/payrun export` | `payRuns.exportCsv`, sent as a file attachment |
+The Discord adapter. It calls core only through `@payrun/core` services; everything external is a port with an in-memory fake (`@payrun/discord/testing`).
 
-Discord requires an answer within 3 seconds. Execution can take longer (sponsor fill, sync send, RPC retries), so the Approve handler replies with a deferred response and enqueues the work through an **`ExecutionQueue` port**:
+```
+http/        Ed25519 verification (WebCrypto) and the endpoint as a fetch handler: Request in, Response out
+app/         Zod parsing of interactions, the router, permission rules, outcome rendering
+commands/    slash command definitions (JSON) and handlers
+components/  the Approve, Cancel and Retry buttons
+views/       pure builders from domain objects to Discord message payloads (soulform's transformers)
+execution/   the in-process ExecutionQueue and the run executor job
+adapters/    DiscordRest over fetch, MemberDirectory over DiscordRest
+ports.ts     DiscordRest, ExecutionQueue, MemberDirectory
+```
+
+A handler is a thin route: parse options with Zod, check permissions, call a service, return an **outcome** (`reply`, `update`, `defer` or `choices`). Handlers never talk to Discord; `app/outcome.ts` renders the outcome. A `defer` answers at once ("thinking...") and finishes in the background, then edits the reply through the interaction webhook; a public deferral that fails is deleted and the error goes to the caller alone. Layering is enforced by `packages/discord/test/architecture.test.ts`: discord imports only `@payrun/core` and `zod`; views import nothing with IO; handlers never reach adapters, the HTTP layer or the queue implementation.
+
+| Command / component | Who | Service calls |
+| --- | --- | --- |
+| `/payrun setup` | Manage Server | `communities.register` (first time, needs `treasury`), `setApproverRole`, `keyStatus`, `provisionBotKey` when there is no usable key (none, revoked, expired, or `new_key`) |
+| `/payee link` | anyone | `payees.issueLink`, replied ephemerally with `${CLAIM_BASE_URL}/${token}` |
+| `/payrun new` | Manage Server or approver | `payees.list` + member lookup for `role`, `payRuns.create`, `payRuns.submit`; the review embed is posted publicly |
+| Approve | approver role only | `payRuns.approve({ actorCanApprove: true })`, then enqueue execution |
+| Cancel | creator, Manage Server or approver | `payRuns.cancel` |
+| Retry | approver role only | enqueue execution for an approved-but-unpaid or retryable failed run |
+| `/payrun status` | Manage Server or approver | `payRuns.get`, or `payRuns.list` + `communities.keyStatus` (deferred: reads the chain) |
+| `/payrun export` | Manage Server or approver | `payRuns.exportCsv` (default: the latest run), sent as a CSV attachment |
+
+Decisions worth knowing:
+
+- **Recipients.** `/payrun new amount:<per person>` takes `role:` (every registered payee holding it), `users:` (mentions or IDs, `@bob=40` overrides the amount for one person), or both. Only registered payees can hold a line, so role filtering checks each registered payee with Get Guild Member, which needs **no privileged intent**. A List Guild Members implementation (which needs the GUILD_MEMBERS intent) can replace it behind the `MemberDirectory` port if a server ever has more payees than that is comfortable for.
+- **Submit at create.** `/payrun new` creates and submits in one go, so a run shown for review is `pending_approval`. Approve is one transition.
+- **Approve answers with UPDATE_MESSAGE.** The review turns into "Approved, paying..." with no buttons inside the 3-second window (so nobody can click twice), the job is queued, and the job edits that same message with the result. A deferred update would leave the buttons live until the job finishes.
+- **Permissions** are checked from the signed interaction (`member.roles`, `member.permissions`), never trusted from `default_member_permissions` alone, which only hides `/payrun` from non-admins by default (admins can grant it to the Treasurer role in Server Settings > Integrations). Manage Server alone cannot approve.
+
+### Execution
+
+Discord requires an answer within 3 seconds; paying can take longer. Approve and Retry enqueue an `ExecutionJob` on the **`ExecutionQueue` port**:
 
 ```ts
-type ExecutionJob = { kind: 'execute_run'; guildId: string; runId: string; reply: { applicationId: string; token: string } }
+type ExecutionJob = { kind: 'execute_run'; guildId: string; runId: string; reply: { applicationId: string; token: string }; channelId: string | null }
 interface ExecutionQueue { enqueue(job: ExecutionJob): Promise<void> }
 ```
 
-The first implementation is in-process: it runs jobs in the background, one at a time per run, calls `payRuns.execute`, re-checks with `payRuns.reconcile` after `retryAfter` while the outcome is `pending`, and edits the deferred message through the interaction webhook (tokens last 15 minutes; after that, post to the channel). Because `execute` is idempotent and the boot sweep recovers anything in flight, losing the in-process queue on a crash loses no money and pays nothing twice. A durable queue can replace it later behind the same port.
+`InProcessExecutionQueue` runs jobs in the background, one at a time per run, different runs in parallel. The job (`createRunExecutor`) calls `payRuns.execute`; while the outcome is `pending` it waits until `retryAfter` (plus a second of slack) and calls `reconcile`, up to 12 checks, then hands over to the recovery sweep; on `concurrent_update` it follows the other worker with `reconcile` and never re-sends. It edits the message through the interaction webhook (tokens last 15 minutes; after that it posts to the channel as the bot), and once paid it DMs each payee a receipt through `DiscordRest`. A pre-flight failure (no active key, over the limit, revoked) leaves the run `approved` and shows the reason with a Retry button. Because `execute` is idempotent and the boot sweep recovers anything in flight, losing the in-process queue in a crash loses no money and pays nothing twice. A durable queue can replace it behind the same port.
 
 ## Testing
 
 | Suite | Where | Runs |
 | --- | --- | --- |
-| Unit (domain, services on fakes) | `src/**/*.test.ts` | `pnpm test` |
-| Repository contract (memory + SQLite) | `test/support/repositoryContracts.ts` | `pnpm test` |
-| SQLite integration (temp file DB) | `*.integration.test.ts` | `pnpm test` |
-| Architecture guards | `test/architecture.test.ts` | `pnpm test` |
-| Chain, Moderato testnet, opt-in | `test/payrun.chain.test.ts` | `pnpm test:chain` |
+| Unit (domain, services on fakes) | `packages/core/src/**/*.test.ts` | `pnpm test` |
+| Repository contract (memory + SQLite) | `packages/core/test/support/repositoryContracts.ts` | `pnpm test` |
+| SQLite integration (temp file DB) | `packages/core/**/*.integration.test.ts` | `pnpm test` |
+| Architecture guards | `packages/core/test/architecture.test.ts`, `packages/discord/test/architecture.test.ts` | `pnpm test` |
+| Discord: verification, routing, every handler, views, executor, queue, REST adapter | `packages/discord/src/**/*.test.ts` (real core on in-memory fakes, fake Discord REST) | `pnpm test` |
+| Server: config, routes, dev claim page, recovery loop, in-process end to end over signed HTTP | `apps/server/**/*.test.ts` | `pnpm test` |
+| Chain, Moderato testnet, opt-in | `packages/core/test/payrun.chain.test.ts`, `apps/server/test/server.chain.test.ts` | `pnpm test:chain` |
 
-The chain test generates throwaway keys into the gitignored `.env`, funds the treasury from the faucet, and runs a full service-level pay run: register, key authorised with a limit, three payees via links, a 3-line sponsored batch, reconcile from memo events, idempotent re-execute, crash recovery from a restarted process, an over-limit run refused before signing, revoke, CSV export. It refuses any chain but Moderato.
+The core chain test generates throwaway keys into the gitignored `.env`, funds the treasury from the faucet, and runs a full service-level pay run: register, key authorised with a limit, three payees via links, a 3-line sponsored batch, reconcile from memo events, idempotent re-execute, crash recovery from a restarted process, an over-limit run refused before signing, revoke, CSV export. The server chain test reuses those keys and drives the whole Discord flow through the signed HTTP endpoint with production adapters and a fake Discord REST: setup, links claimed on the dev page, `/payrun new`, Approve, one sponsored batch, receipts. Both refuse any chain but Moderato.
+
+The in-process end to end (`apps/server/test/e2e.test.ts`) does the same over HTTP with in-memory adapters, and also covers a crash between approval and execution (status offers Retry; still one payment).
 
 ## Known limits and open decisions
 
 - At most 50 lines per run (Tempo's 30M gas cap per tx at about 300k gas per first transfer to a fresh address, with a 2x margin). Raise only after a chain test at the new size.
 - One active bot key per community. Payees are per community (the same person in two guilds registers twice).
-- The run creator may also approve it. A four-eyes rule would be a community setting.
+- The run creator may also approve it (if they hold the approver role). A four-eyes rule would be a community setting.
 - No recipient allowlist by default; adding a payee to an allowlist needs a root-signed `setAllowedCalls` (a passkey prompt), which is why it is off in v1.
-- Mainnet: guarded by `PAYRUN_ALLOW_MAINNET=true`; no sponsor configured, so communities there use `fee_budget`.
+- Mainnet: guarded by `PAYRUN_ALLOW_MAINNET=true`; no sponsor configured, so communities there use `fee_budget`. `/payrun setup` registers sponsored communities only; a `fee_token` option is WP7 work.
+- One amount per person in `/payrun new` (with per-user overrides). A CSV or modal for many different amounts is later.
+- A run the recovery sweep finishes after a restart does not update its Discord message or send receipts; `/payrun status` shows the truth. Receipts are best effort and not recorded, so they are never re-sent.
+- The community's name is not stored from Discord yet (interactions carry no guild name); the claim page and receipts show the guild ID or "your Discord server".
+- The treasury and payout token cannot be changed after registration (no service method for it yet).
