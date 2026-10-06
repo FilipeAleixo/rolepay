@@ -1,0 +1,30 @@
+{
+  "name": "@payrun/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "register-commands": "tsx scripts/registerCommands.ts",
+    "dev:treasury": "tsx scripts/devTreasury.ts",
+    "dev:authorize-key": "tsx scripts/devAuthorizeKey.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.3",
+    "@payrun/core": "workspace:*",
+    "@payrun/discord": "workspace:*",
+    "dotenv": "^18.0.5",
+    "hono": "^4.13.13",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}
