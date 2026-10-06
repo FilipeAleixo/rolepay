@@ -19,6 +19,9 @@ importers:
       '@payrun/discord':
         specifier: workspace:*
         version: link:../../packages/discord
+      '@payrun/web':
+        specifier: workspace:*
+        version: link:../../packages/web
       dotenv:
         specifier: ^18.0.5
         version: 18.0.5

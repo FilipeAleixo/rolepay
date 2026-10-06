@@ -16,7 +16,7 @@ const text = (v: unknown) => JSON.stringify(v ?? null)
 
 describe('pay run end to end through the HTTP endpoint', () => {
   it('setup, register, create, approve, pay once, receipts, export', async () => {
-    const s = await testServer({ devClaim: true })
+    const s = await testServer()
 
     // 1. The admin sets up the server (deferred, ephemeral).
     const setup = await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE }, ADMIN, 'tok-setup'))
@@ -36,9 +36,10 @@ describe('pay run end to end through the HTTP endpoint', () => {
       const res = await s.interact(slashCommand(SCOPE, 'payee', 'link', {}, { userId: user }))
       const reply = (await res.json()) as { data: { content: string; flags: number } }
       expect(reply.data.flags).toBe(64)
-      const url = /http:\/\/payrun\.test(\/claim\/\S+)/.exec(reply.data.content)?.[1]
+      const url = /https:\/\/payrun\.test(\/claim\/\S+)/.exec(reply.data.content)?.[1]
       expect(url).toBeDefined()
-      const claimed = await s.app.request(url as string, { method: 'POST', body: new URLSearchParams({ address }) })
+      // The claim page: the person's passkey session supplies the address (fake sessions here).
+      const claimed = await s.browserPost(url as string, address)
       expect(claimed.status).toBe(200)
     }
 

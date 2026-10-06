@@ -7,9 +7,9 @@ import {
   createDiscordInteractions,
   createRunExecutor,
 } from '@payrun/discord'
+import { type Assets, type PasskeySessions, createWebApp } from '@payrun/web'
 import { Hono } from 'hono'
 import type { ServerConfig } from './config.js'
-import { devClaimRoutes } from './devClaim.js'
 import { startRecovery } from './recovery.js'
 
 export type Log = (event: string, fields?: Record<string, unknown>) => void
@@ -20,6 +20,8 @@ export type ServerDeps = {
   rest: DiscordRest
   clock: Clock
   members?: MemberDirectory
+  /** The claim and setup pages: passkey sessions, the WebAuthn endpoints (production) and the client bundle. */
+  web: { sessions: PasskeySessions; assets: Assets; passkeys?: { fetch: (req: Request) => Response | Promise<Response> } }
   sleep?: (ms: number) => Promise<void>
   log?: Log
 }
@@ -71,7 +73,7 @@ export function composeServer(deps: ServerDeps) {
   const app = new Hono()
   app.get('/health', (c) => c.json({ ok: true, network: config.core.network, jobsInFlight: queue.size }))
   app.post('/discord/interactions', (c) => interactions(c.req.raw))
-  if (config.devClaim) app.route('/', devClaimRoutes(payrun.payees))
+  app.route('/', createWebApp({ payrun, clock: deps.clock, config: config.web, ...deps.web }))
 
   return {
     app,

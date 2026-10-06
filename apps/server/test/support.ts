@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { TESTNET_TOKENS, createPayrun, parseAmount } from '@payrun/core'
 import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
 import { FakeDiscordRest, createTestSigner } from '@payrun/discord/testing'
+import { FakePasskeySessions, staticAssets } from '@payrun/web/testing'
 import { parseServerConfig } from '../src/config.js'
 import { composeServer } from '../src/compose.js'
 
@@ -16,15 +17,14 @@ export const usd = (s: string) => {
   return r.value
 }
 
-export async function testServer(opts: { devClaim?: boolean } = {}) {
+export async function testServer() {
   const signer = await createTestSigner()
   const config = parseServerConfig({
     PAYRUN_MASTER_KEY: randomBytes(32).toString('hex'),
     DISCORD_APP_ID: '500000000000000001',
     DISCORD_PUBLIC_KEY: signer.publicKeyHex,
     DISCORD_BOT_TOKEN: 'test-bot-token',
-    CLAIM_BASE_URL: 'http://payrun.test/claim',
-    PAYRUN_DEV_CLAIM: opts.devClaim ? 'true' : 'false',
+    PUBLIC_URL: 'https://payrun.test',
   })
   const clock = new ManualClock(new Date())
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
@@ -32,7 +32,9 @@ export async function testServer(opts: { devClaim?: boolean } = {}) {
   const payrun = createPayrun({ chain, repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' })
   const rest = new FakeDiscordRest()
   const logs: { event: string; fields?: Record<string, unknown> }[] = []
+  const sessions = new FakePasskeySessions()
   const server = composeServer({
+    web: { sessions, assets: staticAssets({ 'payrun.js': '' }) },
     config,
     payrun,
     rest,
@@ -53,5 +55,13 @@ export async function testServer(opts: { devClaim?: boolean } = {}) {
     return server.app.request('/discord/interactions', { method: 'POST', headers, body })
   }
 
-  return { ...server, config, clock, chain, payrun, rest, logs, interact }
+  /** A browser POST to a page endpoint, signed in with the passkey whose account is `address`. */
+  const browserPost = (path: string, address: string, body: unknown = {}) =>
+    server.app.request(path, {
+      method: 'POST',
+      headers: { cookie: sessions.cookieFor(address), 'content-type': 'application/json', origin: 'https://payrun.test' },
+      body: JSON.stringify(body),
+    })
+
+  return { ...server, config, clock, chain, payrun, rest, logs, interact, browserPost }
 }

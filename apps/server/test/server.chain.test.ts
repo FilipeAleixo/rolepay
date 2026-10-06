@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { NETWORKS, TESTNET_TOKENS, createPayrun, parseAmount } from '@payrun/core'
 import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@payrun/core/adapters'
 import { FakeDiscordRest, buttonClick, createTestSigner, slashCommand } from '@payrun/discord/testing'
+import { FakePasskeySessions, staticAssets } from '@payrun/web/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { composeServer } from '../src/compose.js'
 import { parseServerConfig } from '../src/config.js'
@@ -43,6 +44,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
   let server: ReturnType<typeof composeServer>
   let rest: FakeDiscordRest
   let interact: (i: unknown) => Promise<Response>
+  const sessions = new FakePasskeySessions()
 
   beforeAll(async () => {
     if (!rootKey || !env.PAYRUN_MASTER_KEY) throw new Error('Run `pnpm --filter @payrun/core test:chain` (or `pnpm dev:treasury`) first: it creates the throwaway testnet keys in .env')
@@ -58,14 +60,13 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
       DISCORD_APP_ID: '500000000000000001',
       DISCORD_PUBLIC_KEY: signer.publicKeyHex,
       DISCORD_BOT_TOKEN: 'fake-bot-token',
-      CLAIM_BASE_URL: 'http://payrun.test/claim',
-      PAYRUN_DEV_CLAIM: 'true',
+      PUBLIC_URL: 'https://payrun.test',
       PAYRUN_BOT_KEY_LIMIT: '10',
     })
     const opened = await openPayrunAdapters(config.core)
     close = opened.close
     rest = new FakeDiscordRest()
-    server = composeServer({ config, payrun: createPayrun(opened.deps), rest, clock: opened.deps.clock, log: () => {} })
+    server = composeServer({ config, payrun: createPayrun(opened.deps), rest, clock: opened.deps.clock, web: { sessions, assets: staticAssets({}) }, log: () => {} })
     interact = async (interaction) => {
       const body = JSON.stringify(interaction)
       const timestamp = String(Math.floor(Date.now() / 1000))
@@ -93,8 +94,14 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
   it('links, a run, Approve, one sponsored batch on chain, receipts', async () => {
     for (const [i, user] of payees.entries()) {
       const res = (await (await interact(slashCommand(scope, 'payee', 'link', {}, { userId: user }))).json()) as { data: { content: string } }
-      const path = /http:\/\/payrun\.test(\/claim\/\S+)/.exec(res.data.content)?.[1] as string
-      expect((await server.app.request(path, { method: 'POST', body: new URLSearchParams({ address: addresses[i] as string }) })).status).toBe(200)
+      const path = /https:\/\/payrun\.test(\/claim\/\S+)/.exec(res.data.content)?.[1] as string
+      // The claim page registers the passkey session's account (fake sessions here; the browser e2e uses real passkeys).
+      const claimed = await server.app.request(path, {
+        method: 'POST',
+        headers: { cookie: sessions.cookieFor(addresses[i] as string), 'content-type': 'application/json' },
+        body: '{}',
+      })
+      expect(claimed.status).toBe(200)
     }
 
     await interact(slashCommand(scope, 'payrun', 'new', { amount: '0.01', users: `<@${payees[0]}> <@${payees[1]}>=0.02`, note: 'server chain test' }, admin, 'tok-new'))
