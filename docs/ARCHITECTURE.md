@@ -161,7 +161,7 @@ const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: b
 const server = composeServer({ config, payrun, rest: new FetchDiscordRest({ botToken }), clock: deps.clock, kv, web })
 ```
 
-`composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters, a fake Discord and fake passkey sessions and drive the real Hono app over HTTP; the Playwright e2e passes the production set with real passkeys. Scripts: `pnpm register-commands`, and on testnet the dev shortcut `pnpm dev:treasury` (print and fund a dev treasury whose key is in `.env`) and `pnpm dev:authorize-key <guildId>` (that in-process root signs the pending bot key). How to run it: `apps/server/README.md`.
+`composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters, a fake Discord and fake passkey sessions and drive the real Hono app over HTTP; the Playwright e2e passes the production set with real passkeys. Scripts: `pnpm register-commands`, and on testnet with `PAYRUN_DEV_SHORTCUTS=true` the dev shortcut `pnpm dev:treasury` (print and fund a dev treasury whose key is in `.env`) and `pnpm dev:authorize-key <guildId>` (that in-process root signs the pending bot key). How to run it: `apps/server/README.md`.
 
 ## packages/web
 
@@ -208,7 +208,7 @@ A handler is a thin route: parse options with Zod, check permissions, call a ser
 
 | Command / component | Who | Service calls |
 | --- | --- | --- |
-| `/payrun setup` | Manage Server (the treasury page link only with the approver role too) | first time: `issueSetupLink` with the chosen settings (nothing is registered until the passkey creates the treasury); after that `setName`, `setApproverRole`, `setFeeMode` (`fees`), `keyStatus`, and a fresh `issueSetupLink` for a treasurer. Dev path (testnet): `treasury` registers an existing account and `new_key` provisions a key for `pnpm dev:authorize-key` |
+| `/payrun setup` | Manage Server (the treasury page link only with the approver role too) | first time: `issueSetupLink` with the chosen settings (nothing is registered until the passkey creates the treasury); after that `setName`, `setApproverRole`, `setFeeMode` (`fees`), `keyStatus`, and a fresh `issueSetupLink` for a treasurer. Dev path (Moderato with `PAYRUN_DEV_SHORTCUTS=true` only, and only for a member who holds the approver role; elsewhere the options are not registered and the handler refuses them): `treasury` registers an existing account and `new_key` provisions a key for `pnpm dev:authorize-key` |
 | `/payee link` | anyone | `payees.issueLink`, replied ephemerally with `${PUBLIC_URL}/claim/${token}` |
 | `/payrun new` | Manage Server or approver | `payees.list` + member lookup for `role`, `payRuns.create`, `payRuns.submit`; the review embed is posted publicly |
 | Approve | approver role only | `payRuns.approve({ actorCanApprove: true })`, then enqueue execution |

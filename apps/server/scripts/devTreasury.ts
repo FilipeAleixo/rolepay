@@ -1,4 +1,4 @@
-// pnpm dev:treasury (TESTNET ONLY): prints the dev treasury address and tops it up from
+// pnpm dev:treasury (TESTNET ONLY, with PAYRUN_DEV_SHORTCUTS=true): prints the dev treasury address and tops it up from
 // the Moderato faucet. The treasury key is PAYRUN_TEST_ROOT_PRIVATE_KEY in the gitignored
 // .env (the chain test generates it); if it is missing, a throwaway one is generated there.
 // The key itself is never printed.
@@ -7,11 +7,12 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { NETWORKS, TESTNET_TOKENS, formatAmount, parseConfig } from '@payrun/core'
 import { createTestnetTools, rootSignerFromPrivateKey } from '@payrun/core/adapters'
+import { requireDevShortcuts } from '../src/devShortcuts.js'
 import { REPO_ROOT, loadEnvironment } from '../src/env.js'
 
 const env = loadEnvironment()
 const config = parseConfig(env)
-if (config.network !== 'moderato') throw new Error('dev:treasury is testnet only (PAYRUN_NETWORK=moderato)')
+requireDevShortcuts(config, 'dev:treasury')
 
 let key = env.PAYRUN_TEST_ROOT_PRIVATE_KEY
 if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) {

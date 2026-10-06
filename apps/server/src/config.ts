@@ -43,8 +43,9 @@ export type ServerConfig = {
   web: WebConfig
 }
 
-const TESTNET_AUTHORIZE_HINT =
-  'Testnet, with the dev treasury (`/payrun setup treasury:`): `pnpm dev:authorize-key {guildId}` on the machine running payrun signs it instead.'
+/** Shown only with the testnet dev shortcuts on (PAYRUN_DEV_SHORTCUTS=true). */
+const DEV_AUTHORIZE_HINT =
+  'Testnet dev shortcut, with the dev treasury (`/payrun setup treasury:`): `pnpm dev:authorize-key {guildId}` on the machine running payrun signs it instead.'
 
 /** Throws a ConfigError naming the bad variables. Never includes their values. */
 export function parseServerConfig(raw: Record<string, string | undefined>): ServerConfig {
@@ -76,7 +77,8 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       defaultFeeToken: e.PAYRUN_FEE_TOKEN ?? (testnet ? TESTNET_TOKENS.path_usd : null),
       defaultPayoutToken: e.PAYRUN_PAYOUT_TOKEN ?? TESTNET_TOKENS.alpha_usd,
       botKey,
-      authorizeHint: testnet ? TESTNET_AUTHORIZE_HINT : null,
+      authorizeHint: core.devShortcuts ? DEV_AUTHORIZE_HINT : null,
+      devShortcuts: core.devShortcuts,
     },
     http: { host: e.HOST, port: e.PORT },
     recoveryIntervalMs: e.PAYRUN_RECOVERY_INTERVAL_SECONDS * 1000,

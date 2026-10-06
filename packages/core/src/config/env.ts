@@ -10,7 +10,10 @@ const EnvSchema = z.object({
   PAYRUN_RPC_URL: z.url().optional(),
   PAYRUN_SPONSOR_URL: z.url().optional(),
   PAYRUN_LINK_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
+  PAYRUN_DEV_SHORTCUTS: z.enum(['true', 'false']).default('false'),
 })
+
+const DevShortcutsSchema = EnvSchema.pick({ PAYRUN_NETWORK: true, PAYRUN_DEV_SHORTCUTS: true })
 
 export type PayrunConfig = {
   network: NetworkName
@@ -22,10 +25,31 @@ export type PayrunConfig = {
   masterKey: string
   dbPath: string
   linkTtlSeconds: number
+  /**
+   * The testnet dev shortcuts: `/payrun setup treasury:`, `new_key`, `key_limit` and
+   * `pnpm dev:authorize-key`. Only with PAYRUN_DEV_SHORTCUTS=true, and only on Moderato;
+   * on any other network they do not exist.
+   */
+  devShortcuts: boolean
 }
 
 export class ConfigError extends Error {
   override name = 'ConfigError'
+}
+
+/**
+ * Whether the testnet dev shortcuts are on. Reads only PAYRUN_NETWORK and PAYRUN_DEV_SHORTCUTS,
+ * so scripts that run before the rest is configured (registering commands) can ask too.
+ * Throws a ConfigError when the flag is set off testnet: the shortcuts never exist there.
+ */
+export function devShortcutsEnabled(env: Record<string, string | undefined>): boolean {
+  const parsed = DevShortcutsSchema.safeParse(env)
+  if (!parsed.success) throw new ConfigError(`invalid payrun config: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}: invalid value`)
+  if (parsed.data.PAYRUN_DEV_SHORTCUTS !== 'true') return false
+  if (parsed.data.PAYRUN_NETWORK !== 'moderato') {
+    throw new ConfigError('invalid payrun config: PAYRUN_DEV_SHORTCUTS=true is allowed only on the Moderato testnet')
+  }
+  return true
 }
 
 /** Throws a ConfigError naming the bad variables. Never includes their values. */
@@ -49,5 +73,6 @@ export function parseConfig(env: Record<string, string | undefined>): PayrunConf
     masterKey: e.PAYRUN_MASTER_KEY,
     dbPath: e.PAYRUN_DB_PATH,
     linkTtlSeconds: e.PAYRUN_LINK_TTL_SECONDS,
+    devShortcuts: devShortcutsEnabled(env),
   }
 }

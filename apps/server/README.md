@@ -68,7 +68,7 @@ Run these in a channel of the test server. Ephemeral means only the person who r
 
 Optional: stop the server with Ctrl-C right after clicking Approve on a new run, start it again and wait up to 30 seconds. The recovery sweep finishes a run that was executing, updates its message in the channel and DMs the receipts (once); a run that was only approved shows a Retry button in `/payrun status`. Either way it is paid at most once.
 
-**Dev shortcut (no passkey):** `pnpm dev:treasury` prints and funds a throwaway treasury whose key is in `.env`; `/payrun setup treasury:<that address> approver_role:@Treasurer` registers it and issues a key; `pnpm dev:authorize-key <server ID>` authorises it. Use a different test server for this, because a server's treasury cannot be changed once registered.
+**Dev shortcut (no passkey, testnet only):** set `PAYRUN_DEV_SHORTCUTS=true` in `.env` (config refuses it off Moderato), restart and run `pnpm register-commands` so Discord shows the extra options. Then `pnpm dev:treasury` prints and funds a throwaway treasury whose key is in `.env`; as a member with Manage Server and the Treasurer role, `/payrun setup treasury:<that address> approver_role:@Treasurer` registers it and issues a key; `pnpm dev:authorize-key <server ID>` authorises it. Use a different test server for this, because a server's treasury cannot be changed once registered. Without the flag (the default) the options are not registered, the handler refuses them, and both scripts refuse to run.
 
 ## Reference
 
@@ -77,8 +77,8 @@ Optional: stop the server with Ctrl-C right after clicking Approve on a new run,
 | `pnpm dev` | Runs the server with reload on code changes |
 | `pnpm start` | Runs the server without reload |
 | `pnpm register-commands` | Registers the slash commands (guild if `DISCORD_DEV_GUILD_ID` is set, else global) |
-| `pnpm dev:treasury` | Testnet dev shortcut: prints and funds the dev treasury (`PAYRUN_TEST_ROOT_PRIVATE_KEY`) |
-| `pnpm dev:authorize-key <guildId>` | Testnet dev shortcut: the dev treasury authorises the pending bot key |
+| `pnpm dev:treasury` | Testnet dev shortcut (`PAYRUN_DEV_SHORTCUTS=true`): prints and funds the dev treasury (`PAYRUN_TEST_ROOT_PRIVATE_KEY`) |
+| `pnpm dev:authorize-key <guildId>` | Testnet dev shortcut (`PAYRUN_DEV_SHORTCUTS=true`): the dev treasury authorises the pending bot key |
 | `pnpm --filter @payrun/server test` | Server tests (no network) |
 | `pnpm --filter @payrun/server test:chain` | Opt-in: the Discord flow over HTTP on Moderato, fake Discord REST |
 | `pnpm test:e2e` | Opt-in: Playwright in Chromium with a virtual passkey authenticator, the real server on `http://localhost:8799`, Moderato |

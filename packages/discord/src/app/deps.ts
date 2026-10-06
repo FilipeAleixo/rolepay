@@ -16,7 +16,15 @@ export type DiscordAppConfig = {
   botKey: { limit: bigint; periodSeconds: number; validitySeconds: number }
   /** A second way to authorise a pending key, shown in /payrun setup (the dev script on testnet). `{guildId}` is filled in. */
   authorizeHint: string | null
+  /**
+   * The testnet dev shortcuts (`/payrun setup treasury:`, `new_key`, `key_limit`). Honoured only
+   * on Moderato: on any other network they do not exist, whatever this says.
+   */
+  devShortcuts: boolean
 }
+
+/** Whether the dev shortcuts exist here: the flag is on AND the network is the Moderato testnet. */
+export const devShortcutsOn = (c: Pick<DiscordAppConfig, 'devShortcuts' | 'network'>) => c.devShortcuts && c.network === 'moderato'
 
 /** Everything the interaction handlers use. Core is reached only through its services. */
 export type DiscordAppDeps = {

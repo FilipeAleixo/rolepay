@@ -6,12 +6,20 @@ const GUILD_ONLY = { contexts: [0], integration_types: [0] }
 
 const runOption = (description: string) => ({ type: OptionType.String, name: 'run', description, autocomplete: true })
 
+/** Testnet only (Moderato with PAYRUN_DEV_SHORTCUTS=true); never registered anywhere else. */
+const DEV_SETUP_OPTIONS = [
+  { type: OptionType.String, name: 'treasury', description: 'Dev shortcut: an existing treasury address instead of the passkey page' },
+  { type: OptionType.String, name: 'key_limit', description: 'Dev shortcut: spend limit for a new key issued here (default 100)' },
+  { type: OptionType.Boolean, name: 'new_key', description: 'Dev shortcut: issue a fresh key here, for pnpm dev:authorize-key' },
+]
+
 /**
  * The slash commands, as JSON for `PUT /applications/{id}/commands`. /payrun is visible
  * to Manage Server by default (admins can grant it to the Treasurer role in Server
- * Settings > Integrations); the handlers re-check permissions regardless.
+ * Settings > Integrations); the handlers re-check permissions regardless. The dev shortcut
+ * options exist only when `devShortcuts` is on (the handler refuses them otherwise anyway).
  */
-export const COMMAND_DEFINITIONS = [
+export const commandDefinitions = (opts: { devShortcuts: boolean }) => [
   {
     name: 'payrun',
     description: 'Pay the people who run this server, in one stablecoin transaction',
@@ -36,9 +44,7 @@ export const COMMAND_DEFINITIONS = [
           },
           { type: OptionType.String, name: 'fee_token', description: 'Fee budget token address (default: pathUSD on testnet)' },
           { type: OptionType.String, name: 'token', description: 'Payout token address, the first time (default: AlphaUSD on testnet)' },
-          { type: OptionType.String, name: 'treasury', description: 'Dev shortcut: an existing treasury address instead of the passkey page' },
-          { type: OptionType.String, name: 'key_limit', description: 'Dev shortcut: spend limit for a new key issued here (default 100)' },
-          { type: OptionType.Boolean, name: 'new_key', description: 'Dev shortcut: issue a fresh key here, for pnpm dev:authorize-key' },
+          ...(opts.devShortcuts ? DEV_SETUP_OPTIONS : []),
         ],
       },
       {
@@ -74,3 +80,6 @@ export const COMMAND_DEFINITIONS = [
     options: [{ type: OptionType.SubCommand, name: 'link', description: 'Get your one-time link to register the account you are paid at' }],
   },
 ]
+
+/** The production commands: no dev shortcuts. */
+export const COMMAND_DEFINITIONS = commandDefinitions({ devShortcuts: false })

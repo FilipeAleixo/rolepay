@@ -36,6 +36,8 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
   const scope = { guildId, channelId: '700000000000000001' }
   const admin = { userId: '300000000000000202', manageGuild: true }
   const treasurerRole = '400000000000000201'
+  /** The dev path is for a treasurer: Manage Server and the approver role. */
+  const treasurerAdmin = { ...admin, roles: [treasurerRole] }
   const treasurer = { userId: '300000000000000201', roles: [treasurerRole] }
   const payees = ['200000000000000201', '200000000000000202']
   const addresses = payees.map(fresh)
@@ -62,6 +64,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
       DISCORD_BOT_TOKEN: 'fake-bot-token',
       PUBLIC_URL: 'https://payrun.test',
       PAYRUN_BOT_KEY_LIMIT: '10',
+      PAYRUN_DEV_SHORTCUTS: 'true',
     })
     const opened = await openPayrunAdapters(config.core)
     close = opened.close
@@ -78,7 +81,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
     }
 
     // Setup over HTTP, then the dev path authorises the key with the in-process root.
-    await interact(slashCommand(scope, 'payrun', 'setup', { treasury: root.address, approver_role: treasurerRole }, admin, 'tok-setup'))
+    await interact(slashCommand(scope, 'payrun', 'setup', { treasury: root.address, approver_role: treasurerRole }, treasurerAdmin, 'tok-setup'))
     await server.drain()
     expect(text(rest.lastEdit('tok-setup'))).toMatch(/Waiting for the treasury to authorise/)
     const payrun = createPayrun(opened.deps)

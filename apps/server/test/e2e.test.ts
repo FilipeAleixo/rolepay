@@ -9,6 +9,8 @@ const CHANNEL = '700000000000000001'
 const SCOPE = { guildId: GUILD, channelId: CHANNEL }
 const ADMIN = { userId: '300000000000000002', manageGuild: true }
 const TREASURER_ROLE = '400000000000000001'
+/** The dev path is for a treasurer: Manage Server and the approver role. */
+const TREASURER_ADMIN = { ...ADMIN, roles: [TREASURER_ROLE] }
 const TREASURER = { userId: '300000000000000001', roles: [TREASURER_ROLE] }
 const ALICE = '200000000000000001'
 const BOB = '200000000000000002'
@@ -20,7 +22,7 @@ describe('pay run end to end through the HTTP endpoint', () => {
     const s = await testServer()
 
     // 1. The admin sets up the server (deferred, ephemeral).
-    const setup = await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE }, ADMIN, 'tok-setup'))
+    const setup = await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE }, TREASURER_ADMIN, 'tok-setup'))
     expect(await setup.json()).toEqual({ type: 5, data: { flags: 64 } })
     await s.drain()
     expect(text(s.rest.lastEdit('tok-setup'))).toMatch(/Waiting for the treasury to authorise/)
@@ -149,8 +151,16 @@ describe('pay run end to end through the HTTP endpoint', () => {
     expect(after.rest.dms).toHaveLength(1)
   })
 
+  it('with the production default (no PAYRUN_DEV_SHORTCUTS), Discord cannot register a treasury or issue a key', async () => {
+    const s = await testServer({ devShortcuts: false })
+    const res = await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE }, TREASURER_ADMIN, 'tok-setup'))
+    expect(text(await res.json())).toMatch(/dev shortcuts.*off/)
+    await s.drain()
+    expect((await s.payrun.communities.get(GUILD)).ok).toBe(false)
+  })
+
   it('the production setup: a treasurer gets the treasury page link, the passkey binds the treasury and authorises the key', async () => {
-    const s = await testServer()
+    const s = await testServer({ devShortcuts: false })
     s.rest.guilds.set(GUILD, 'Mods guild')
     const treasurerAdmin = { ...TREASURER, manageGuild: true }
     await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { approver_role: TREASURER_ROLE }, treasurerAdmin, 'tok-setup'))

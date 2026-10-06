@@ -32,8 +32,18 @@ describe('parseServerConfig', () => {
     })
     expect(c.app.defaultPayoutToken).toBe(TESTNET_TOKENS.alpha_usd)
     expect(c.app.botKey).toEqual({ limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400 })
-    expect(c.app.authorizeHint).toMatch(/pnpm dev:authorize-key \{guildId\}/)
+    expect(c.app.devShortcuts).toBe(false)
+    expect(c.app.authorizeHint).toBeNull()
     expect(c.recoveryIntervalMs).toBe(30_000)
+  })
+
+  it('the dev shortcuts (and their hint) exist only with PAYRUN_DEV_SHORTCUTS=true on testnet', () => {
+    const c = parseServerConfig(env({ PAYRUN_DEV_SHORTCUTS: 'true' }))
+    expect(c.app.devShortcuts).toBe(true)
+    expect(c.app.authorizeHint).toMatch(/pnpm dev:authorize-key \{guildId\}/)
+    const mainnet = { PAYRUN_NETWORK: 'mainnet', PAYRUN_ALLOW_MAINNET: 'true', PAYRUN_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001' }
+    expect(() => parseServerConfig(env({ ...mainnet, PAYRUN_DEV_SHORTCUTS: 'true' }))).toThrow(/PAYRUN_DEV_SHORTCUTS/)
+    expect(parseServerConfig(env(mainnet)).app.devShortcuts).toBe(false)
   })
 
   it('reads overrides', () => {

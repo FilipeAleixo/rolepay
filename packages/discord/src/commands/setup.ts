@@ -1,6 +1,6 @@
 import { AddressSchema, type Community, DiscordIdSchema, FeeModeSchema, parseAmount } from '@payrun/core'
 import { z } from 'zod'
-import type { DiscordAppDeps } from '../app/deps.js'
+import { type DiscordAppDeps, devShortcutsOn } from '../app/deps.js'
 import { type CommandHandler, type GuildContext, parseOptions } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'
 import { canManageGuild } from '../app/permissions.js'
@@ -25,11 +25,15 @@ const fail = (content: string): DeferredResult => ({ ok: false, message: { conte
 /** A fee budget for a key issued on the dev path in fee_budget mode (1 unit of the fee token per period). */
 const DEV_FEE_BUDGET = 1_000_000n
 
+const DEV_SHORTCUTS_OFF =
+  '`treasury`, `new_key` and `key_limit` are testnet dev shortcuts, and they are off on this server. Run /payrun setup without them: the treasurer sets up the treasury and the bot key on the treasury page.'
+
 /**
  * /payrun setup (Manage Server). The production path: a member who also holds the approver
  * role gets a short-lived link to the treasury page, where the treasurer's passkey creates
  * the community account (the first time), authorises the bot key or revokes it. The command
- * itself sets the approver role, the fee mode and the server name. Dev path (testnet): the
+ * itself sets the approver role, the fee mode and the server name. Dev path (Moderato with
+ * PAYRUN_DEV_SHORTCUTS=true only, and only for a member who holds the approver role): the
  * `treasury` option registers an existing account and `new_key` issues a key here, for
  * `pnpm dev:authorize-key`. Deferred, because the key status is read from the chain.
  */
@@ -38,6 +42,8 @@ export const setupCommand: CommandHandler = async ({ options, ctx }, deps) => {
   const parsed = parseOptions(SetupOptions, options)
   if (!parsed.ok) return parsed.reply
   const o = parsed.value
+  const dev = o.treasury !== undefined || o.new_key !== undefined || o.key_limit !== undefined
+  if (dev && !devShortcutsOn(deps.config)) return ephemeralReply(DEV_SHORTCUTS_OFF)
   let limit = deps.config.botKey.limit
   if (o.key_limit !== undefined) {
     const l = parseAmount(o.key_limit)
@@ -62,7 +68,10 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
   let community = await payrun.communities.get(guildId)
   if (!community.ok) {
     if (!o.treasury) return firstSetup(o, fees, guildName, ctx, deps)
-    // Dev path: register an existing treasury account (its root key signs elsewhere).
+    // Dev path: register an existing treasury account (its root key signs elsewhere). The same
+    // rule as the treasury page link: Manage Server AND the approver role being set.
+    const role = chosenRole(o, ctx)
+    if (!('roleId' in role)) return role
     const registered = await payrun.communities.register({
       guildId,
       name: guildName,
@@ -70,7 +79,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       payoutToken: o.token ?? config.defaultPayoutToken,
       feeMode: fees?.feeMode ?? 'sponsor',
       feeToken: fees?.feeToken ?? null,
-      approverRoleId: o.approver_role ?? null,
+      approverRoleId: role.roleId,
     })
     if (!registered.ok) return fail(explainError(registered.error))
     community = registered
@@ -102,6 +111,10 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
   let key = await payrun.communities.keyStatus({ guildId })
   const unusable = !key.ok || key.value.key.status === 'revoked' || key.value.state.status === 'revoked' || key.value.state.status === 'expired'
   if (o.new_key || (o.treasury && unusable)) {
+    if (!isTreasurer(ctx, community.value)) {
+      const role = community.value.approverRoleId
+      return fail(`Only a member with ${role ? roleMention(role) : 'the approver role'} can issue a bot key here.`)
+    }
     const provisioned = await payrun.communities.provisionBotKey({
       guildId,
       limit,
@@ -127,8 +140,8 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
   }
 }
 
-/** Nothing is registered yet: the treasury does not exist until the treasurer creates it on the page. */
-async function firstSetup(o: Options, fees: Fees | null, guildName: string | null, ctx: GuildContext, deps: DiscordAppDeps): Promise<DeferredResult> {
+/** First setup: the caller names the approver role and holds it (a treasurer with Manage Server). */
+function chosenRole(o: Options, ctx: GuildContext): { ok: true; roleId: string } | DeferredResult {
   if (!o.approver_role) {
     return fail(
       'The first /payrun setup needs `approver_role`: the role that approves pay runs (the Treasurer). A member with Manage Server who holds it gets the treasury page link.',
@@ -139,12 +152,19 @@ async function firstSetup(o: Options, fees: Fees | null, guildName: string | nul
       `The treasury page link goes to a member with Manage Server who also holds ${roleMention(o.approver_role)}. Give yourself the role, or ask a treasurer to run /payrun setup.`,
     )
   }
+  return { ok: true, roleId: o.approver_role }
+}
+
+/** Nothing is registered yet: the treasury does not exist until the treasurer creates it on the page. */
+async function firstSetup(o: Options, fees: Fees | null, guildName: string | null, ctx: GuildContext, deps: DiscordAppDeps): Promise<DeferredResult> {
+  const role = chosenRole(o, ctx)
+  if (!('roleId' in role)) return role
   const settings = {
     name: guildName,
     payoutToken: o.token ?? deps.config.defaultPayoutToken,
     feeMode: fees?.feeMode ?? ('sponsor' as const),
     feeToken: fees?.feeToken ?? null,
-    approverRoleId: o.approver_role,
+    approverRoleId: role.roleId,
   }
   const link = await deps.payrun.communities.issueSetupLink({ guildId: ctx.guildId, discordUserId: ctx.caller.userId, settings })
   if (!link.ok) return fail(explainError(link.error))

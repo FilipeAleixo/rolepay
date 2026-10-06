@@ -23,11 +23,14 @@ type SharedState = { payrun: Payrun; chain: FakePayoutChain; clock: ManualClock;
 /**
  * `from`: start a second server over the first one's database and chain, as a restarted
  * process would (a fresh Discord connection and queue). `sleep`: replace the job's waits.
+ * `devShortcuts: false`: the production default (no `treasury:` or `new_key` in Discord).
  */
-export async function testServer(opts: { from?: SharedState; sleep?: (ms: number) => Promise<void> } = {}) {
+export async function testServer(opts: { from?: SharedState; sleep?: (ms: number) => Promise<void>; devShortcuts?: boolean } = {}) {
   const signer = await createTestSigner()
   const config = parseServerConfig({
     PAYRUN_MASTER_KEY: randomBytes(32).toString('hex'),
+    // These tests run on testnet with the dev path on, unless a test asks for the production default.
+    PAYRUN_DEV_SHORTCUTS: String(opts.devShortcuts ?? true),
     DISCORD_APP_ID: '500000000000000001',
     DISCORD_PUBLIC_KEY: signer.publicKeyHex,
     DISCORD_BOT_TOKEN: 'test-bot-token',

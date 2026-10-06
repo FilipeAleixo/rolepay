@@ -1,9 +1,10 @@
-// pnpm dev:authorize-key <guildId> (TESTNET ONLY): the treasury root authorises the bot key
+// pnpm dev:authorize-key <guildId> (TESTNET ONLY, with PAYRUN_DEV_SHORTCUTS=true): the treasury root authorises the bot key
 // that /payrun setup provisioned, signing in-process with PAYRUN_TEST_ROOT_PRIVATE_KEY.
 // The production path is the treasury page: /payrun setup hands a treasurer the link, and the
 // passkey signs the authorisation in the browser.
 import { NETWORKS, createPayrun, parseConfig } from '@payrun/core'
 import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@payrun/core/adapters'
+import { requireDevShortcuts } from '../src/devShortcuts.js'
 import { loadEnvironment } from '../src/env.js'
 
 const guildId = process.argv[2]
@@ -13,7 +14,7 @@ if (!guildId || !/^\d{17,20}$/.test(guildId)) {
 }
 const env = loadEnvironment()
 const config = parseConfig(env)
-if (config.network !== 'moderato') throw new Error('dev:authorize-key is testnet only (PAYRUN_NETWORK=moderato)')
+requireDevShortcuts(config, 'dev:authorize-key')
 const key = env.PAYRUN_TEST_ROOT_PRIVATE_KEY
 if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) {
   console.error('PAYRUN_TEST_ROOT_PRIVATE_KEY is not set. Run `pnpm dev:treasury` first.')

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { OptionType, Permission } from '../api.js'
 import { ROUTED_COMMANDS } from '../app/router.js'
-import { COMMAND_DEFINITIONS } from './definitions.js'
+import { COMMAND_DEFINITIONS, commandDefinitions } from './definitions.js'
 
 type Def = { name: string; description: string; type?: number; required?: boolean; options?: Def[]; default_member_permissions?: string; contexts?: number[] }
 const defs = COMMAND_DEFINITIONS as Def[]
@@ -23,7 +23,18 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
       if (firstOptional >= 0) expect(leaves.slice(firstOptional).some((o) => o.required)).toBe(false)
       for (const o of d.options ?? []) walk(o)
     }
-    for (const d of defs) walk(d)
+    for (const d of [...defs, ...(commandDefinitions({ devShortcuts: true }) as Def[])]) walk(d)
+  })
+
+  it('the dev shortcuts are registered only when they are on; by default they do not exist', () => {
+    const setupOptions = (d: Def[]) =>
+      (d.find((c) => c.name === 'payrun')?.options?.find((o) => o.name === 'setup')?.options ?? []).map((o) => o.name)
+    const dev = ['treasury', 'key_limit', 'new_key']
+    for (const off of [COMMAND_DEFINITIONS, commandDefinitions({ devShortcuts: false })] as Def[][]) {
+      expect(setupOptions(off)).not.toEqual(expect.arrayContaining([expect.stringMatching(/^(treasury|key_limit|new_key)$/)]))
+      expect(setupOptions(off)).toContain('approver_role')
+    }
+    expect(setupOptions(commandDefinitions({ devShortcuts: true }) as Def[])).toEqual(expect.arrayContaining(dev))
   })
 
   it('/payrun is shown to Manage Server by default; /payee to everyone; both only inside servers', () => {

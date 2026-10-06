@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseConfig } from './env.js'
+import { devShortcutsEnabled, parseConfig } from './env.js'
 
 const MASTER = 'a'.repeat(64)
 
@@ -37,6 +37,23 @@ describe('parseConfig (operational settings from env)', () => {
       expect(String(e)).toMatch(/PAYRUN_MASTER_KEY/)
       expect(String(e)).not.toContain('SECRETVALUE')
     }
+  })
+
+  it('dev shortcuts are off unless PAYRUN_DEV_SHORTCUTS=true, and only exist on the Moderato testnet', () => {
+    expect(parseConfig({ PAYRUN_MASTER_KEY: MASTER }).devShortcuts).toBe(false)
+    expect(parseConfig({ PAYRUN_MASTER_KEY: MASTER, PAYRUN_DEV_SHORTCUTS: 'false' }).devShortcuts).toBe(false)
+    expect(parseConfig({ PAYRUN_MASTER_KEY: MASTER, PAYRUN_DEV_SHORTCUTS: 'true' }).devShortcuts).toBe(true)
+    const mainnet = { PAYRUN_MASTER_KEY: MASTER, PAYRUN_NETWORK: 'mainnet', PAYRUN_ALLOW_MAINNET: 'true' }
+    expect(parseConfig(mainnet).devShortcuts).toBe(false)
+    expect(() => parseConfig({ ...mainnet, PAYRUN_DEV_SHORTCUTS: 'true' })).toThrow(/PAYRUN_DEV_SHORTCUTS.*testnet/)
+    expect(() => parseConfig({ PAYRUN_MASTER_KEY: MASTER, PAYRUN_DEV_SHORTCUTS: 'yes' })).toThrow(/PAYRUN_DEV_SHORTCUTS/)
+  })
+
+  it('devShortcutsEnabled reads only the network and the flag (for scripts that run before the rest is configured)', () => {
+    expect(devShortcutsEnabled({})).toBe(false)
+    expect(devShortcutsEnabled({ PAYRUN_DEV_SHORTCUTS: 'true' })).toBe(true)
+    expect(devShortcutsEnabled({ PAYRUN_DEV_SHORTCUTS: 'true', PAYRUN_NETWORK: 'moderato' })).toBe(true)
+    expect(() => devShortcutsEnabled({ PAYRUN_DEV_SHORTCUTS: 'true', PAYRUN_NETWORK: 'mainnet' })).toThrow(/testnet/)
   })
 
   it('rejects unknown networks', () => {

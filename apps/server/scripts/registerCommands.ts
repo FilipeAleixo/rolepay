@@ -7,6 +7,7 @@ const result = await registerCommands(loadEnvironment())
 if (result.ok) {
   console.log(`Registered ${result.value.count} commands (${result.value.scope}).`)
 } else {
-  console.error(result.error.code === 'missing_env' ? `Missing in .env: ${result.error.detail}` : `Discord refused: ${result.error.detail}`)
+  const { code, detail } = result.error
+  console.error(code === 'missing_env' ? `Missing in .env: ${detail}` : code === 'invalid_env' ? detail : `Discord refused: ${detail}`)
   process.exit(1)
 }

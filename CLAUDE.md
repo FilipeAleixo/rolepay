@@ -11,7 +11,7 @@ pnpm test:chain    # opt-in: full pay runs on the Moderato TESTNET (chain 42431)
 pnpm test:e2e      # opt-in: Playwright, real passkeys (virtual authenticator) on localhost, Moderato
 pnpm dev           # the server (apps/server/README.md: Discord setup and the manual test)
 pnpm register-commands                 # PUT the slash commands to Discord (needs DISCORD_APP_ID, DISCORD_BOT_TOKEN)
-pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut: fund a dev treasury, authorise its pending bot key (production: the setup page)
+pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut (PAYRUN_DEV_SHORTCUTS=true): fund a dev treasury, authorise its pending bot key (production: the setup page)
 ```
 
 ## Rules
@@ -31,7 +31,7 @@ pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut: fund a dev treasu
 ## Secrets and networks
 
 - **No secrets in git.** Keys live in `.env` (gitignored); `.env.example` lists the names. Never print key values, in logs, tests or commit messages.
-- **Tests are testnet-only by default.** `pnpm test` makes no network calls. `pnpm test:chain` refuses any chain but Moderato. Mainnet needs `PAYRUN_NETWORK=mainnet` plus `PAYRUN_ALLOW_MAINNET=true`, and never runs in tests.
+- **Tests are testnet-only by default.** `pnpm test` makes no network calls. `pnpm test:chain` refuses any chain but Moderato. Mainnet needs `PAYRUN_NETWORK=mainnet` plus `PAYRUN_ALLOW_MAINNET=true`, and never runs in tests. The dev shortcuts (`/payrun setup treasury:`, `new_key`, `key_limit`, the dev scripts) need `PAYRUN_DEV_SHORTCUTS=true`, which config refuses off Moderato.
 - Allowed network calls: Tempo testnet RPC, sponsor and faucet; npm installs.
 
 ## Tempo gotchas (from the spike, encoded in `adapters/tempo/`)

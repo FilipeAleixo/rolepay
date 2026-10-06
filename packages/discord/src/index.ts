@@ -5,7 +5,7 @@
 export { type FileUpload, type Message } from './api.js'
 export type { DiscordAppConfig, DiscordAppDeps } from './app/deps.js'
 export { createDispatcher } from './app/router.js'
-export { COMMAND_DEFINITIONS } from './commands/definitions.js'
+export { COMMAND_DEFINITIONS, commandDefinitions } from './commands/definitions.js'
 export { FetchDiscordRest, type FetchDiscordRestOptions } from './adapters/fetchDiscordRest.js'
 export { KvRunNotices } from './adapters/kvRunNotices.js'
 export { RestMemberDirectory } from './adapters/restMemberDirectory.js'

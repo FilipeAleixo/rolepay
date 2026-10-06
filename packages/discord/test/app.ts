@@ -16,11 +16,12 @@ export const CONFIG: DiscordAppConfig = {
   defaultPayoutToken: TESTNET_TOKENS.alpha_usd,
   botKey: { limit: usd('100'), periodSeconds: 2_592_000, validitySeconds: 2_592_000 },
   authorizeHint: 'Dev: run `pnpm dev:authorize-key {guildId}`.',
+  devShortcuts: true,
 }
 
 export const SCOPE = { guildId: GUILD, channelId: CHANNEL }
 
-export async function appHarness(opts: { members?: MemberDirectory } = {}) {
+export async function appHarness(opts: { members?: MemberDirectory; config?: Partial<DiscordAppConfig> } = {}) {
   const h = await harness()
   const errors: unknown[] = []
   const deps: DiscordAppDeps = {
@@ -29,7 +30,7 @@ export async function appHarness(opts: { members?: MemberDirectory } = {}) {
     queue: h.queue,
     members: opts.members ?? new RestMemberDirectory(h.rest),
     clock: h.clock,
-    config: CONFIG,
+    config: { ...CONFIG, ...opts.config },
     onError: (e) => errors.push(e),
   }
   const dispatch = createDispatcher(deps)
