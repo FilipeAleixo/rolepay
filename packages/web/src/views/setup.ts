@@ -72,6 +72,7 @@ export function setupPage(c: SetupPageConfig): string {
       ${feeField}
     </div>
     <p class="muted">The bot can only call transferWithMemo on ${token}, up to this limit, until it expires. Fees are ${c.feeMode === 'sponsor' ? 'paid by the sponsor' : `paid from the fee budget in ${esc(c.feeTokenLabel ?? 'the fee token')}`}.</p>
+    <p data-field="key-signs"></p>
     <p data-field="key-replaces" class="muted"></p>
     <p data-field="key-prompts"></p>
     <button id="authorize" type="submit">Authorise the bot key with my passkey</button>

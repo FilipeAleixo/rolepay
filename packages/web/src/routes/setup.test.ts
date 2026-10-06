@@ -4,6 +4,8 @@ import { DEV_TREASURY, FEE_TOKEN, GUILD, OTHER_PASSKEY, PASSKEY, ROLE, TOKEN, pa
 type H = ReturnType<typeof webHarness>
 type Json = any
 const json = async (res: Response): Promise<Json> => res.json()
+/** The expiry the page computes from "expires after N days" (it signs that exact number). */
+const inDays = (h: H, n: number) => Math.floor(h.clock.now().getTime() / 1000) + n * 86_400
 
 /** What the treasurer's browser does after the server hands it an authorisation: sign it on chain with the passkey. */
 async function signOnChain(h: H, body: { keyAddress: string; authorization: { expiry: number; limits: { token: string; limit: string; period?: number }[]; scopes: unknown[] } }) {
@@ -84,7 +86,7 @@ describe('the treasurer setup page', () => {
     const h = webHarness()
     const token = await setupLink(h)
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
-    const res = await h.post(`/setup/${token}/key`, { limit: '25.5', periodDays: 7, validityDays: 14 }, PASSKEY)
+    const res = await h.post(`/setup/${token}/key`, { limit: '25.5', periodDays: 7, expiresAt: inDays(h, 14) }, PASSKEY)
     expect(res.status).toBe(200)
     const body = await json(res)
     const nowS = Math.floor(h.clock.now().getTime() / 1000)
@@ -104,7 +106,7 @@ describe('the treasurer setup page', () => {
     const h = webHarness()
     const token = await setupLink(h)
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
-    const body = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 0, validityDays: 3 }, PASSKEY))
+    const body = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 0, expiresAt: inDays(h, 3) }, PASSKEY))
     expect(body.authorization.limits).toEqual([{ token: TOKEN, limit: '10000000' }])
   })
 
@@ -112,7 +114,7 @@ describe('the treasurer setup page', () => {
     const h = webHarness()
     const token = await setupLink(h, { feeMode: 'fee_budget', feeToken: FEE_TOKEN })
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
-    const body = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, validityDays: 30, feeBudget: '2' }, PASSKEY))
+    const body = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, expiresAt: inDays(h, 30), feeBudget: '2' }, PASSKEY))
     expect(body.authorization.limits).toEqual([
       { token: TOKEN, limit: '10000000', period: 2_592_000 },
       { token: FEE_TOKEN, limit: '2000000', period: 2_592_000 },
@@ -123,24 +125,26 @@ describe('the treasurer setup page', () => {
     const h = webHarness()
     const token = await setupLink(h)
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
-    const res = await h.post(`/setup/${token}/key`, { limit: 'lots', periodDays: 7, validityDays: 14 }, PASSKEY)
+    const res = await h.post(`/setup/${token}/key`, { limit: 'lots', periodDays: 7, expiresAt: inDays(h, 14) }, PASSKEY)
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
-    expect((await h.post(`/setup/${token}/key`, { limit: '1', periodDays: 7, validityDays: 0 }, PASSKEY)).status).toBe(400)
+    expect((await h.post(`/setup/${token}/key`, { limit: '1', periodDays: 7, expiresAt: inDays(h, 0) }, PASSKEY)).status).toBe(400)
+    expect((await h.post(`/setup/${token}/key`, { limit: '1', periodDays: 7, expiresAt: inDays(h, 400) }, PASSKEY)).status).toBe(400)
+    expect((await h.post(`/setup/${token}/key`, { limit: '1', periodDays: 7, validityDays: 14 }, PASSKEY)).status).toBe(400)
   })
 
   it('only the treasury passkey can manage the key', async () => {
     const h = webHarness()
     const token = await setupLink(h)
-    expect(await (await h.post(`/setup/${token}/key`, { limit: '1', periodDays: 1, validityDays: 1 }, PASSKEY)).json()).toEqual({
+    expect(await (await h.post(`/setup/${token}/key`, { limit: '1', periodDays: 1, expiresAt: inDays(h, 1) }, PASSKEY)).json()).toEqual({
       ok: false,
       error: { code: 'treasury_not_bound' },
     })
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
     for (const path of ['key', 'key/confirm', 'key/revoked']) {
-      const anon = await h.post(`/setup/${token}/${path}`, { limit: '1', periodDays: 1, validityDays: 1 })
+      const anon = await h.post(`/setup/${token}/${path}`, { limit: '1', periodDays: 1, expiresAt: inDays(h, 1) })
       expect(anon.status).toBe(401)
-      const other = await h.post(`/setup/${token}/${path}`, { limit: '1', periodDays: 1, validityDays: 1 }, OTHER_PASSKEY)
+      const other = await h.post(`/setup/${token}/${path}`, { limit: '1', periodDays: 1, expiresAt: inDays(h, 1) }, OTHER_PASSKEY)
       expect(other.status).toBe(403)
       expect(await other.json()).toEqual({ ok: false, error: { code: 'not_the_treasury', treasuryAddress: PASSKEY } })
     }
@@ -160,7 +164,7 @@ describe('the treasurer setup page', () => {
     const h = webHarness()
     const token = await setupLink(h)
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
-    const provisioned = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, validityDays: 30 }, PASSKEY))
+    const provisioned = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, expiresAt: inDays(h, 30) }, PASSKEY))
 
     const keyAddress = provisioned.keyAddress
     const early = await h.post(`/setup/${token}/key/confirm`, { keyAddress }, PASSKEY)
@@ -197,12 +201,12 @@ describe('the treasurer setup page', () => {
     const h = webHarness()
     const token = await setupLink(h)
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
-    const first = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, validityDays: 30 }, PASSKEY))
+    const first = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, expiresAt: inDays(h, 30) }, PASSKEY))
     await signOnChain(h, first)
     await h.post(`/setup/${token}/key/confirm`, { keyAddress: first.keyAddress }, PASSKEY)
     h.clock.advance(60)
 
-    const second = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, validityDays: 30 }, PASSKEY))
+    const second = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, expiresAt: inDays(h, 30) }, PASSKEY))
     const during = await json(await h.send(`/setup/${token}/state`, { passkey: PASSKEY }))
     // A pending key never hides the active one (M5): the state still describes it, and lists both.
     expect(during.key).toMatchObject({ address: first.keyAddress, status: 'active' })
@@ -223,11 +227,11 @@ describe('the treasurer setup page', () => {
     const h = webHarness()
     const token = await setupLink(h)
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
-    const first = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, validityDays: 30 }, PASSKEY))
+    const first = await json(await h.post(`/setup/${token}/key`, { limit: '50', periodDays: 30, expiresAt: inDays(h, 30) }, PASSKEY))
     await signOnChain(h, first)
     await h.post(`/setup/${token}/key/confirm`, { keyAddress: first.keyAddress }, PASSKEY)
     h.clock.advance(60)
-    const second = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, validityDays: 30 }, PASSKEY))
+    const second = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, expiresAt: inDays(h, 30) }, PASSKEY))
     await signOnChain(h, second)
     await h.post(`/setup/${token}/key/confirm`, { keyAddress: second.keyAddress }, PASSKEY)
 
@@ -246,7 +250,7 @@ describe('the treasurer setup page', () => {
     const token = await setupLink(h)
     await h.post(`/setup/${token}/treasury`, {}, PASSKEY)
     h.clock.advance(1800)
-    const res = await h.post(`/setup/${token}/key`, { limit: '1', periodDays: 1, validityDays: 1 }, PASSKEY)
+    const res = await h.post(`/setup/${token}/key`, { limit: '1', periodDays: 1, expiresAt: inDays(h, 1) }, PASSKEY)
     expect(res.status).toBe(410)
   })
 })

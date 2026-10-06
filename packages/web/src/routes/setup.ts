@@ -12,11 +12,16 @@ export type SetupRoutesDeps = { payrun: Payrun; sessions: PasskeySessions; confi
 const DAY = 86_400
 const label = (token: string | null) => (token ? (TOKEN_SYMBOLS[token.toLowerCase()] ?? token) : null)
 
+const MAX_DAYS = 366
 const KeyPolicyBody = z.object({
   limit: z.string().min(1),
   /** 0 = one limit for the key's whole life. */
-  periodDays: z.coerce.number().int().min(0).max(366),
-  validityDays: z.coerce.number().int().min(1).max(366),
+  periodDays: z.coerce.number().int().min(0).max(MAX_DAYS),
+  /**
+   * Unix seconds, computed by the page from "expires after N days". The page signs exactly this
+   * number (it builds the authorisation itself), so the server takes it rather than choosing one.
+   */
+  expiresAt: z.number().int().positive(),
   feeBudget: z.string().min(1).optional(),
 })
 
@@ -135,11 +140,15 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
       feeBudget = parsed.value
     }
     const now = Math.floor(deps.clock.now().getTime() / 1000)
+    // A day of slack for the treasurer's device clock; the chain enforces the expiry it is given.
+    if (body.data.expiresAt <= now || body.data.expiresAt > now + (MAX_DAYS + 1) * DAY) {
+      return failure(400, { code: 'invalid_input', issues: [`expiresAt: must be in the future and at most ${MAX_DAYS} days away`] })
+    }
     const provisioned = await payrun.communities.provisionBotKey({
       guildId: t.value.community.id,
       limit: limit.value,
       periodSeconds: body.data.periodDays === 0 ? null : body.data.periodDays * DAY,
-      expiresAt: now + body.data.validityDays * DAY,
+      expiresAt: body.data.expiresAt,
       feeBudget,
     })
     if (!provisioned.ok) return failure(400, provisioned.error)

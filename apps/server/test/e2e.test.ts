@@ -172,7 +172,7 @@ describe('pay run end to end through the HTTP endpoint', () => {
     // On the page (the passkey session is faked here; the browser e2e uses a real one).
     const passkey = '0x7777777777777777777777777777777777777777'
     expect((await s.browserPost(`${path}/treasury`, passkey)).status).toBe(200)
-    const provisioned = (await (await s.browserPost(`${path}/key`, passkey, { limit: '20', periodDays: 30, validityDays: 30 })).json()) as {
+    const provisioned = (await (await s.browserPost(`${path}/key`, passkey, { limit: '20', periodDays: 30, expiresAt: Math.floor(s.clock.now().getTime() / 1000) + 30 * 86_400 })).json()) as {
       keyAddress: `0x${string}`
       authorization: { expiry: number; limits: { token: string; limit: string; period?: number }[]; scopes: never }
     }

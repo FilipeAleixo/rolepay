@@ -89,6 +89,21 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await page.locator('#periodDays').fill('1')
   await page.locator('#validityDays').fill('2')
   await expect(page.locator('[data-field="key-prompts"]')).toHaveText('Your device will ask for your passkey once, to sign the key.')
+  // The page shows exactly what it will sign, built from the form, not from the server.
+  await expect(page.locator('[data-field="key-signs"]')).toContainText('You will sign: Up to 5 AlphaUSD every day. Only transferWithMemo on AlphaUSD')
+
+  // 3a. A server that answers with other numbers (here a limit of 2^255) gets nothing signed.
+  await page.route('**/setup/*/key', async (route) => {
+    const response = await route.fetch()
+    const body = (await response.json()) as { authorization: { limits: { limit: string }[] } }
+    ;(body.authorization.limits[0] as { limit: string }).limit = (2n ** 255n).toString()
+    await route.fulfill({ response, json: body })
+  })
+  await page.getByRole('button', { name: 'Authorise the bot key with my passkey' }).click()
+  await expect(page.locator('#status')).toContainText('Nothing was signed')
+  expect(await prompts()).toEqual({ create: 1, get: 0 })
+  await page.unroute('**/setup/*/key')
+
   await page.getByRole('button', { name: 'Authorise the bot key with my passkey' }).click()
   await expect(page.locator('#status')).toContainText('The bot key is active')
   // One fingerprint for the authorisation: the root signs one transaction, no separate key signature.

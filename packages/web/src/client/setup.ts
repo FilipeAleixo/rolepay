@@ -1,6 +1,7 @@
 // The treasurer setup page: the community account (passkey as root), funding, and the bot
 // key's authorisation and revocation, signed with the passkey.
 import { $, busy, explainPasskeyError, fill, formatMicros, get, post, shortAddress, show, status } from './dom.js'
+import { type KeyForm, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
 import { passkeys } from './passkey.js'
 import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, faucet, revokeAccessKey } from './tempo.js'
 
@@ -166,16 +167,43 @@ export function startSetup(config: SetupConfig) {
   }
 
   const input = (id: string) => $<HTMLInputElement>(`#${id}`)?.value.trim() ?? ''
+  const form = (): KeyForm => ({
+    limit: input('limit'),
+    periodDays: input('periodDays'),
+    validityDays: input('validityDays'),
+    ...(config.feeMode === 'fee_budget' ? { feeBudget: input('feeBudget') } : {}),
+  })
+  /** What this page signs comes from the form and the page config, never from the server (H4). */
+  const keyPage = { payoutToken: config.payoutToken, feeToken: config.feeMode === 'fee_budget' ? config.feeToken : null }
+  const labels = {
+    label: (token: string) => (token.toLowerCase() === config.payoutToken.toLowerCase() ? config.tokenLabel : token.toLowerCase() === config.feeToken?.toLowerCase() ? (config.feeTokenLabel ?? token) : token),
+    date,
+  }
+  const nowSeconds = () => Math.floor(Date.now() / 1000)
+  /** The exact values the passkey will sign, in plain words, kept up to date as the form changes. */
+  function showSigns() {
+    const built = buildAuthorization(form(), keyPage, nowSeconds())
+    fill('key-signs', built.ok ? `You will sign: ${describeAuthorization(built.value, labels)}` : `Check the form: ${built.error}.`)
+  }
 
   async function authorize() {
+    const built = buildAuthorization(form(), keyPage, nowSeconds())
+    if (!built.ok) return status(`Nothing was signed: ${built.error}.`, 'bad')
+    const mine = built.value
     const account = await treasuryAccount()
     status('Preparing the bot key...')
-    const body = { limit: input('limit'), periodDays: Number(input('periodDays')), validityDays: Number(input('validityDays')), ...(config.feeMode === 'fee_budget' ? { feeBudget: input('feeBudget') } : {}) }
+    const f = form()
+    const body = { limit: f.limit, periodDays: Number(f.periodDays), expiresAt: mine.expiry, ...(f.feeBudget !== undefined ? { feeBudget: f.feeBudget } : {}) }
     const revoke = liveKeys(state).map((k) => k.address)
     const p = await post<{ keyAddress: string; authorization: WireAuthorization }>(`${base}/key`, body)
     if (!p.ok) return status(explain(p.error), 'bad')
+    // The server only names the key. If its copy of the authorisation differs from what this page
+    // built from the form, something is wrong with the server: sign nothing.
+    const mismatch = authorizationMismatch(mine, p.authorization)
+    if (mismatch) return status(`Nothing was signed: the server's copy of the authorisation has ${mismatch}, not what you chose. Do not sign until this is explained.`, 'bad')
+    fill('key-signs', `You are signing: ${describeAuthorization(mine, labels)}`)
     status(revoke.length ? 'Confirm with your passkey to replace the bot key (one signature)...' : 'Confirm with your passkey to authorise the bot key...')
-    const tx = await authorizeAccessKey(chain, account, p.keyAddress, p.authorization, revoke.filter((a) => a !== p.keyAddress))
+    const tx = await authorizeAccessKey(chain, account, p.keyAddress, mine, revoke.filter((a) => a !== p.keyAddress))
     status('Authorised on chain. Checking...')
     const c = await post<{ key: unknown }>(`${base}/key/confirm`, { keyAddress: p.keyAddress })
     if (!c.ok) return status(explain(c.error), 'bad')
@@ -210,6 +238,8 @@ export function startSetup(config: SetupConfig) {
   signin?.addEventListener('click', action(() => bind(() => keys.signIn())))
   signinBound?.addEventListener('click', action(() => bind(() => keys.signIn())))
   faucetButton?.addEventListener('click', action(fund))
+  $('#key-form')?.addEventListener('input', showSigns)
+  showSigns()
   $('#key-form')?.addEventListener('submit', (e) => {
     e.preventDefault()
     void action(authorize)()
