@@ -44,6 +44,15 @@ describe('CommunityService', () => {
       expect((await svc.get(GUILD)).ok).toBe(true)
     })
 
+    it('stores the approver (Treasurer) role, which the Discord layer checks before asserting approval', async () => {
+      const r = await register({ approverRoleId: '400000000000000001' })
+      expect(r.ok && r.value.approverRoleId).toBe('400000000000000001')
+      const changed = await svc.setApproverRole({ guildId: GUILD, approverRoleId: '400000000000000002' })
+      expect(changed).toMatchObject({ ok: true, value: { approverRoleId: '400000000000000002' } })
+      expect(await svc.get(GUILD)).toMatchObject({ ok: true, value: { approverRoleId: '400000000000000002' } })
+      expect(await svc.setApproverRole({ guildId: GUILD, approverRoleId: 'nope' })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+    })
+
     it('normalises addresses to lowercase', async () => {
       const r = await register({ treasuryAddress: '0xABCDEF9999999999999999999999999999999999' })
       expect(r.ok && r.value.treasuryAddress).toBe('0xabcdef9999999999999999999999999999999999')

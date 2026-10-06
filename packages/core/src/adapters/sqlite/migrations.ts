@@ -17,6 +17,7 @@ const migrations: Record<string, Migration> = {
         .addColumn('payout_token', 'text', (c) => c.notNull())
         .addColumn('fee_mode', 'text', (c) => c.notNull())
         .addColumn('fee_token', 'text')
+        .addColumn('approver_role_id', 'text')
         .addColumn('created_at', 'text', (c) => c.notNull())
         .addColumn('updated_at', 'text', (c) => c.notNull())
         .execute()

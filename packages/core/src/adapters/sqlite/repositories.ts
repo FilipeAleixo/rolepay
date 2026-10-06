@@ -79,6 +79,7 @@ function communityRow(c: Community) {
     payout_token: c.payoutToken,
     fee_mode: c.feeMode,
     fee_token: c.feeToken,
+    approver_role_id: c.approverRoleId,
     created_at: iso(c.createdAt),
     updated_at: iso(c.updatedAt),
   }
@@ -93,6 +94,7 @@ function toCommunity(r: Selectable<Database['communities']>): Community {
     payoutToken: r.payout_token,
     feeMode: r.fee_mode,
     feeToken: r.fee_token,
+    approverRoleId: r.approver_role_id,
     createdAt: date(r.created_at),
     updatedAt: date(r.updated_at),
   })

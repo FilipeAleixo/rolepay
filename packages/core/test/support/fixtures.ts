@@ -29,6 +29,7 @@ export function community(over: Partial<Community> = {}): Community {
     payoutToken: TOKEN,
     feeMode: 'sponsor',
     feeToken: null,
+    approverRoleId: null,
     createdAt: T0,
     updatedAt: T0,
     ...over,

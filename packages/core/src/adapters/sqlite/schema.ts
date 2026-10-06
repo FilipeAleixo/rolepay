@@ -11,6 +11,7 @@ export interface CommunitiesTable {
   payout_token: string
   fee_mode: string
   fee_token: string | null
+  approver_role_id: string | null
   created_at: string
   updated_at: string
 }

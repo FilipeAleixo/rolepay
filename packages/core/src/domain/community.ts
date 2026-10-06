@@ -20,6 +20,8 @@ export const CommunitySchema = z
     feeMode: FeeModeSchema,
     /** Required in fee_budget mode: the token the bot pays fees in, under its own limit. */
     feeToken: AddressSchema.nullable(),
+    /** The Discord role allowed to approve runs (the Treasurer). The Discord layer checks it. */
+    approverRoleId: DiscordIdSchema.nullable(),
     createdAt: z.date(),
     updatedAt: z.date(),
   })

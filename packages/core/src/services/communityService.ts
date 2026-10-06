@@ -36,6 +36,7 @@ export const RegisterCommunityInputSchema = z.object({
   payoutToken: AddressSchema,
   feeMode: FeeModeSchema,
   feeToken: AddressSchema.nullable().default(null),
+  approverRoleId: DiscordIdSchema.nullable().default(null),
 })
 export type RegisterCommunityInput = z.input<typeof RegisterCommunityInputSchema>
 
@@ -77,6 +78,7 @@ export class CommunityService {
       payoutToken: parsed.data.payoutToken,
       feeMode: parsed.data.feeMode,
       feeToken: parsed.data.feeToken,
+      approverRoleId: parsed.data.approverRoleId,
       createdAt: now,
       updatedAt: now,
     })
@@ -84,6 +86,16 @@ export class CommunityService {
     const inserted = await this.deps.communities.insert(candidate.data)
     if (!inserted.ok) return err({ code: 'already_registered' })
     return ok(candidate.data)
+  }
+
+  async setApproverRole(input: { guildId: string; approverRoleId: string | null }): Promise<Result<Community, InvalidInput | NotFound>> {
+    const role = DiscordIdSchema.nullable().safeParse(input.approverRoleId)
+    if (!role.success) return invalidInput(role.error)
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const updated: Community = { ...community, approverRoleId: role.data, updatedAt: this.deps.clock.now() }
+    await this.deps.communities.update(updated)
+    return ok(updated)
   }
 
   async get(guildId: string): Promise<Result<Community, NotFound>> {
