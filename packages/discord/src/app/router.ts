@@ -1,4 +1,5 @@
 import { ResponseType } from '../api.js'
+import { newRunCommand } from '../commands/newRun.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
 import { setupCommand } from '../commands/setup.js'
 import { decodeCustomId } from '../components/customId.js'
@@ -11,6 +12,7 @@ import { type Outcome, ephemeralReply, renderOutcome } from './outcome.js'
 /** `${command} ${subcommand}` -> handler. Kept in step with COMMAND_DEFINITIONS by a test. */
 const COMMANDS: Record<string, CommandHandler> = {
   'payrun setup': setupCommand,
+  'payrun new': newRunCommand,
   'payee link': payeeLinkCommand,
 }
 
