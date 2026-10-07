@@ -12,7 +12,7 @@ import { checkChain } from './chainCheck.js'
 import { composeServer } from './compose.js'
 import { parseServerConfig } from './config.js'
 import { loadEnvironment } from './env.js'
-import { aiUsagePortFromCore, auditPortFromCore, payoutsPortFromCore, policyPortFromCore } from './policySeam.js'
+import { aiUsagePortFromCore, auditPortFromCore, payoutsPortFromCore, policyKeysPortFromCore, policyPortFromCore } from './policySeam.js'
 
 const log = (event: string, fields: Record<string, unknown> = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ...fields }))
 
@@ -48,7 +48,13 @@ async function main() {
   // The dashboard's policy seam: its Policies and Audit pages over core's policy services and audit stream,
   // the AI spend (one content-free row per model call) on the Overview, the Audit log and each policy's versions,
   // and what was paid each week on the Overview (policy runs apart from runs made by hand).
-  const dashboard = { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay), aiUsage: aiUsagePortFromCore(rolepay), payouts: payoutsPortFromCore(rolepay) }
+  const dashboard = {
+    policies: policyPortFromCore(rolepay, { names: activity }),
+    audit: auditPortFromCore(rolepay),
+    aiUsage: aiUsagePortFromCore(rolepay),
+    payouts: payoutsPortFromCore(rolepay),
+    policyKeys: policyKeysPortFromCore(rolepay),
+  }
   const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets, dashboard }
   const composed = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web, log })
   const recovery = composed.startRecovery()

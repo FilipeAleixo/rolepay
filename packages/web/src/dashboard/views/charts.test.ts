@@ -1,7 +1,7 @@
 import type { KeyState, KeyStatusView } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import type { PaidByWeekView, PaidWeekView } from '../policyPort.js'
-import { atAGlance, budgetBar, keyBudget, paidWeeks, weeksChart } from './charts.js'
+import { POLICY_KEY_WORDS, atAGlance, budgetBar, keyBudget, paidWeeks, weeksChart } from './charts.js'
 
 const TOKEN = '0x20c0000000000000000000000000000000000001' // AlphaUSD
 const EVIL_TOKEN = '<img src=x onerror=alert(1)>"\'&' // tokenLabel keeps its first six and last four characters
@@ -115,6 +115,29 @@ describe('keyBudget: what the bot may still spend, or why it may spend nothing',
       expect(text(html)).toMatch(words)
       expect(html).not.toContain('<svg')
     }
+  })
+})
+
+describe("keyBudget for a policy's own key: the same picture, in the policy's words", () => {
+  /** The text as a person reads it (the words are escaped in the HTML). */
+  const said = (html: string) => text(html).replaceAll('&#39;', "'")
+  it('names the policy and its key, never the bot, and the bar says whose budget it is', () => {
+    const html = keyBudget(ok(key()), POLICY_KEY_WORDS)
+    const t = said(html)
+    expect(t).toMatch(/^This policy's own budget Spent this period 62 AlphaUSD Left 138 AlphaUSD/)
+    expect(html).toContain('aria-label="This policy&#39;s own budget: 62 of 200 AlphaUSD spent, 138 AlphaUSD left.')
+    expect(t).toContain('This policy can never spend past that line: the chain enforces it')
+    expect(t).not.toMatch(/bot/i)
+  })
+
+  it('revoked or expired: the policy pays nothing until it gets a new budget', () => {
+    expect(said(keyBudget(ok(key({ state: { status: 'revoked', remaining: 0n } })), POLICY_KEY_WORDS))).toMatch(
+      /This policy's key is revoked: this policy can spend nothing\. A treasurer gives it a new budget on the treasury page\./,
+    )
+    expect(said(keyBudget(ok(key({ state: { status: 'expired', expiry: at('2026-10-01T00:00:00Z') } })), POLICY_KEY_WORDS))).toMatch(
+      /This policy's key expired on 2026-10-01 00:00 UTC ?: this policy can spend nothing until a treasurer gives it a new budget on the treasury page/,
+    )
+    expect(said(keyBudget({ kind: 'unavailable' }, POLICY_KEY_WORDS))).toMatch(/could not read this policy's key from the chain/)
   })
 })
 

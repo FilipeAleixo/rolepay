@@ -1,5 +1,6 @@
 import { POLICY_LIMITS, PROPOSAL_LIMITS, secondsText, usdText } from '@rolepay/core'
-import type { AiCallView, PolicyDetail, PolicyPreview, PolicySchedule, PolicySummary, PolicyVersionView } from '../policyPort.js'
+import type { AiCallView, PolicyBudgetView, PolicyDetail, PolicyPreview, PolicySchedule, PolicySummary, PolicyVersionView } from '../policyPort.js'
+import { POLICY_KEY_WORDS, keyBudget } from './charts.js'
 import { lineDiff } from './diff.js'
 import { type Names, esc, money, person, pill, row, table, when } from './format.js'
 import { csrfField } from './layout.js'
@@ -123,7 +124,7 @@ function previewSection(d: { preview: PolicyPreview | { error: string }; names: 
   const window = p.window ? `<p class="muted small">Counts activity from ${when(p.window.since)} to ${when(p.window.until)}, as of ${when(p.asOf)}.</p>` : ''
   const budget = p.remainingBudget === null ? '<span class="muted">unknown</span>' : money(p.remainingBudget, d.token)
   return `<section class="card"><h2>Next run</h2><p>${p.nextRunAt ? `On ${when(p.nextRunAt)}` : 'When it next runs'}, it would pay <strong>${money(p.total, d.token)}</strong> to ${paid} ${paid === 1 ? 'person' : 'people'}.</p>
-<p>The bot key has ${budget} left now.</p>${p.held ? `<p class="notice warn">${esc(p.held)}</p>` : ''}</section>
+<p>${p.budgetKey === 'policy' ? "This policy's own key" : 'The bot key'} has ${budget} left now.</p>${p.held ? `<p class="notice warn">${esc(p.held)}</p>` : ''}</section>
 <section class="card"><h2>Applies to right now</h2>${window}${matches}</section>
 <section class="card"><h2>Just below the line</h2>${near}</section>`
 }
@@ -180,6 +181,39 @@ function actionsSection(d: { base: string; policy: PolicyDetail; csrf: string })
   }${p.status === 'paused' ? post('resume', 'Resume') : ''}${post('archive', 'Archive', 'danger')}</div>${mode}</section>`
 }
 
+/** A policy's own budget as read for its page: the view, or the chain could not be read in time. */
+export type PolicyBudgetRead = { kind: 'ok'; view: PolicyBudgetView } | { kind: 'unavailable' }
+
+/**
+ * What the policy may spend: its own key's budget (the Overview's picture, in the policy's words)
+ * or the bot key's, shared. The Treasurer role gets the way to the treasury page, where the
+ * treasury passkey gives it its own budget, changes it or revokes it. An archived policy whose key
+ * is still live on chain is offered the revoke.
+ */
+function budgetSection(d: { base: string; budget: PolicyBudgetRead; canAct: boolean; csrf: string; archived: boolean }): string {
+  const card = (body: string) => `<section class="card"><h2>Budget</h2>${body}</section>`
+  const button = (label: string, cls = '') =>
+    d.canAct ? `<form method="post" action="${d.base}/budget">${csrfField(d.csrf)}<button type="submit"${cls ? ` class="${cls}"` : ''}>${label}</button></form>` : ''
+  const how = d.canAct ? '<p class="muted small">Opens the treasury page: the treasury passkey signs it, and the chain enforces it.</p>' : ''
+  if (d.budget.kind === 'unavailable') return card("<p class=\"muted\">Rolepay could not read this policy's budget from the chain just now. Reload in a moment.</p>")
+  const v = d.budget.view
+  if (d.archived) {
+    if (v.kind !== 'own' || v.key.state.status !== 'active') return ''
+    return card(
+      `<p class="notice warn">This policy is archived, but its own key is still live on chain. Revoke it on the treasury page, so nothing can spend with it.</p>${button('Revoke its key on the treasury page', 'danger')}`,
+    )
+  }
+  if (v.kind === 'shared') return card(`<p>This policy pays from the bot key's budget, shared with manual runs, AI-proposed runs and other policies.</p>${button('Give this policy its own budget')}${how}`)
+  if (v.kind === 'retired') {
+    return card(
+      `<p class="notice bad">This policy's own key is revoked: it pays nothing until a treasurer gives it a new budget. It never falls back to the bot key.</p>${button('Give this policy its own budget')}${how}`,
+    )
+  }
+  return card(
+    `${keyBudget({ kind: 'ok', value: v.key }, POLICY_KEY_WORDS)}<p class="muted small">Only this policy's runs are signed with this key; the bot key and other policies are not touched.</p>${button('Change or revoke its budget', 'secondary')}`,
+  )
+}
+
 export function policyBody(d: {
   guildId: string
   policy: PolicyDetail
@@ -192,6 +226,8 @@ export function policyBody(d: {
   notice: string
   /** What compiling each version cost; null: the AI spend is not wired on this server. */
   compiles?: Record<number, AiCallView> | null
+  /** The policy's own budget; null: policy keys are not wired on this server (no card). */
+  budget?: PolicyBudgetRead | null
 }): string {
   const p = d.policy
   const g = esc(d.guildId)
@@ -214,6 +250,7 @@ export function policyBody(d: {
 <details><summary>Exact filter</summary><pre>${esc(JSON.stringify(p.filter, null, 2))}</pre></details></section>
 <section class="card"><h2>Settings</h2><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section></div>
 ${previewSection({ preview: d.preview, names: d.names, token: d.token })}
+${d.budget ? budgetSection({ base, budget: d.budget, canAct: d.canAct, csrf: d.csrf, archived: p.status === 'archived' }) : ''}
 ${actions}
 ${versionsSection(d.versions, d.names, d.compiles ?? null)}`
 }

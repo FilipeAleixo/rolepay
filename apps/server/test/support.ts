@@ -9,7 +9,7 @@ import { FakeDiscordRest, createTestSigner } from '@rolepay/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
 import { parseServerConfig } from '../src/config.js'
 import { type ServerDeps, composeServer } from '../src/compose.js'
-import { aiUsagePortFromCore, auditPortFromCore, payoutsPortFromCore, policyPortFromCore } from '../src/policySeam.js'
+import { aiUsagePortFromCore, auditPortFromCore, payoutsPortFromCore, policyKeysPortFromCore, policyPortFromCore } from '../src/policySeam.js'
 
 export const GUILD = '1094309218049937418'
 export const TREASURY = '0x9999999999999999999999999999999999999999'
@@ -78,7 +78,9 @@ export async function testServer(
     })
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
-  const seam = opts.policySeam ? { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay), aiUsage: aiUsagePortFromCore(rolepay), payouts: payoutsPortFromCore(rolepay) } : {}
+  const seam = opts.policySeam
+    ? { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay), aiUsage: aiUsagePortFromCore(rolepay), payouts: payoutsPortFromCore(rolepay), policyKeys: policyKeysPortFromCore(rolepay) }
+    : {}
   const dashboard = opts.dashboard || opts.policySeam ? { ...seam, ...opts.dashboard } : undefined
   const server = composeServer({
     web: { sessions, assets: staticAssets({ 'rolepay.js': '' }), ...(dashboard ? { dashboard } : {}) },

@@ -34,6 +34,7 @@ import type {
   PolicyActor,
   PolicyDetail,
   PolicyError,
+  PolicyKeysPort,
   PolicyNearMiss,
   PolicyPort,
   PolicyPreview,
@@ -167,6 +168,10 @@ function heldWords(problems: readonly string[], d: { total: Micros; remaining: M
         return ['There is no active bot key: it would be held until a treasurer authorises one on the setup page.']
       case 'over_budget':
         return d.remaining === null ? [] : [`The run (${money(d.total)}) is more than the bot key has left (${money(d.remaining)}): it would be held, not partly paid.`]
+      case 'policy_key_inactive':
+        return ["This policy's own key cannot pay (revoked or expired): it would be held until a treasurer gives it a new budget on the treasury page. It never falls back to the bot key."]
+      case 'over_policy_budget':
+        return d.remaining === null ? [] : [`The run (${money(d.total)}) is more than this policy's own key has left (${money(d.remaining)}): it would be held, not partly paid. The chain would refuse it anyway.`]
       default:
         return []
     }
@@ -304,6 +309,7 @@ export function policyPortFromCore(rolepay: Rolepay, opts: { names?: NameSource 
         nextRunAt: v.nextRunAt,
         total: v.total,
         remainingBudget: v.remaining,
+        budgetKey: v.budgetKey,
         held: heldWords(v.problems, { total: v.total, remaining: v.remaining, caps: p.caps }, n.money),
       }
       return ok(preview)
@@ -399,6 +405,8 @@ const HOLD_WORDS: Record<string, string> = {
   key_revoked: 'the bot key was revoked',
   key_expired: 'the bot key has expired',
   insufficient_limit: 'more than the bot key has left',
+  over_policy_budget: "more than the policy's own key has left",
+  policy_key_inactive: "the policy's own key cannot pay (revoked or expired)",
   policy_not_active: 'the policy is not active',
   autopilot_off: 'autopilot was switched off',
   policy_changed: 'the policy changed since the run was made',
@@ -547,6 +555,26 @@ export function payoutsPortFromCore(rolepay: Rolepay): PayoutsPort {
       if (!r.ok) return null
       const { token, weeks, total, policy, manual, runs } = r.value
       return { token, weeks: weeks.map((w) => ({ start: w.start, policy: w.policy, manual: w.manual, runs: w.runs, partial: w.partial })), total, policy, manual, runs }
+    },
+  }
+}
+
+// ---- a policy's own budget -----------------------------------------------------------------
+
+/**
+ * The dashboard's PolicyKeysPort over `rolepay.policyKeys.status`: whose budget pays a policy (the
+ * bot key's, shared; its own key, with what the chain says now; or nothing, its key revoked). A
+ * policy with only a key waiting for the passkey still pays from the bot key, so it reads `shared`.
+ */
+export function policyKeysPortFromCore(rolepay: Rolepay): PolicyKeysPort {
+  return {
+    async budget(ref) {
+      const s = await rolepay.policyKeys.status(ref)
+      if (!s.ok) return null
+      const { signs, key, state } = s.value
+      if (signs === 'retired') return { kind: 'retired' }
+      if (signs === 'own' && key && state) return { kind: 'own', key: { key, state } }
+      return { kind: 'shared' }
     },
   }
 }

@@ -1,4 +1,4 @@
-import type { Result } from '@rolepay/core'
+import type { KeyStatusView, Result } from '@rolepay/core'
 
 /**
  * THE POLICY SEAM. The dashboard's Policies and Audit pages read and act through these ports,
@@ -79,8 +79,10 @@ export type PolicyPreview = {
   nearMisses: PolicyNearMiss[]
   nextRunAt: Date | null
   total: bigint
-  /** The bot key's remaining budget now, or null when unknown (no key, or the chain could not be read). */
+  /** The remaining budget now of the key that pays this policy, or null when unknown (no key, or the chain could not be read). */
   remainingBudget: bigint | null
+  /** Whose key that is: the policy's own (`policy`) or the bot key, shared (`bot`, the default). */
+  budgetKey?: 'bot' | 'policy'
   /** Why the next run would be held instead of paid (over budget, over a cap), in plain words; null when it would go ahead. */
   held: string | null
 }
@@ -271,4 +273,20 @@ export type PaidByWeekView = {
 export interface PayoutsPort {
   /** The last 12 UTC weeks, the current one last; null for a community Rolepay does not know. */
   paidByWeek(input: { guildId: string }): Promise<PaidByWeekView | null>
+}
+
+// ---- a policy's own budget -------------------------------------------------------------------
+
+/**
+ * A policy's own budget (its own access key, authorised by the treasury passkey on the treasury
+ * page), as the policy's page shows it: `shared` (it pays from the bot key's budget, with every
+ * other run), `own` (its own key, with what the chain says now: the same view as the bot key's on
+ * the Overview), `retired` (its own key was revoked: it pays nothing until it gets a new one).
+ */
+export type PolicyBudgetView = { kind: 'shared' } | { kind: 'own'; key: KeyStatusView } | { kind: 'retired' }
+
+/** Policies' own keys, through the seam (which key pays a policy is policy knowledge). Absent: the policy page leaves the budget out. */
+export interface PolicyKeysPort {
+  /** null for a policy Rolepay does not know in this community. Reads the chain. */
+  budget(input: { guildId: string; policyId: string }): Promise<PolicyBudgetView | null>
 }

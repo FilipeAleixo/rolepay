@@ -2,7 +2,7 @@ import type { Clock, KeyValueStore, Rolepay } from '@rolepay/core'
 import type { WebConfig } from '../config.js'
 import { type CookieNames, cookieNames, readCookie } from './cookies.js'
 import { CachedGuildMembers } from './members.js'
-import type { AiUsagePort, AuditPort, PayoutsPort, PolicyPort } from './policyPort.js'
+import type { AiUsagePort, AuditPort, PayoutsPort, PolicyKeysPort, PolicyPort } from './policyPort.js'
 import type { DiscordOAuth, GuildMembers } from './ports.js'
 import { type DashboardSession, DashboardSessionStore } from './sessions.js'
 
@@ -21,6 +21,8 @@ export type DashboardDeps = {
   aiUsage?: AiUsagePort
   /** What was paid each week (policyPort.ts). Absent: the Overview leaves that chart out. */
   payouts?: PayoutsPort
+  /** Policies' own budgets (policyPort.ts). Absent: a policy's page leaves its budget out. */
+  policyKeys?: PolicyKeysPort
   /** Unexpected errors (the page shows a generic message). Never given request data. */
   onError?: (error: unknown) => void
 }

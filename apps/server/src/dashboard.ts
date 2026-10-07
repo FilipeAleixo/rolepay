@@ -1,6 +1,6 @@
 import type { KeyValueStore } from '@rolepay/core'
 import type { DiscordRest } from '@rolepay/discord'
-import { type AiUsagePort, type AuditPort, type DashboardDeps, type DiscordOAuth, FetchDiscordOAuth, type GuildMembers, type PayoutsPort, type PolicyPort } from '@rolepay/web'
+import { type AiUsagePort, type AuditPort, type DashboardDeps, type DiscordOAuth, FetchDiscordOAuth, type GuildMembers, type PayoutsPort, type PolicyKeysPort, type PolicyPort } from '@rolepay/web'
 import type { ServerConfig } from './config.js'
 
 /** The bot's view of guild members for the dashboard: Get Guild Member as the bot (no privileged intent). */
@@ -29,6 +29,8 @@ export type DashboardOverrides = {
   aiUsage?: AiUsagePort
   /** What was paid each week (`payoutsPortFromCore(rolepay)` in policySeam.ts). Absent: the Overview leaves that chart out. */
   payouts?: PayoutsPort
+  /** Policies' own budgets (`policyKeysPortFromCore(rolepay)` in policySeam.ts). Absent: a policy's page leaves its budget out. */
+  policyKeys?: PolicyKeysPort
 }
 
 /** The dashboard's dependencies: sessions in the server's KeyValueStore, the bot's member view, Discord OAuth2 from config. */
@@ -49,6 +51,7 @@ export function dashboardDeps(opts: {
     ...(o.audit ? { audit: o.audit } : {}),
     ...(o.aiUsage ? { aiUsage: o.aiUsage } : {}),
     ...(o.payouts ? { payouts: o.payouts } : {}),
+    ...(o.policyKeys ? { policyKeys: o.policyKeys } : {}),
     onError: opts.onError,
   }
 }

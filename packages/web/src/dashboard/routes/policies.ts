@@ -5,9 +5,12 @@ import { type CommunityAccess, actionAccess, communityAccess } from '../access.j
 import { type DashboardKit, html, redirect } from '../kit.js'
 import type { PolicyDraft, PolicyError, PolicyPort } from '../policyPort.js'
 import { type Section, messagePage, shell } from '../views/layout.js'
-import { DAILY_REFUSED, type PolicyFormValues, notice, policiesBody, policyBody, policyFormBody } from '../views/policies.js'
+import { DAILY_REFUSED, type PolicyBudgetRead, type PolicyFormValues, notice, policiesBody, policyBody, policyFormBody } from '../views/policies.js'
 
 const MAX_NAMED = 60
+/** A chain read slower than this is shown as unavailable rather than holding the page. */
+const CHAIN_TIMEOUT_MS = 5_000
+const timeout = (ms: number) => new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timed out')), ms).unref?.())
 
 const validTimezone = (tz: string) => {
   try {
@@ -85,6 +88,16 @@ export function policyRoutes(kit: DashboardKit): Hono {
   const base = (a: CommunityAccess, policyId: string) => `/dashboard/${a.community.id}/policies/${encodeURIComponent(policyId)}`
   /** The policy port, or null when this server has none (the pages say so). */
   const port = (): PolicyPort | null => kit.policies ?? null
+  /** The policy's own budget, read from the chain through the policy keys port; null without the port (no card). */
+  const budgetRead = async (ref: { guildId: string; policyId: string }): Promise<PolicyBudgetRead | null> => {
+    if (!kit.policyKeys) return null
+    try {
+      const view = await Promise.race([kit.policyKeys.budget(ref), timeout(CHAIN_TIMEOUT_MS)])
+      return view ? { kind: 'ok', view } : null
+    } catch {
+      return { kind: 'unavailable' }
+    }
+  }
 
   app.get('/dashboard/:guildId/policies', async (c) => {
     const access = await communityAccess(kit, c)
@@ -130,10 +143,11 @@ export function policyRoutes(kit: DashboardKit): Hono {
     const ref = { guildId: a.community.id, policyId: c.req.param('policyId') }
     const policy = await policies.get(ref)
     if (!policy.ok) return notFound(a)
-    const [preview, versions, compiles] = await Promise.all([
+    const [preview, versions, compiles, budget] = await Promise.all([
       policies.preview(ref).catch(() => null),
       policies.versions(ref),
       kit.aiUsage ? kit.aiUsage.compiles(ref) : Promise.resolve(null),
+      budgetRead(ref),
     ])
     const shown = preview?.ok ? preview.value : { error: preview && !preview.ok ? (preview.error.message ?? '') : '' }
     const people = [
@@ -152,6 +166,7 @@ export function policyRoutes(kit: DashboardKit): Hono {
       csrf: a.viewer.csrf,
       notice: notice(c.req.query('done'), c.req.query('error')),
       compiles,
+      budget,
     })
     return page(a, policy.value.name, body)
   })
@@ -222,6 +237,23 @@ export function policyRoutes(kit: DashboardKit): Hono {
   action('pause', 'paused', (p, a, id) => p.pause(ref(a, id)))
   action('resume', 'resumed', (p, a, id) => p.resume(ref(a, id)))
   action('archive', 'archived', (p, a, id) => p.archive(ref(a, id)))
+  /**
+   * "Give this policy its own budget": a fresh treasury page link for this policy (a setup link, the
+   * same as /rolepay setup issues, 30 minutes), then the treasury page itself. Nothing changes here:
+   * the treasury passkey signs the policy's key on that page, and the chain enforces it.
+   */
+  action('budget', 'budget', async (p, a, id) => {
+    if (!kit.policyKeys) return notFound(a)
+    if (!(await p.get({ guildId: a.community.id, policyId: id })).ok) return notFound(a)
+    const c = a.community
+    const link = await kit.rolepay.communities.issueSetupLink({
+      guildId: c.id,
+      discordUserId: a.actor.id,
+      settings: { name: c.name, payoutToken: c.payoutToken, feeMode: c.feeMode, feeToken: c.feeToken, approverRoleId: c.approverRoleId, requireSeparateApprover: c.requireSeparateApprover },
+    })
+    if (!link.ok) return badRequest(a, 'Rolepay could not make a treasury page link just now. Try again.')
+    return redirect(`/setup/${encodeURIComponent(link.value.token)}/policies/${encodeURIComponent(id)}`, 303)
+  })
   action('mode', 'mode_changed', async (p, a, id) => {
     const m = ModeForm.safeParse(a.form)
     return m.success
