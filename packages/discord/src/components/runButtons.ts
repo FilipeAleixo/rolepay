@@ -2,6 +2,7 @@ import type { Community } from '@rolepay/core'
 import { type ButtonHandler, type GuildContext, replyError } from '../app/handlers.js'
 import { type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canManageGuild, holdsApproverRole } from '../app/permissions.js'
+import { autopilotReleaseOf } from '../app/runContext.js'
 import type { ExecutionJob } from '../ports.js'
 import { explainError } from '../views/errors.js'
 import { roleMention } from '../views/format.js'
@@ -79,5 +80,5 @@ export const retryButton: ButtonHandler = async ({ runId, messageId, ctx }, { ro
   const retryable = r.status === 'approved' || r.status === 'executing' || (r.status === 'failed' && r.failure?.retryable)
   if (!retryable) return replyError(r.status === 'failed' ? { code: 'not_retryable' } : { code: 'illegal_state', status: r.status })
   await queue.enqueue(executeJob(ctx, runId, messageId))
-  return { kind: 'update', message: runMessage(r, { network: config.network, paying: true }) }
+  return { kind: 'update', message: runMessage(r, { network: config.network, paying: true, ...(await autopilotReleaseOf(rolepay, r)) }) }
 }

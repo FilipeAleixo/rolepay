@@ -226,6 +226,40 @@ describe('Run detail', () => {
     expect(t).toContain('2026-10-06 09:30 UTC')
   })
 
+  it('a run autopilot paid after its veto window: nobody approved this run, so it never reads "Approved by"; a propose-mode one keeps it', async () => {
+    const h = await seeded()
+    await h.activeKey()
+    const run = await h.run([[ALICE.id, '10']])
+    const approvedAt = run.approvedAt as Date
+    h.policies.seed(GUILD, { id: 'pol_9', name: 'Weekly helpers', instruction: '10 each', version: 3, mode: 'autopilot', approvedBy: MEMBER.id, approvedAt: new Date(approvedAt.getTime() - 86_400_000) })
+    const origin = {
+      policyId: 'pol_9',
+      policyRunId: 'prun_9',
+      policyName: 'Weekly helpers',
+      version: 3,
+      period: 'week of 2026-10-05',
+      mode: 'autopilot' as const,
+      scheduledFor: new Date(approvedAt.getTime() - 3_600_000),
+      executesAt: new Date(approvedAt.getTime() - 1000),
+      vetoedBy: null,
+      vetoedAt: null,
+      executedAt: approvedAt,
+      vetoable: false,
+    }
+    h.policies.linkRun(GUILD, run.id, origin)
+    const { browser } = await h.signIn(identity(MEMBER))
+    const t = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
+    expect(t).toContain('Released on autopilot after the veto window; no veto. Policy approved by Felix (version 3); autopilot switched on by Tess.')
+    expect(t).toMatch(/Approver\s*Autopilot, after the veto window/)
+    expect(t).not.toMatch(/Approved by/)
+
+    // The same run approved by a person (propose mode): "Approved by" stays.
+    h.policies.linkRun(GUILD, run.id, { ...origin, mode: 'propose', executesAt: null, executedAt: null })
+    const manual = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
+    expect(manual).toMatch(/Approved by Tess/)
+    expect(manual).not.toContain('on autopilot after the veto window')
+  })
+
   it('a failed run shows why', async () => {
     const h = await seeded()
     await h.activeKey()

@@ -51,12 +51,33 @@ const FAILURE_WORDS: Record<string, string> = {
 
 type Event = { at: Date; text: string }
 
+/**
+ * Autopilot approved this run, rather than a person: its policy run was released and the run was
+ * approved once the veto window was over (the same rule as the Discord run message). A person who
+ * approved it during the window, or after autopilot stopped, approved it themselves.
+ */
+export const releasedOnAutopilot = (run: Run, o: RunOrigin | undefined): o is RunOrigin =>
+  !!o && o.mode === 'autopilot' && o.executedAt !== null && o.vetoedAt === null && o.executesAt !== null && run.approvedAt !== null && run.approvedAt >= o.executesAt
+
+/**
+ * "Released on autopilot after the veto window; no veto. Policy approved by A (version 3); autopilot
+ * switched on by B." Nobody approved such a run itself; the run is approved in the name of whoever
+ * switched autopilot on, named when that is not who approved the policy version.
+ */
+function autopilotApproval(run: Run, o: RunOrigin, policyApprovedBy: string | null, names: Names): string {
+  const policy = policyApprovedBy ? `Policy approved by ${person(policyApprovedBy, names)} (version ${o.version})` : `Policy version ${o.version}`
+  const switched = run.approvedBy && run.approvedBy !== policyApprovedBy ? `; autopilot switched on by ${person(run.approvedBy, names)}` : ''
+  return `Released on autopilot after the veto window; no veto. ${policy}${switched}.`
+}
+
 /** The run's story in order. Events at the same moment keep their logical order. */
-function timeline(run: Run, origin: RunOrigin | undefined, names: Names, explorer: string): Event[] {
+function timeline(run: Run, origin: RunOrigin | undefined, names: Names, explorer: string, policyApprovedBy: string | null): Event[] {
   const events: Event[] = [{ at: run.createdAt, text: `Created by ${person(run.createdBy, names)}${origin ? ` for <strong>${esc(origin.policyName)}</strong>` : ''}` }]
   if (run.submittedAt) events.push({ at: run.submittedAt, text: 'Submitted for approval' })
   if (origin?.vetoedAt) events.push({ at: origin.vetoedAt, text: `Vetoed by ${person(origin.vetoedBy, names)}` })
-  if (run.approvedAt) events.push({ at: run.approvedAt, text: `Approved by ${person(run.approvedBy, names)}` })
+  if (run.approvedAt) {
+    events.push({ at: run.approvedAt, text: releasedOnAutopilot(run, origin) ? autopilotApproval(run, origin, policyApprovedBy, names) : `Approved by ${person(run.approvedBy, names)}` })
+  }
   for (const a of run.attempts) {
     events.push({ at: a.startedAt, text: `Attempt ${a.number}${a.txHash ? `: signed and sent, ${txLink(explorer, a.txHash)}` : ' started'}` })
   }
@@ -91,14 +112,21 @@ export function runBody(d: {
   csrf?: string
   /** A message after an action (escaped by its builder). */
   notice?: string
+  /** For a run autopilot released: who approved the policy version that made it (null: not known). */
+  policyApprovedBy?: string | null
 }): string {
   const { run, origin, names, explorer } = d
   const g = esc(d.guildId)
+  const approver = releasedOnAutopilot(run, origin)
+    ? 'Autopilot, after the veto window (no veto)'
+    : run.approvedBy
+      ? person(run.approvedBy, names)
+      : '<span class="muted">not yet</span>'
   const facts = [
     ['Total', money(run.total, run.token)],
     ['Lines', String(run.lines.length)],
     ['Creator', person(run.createdBy, names)],
-    ['Approver', run.approvedBy ? person(run.approvedBy, names) : '<span class="muted">not yet</span>'],
+    ['Approver', approver],
     ...(run.paidTxHash ? [['Transaction', txLink(explorer, run.paidTxHash)]] : []),
   ]
   const originCard = origin
@@ -112,7 +140,7 @@ export function runBody(d: {
     run.lines.map((l) => row([String(l.line), person(l.payeeDiscordId, names), addressLink(explorer, l.address), money(l.amount, run.token), `<code class="small" title="${esc(l.memo)}">${esc(shortHex(l.memo))}</code>`], { numeric: [0, 3] })),
     { numeric: [0, 3] },
   )
-  const steps = timeline(run, origin, names, explorer)
+  const steps = timeline(run, origin, names, explorer, d.policyApprovedBy ?? null)
     .map((e) => `<li>${e.text}<br><span class="small muted">${when(e.at)}</span></li>`)
     .join('')
   return `<p class="small"><a href="/dashboard/${g}/runs">All runs</a></p>

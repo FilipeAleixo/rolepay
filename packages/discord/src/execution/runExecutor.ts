@@ -1,5 +1,6 @@
 import type { ExecuteOutcome, NetworkName, Rolepay, Run } from '@rolepay/core'
 import type { Message } from '../api.js'
+import { autopilotReleaseOf } from '../app/runContext.js'
 import type { DiscordRest, ExecutionJob, RunNotices } from '../ports.js'
 import { explainError } from '../views/errors.js'
 import { type RunViewContext, runMessage } from '../views/run.js'
@@ -79,7 +80,9 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
         report.phases.discord += performance.now() - t
       }
     }
-    const view = (run: Run, extra: Omit<RunViewContext, 'network'> = {}) => runMessage(run, { network: deps.network, ...extra })
+    // A run autopilot released says so rather than "Approved by" (read once the run is loaded).
+    let released: Pick<RunViewContext, 'released'> = {}
+    const view = (run: Run, extra: Omit<RunViewContext, 'network'> = {}) => runMessage(run, { network: deps.network, ...released, ...extra })
     const publish = (message: Message) =>
       timedDiscord(async () => {
         const edited = await deps.rest.editOriginal(job.reply, message)
@@ -95,6 +98,7 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
         return await publish({ content: explainError(before.error) })
       }
       const alreadyPaid = before.value.status === 'paid'
+      released = await autopilotReleaseOf(deps.rolepay, before.value)
 
       let outcome = await payRuns.execute(ref)
       for (let checks = 0; checks < maxChecks; checks++) {

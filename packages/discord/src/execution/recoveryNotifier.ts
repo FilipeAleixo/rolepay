@@ -1,4 +1,5 @@
 import type { NetworkName, Rolepay, RecoveryResult } from '@rolepay/core'
+import { autopilotReleaseOf } from '../app/runContext.js'
 import type { DiscordRest, RunNotices } from '../ports.js'
 import { runMessage } from '../views/run.js'
 import { sendReceipts } from './receipts.js'
@@ -30,7 +31,7 @@ export function createRecoveryNotifier(deps: RecoveryNotifierDeps): (results: Re
     }
     const ref = await deps.notices.message(run.value.id)
     if (!ref) return
-    const message = runMessage(run.value, { network: deps.network, ...(receipts ? { receipts } : {}) })
+    const message = runMessage(run.value, { network: deps.network, ...(await autopilotReleaseOf(deps.rolepay, run.value)), ...(receipts ? { receipts } : {}) })
     if (ref.messageId && (await deps.rest.editChannelMessage(ref.channelId, ref.messageId, message)).ok) return
     await deps.rest.postToChannel(ref.channelId, message)
   }

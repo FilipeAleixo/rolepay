@@ -8,7 +8,7 @@ import { type Section, messagePage, shell } from '../views/layout.js'
 import { type ChainRead, overviewBody } from '../views/overview.js'
 import { type PayeeTotals, payeesBody } from '../views/payees.js'
 import { notice } from '../views/policies.js'
-import { runBody, runsBody } from '../views/runs.js'
+import { releasedOnAutopilot, runBody, runsBody } from '../views/runs.js'
 import type { CommunityAccess } from '../access.js'
 
 /** How many runs a page reads to filter and total in memory. A repository query can replace this when communities have more. */
@@ -127,11 +127,15 @@ export function communityRoutes(kit: DashboardKit): Hono {
     const run = await kit.rolepay.payRuns.get({ guildId, runId: c.req.param('runId') })
     if (!run.ok) return page(a, 'runs', 'Run not found', '<h1>Run not found</h1><p><a href="runs">All runs</a></p>', 404)
     const origin = (await origins(guildId, [run.value]))[run.value.id]
+    // Autopilot approved it: name who approved the policy version that made it, not an approver of this run.
+    const policyApprovedBy =
+      kit.policies && releasedOnAutopilot(run.value, origin) ? ((await kit.policies.versions({ guildId, policyId: origin.policyId })).find((v) => v.version === origin.version)?.approvedBy ?? null) : null
     const body = runBody({
       guildId,
       run: run.value,
       origin,
-      names: await names(guildId, peopleIn([run.value], origin ? { [run.value.id]: origin } : {})),
+      policyApprovedBy,
+      names: await names(guildId, [...peopleIn([run.value], origin ? { [run.value.id]: origin } : {}), ...(policyApprovedBy ? [policyApprovedBy] : [])]),
       explorer,
       canAct: a.viewer.canAct,
       csrf: a.viewer.csrf,

@@ -1,4 +1,4 @@
-import type { KeyStatusView } from '@rolepay/core'
+import { type KeyStatusView, type PolicyRun, newPolicyRun } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { ADMIN, ALICE, BOB, GUILD, T0, TOKEN, TREASURER, TX, approved, cancelled, executing, failed, paid, pending, run } from '../../test/fixtures.js'
 import { ButtonStyle, type Message } from '../api.js'
@@ -6,7 +6,7 @@ import { decodeCustomId } from '../components/customId.js'
 import { explainError } from './errors.js'
 import { count, money, shortAddress, tokenLabel } from './format.js'
 import { keyText } from './key.js'
-import { receiptDm, runMessage } from './run.js'
+import { receiptDm, releasedOnAutopilot, runMessage } from './run.js'
 import { runSummary, statusMessage } from './status.js'
 
 const ctx = { network: 'moderato' as const }
@@ -183,6 +183,59 @@ describe('runMessage', () => {
 
   it('a run without a note still renders', () => {
     expect(() => runMessage(run({ note: null }), ctx)).not.toThrow()
+  })
+})
+
+describe('a run autopilot released after its veto window: nobody approved this run, so the status never says "Approved by"', () => {
+  const POLICY_APPROVER = '300000000000000003'
+  const released = { version: 2, policyApprovedBy: POLICY_APPROVER }
+  const statusOf = (m: Message) => m.embeds?.[0]?.fields?.find((f) => f.name === 'Status')?.value ?? ''
+  /** The policy run behind the fixture runs (approved at T0 + 1 s): autopilot, its window over at T0. */
+  const policyRun = (over: Partial<PolicyRun> = {}): PolicyRun => ({
+    ...newPolicyRun({ id: 'prun_1', policyId: 'pol_1', policyVersion: 2, communityId: GUILD, mode: 'autopilot', window: { start: new Date(T0.getTime() - 7 * 86_400_000), end: T0 }, runId: 'run_view01', now: T0, leaseUntil: T0 }),
+    status: 'released',
+    executeAfter: T0,
+    releasedBy: TREASURER,
+    releasedAt: new Date(T0.getTime() + 2000),
+    ...over,
+  })
+
+  it('paid: on autopilot after the veto window, no veto, and who approved the policy version (and who switched autopilot on, when that is someone else)', () => {
+    const status = statusOf(runMessage(paid(), { ...ctx, released }))
+    expect(status).toMatch(new RegExp(`^Paid on autopilot after the veto window <t:\\d+:R>; no veto\\. Policy approved by <@${POLICY_APPROVER}> \\(version 2\\)\\. Autopilot switched on by <@${TREASURER}>\\.\\n`))
+    expect(status).toContain(`/tx/${TX}`)
+    expect(status).not.toMatch(/Approved by/)
+    // The same person approved the policy and switched autopilot on: said once.
+    const same = statusOf(runMessage(paid(), { ...ctx, released: { version: 1, policyApprovedBy: TREASURER } }))
+    expect(same).toMatch(new RegExp(`no veto\\. Policy approved by <@${TREASURER}> \\(version 1\\)\\.\\n`))
+    expect(same).not.toContain('switched on')
+  })
+
+  it('paying, and approved but not paid yet (a key problem): released on autopilot, never "Approved by"', () => {
+    for (const r of [approved(), executing()]) expect(statusOf(runMessage(r, { ...ctx, released }))).toBe('Released on autopilot after the veto window; no veto. Paying…')
+    expect(statusOf(runMessage(failed('rejected'), { ...ctx, released, paying: true }))).toBe('Released on autopilot after the veto window; no veto. Paying…')
+    const stuck = runMessage(approved(), { ...ctx, released, problem: 'The bot key was revoked.' })
+    expect(statusOf(stuck)).toBe(`Released on autopilot after the veto window; no veto. Policy approved by <@${POLICY_APPROVER}> (version 2). Autopilot switched on by <@${TREASURER}>.`)
+    expect(actions(stuck)).toEqual(['retry', 'cancel'])
+  })
+
+  it('a manual run, or a propose-mode policy run, keeps "Approved by"', () => {
+    expect(statusOf(runMessage(paid(), ctx))).toMatch(new RegExp(`^Paid in one transaction <t:\\d+:R>\\. Approved by <@${TREASURER}>\\.`))
+    const policy = { name: 'Help desk', version: 1, periodStart: T0, periodEnd: T0 }
+    expect(statusOf(runMessage(paid(), { ...ctx, policy }))).toContain(`Approved by <@${TREASURER}>.`)
+    expect(statusOf(runMessage(executing(), { ...ctx, policy }))).toBe(`Approved by <@${TREASURER}>. Paying…`)
+  })
+
+  it('released on autopilot only when autopilot approved it: released, after the window, not vetoed', () => {
+    expect(releasedOnAutopilot(paid(), policyRun(), POLICY_APPROVER)).toEqual(released)
+    // A propose-mode policy run, approved by a person.
+    expect(releasedOnAutopilot(paid(), policyRun({ mode: 'propose', status: 'proposed', executeAfter: null, releasedAt: null, releasedBy: null }), POLICY_APPROVER)).toBeUndefined()
+    // A person approved it during the window (Rolepay then paid it at release): their approval.
+    expect(releasedOnAutopilot(paid(), policyRun({ executeAfter: new Date(T0.getTime() + 60_000) }), POLICY_APPROVER)).toBeUndefined()
+    // Autopilot stopped (held) and a person approved it later.
+    expect(releasedOnAutopilot(paid(), policyRun({ status: 'held', releasedAt: null, releasedBy: null }), POLICY_APPROVER)).toBeUndefined()
+    // Not approved at all.
+    expect(releasedOnAutopilot(pending(), policyRun(), POLICY_APPROVER)).toBeUndefined()
   })
 })
 
