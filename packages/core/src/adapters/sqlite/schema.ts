@@ -180,6 +180,28 @@ export interface AuditEventsTable {
   details: string
 }
 
+export interface AiUsageTable {
+  /** Assigned by the database on insert. */
+  seq: Generated<number>
+  community_id: string
+  purpose: string
+  actor: string
+  model: string
+  input_tokens: number | null
+  cache_creation_input_tokens: number | null
+  cache_read_input_tokens: number | null
+  output_tokens: number | null
+  latency_ms: number | null
+  /** US dollars as decimal text ("0.0108"), or null. */
+  cost_usd: string | null
+  outcome: string
+  created_at: string
+  proposal_id: string | null
+  run_id: string | null
+  policy_id: string | null
+  policy_version: number | null
+}
+
 export interface Database {
   kv: KvTable
   setup_links: SetupLinksTable
@@ -193,4 +215,5 @@ export interface Database {
   policy_versions: PolicyVersionsTable
   policy_runs: PolicyRunsTable
   audit_events: AuditEventsTable
+  ai_usage: AiUsageTable
 }

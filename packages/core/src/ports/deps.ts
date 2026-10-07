@@ -5,7 +5,7 @@ import type { KeyVault } from './keyVault.js'
 import type { PayoutChain } from './payoutChain.js'
 import type { ActivityReader } from './activityReader.js'
 import type { ProposalLog } from './proposalLog.js'
-import type { AuditLog, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, ProposalRepository, RunRepository } from './repositories.js'
+import type { AiUsageRepository, AuditLog, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, ProposalRepository, RunRepository } from './repositories.js'
 import type { RunLeases } from './runLeases.js'
 import type { RunProposer } from './runProposer.js'
 
@@ -20,6 +20,8 @@ export type RolepayDeps = {
     policies: PolicyRepository
     policyRuns: PolicyRunRepository
     audit: AuditLog
+    /** One content-free row per model call: the AI spend. */
+    aiUsage: AiUsageRepository
   }
   vault: KeyVault
   ids: IdGenerator

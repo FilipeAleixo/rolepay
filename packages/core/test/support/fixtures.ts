@@ -1,4 +1,5 @@
 // Test fixtures: valid domain objects with overridable fields.
+import type { NewAiUsage } from '../../src/domain/aiUsage.js'
 import type { BotKey, Community, SetupLink } from '../../src/domain/community.js'
 import type { LinkToken, Payee } from '../../src/domain/payee.js'
 import type { NewAuditEvent } from '../../src/domain/policy/audit.js'
@@ -259,4 +260,27 @@ export function policyRun(over: Partial<PolicyRun> = {}): PolicyRun {
 
 export function auditEvent(over: Partial<NewAuditEvent> = {}): NewAuditEvent {
   return { communityId: GUILD, at: T0, type: 'policy.created', actor: TREASURER, policyId: 'pol_fixture01', policyVersion: 1, policyRunId: null, runId: null, details: { mode: 'propose' }, ...over }
+}
+
+/** A warm message-mode proposal on Sonnet 5.5 that was drafted. */
+export function aiUsage(over: Partial<NewAiUsage> = {}): NewAiUsage {
+  return {
+    communityId: GUILD,
+    purpose: 'proposal_messages',
+    actor: TREASURER,
+    model: 'claude-sonnet-5-5',
+    inputTokens: 412,
+    cacheCreationInputTokens: 0,
+    cacheReadInputTokens: 1844,
+    outputTokens: 300,
+    latencyMs: 2100,
+    costMicroUsd: 3_869n,
+    outcome: 'proposed',
+    createdAt: T0,
+    proposalId: 'prop_fixture01',
+    runId: null,
+    policyId: null,
+    policyVersion: null,
+    ...over,
+  }
 }

@@ -1,13 +1,18 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import BetterSqlite3 from 'better-sqlite3'
+import { Kysely, SqliteDialect } from 'kysely'
 import { afterAll, describe, expect, it } from 'vitest'
 import { keyValueContract } from '../../../test/support/keyValueContract.js'
 import { policyRepositoryContract } from '../../../test/support/policyRepositoryContract.js'
 import { proposalRepositoryContract } from '../../../test/support/proposalRepositoryContract.js'
 import { repositoryContracts } from '../../../test/support/repositoryContracts.js'
 import * as f from '../../../test/support/fixtures.js'
-import { openSqliteDatabase } from './index.js'
+import { type Database, openSqliteDatabase } from './index.js'
+import { migrateTo } from './migrations.js'
+import { SqliteAuditLog, SqlitePolicyRepository } from './policyRepositories.js'
+import { SqliteCommunityRepository, SqliteRunRepository } from './repositories.js'
 
 // Real SQLite on a temp file (not :memory:), so file-level behaviour is exercised too.
 const dir = mkdtempSync(join(tmpdir(), 'rolepay-sqlite-'))
@@ -40,6 +45,34 @@ describe('sqlite: migrations and persistence', () => {
     opened.push(b)
     expect(await b.repositories.communities.get(f.GUILD)).toEqual(f.community())
     expect(await b.repositories.runs.get('run_fixture01')).toEqual(f.run())
+  })
+
+  it('0007 adds ai_usage to a database the earlier migrations made, with rows in it, and keeps them', async () => {
+    const path = join(dir, 'before-ai-usage.db')
+    const sqlite = new BetterSqlite3(path)
+    sqlite.pragma('foreign_keys = ON')
+    const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+    await migrateTo(before as unknown as Kysely<unknown>, '0006_policies')
+    await new SqliteCommunityRepository(before).insert(f.community())
+    await new SqliteRunRepository(before).insert(f.run())
+    await new SqlitePolicyRepository(before).insert(f.policy(), f.policyVersion())
+    const event = await new SqliteAuditLog(before).append(f.auditEvent())
+    const tables = () => (sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((t) => t.name)
+    expect(tables()).not.toContain('ai_usage')
+    await before.destroy()
+
+    const after = await openSqliteDatabase(path)
+    expect(await after.repositories.communities.get(f.GUILD)).toEqual(f.community())
+    expect(await after.repositories.runs.get('run_fixture01')).toEqual(f.run())
+    expect(await after.repositories.policies.get('pol_fixture01')).toEqual(f.policy())
+    expect(await after.repositories.audit.query({ guildId: f.GUILD, types: [], actor: null, policyId: null, runId: null, since: null, until: null, before: null, limit: 10 })).toEqual([event])
+    const row = await after.repositories.aiUsage.append(f.aiUsage())
+    expect(await after.repositories.aiUsage.list(f.GUILD)).toEqual([row])
+    await after.close()
+    // Opening again runs nothing twice.
+    const again = await openSqliteDatabase(path)
+    opened.push(again)
+    expect(await again.repositories.aiUsage.list(f.GUILD)).toEqual([row])
   })
 
   it('keeps key-value records across reopen', async () => {

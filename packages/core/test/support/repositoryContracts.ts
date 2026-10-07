@@ -1,13 +1,14 @@
 // Behavioural contracts every repository implementation must satisfy. Run against the
 // in-memory fakes (so unit tests can trust them) and against SQLite (so production can).
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { CommunityRepository, PayeeRepository, RunRepository } from '../../src/ports/repositories.js'
+import type { AiUsageRepository, CommunityRepository, PayeeRepository, RunRepository } from '../../src/ports/repositories.js'
 import * as f from './fixtures.js'
 
 export type RepoFactory = () => Promise<{
   communities: CommunityRepository
   payees: PayeeRepository
   runs: RunRepository
+  aiUsage: AiUsageRepository
 }>
 
 export function repositoryContracts(name: string, make: RepoFactory) {
@@ -156,6 +157,64 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       expect((await repo.listByCommunity(f.GUILD, { limit: 1 })).map((r) => r.id)).toEqual(['run_b'])
       expect((await repo.listByStatus('pending_approval')).map((r) => r.id)).toEqual(['run_a'])
       expect((await repo.listByStatus('draft')).map((r) => r.id).sort()).toEqual(['run_b', 'run_c'])
+    })
+  })
+
+  describe(`${name}: AiUsageRepository`, () => {
+    let repo: AiUsageRepository
+    beforeEach(async () => {
+      repo = (await make()).aiUsage
+    })
+
+    it('appends with an increasing sequence number and round-trips every field (nulls, bigints, dates) exactly', async () => {
+      const a = await repo.append(f.aiUsage())
+      const failed = f.aiUsage({
+        purpose: 'policy_compile',
+        model: 'claude-opus-5-5',
+        inputTokens: null,
+        cacheCreationInputTokens: null,
+        cacheReadInputTokens: null,
+        outputTokens: null,
+        latencyMs: null,
+        costMicroUsd: null,
+        outcome: 'could_not_propose',
+        createdAt: f.at(1),
+        proposalId: null,
+      })
+      const b = await repo.append(failed)
+      const compiled = await repo.append(f.aiUsage({ purpose: 'policy_compile', proposalId: null, policyId: 'pol_fixture01', policyVersion: 2, costMicroUsd: 123_456_789_012n, createdAt: f.at(2) }))
+      expect(a).toEqual({ ...f.aiUsage(), seq: a.seq })
+      expect(b.seq).toBeGreaterThan(a.seq)
+      expect(await repo.list(f.GUILD)).toEqual([compiled, { ...failed, seq: b.seq }, a])
+    })
+
+    it('lists per community, newest first, by purpose, policy, time and a limit', async () => {
+      const older = await repo.append(f.aiUsage({ createdAt: f.at(1) }))
+      const criteria = await repo.append(f.aiUsage({ purpose: 'proposal_criteria', createdAt: f.at(2), proposalId: 'prop_2' }))
+      const compile = await repo.append(f.aiUsage({ purpose: 'policy_compile', createdAt: f.at(3), proposalId: null, policyId: 'pol_fixture01', policyVersion: 1 }))
+      await repo.append(f.aiUsage({ communityId: f.OTHER_GUILD, createdAt: f.at(4) }))
+      expect(await repo.list(f.GUILD)).toEqual([compile, criteria, older])
+      expect(await repo.list(f.GUILD, { purposes: ['proposal_messages', 'proposal_criteria'] })).toEqual([criteria, older])
+      expect(await repo.list(f.GUILD, { policyId: 'pol_fixture01' })).toEqual([compile])
+      expect(await repo.list(f.GUILD, { since: f.at(2) })).toEqual([compile, criteria])
+      expect(await repo.list(f.GUILD, { limit: 1 })).toEqual([compile])
+      expect(await repo.list(f.GUILD, { purposes: [] })).toEqual([])
+    })
+
+    it('links a proposal\'s rows to the pay run it became, and nothing else', async () => {
+      const mine = await repo.append(f.aiUsage())
+      const other = await repo.append(f.aiUsage({ proposalId: 'prop_other', createdAt: f.at(1) }))
+      await repo.linkRun('prop_fixture01', 'run_000009')
+      expect(await repo.list(f.GUILD)).toEqual([other, { ...mine, runId: 'run_000009' }])
+      await repo.linkRun('prop_unknown', 'run_000010')
+      expect((await repo.list(f.GUILD)).map((r) => r.runId)).toEqual([null, 'run_000009'])
+    })
+
+    it('hands out copies', async () => {
+      await repo.append(f.aiUsage())
+      const got = (await repo.list(f.GUILD))[0]
+      if (got) got.model = 'mutated'
+      expect((await repo.list(f.GUILD))[0]?.model).toBe('claude-sonnet-5-5')
     })
   })
 }

@@ -1,3 +1,4 @@
+import type { AiUsage, AiUsagePurpose, NewAiUsage } from '../../domain/aiUsage.js'
 import type { BotKey, Community, SetupLink } from '../../domain/community.js'
 import type { LinkToken, Payee } from '../../domain/payee.js'
 import type { AuditEvent, AuditQuery, NewAuditEvent } from '../../domain/policy/audit.js'
@@ -6,7 +7,7 @@ import type { PolicyRun, PolicyRunStatus } from '../../domain/policy/policyRun.j
 import { err, ok } from '../../domain/result.js'
 import type { Run } from '../../domain/run.js'
 import type { Clock } from '../../ports/clock.js'
-import type { AuditLog, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, RunRepository } from '../../ports/repositories.js'
+import type { AiUsageRepository, AuditLog, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, RunRepository } from '../../ports/repositories.js'
 import { KvProposalRepository } from '../kv/proposals.js'
 import { MemoryKeyValueStore } from './keyValue.js'
 
@@ -208,6 +209,31 @@ export class MemoryAuditLog implements AuditLog {
   }
 }
 
+export class MemoryAiUsageRepository implements AiUsageRepository {
+  private rows: AiUsage[] = []
+
+  async append(row: NewAiUsage) {
+    const stored = { ...copy(row), seq: this.rows.length + 1 }
+    this.rows.push(stored)
+    return copy(stored)
+  }
+  async linkRun(proposalId: string, runId: string) {
+    this.rows = this.rows.map((r) => (r.proposalId === proposalId ? { ...r, runId } : r))
+  }
+  async list(communityId: string, opts: { purposes?: readonly AiUsagePurpose[]; policyId?: string; since?: Date; limit?: number } = {}) {
+    const all = this.rows
+      .filter(
+        (r) =>
+          r.communityId === communityId &&
+          (!opts.purposes || opts.purposes.includes(r.purpose)) &&
+          (!opts.policyId || r.policyId === opts.policyId) &&
+          (!opts.since || r.createdAt >= opts.since),
+      )
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || b.seq - a.seq)
+    return all.slice(0, opts.limit ?? all.length).map(copy)
+  }
+}
+
 export function createMemoryRepositories(opts: { clock?: Clock } = {}) {
   const clock = opts.clock ?? { now: () => new Date() }
   return {
@@ -218,5 +244,6 @@ export function createMemoryRepositories(opts: { clock?: Clock } = {}) {
     policies: new MemoryPolicyRepository(),
     policyRuns: new MemoryPolicyRunRepository(),
     audit: new MemoryAuditLog(),
+    aiUsage: new MemoryAiUsageRepository(),
   }
 }

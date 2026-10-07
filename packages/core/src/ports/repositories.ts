@@ -1,3 +1,4 @@
+import type { AiUsage, AiUsagePurpose, NewAiUsage } from '../domain/aiUsage.js'
 import type { BotKey, Community, SetupLink } from '../domain/community.js'
 import type { LinkToken, Payee } from '../domain/payee.js'
 import type { AuditEvent, AuditQuery, NewAuditEvent } from '../domain/policy/audit.js'
@@ -101,4 +102,17 @@ export interface AuditLog {
   append(event: NewAuditEvent): Promise<AuditEvent>
   /** Newest first, filtered (see AuditQuery). */
   query(query: AuditQuery): Promise<AuditEvent[]>
+}
+
+/**
+ * One content-free row per model call: the AI spend. Append-only; the one change is the link from
+ * a proposal's rows to the pay run it became.
+ */
+export interface AiUsageRepository {
+  /** Stores the row and returns it with its sequence number (increasing). */
+  append(row: NewAiUsage): Promise<AiUsage>
+  /** Sets the pay run on this proposal's rows. */
+  linkRun(proposalId: string, runId: string): Promise<void>
+  /** Newest first, filtered by purpose, policy and time. */
+  list(communityId: string, opts?: { purposes?: readonly AiUsagePurpose[]; policyId?: string; since?: Date; limit?: number }): Promise<AiUsage[]>
 }

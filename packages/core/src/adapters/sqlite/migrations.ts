@@ -235,6 +235,36 @@ const migrations: Record<string, Migration> = {
       await db.schema.createIndex('audit_events_run').on('audit_events').column('run_id').execute()
     },
   },
+  '0007_ai_usage': {
+    async up(db: Kysely<unknown>) {
+      // One row per model call: counts, codes, IDs and the estimated cost (decimal USD text, NUMERIC
+      // on Postgres), never any text. `seq` is the row ID (an identity column on Postgres). A new
+      // table only, so it applies to a database with data as to an empty one.
+      await db.schema
+        .createTable('ai_usage')
+        .addColumn('seq', 'integer', (c) => c.primaryKey())
+        .addColumn('community_id', 'text', (c) => c.notNull())
+        .addColumn('purpose', 'text', (c) => c.notNull())
+        .addColumn('actor', 'text', (c) => c.notNull())
+        .addColumn('model', 'text', (c) => c.notNull())
+        .addColumn('input_tokens', 'integer')
+        .addColumn('cache_creation_input_tokens', 'integer')
+        .addColumn('cache_read_input_tokens', 'integer')
+        .addColumn('output_tokens', 'integer')
+        .addColumn('latency_ms', 'integer')
+        .addColumn('cost_usd', 'text')
+        .addColumn('outcome', 'text', (c) => c.notNull())
+        .addColumn('created_at', 'text', (c) => c.notNull())
+        .addColumn('proposal_id', 'text')
+        .addColumn('run_id', 'text')
+        .addColumn('policy_id', 'text')
+        .addColumn('policy_version', 'integer')
+        .execute()
+      await db.schema.createIndex('ai_usage_community').on('ai_usage').columns(['community_id', 'created_at']).execute()
+      await db.schema.createIndex('ai_usage_proposal').on('ai_usage').column('proposal_id').execute()
+      await db.schema.createIndex('ai_usage_policy').on('ai_usage').column('policy_id').execute()
+    },
+  },
 }
 
 class InlineMigrations implements MigrationProvider {
@@ -244,7 +274,15 @@ class InlineMigrations implements MigrationProvider {
 }
 
 export async function migrateToLatest(db: Kysely<unknown>) {
-  const { error, results } = await new Migrator({ db, provider: new InlineMigrations() }).migrateToLatest()
+  check(await new Migrator({ db, provider: new InlineMigrations() }).migrateToLatest())
+}
+
+/** Up to and including `name` only: tests build a database as an earlier release left it. */
+export async function migrateTo(db: Kysely<unknown>, name: string) {
+  check(await new Migrator({ db, provider: new InlineMigrations() }).migrateTo(name))
+}
+
+function check({ error, results }: Awaited<ReturnType<Migrator['migrateToLatest']>>) {
   const failed = results?.find((r) => r.status === 'Error')
   if (error || failed) throw new Error(`migration failed: ${failed?.migrationName ?? ''} ${String(error ?? '')}`)
 }

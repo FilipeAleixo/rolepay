@@ -3,6 +3,7 @@ export { FakePayoutChain } from './fakeChain.js'
 export { FakeRunProposer, emptyCriteria, naiveMessageProposal, unclearCriteria } from './fakeProposer.js'
 export { MemoryKeyValueStore } from './keyValue.js'
 export {
+  MemoryAiUsageRepository,
   MemoryAuditLog,
   MemoryCommunityRepository,
   MemoryPolicyRepository,
