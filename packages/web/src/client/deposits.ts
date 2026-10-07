@@ -43,11 +43,91 @@ export const describeRegistration = (r: Registration) =>
   `register this account as the owner of the deposit addresses that start with ${r.masterId} (one call, registerVirtualMaster, to Tempo's address registry ${r.call.to}). It moves no money.`
 
 /**
- * Mines a salt that passes the registry's 32-bit proof of work for `treasury`, with WebAssembly in
- * Web Workers (all but one of this device's cores): about 4 billion tries on average, under a minute
- * to a few minutes. `start` resumes after an earlier salt whose masterId was taken.
+ * The salt search stopped making progress (no worker reported for a while). The page says so
+ * instead of waiting for ever.
  */
-export async function mineSalt(treasury: string, onProgress: (tries: number) => void, start = 0n): Promise<{ salt: string; masterId: string } | null> {
-  const found = await VirtualMaster.mineSaltAsync({ address: treasury as Hex, start, onProgress: (p) => onProgress(p.attempts) })
-  return found ? { salt: found.salt, masterId: found.masterId.toLowerCase() } : null
+export class MiningStalled extends Error {
+  constructor() {
+    super('the browser stopped finding a registration code')
+    this.name = 'MiningStalled'
+  }
+}
+
+/**
+ * Put in front of the source of ox's mining worker (viem's `VirtualMaster.mineSaltAsync`, ox
+ * 0.14.45). That worker sets `self.onmessage` only after `WebAssembly.instantiate` resolves, while
+ * the page posts each worker its start message at once: a message that arrives first has no
+ * handler and is dropped, so that worker never mines, and when none starts the promise never
+ * settles. Seen in Chromium on 2026-10-07: no progress at all, or a fraction of the workers (4
+ * million tries a second instead of 42). Node's worker_threads queue messages until a listener is
+ * attached, which is why it works there. This queues messages until onmessage is set, then hands
+ * them over in order, once.
+ */
+export const WORKER_QUEUE_SHIM =
+  "(function(){var q=[];var h=null;self.addEventListener('message',function(e){if(!h)q.push(e)});" +
+  "Object.defineProperty(self,'onmessage',{configurable:true,get:function(){return h},set:function(f){h=f;" +
+  "self.addEventListener('message',function(e){f.call(self,e)});var p=q;q=[];p.forEach(function(e){f.call(self,e)})}})})();\n"
+
+/**
+ * Runs `work` with `Blob` replaced, so that the JavaScript source of ox's miner (it builds its
+ * workers from a Blob URL, once, on its first search) gets the shim in front. Every other Blob is
+ * made as usual, and `Blob` is restored when `work` ends, however it ends.
+ */
+export async function withQueuedWorkerMessages<T>(work: () => Promise<T>): Promise<T> {
+  const Original = globalThis.Blob
+  globalThis.Blob = class extends Original {
+    constructor(parts?: BlobPart[], options?: BlobPropertyBag) {
+      const isMiner = options?.type === 'application/javascript' && typeof parts?.[0] === 'string' && parts[0].includes('mineLoop')
+      super(isMiner ? [WORKER_QUEUE_SHIM, ...(parts ?? [])] : parts, options)
+    }
+  } as typeof Blob
+  try {
+    return await work()
+  } finally {
+    globalThis.Blob = Original
+  }
+}
+
+type Miner = typeof VirtualMaster.mineSaltAsync
+
+/**
+ * Mines a salt that passes the registry's 32-bit proof of work for `treasury`, with WebAssembly in
+ * Web Workers (all but one of this device's cores): about 4.3 billion tries on average, about a
+ * minute and a half on a recent laptop. `start` resumes after an earlier salt whose masterId was
+ * taken. Stops with `MiningStalled` when no progress comes for `stallMs` (15 s).
+ */
+export async function mineSalt(
+  treasury: string,
+  onProgress: (tries: number) => void,
+  start = 0n,
+  deps: { mine?: Miner; stallMs?: number } = {},
+): Promise<{ salt: string; masterId: string } | null> {
+  const mine = deps.mine ?? VirtualMaster.mineSaltAsync
+  const stallMs = deps.stallMs ?? 15_000
+  const abort = new AbortController()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const watch = () => {
+    clearTimeout(timer)
+    timer = setTimeout(() => abort.abort(new MiningStalled()), stallMs)
+  }
+  watch()
+  try {
+    const found = await withQueuedWorkerMessages(() =>
+      mine({
+        address: treasury as Hex,
+        start,
+        signal: abort.signal,
+        onProgress: (p) => {
+          watch()
+          onProgress(p.attempts)
+        },
+      }),
+    )
+    return found ? { salt: found.salt, masterId: found.masterId.toLowerCase() } : null
+  } catch (error) {
+    if (abort.signal.aborted && abort.signal.reason instanceof MiningStalled) throw abort.signal.reason
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
 }

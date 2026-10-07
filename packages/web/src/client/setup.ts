@@ -1,6 +1,6 @@
 // The treasurer setup page: the community account (passkey as root), funding, and the bot
 // key's authorisation and revocation, signed with the passkey.
-import { type Registration, buildRegistration, describeRegistration, mineSalt, registrationMismatch } from './deposits.js'
+import { MiningStalled, type Registration, buildRegistration, describeRegistration, mineSalt, registrationMismatch } from './deposits.js'
 import { $, busy, explainPasskeyError, fill, formatMicros, get, post, shortAddress, show, status } from './dom.js'
 import { treasuryFeeToken } from './fees.js'
 import { type KeyForm, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
@@ -290,7 +290,11 @@ export function startSetup(config: SetupConfig) {
     let start = 0n
     for (let round = 0; round < 3; round++) {
       status('Finding a registration code for this account (a proof of work Tempo asks for). Keep this page open: usually under a minute...')
-      const mined = await mineSalt(treasury, (tries) => status(`Finding a registration code: ${Math.floor(tries / 1_000_000).toLocaleString()} million tries so far (about 4,300 million on average)...`), start)
+      const mined = await mineSalt(treasury, (tries) => status(`Finding a registration code: ${Math.floor(tries / 1_000_000).toLocaleString()} million tries so far (about 4,300 million on average)...`), start).catch((error: unknown) => {
+        if (error instanceof MiningStalled) return 'stalled' as const
+        throw error
+      })
+      if (mined === 'stalled') return status('This browser stopped working on the registration code. Nothing was signed. Reload the page and try again, with this tab in front.', 'bad')
       if (!mined) return status('No registration code was found. Try again.', 'bad')
       const mine = buildRegistration(treasury, mined.salt)
       if (!mine) return status('Nothing was signed: this account cannot own deposit addresses.', 'bad')
