@@ -8,6 +8,21 @@ Communities pay moderators, staff and bounty winners every month. Today that usu
 - A treasurer approves it with one button.
 - Everyone is paid in one batched stablecoin transaction. Each payout carries a memo, recipients need no wallet and pay no gas, and the run exports to CSV for accounting.
 
+## Try it
+
+A demo runs on Tempo's Moderato testnet at <https://demo.rolepay.app>: test dollars only, nothing real moves.
+
+**[TO FILL: the demo server invite link.]**
+
+In about two minutes, as a recipient:
+
+1. Join the demo Discord server and run `/payee link`. Only you see the reply.
+2. Open the link and press **Create my passkey**, then confirm with your fingerprint or face. That is your Tempo account: no wallet, no seed phrase, nothing to install, no gas.
+3. **[TO FILL: what gets a judge paid, for example a message in #bounties, and who approves the run and when.]** The treasurer can draft the run with AI from the channel (right-click a message, Apps > Propose pay run) and approves it with one click.
+4. You get a DM receipt with your amount, and the transaction on Tempo's explorer shows everyone paid in one batch, each line with its memo.
+
+**[TO FILL, optional: the treasurer side in your own server, about five minutes: invite the bot, `/rolepay setup approver_role:@Treasurer`, create the treasury with a passkey, get testnet funds, authorise the bot key, `/rolepay new`, Approve.]**
+
 ## The trust model
 
 The community's own Tempo account holds the money. The bot never does.
@@ -36,7 +51,7 @@ AI proposes, the protocol limits, a human approves.
 - `packages/web`: the claim and treasurer setup pages (passkeys).
 - `apps/server`: the composition root (Hono).
 
-See `docs/ARCHITECTURE.md` for the design and `apps/server/README.md` to run it. The hosted servers are planned at `demo.rolepay.app` (the testnet demo) and `app.rolepay.app` (mainnet).
+See `docs/ARCHITECTURE.md` for the design and `apps/server/README.md` to run it (and, under "Deploying", how the hosted servers run on Fly.io). The testnet demo runs at `demo.rolepay.app`; mainnet is planned at `app.rolepay.app`.
 
 Rolepay was called payrun while it was built. Settings, data and Discord messages from then keep working: see "Renamed from payrun" in `docs/ARCHITECTURE.md`.
 
