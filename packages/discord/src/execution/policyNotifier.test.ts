@@ -1,3 +1,4 @@
+import type { Schedule } from '@rolepay/core'
 import { emptyCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { text } from '../../test/app.js'
@@ -12,7 +13,7 @@ const asTreasurer = { guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER
 const MONDAY = new Date('2026-10-12T18:00:00Z')
 
 /** A community whose help desk policy (1 per answer in #help, Mods) is approved; Alice answered 3 questions, Bob 1. */
-async function world(opts: { limit?: string; autopilot?: boolean; channel?: string | null } = {}) {
+async function world(opts: { limit?: string; autopilot?: boolean; channel?: string | null; schedule?: Schedule } = {}) {
   const h = await harness()
   await h.setupCommunity({ limit: opts.limit ?? '1000' })
   await h.registerAll()
@@ -33,7 +34,7 @@ async function world(opts: { limit?: string; autopilot?: boolean; channel?: stri
     ...asTreasurer,
     name: 'Help desk',
     instruction: '1 per answered question in #help, max 50 a week each, for Mods',
-    schedule: { kind: 'weekly', weekday: 'monday', hour: 18 },
+    schedule: opts.schedule ?? { kind: 'weekly', weekday: 'monday', hour: 18 },
     channelId: opts.channel === undefined ? CHANNEL : opts.channel,
   })
   if (!created.ok) throw new Error(JSON.stringify(created.error))
@@ -131,10 +132,36 @@ describe('createPolicyNotifier: telling the channel what the scheduler did', () 
     expect(text(w.rest.channelPosts.at(-1)?.message)).toContain('nobody matched')
   })
 
+  it('a daily policy (the judge demo) says nothing on a day nobody matched: no run, no post; the audit log records it quietly', async () => {
+    const w = await world({ schedule: { kind: 'daily', hour: 18, timezone: 'UTC' } })
+    // The day to 7 October 18:00 has no answers in #help (they were on the 6th, before the 18:00 run).
+    await w.travelTo(new Date('2026-10-07T18:00:00Z'))
+    const report = await w.rolepay.scheduler.tick()
+    expect(report.events.map((e) => [e.kind, e.policyRun.status, e.run])).toEqual([['generated', 'empty', null]])
+    await w.notifier.announce(report.events)
+    expect(w.rest.channelPosts).toEqual([])
+    const audit = await w.rolepay.audit.list({ guildId: GUILD, types: ['policy_run.empty'] })
+    expect(audit.ok && audit.value.events).toHaveLength(1)
+  })
+
   it('a policy with no channel posts nothing (the dashboard shows its runs)', async () => {
     const w = await world({ channel: null })
     await w.travelTo(MONDAY)
     await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
     expect(w.rest.channelPosts).toEqual([])
+  })
+
+  it('a policy with no channel still sends each payee their receipt when autopilot pays, once', async () => {
+    const w = await world({ channel: null, autopilot: true })
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    await w.sleep(3600 * 1000)
+    const released = await w.rolepay.scheduler.tick()
+    expect(released.events.map((e) => [e.kind, e.outcome])).toEqual([['released', 'paid']])
+    await w.notifier.announce(released.events)
+    await w.notifier.announce(released.events)
+    expect(w.rest.dms.map((d) => d.userId).sort()).toEqual([ALICE, BOB])
+    expect(w.rest.channelPosts).toEqual([])
+    expect(w.rest.channelEdits).toEqual([])
   })
 })

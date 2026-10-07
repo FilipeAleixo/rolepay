@@ -1,4 +1,4 @@
-import { type Community, POLICY_LIMITS, PROPOSAL_LIMITS, type Rolepay, type Schedule, WEEKDAYS, canPropose, isTimezone, parseAmount } from '@rolepay/core'
+import { type Community, POLICY_LIMITS, PROPOSAL_LIMITS, type Rolepay, type Schedule, WEEKDAYS, canPropose, isTimezone, parseAmount, quietWhenEmpty } from '@rolepay/core'
 import { z } from 'zod'
 import { demoControlsOn } from '../app/deps.js'
 import { type AutocompleteHandler, type CommandHandler, type GuildContext, parseOptions, replyError } from '../app/handlers.js'
@@ -186,7 +186,13 @@ export const policyRunNowCommand: CommandHandler = async ({ options, ctx }, { ro
       const r = await rolepay.scheduler.runNow({ ...actorOf(ctx), policyId: parsed.value.policy })
       if (!r.ok) return { ok: false, message: { content: explainPolicyError(r.error, { community: guard.community }) } }
       await announcer?.announce([r.value])
-      const where = r.value.policy.channelId ? ` and posted it in <#${r.value.policy.channelId}>` : ' (this policy posts nowhere in Discord; the dashboard shows it)'
+      const { policy, policyRun } = r.value
+      if (policyRun.status === 'empty') {
+        const quiet = quietWhenEmpty(policy.schedule)
+        const said = quiet ? ' Nothing was posted: a daily policy stays quiet on empty days (the audit log records them).' : policy.channelId ? ` A line in <#${policy.channelId}> says so.` : ''
+        return { ok: true, message: { content: `Nobody matched for the next period, so no run was made.${said}` } }
+      }
+      const where = policy.channelId ? ` and posted it in <#${policy.channelId}>` : ' (this policy posts nowhere in Discord; the dashboard shows it)'
       return { ok: true, message: { content: `Made the next run of this policy now${where}.` } }
     },
   }

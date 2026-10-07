@@ -40,6 +40,13 @@ export type Schedule = z.infer<typeof ScheduleSchema>
  */
 export const scheduleAllowed = (s: Pick<Schedule, 'kind'>, opts: { demoControls: boolean }) => s.kind !== 'daily' || opts.demoControls
 
+/**
+ * Whether a period where nobody matched goes unannounced. A daily policy's empty days would be a
+ * line in the channel every day (the judge demo waits most days for someone new), so only the
+ * audit log records them; a weekly or monthly policy says so in one line.
+ */
+export const quietWhenEmpty = (s: Pick<Schedule, 'kind'>) => s.kind === 'daily'
+
 /** A calendar date in the schedule's timezone. Month is 1-12. */
 type LocalDate = { y: number; m: number; d: number }
 

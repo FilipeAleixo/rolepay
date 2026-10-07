@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Schedule, ScheduleSchema, describeSchedule, isTimezone, nextOccurrence, occurrenceAtOrBefore, periodEnding, periodKey } from './schedule.js'
+import { type Schedule, ScheduleSchema, describeSchedule, isTimezone, nextOccurrence, occurrenceAtOrBefore, periodEnding, periodKey, quietWhenEmpty, scheduleAllowed } from './schedule.js'
 
 const weekly = (over: Partial<Extract<Schedule, { kind: 'weekly' }>> = {}): Schedule => ({ kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC', ...over })
 const monthly = (over: Partial<Extract<Schedule, { kind: 'monthly' }>> = {}): Schedule => ({ kind: 'monthly', day: 1, hour: 9, timezone: 'UTC', ...over })
@@ -100,6 +100,13 @@ describe('schedule: monthly', () => {
 
 describe('schedule: daily (the testnet demo controls only; the services refuse it elsewhere)', () => {
   const daily = (over: Partial<Extract<Schedule, { kind: 'daily' }>> = {}): Schedule => ({ kind: 'daily', hour: 18, timezone: 'UTC', ...over })
+
+  it('exists only with the demo controls; its empty days are not announced (one line a day would be noise)', () => {
+    expect(scheduleAllowed(daily(), { demoControls: false })).toBe(false)
+    expect(scheduleAllowed(daily(), { demoControls: true })).toBe(true)
+    expect(scheduleAllowed(weekly(), { demoControls: false })).toBe(true)
+    expect([quietWhenEmpty(daily()), quietWhenEmpty(weekly()), quietWhenEmpty(monthly())]).toEqual([true, false, false])
+  })
 
   it('is an hour in an IANA timezone, UTC by default, and says itself in plain words', () => {
     expect(ScheduleSchema.parse({ kind: 'daily', hour: 18 })).toEqual(daily())

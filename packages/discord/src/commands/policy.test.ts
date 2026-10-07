@@ -120,6 +120,25 @@ describe('/rolepay policy new schedule:daily (a demo control: the judge demo)', 
     expect(shown).toContain('every day at 18:00 (UTC)')
   })
 
+  it('run_now when nobody matches: the caller is told no run was made; a daily policy posts nothing, a weekly one says so in its channel', async () => {
+    for (const [schedule, posts] of [
+      ['daily', 0],
+      ['weekly', 1],
+    ] as const) {
+      const a = await ready()
+      // A rule nobody registered meets: the Treasurer role.
+      a.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' } }, { hasRole: ['R1'] })
+      const { policyId } = await newPolicy(a, { instruction: '1 to every Treasurer', schedule })
+      await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
+      const before = a.rest.channelPosts.length
+      await a.send(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: policyId }, treasurer, `tok-empty-${schedule}`))
+      const said = text(a.rest.lastEdit(`tok-empty-${schedule}`))
+      expect([schedule, said]).toEqual([schedule, expect.stringContaining('Nobody matched for the next period, so no run was made')])
+      expect([schedule, a.rest.channelPosts.length - before]).toEqual([schedule, posts])
+      if (schedule === 'daily') expect(said).toContain('a daily policy stays quiet on empty days')
+    }
+  })
+
   it('without them it is refused before the model is called, even with the dev shortcuts on; off Moderato too', async () => {
     for (const config of [{ devShortcuts: true, demoControls: false }, { network: 'mainnet' as const, demoControls: true }]) {
       const a = await ready({ config })
