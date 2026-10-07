@@ -2,11 +2,12 @@ import type { Result } from '@rolepay/core'
 
 /**
  * THE POLICY SEAM. The dashboard's Policies and Audit pages read and act through these two ports,
- * never through core's policy services directly, because those were built on another branch. The
- * server wires them with a thin adapter over core's `PolicyService` and the `AuditEvent` stream
- * (apps/server, see docs/ARCHITECTURE.md "The policy seam"); tests and the browser e2e use
- * `InMemoryPolicies` from `@rolepay/web/testing`. Without them the pages say policies are not
- * available on this server.
+ * never through core's policy services directly: the types stay plain (Dates, bigint micro-units,
+ * words written by code) and the pages stay testable without the AI or Discord. The server wires
+ * them with a thin adapter over core's `PolicyService` and `AuditService` (`policyPortFromCore`
+ * and `auditPortFromCore` in apps/server, see docs/ARCHITECTURE.md "The policy seam"). Tests use
+ * `InMemoryPolicies` from `@rolepay/web/testing`, and the page contract (`@rolepay/web/contract`)
+ * runs the same page tests against both. Without them the pages say policies are not available.
  *
  * Money is bigint micro-units, as everywhere in Rolepay. Times are Dates. Every text field here
  * is shown escaped; none of it may carry Discord message text (only what a run already stores).
@@ -43,7 +44,8 @@ export type PolicyDetail = PolicySummary & {
   ruleInWords: string
   /** The exact compiled filter and amount plan, JSON-safe (bigints as strings). */
   filter: unknown
-  vetoWindowHours: number
+  /** Autopilot: how long a run waits for a veto before it pays. */
+  vetoWindowMinutes: number
   caps: { perRun: bigint | null; perPerson: bigint | null }
   createdBy: string
   createdAt: Date
@@ -59,7 +61,8 @@ export type PolicyMatch = {
   metrics: Record<string, number>
   /** Why they match, in plain words, from the filter (never message text). */
   reasons: string[]
-  amount: bigint
+  /** What the next run would pay them; null when nothing is worked out for them (not registered). */
+  amount: bigint | null
   /** false: they match but have not linked a payout account (`/payee link`), so nothing is paid to them. */
   registered: boolean
 }
@@ -98,6 +101,8 @@ export type ScheduledRunView = { policyId: string; policyName: string; at: Date;
 /** Which policy (and version) generated a run, and its autopilot story. */
 export type RunOrigin = {
   policyId: string
+  /** The policy's run for that period (what a veto acts on). */
+  policyRunId: string
   policyName: string
   version: number
   /** The period the run covers, in words (for example "week of 2026-10-05"). */
@@ -109,6 +114,8 @@ export type RunOrigin = {
   vetoedBy: string | null
   vetoedAt: Date | null
   executedAt: Date | null
+  /** An autopilot run still inside its veto window: a Treasurer may veto it now. */
+  vetoable: boolean
 }
 
 export type PolicyDraft = { name: string; instruction: string; schedule: PolicySchedule }
@@ -140,14 +147,16 @@ export interface PolicyPort {
   pause(input: Ref & { actor: PolicyActor }): Promise<Result<void, PolicyError>>
   resume(input: Ref & { actor: PolicyActor }): Promise<Result<void, PolicyError>>
   archive(input: Ref & { actor: PolicyActor }): Promise<Result<void, PolicyError>>
-  setMode(input: Ref & { actor: PolicyActor; mode: PolicyMode; vetoWindowHours: number }): Promise<Result<void, PolicyError>>
+  setMode(input: Ref & { actor: PolicyActor; mode: PolicyMode; vetoWindowMinutes: number }): Promise<Result<void, PolicyError>>
+  /** Vetoes an autopilot run during its veto window: it is cancelled and nothing is paid. */
+  veto(input: { guildId: string; runId: string; actor: PolicyActor }): Promise<Result<void, PolicyError>>
 }
 
 /** One event of the audit stream: every policy and run event, who did it, and a summary in plain words. */
 export type AuditEventView = {
   id: string
   at: Date
-  /** For example `policy.approved`, `run.vetoed`. */
+  /** For example `policy.approved`, `policy_run.vetoed`. */
   type: string
   /** The Discord user, or null for Rolepay itself (the scheduler). */
   actorId: string | null

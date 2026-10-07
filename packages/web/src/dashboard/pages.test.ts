@@ -80,7 +80,7 @@ describe('Runs', () => {
     const first = await h.run([[ALICE.id, '10']], { note: 'first' })
     h.clock.advance(60)
     const second = await h.run([[BOB.id, '3']], { approve: false, by: MEMBER.id })
-    h.policies.linkRun(GUILD, first.id, { policyId: 'pol_9', policyName: 'Weekly helpers', version: 2, period: 'week of 2026-10-05', mode: 'autopilot', scheduledFor: new Date('2026-10-05T18:00:00Z'), executesAt: null, vetoedBy: null, vetoedAt: null, executedAt: null })
+    h.policies.linkRun(GUILD, first.id, { policyId: 'pol_9', policyRunId: 'prun_1', policyName: 'Weekly helpers', version: 2, period: 'week of 2026-10-05', mode: 'autopilot', scheduledFor: new Date('2026-10-05T18:00:00Z'), executesAt: null, vetoedBy: null, vetoedAt: null, executedAt: null, vetoable: false })
     const { browser } = await h.signIn(identity(MEMBER))
     const html = await (await browser.get(`/dashboard/${GUILD}/runs`)).text()
     const t = text(html)
@@ -98,7 +98,7 @@ describe('Runs', () => {
     const paid = await h.run([[ALICE.id, '10']])
     const pending = await h.run([[BOB.id, '3']], { approve: false })
     h.policies.seed(GUILD, { id: 'pol_9', name: 'Weekly helpers', instruction: 'x' })
-    h.policies.linkRun(GUILD, pending.id, { policyId: 'pol_9', policyName: 'Weekly helpers', version: 1, period: 'p', mode: 'propose', scheduledFor: new Date(), executesAt: null, vetoedBy: null, vetoedAt: null, executedAt: null })
+    h.policies.linkRun(GUILD, pending.id, { policyId: 'pol_9', policyRunId: 'prun_1', policyName: 'Weekly helpers', version: 1, period: 'p', mode: 'propose', scheduledFor: new Date(), executesAt: null, vetoedBy: null, vetoedAt: null, executedAt: null, vetoable: false })
     const { browser } = await h.signIn(identity(MEMBER))
     const byStatus = await (await browser.get(`/dashboard/${GUILD}/runs?status=paid`)).text()
     expect(byStatus).toContain(paid.id)
@@ -161,6 +161,7 @@ describe('Run detail', () => {
     const run = await h.run([[ALICE.id, '10']], { approve: false })
     h.policies.linkRun(GUILD, run.id, {
       policyId: 'pol_9',
+      policyRunId: 'prun_9',
       policyName: 'Weekly helpers',
       version: 3,
       period: 'week of 2026-10-05',
@@ -170,6 +171,7 @@ describe('Run detail', () => {
       vetoedBy: TREASURER.id,
       vetoedAt: new Date('2026-10-06T09:30:00Z'),
       executedAt: null,
+      vetoable: false,
     })
     const { browser } = await h.signIn(identity(MEMBER))
     const html = await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text()

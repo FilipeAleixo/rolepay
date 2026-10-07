@@ -87,7 +87,7 @@ export async function startDashboardServer(port: number) {
       held: null,
     },
   )
-  policies.linkRun(GUILD, run.value.id, { policyId, policyName: 'Weekly helpers', version: 1, period: 'week 40', mode: 'propose', scheduledFor: new Date(), executesAt: null, vetoedBy: null, vetoedAt: null, executedAt: null })
+  policies.linkRun(GUILD, run.value.id, { policyId, policyRunId: 'prun_1', policyName: 'Weekly helpers', version: 1, period: 'week 40', mode: 'propose', scheduledFor: new Date(), executesAt: null, vetoedBy: null, vetoedAt: null, executedAt: null, vetoable: false })
   policies.addEvent(GUILD, { at: new Date(), type: 'run.generated', actorId: null, policyId, runId: run.value.id, summary: 'Generated a run of 62 AlphaUSD for 2 people.' })
 
   const composed = composeServer({

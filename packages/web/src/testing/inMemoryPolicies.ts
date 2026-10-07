@@ -1,4 +1,4 @@
-import type { Result } from '@rolepay/core'
+import { AUDIT_EVENT_TYPES, type Result } from '@rolepay/core'
 import type {
   AuditEventView,
   AuditPort,
@@ -22,30 +22,22 @@ type Ref = { guildId: string; policyId: string }
 const ok = <T>(value: T): Result<T, PolicyError> => ({ ok: true, value })
 const fail = (code: string, message?: string): Result<never, PolicyError> => ({ ok: false, error: message ? { code, message } : { code } })
 
+/** The shortest veto window core allows without the demo controls, in minutes. */
+const MIN_VETO_MINUTES = 60
+const MAX_VETO_MINUTES = 7 * 24 * 60
+
 /**
- * The policy and audit ports in memory, for tests and the browser e2e, until the real policy
- * services are wired (see `policyPort.ts`). Behaves like core is specified to: the approver role
- * is re-checked from the actor's roles on every action (`not_permitted`), an instruction is
- * "compiled" once into a draft (an instruction containing "unclear" cannot be compiled), an edit
- * makes a new version that needs a new approval, and every action lands in the audit stream.
- * `calls` records every action with its actor.
+ * The policy and audit ports in memory, for the dashboard's page tests and the browser e2e of the
+ * pages alone. It behaves the way core does, and the page contract (`@rolepay/web/contract`)
+ * holds the two equal: the approver role is re-checked from the actor's roles on every action
+ * (`not_permitted`); an instruction is "compiled" once into a draft (one containing "unclear"
+ * cannot be compiled); an edit makes a new version and puts the policy back to draft (it stops
+ * running and autopilot is switched off) until that version is approved; discarding an edit goes
+ * back to the last approved version, paused; every action lands in the audit stream. `calls`
+ * records every action with its actor.
  */
 export class InMemoryPolicies implements PolicyPort, AuditPort {
-  readonly eventTypes = [
-    'policy.created',
-    'policy.edited',
-    'policy.approved',
-    'policy.discarded',
-    'policy.paused',
-    'policy.resumed',
-    'policy.mode_changed',
-    'policy.archived',
-    'run.generated',
-    'run.vetoed',
-    'run.approved',
-    'run.executed',
-    'run.failed',
-  ] as const
+  readonly eventTypes: readonly string[] = AUDIT_EVENT_TYPES
   readonly calls: { method: string; guildId: string; policyId?: string; actor: PolicyActor }[] = []
   private readonly policies = new Map<string, Stored>()
   private readonly stream: (AuditEventView & { guildId: string })[] = []
@@ -76,7 +68,7 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
       matchesNow: preview ? preview.matches.length : null,
       ruleInWords: `Pays what "${over.name}" says.`,
       filter: { hasRole: [], messagesIn: null },
-      vetoWindowHours: 24,
+      vetoWindowMinutes: 24 * 60,
       caps: { perRun: null, perPerson: null },
       createdBy: '0',
       createdAt: now,
@@ -85,6 +77,7 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
       pendingVersion: null,
       ...over,
     }
+    if (detail.status === 'draft') detail.pendingVersion = detail.version
     const version: PolicyVersionView = {
       version: detail.version,
       instruction: detail.instruction,
@@ -166,7 +159,6 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
       createdBy: input.actor.id,
       ruleInWords: `Compiled from: ${input.draft.instruction}`,
       filter: { compiledFrom: 'instruction', length: input.draft.instruction.length },
-      pendingVersion: 1,
     })
     this.audit(input.guildId, 'policy.created', input.actor.id, id, `Created "${input.draft.name}" as a draft.`)
     return ok({ policyId: id })
@@ -175,57 +167,75 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
   async edit(input: Ref & { actor: PolicyActor; draft: PolicyDraft }) {
     const p = this.action('edit', input)
     if (!p.ok) return p
-    if (p.value.detail.status === 'archived') return fail('illegal_state')
+    const d = p.value.detail
+    if (d.status === 'archived') return fail('illegal_state')
     if (/unclear/i.test(input.draft.instruction)) return fail('could_not_compile', 'The rule could not be compiled from that instruction.')
     const version = Math.max(...p.value.versions.map((v) => v.version)) + 1
     for (const v of p.value.versions) if (v.status === 'pending') v.status = 'discarded'
-    p.value.versions.push({
-      version,
+    const ruleInWords = `Compiled from: ${input.draft.instruction}`
+    const filter = { compiledFrom: 'instruction', length: input.draft.instruction.length }
+    p.value.versions.push({ version, instruction: input.draft.instruction, ruleInWords, filter, createdBy: input.actor.id, createdAt: this.clock.now(), approvedBy: null, approvedAt: null, status: 'pending' })
+    // Like core: the policy is the new draft now (it stops running, autopilot goes off) until approved.
+    Object.assign(d, {
+      name: input.draft.name,
       instruction: input.draft.instruction,
-      ruleInWords: `Compiled from: ${input.draft.instruction}`,
-      filter: { compiledFrom: 'instruction', length: input.draft.instruction.length },
-      createdBy: input.actor.id,
-      createdAt: this.clock.now(),
+      schedule: input.draft.schedule,
+      ruleInWords,
+      filter,
+      version,
+      status: 'draft',
+      mode: 'propose',
       approvedBy: null,
       approvedAt: null,
-      status: 'pending',
+      nextRunAt: null,
+      pendingVersion: version,
     })
-    p.value.detail.pendingVersion = version
-    this.audit(input.guildId, 'policy.edited', input.actor.id, input.policyId, `Edited "${p.value.detail.name}": version ${version} waits for approval.`)
+    this.audit(input.guildId, 'policy.edited', input.actor.id, input.policyId, `Edited "${d.name}": version ${version} waits for approval.`)
     return ok({ version })
   }
 
   async approve(input: Ref & { actor: PolicyActor; version: number }) {
     const p = this.action('approve', input)
     if (!p.ok) return p
-    const v = p.value.versions.find((x) => x.version === input.version && x.status === 'pending')
+    const d = p.value.detail
+    if (d.status !== 'draft') return fail('illegal_state')
+    if (input.version !== d.version) return fail('version_mismatch')
+    const v = p.value.versions.find((x) => x.version === input.version)
     if (!v) return fail('illegal_state')
     for (const x of p.value.versions) if (x.status === 'approved') x.status = 'superseded'
     Object.assign(v, { status: 'approved', approvedBy: input.actor.id, approvedAt: this.clock.now() })
-    Object.assign(p.value.detail, {
-      status: p.value.detail.status === 'draft' ? 'active' : p.value.detail.status,
-      version: v.version,
-      instruction: v.instruction,
-      ruleInWords: v.ruleInWords,
-      filter: v.filter,
-      approvedBy: input.actor.id,
-      approvedAt: this.clock.now(),
-      pendingVersion: null,
-      nextRunAt: p.value.detail.nextRunAt ?? new Date(this.clock.now().getTime() + 86_400_000),
-    })
-    this.audit(input.guildId, 'policy.approved', input.actor.id, input.policyId, `Approved version ${v.version} of "${p.value.detail.name}".`)
+    Object.assign(d, { status: 'active', approvedBy: input.actor.id, approvedAt: this.clock.now(), pendingVersion: null, nextRunAt: new Date(this.clock.now().getTime() + 86_400_000) })
+    this.audit(input.guildId, 'policy.approved', input.actor.id, input.policyId, `Approved version ${v.version} of "${d.name}".`)
     return ok(undefined)
   }
 
   async discard(input: Ref & { actor: PolicyActor; version: number }) {
     const p = this.action('discard', input)
     if (!p.ok) return p
-    const v = p.value.versions.find((x) => x.version === input.version && x.status === 'pending')
+    const d = p.value.detail
+    if (d.status !== 'draft') return fail('illegal_state')
+    if (input.version !== d.version) return fail('version_mismatch')
+    const v = p.value.versions.find((x) => x.version === input.version)
     if (!v) return fail('illegal_state')
     v.status = 'discarded'
-    p.value.detail.pendingVersion = null
-    if (p.value.detail.status === 'draft') p.value.detail.status = 'archived'
-    this.audit(input.guildId, 'policy.discarded', input.actor.id, input.policyId, `Discarded version ${v.version} of "${p.value.detail.name}".`)
+    // Like core: back to the last approved version, paused; a policy never approved is archived.
+    const prior = p.value.versions.filter((x) => x.version < v.version && x.approvedBy !== null && x.status !== 'discarded').at(-1)
+    if (prior) {
+      prior.status = 'approved'
+      Object.assign(d, {
+        version: prior.version,
+        instruction: prior.instruction,
+        ruleInWords: prior.ruleInWords,
+        filter: prior.filter,
+        status: 'paused',
+        approvedBy: prior.approvedBy,
+        approvedAt: prior.approvedAt,
+        pendingVersion: null,
+      })
+    } else {
+      Object.assign(d, { status: 'archived', pendingVersion: null, nextRunAt: null })
+    }
+    this.audit(input.guildId, 'policy.discarded', input.actor.id, input.policyId, `Discarded version ${v.version} of "${d.name}".`)
     return ok(undefined)
   }
 
@@ -241,18 +251,32 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
     const p = this.action('archive', input)
     if (!p.ok) return p
     if (p.value.detail.status === 'archived') return fail('illegal_state')
-    Object.assign(p.value.detail, { status: 'archived', nextRunAt: null, pendingVersion: null })
+    Object.assign(p.value.detail, { status: 'archived', mode: 'propose', nextRunAt: null, pendingVersion: null })
     this.audit(input.guildId, 'policy.archived', input.actor.id, input.policyId, `Archived "${p.value.detail.name}".`)
     return ok(undefined)
   }
 
-  async setMode(input: Ref & { actor: PolicyActor; mode: PolicyMode; vetoWindowHours: number }) {
+  async setMode(input: Ref & { actor: PolicyActor; mode: PolicyMode; vetoWindowMinutes: number }) {
     const p = this.action('setMode', input)
     if (!p.ok) return p
-    if (input.vetoWindowHours < 1) return fail('invalid_input', 'The veto window is at least 1 hour.')
-    Object.assign(p.value.detail, { mode: input.mode, vetoWindowHours: input.vetoWindowHours })
-    const words = input.mode === 'autopilot' ? `autopilot, veto window ${input.vetoWindowHours} h` : 'propose'
-    this.audit(input.guildId, 'policy.mode_changed', input.actor.id, input.policyId, `Switched "${p.value.detail.name}" to ${words}.`)
+    const d = p.value.detail
+    if (d.status === 'archived') return fail('illegal_state')
+    if (input.mode === 'autopilot' && (d.approvedBy === null || d.status === 'draft')) return fail('policy_not_approved')
+    if (!Number.isInteger(input.vetoWindowMinutes) || input.vetoWindowMinutes < MIN_VETO_MINUTES || input.vetoWindowMinutes > MAX_VETO_MINUTES) return fail('invalid_veto_window')
+    Object.assign(d, { mode: input.mode, vetoWindowMinutes: input.vetoWindowMinutes })
+    const words = input.mode === 'autopilot' ? `autopilot, veto window ${input.vetoWindowMinutes} minutes` : 'propose'
+    this.audit(input.guildId, 'policy.mode_changed', input.actor.id, input.policyId, `Switched "${d.name}" to ${words}.`)
+    return ok(undefined)
+  }
+
+  async veto(input: { guildId: string; runId: string; actor: PolicyActor }) {
+    this.calls.push({ method: 'veto', guildId: input.guildId, actor: input.actor })
+    if (!this.permitted(input.guildId, input.actor)) return fail('not_permitted')
+    const o = this.origins.get(`${input.guildId}:${input.runId}`)
+    if (!o) return fail('policy_run_not_found')
+    if (!o.vetoable) return fail('illegal_state')
+    Object.assign(o, { vetoable: false, vetoedBy: input.actor.id, vetoedAt: this.clock.now() })
+    this.addEvent(input.guildId, { at: this.clock.now(), type: 'policy_run.vetoed', actorId: input.actor.id, policyId: o.policyId, runId: input.runId, summary: 'Vetoed the run.' })
     return ok(undefined)
   }
 

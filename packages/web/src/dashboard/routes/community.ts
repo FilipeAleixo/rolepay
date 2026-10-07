@@ -1,12 +1,13 @@
 import { RUN_STATUSES, type Run, type RunStatus } from '@rolepay/core'
 import { Hono } from 'hono'
-import { communityAccess } from '../access.js'
-import { type DashboardKit, html } from '../kit.js'
+import { actionAccess, communityAccess } from '../access.js'
+import { type DashboardKit, html, redirect } from '../kit.js'
 import type { RunOrigin } from '../policyPort.js'
 import type { Names } from '../views/format.js'
 import { type Section, messagePage, shell } from '../views/layout.js'
 import { type ChainRead, overviewBody } from '../views/overview.js'
 import { type PayeeTotals, payeesBody } from '../views/payees.js'
+import { notice } from '../views/policies.js'
 import { runBody, runsBody } from '../views/runs.js'
 import type { CommunityAccess } from '../access.js'
 
@@ -124,8 +125,32 @@ export function communityRoutes(kit: DashboardKit): Hono {
     const run = await kit.rolepay.payRuns.get({ guildId, runId: c.req.param('runId') })
     if (!run.ok) return page(a, 'runs', 'Run not found', '<h1>Run not found</h1><p><a href="runs">All runs</a></p>', 404)
     const origin = (await origins(guildId, [run.value]))[run.value.id]
-    const body = runBody({ guildId, run: run.value, origin, names: await names(guildId, peopleIn([run.value], origin ? { [run.value.id]: origin } : {})), explorer })
+    const body = runBody({
+      guildId,
+      run: run.value,
+      origin,
+      names: await names(guildId, peopleIn([run.value], origin ? { [run.value.id]: origin } : {})),
+      explorer,
+      canAct: a.viewer.canAct,
+      csrf: a.viewer.csrf,
+      notice: notice(c.req.query('done'), c.req.query('error')),
+    })
     return page(a, 'runs', `Run ${run.value.id}`, body)
+  })
+
+  /**
+   * Veto an autopilot run during its veto window (the Treasurer role, gated like every action:
+   * CSRF, roles read fresh, core checks them again). The run is cancelled and nothing is paid.
+   */
+  app.post('/dashboard/:guildId/runs/:runId/veto', async (c) => {
+    const access = await actionAccess(kit, c)
+    if (!access.ok) return access.response
+    const a = access.value
+    const runId = c.req.param('runId')
+    const back = `/dashboard/${a.community.id}/runs/${encodeURIComponent(runId)}`
+    if (!kit.policies) return redirect(`${back}?error=policy_not_found`, 303)
+    const r = await kit.policies.veto({ guildId: a.community.id, runId, actor: a.actor })
+    return redirect(`${back}?${r.ok ? 'done=vetoed' : `error=${encodeURIComponent(r.error.code)}`}`, 303)
   })
 
   app.get('/dashboard/:guildId/runs/:runId/csv', async (c) => {

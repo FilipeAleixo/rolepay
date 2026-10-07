@@ -1,6 +1,7 @@
 import { RUN_STATUSES, type Run, type RunStatus } from '@rolepay/core'
 import type { PolicySummary, RunOrigin } from '../policyPort.js'
 import { type Names, RUN_STATUS_LABELS, addressLink, esc, money, person, pill, row, runPill, shortHex, table, txLink, when } from './format.js'
+import { csrfField } from './layout.js'
 import { RUN_COLUMNS, runRows } from './overview.js'
 
 export type RunFilters = { status: RunStatus | null; policy: string | null; page: number }
@@ -68,7 +69,29 @@ function timeline(run: Run, origin: RunOrigin | undefined, names: Names, explore
   return events.map((e, i) => ({ e, i })).sort((a, b) => a.e.at.getTime() - b.e.at.getTime() || a.i - b.i).map(({ e }) => e)
 }
 
-export function runBody(d: { guildId: string; run: Run; origin: RunOrigin | undefined; names: Names; explorer: string }): string {
+/** Where an autopilot run stands: released after its window, vetoed, or paying at a time unless vetoed. */
+const autopilotWords = (o: RunOrigin) =>
+  o.executedAt ? `, released after its veto window ${when(o.executedAt)}` : o.vetoedAt ? ', vetoed' : o.executesAt ? `, pays at ${when(o.executesAt)} unless vetoed` : ''
+
+/** An autopilot run inside its veto window: the Veto button for the Treasurer role, a line for everyone else. */
+function vetoControl(d: { guildId: string; run: Run; origin: RunOrigin; canAct: boolean; csrf: string }): string {
+  if (!d.origin.vetoable) return ''
+  if (!d.canAct) return '<p class="muted small">A Treasurer can veto it until then.</p>'
+  return `<form method="post" action="/dashboard/${esc(d.guildId)}/runs/${encodeURIComponent(d.run.id)}/veto">${csrfField(d.csrf)}<button type="submit" class="danger">Veto this run</button></form>`
+}
+
+export function runBody(d: {
+  guildId: string
+  run: Run
+  origin: RunOrigin | undefined
+  names: Names
+  explorer: string
+  /** The viewer holds the Treasurer role (may veto an autopilot run). */
+  canAct?: boolean
+  csrf?: string
+  /** A message after an action (escaped by its builder). */
+  notice?: string
+}): string {
   const { run, origin, names, explorer } = d
   const g = esc(d.guildId)
   const facts = [
@@ -79,9 +102,9 @@ export function runBody(d: { guildId: string; run: Run; origin: RunOrigin | unde
     ...(run.paidTxHash ? [['Transaction', txLink(explorer, run.paidTxHash)]] : []),
   ]
   const originCard = origin
-    ? `<section class="card"><h2>Made by a policy</h2><dl class="facts"><dt>Policy</dt><dd><a href="/dashboard/${g}/policies/${encodeURIComponent(origin.policyId)}">${esc(origin.policyName)}</a>, version ${origin.version}</dd><dt>Period</dt><dd>${esc(origin.period)}</dd><dt>Mode</dt><dd>${origin.mode === 'autopilot' ? `autopilot${origin.executesAt ? `, pays at ${when(origin.executesAt)} unless vetoed` : ''}` : 'propose (a treasurer approves it in Discord)'}</dd><dt>Scheduled for</dt><dd>${when(origin.scheduledFor)}</dd>${
+    ? `<section class="card"><h2>Made by a policy</h2><dl class="facts"><dt>Policy</dt><dd><a href="/dashboard/${g}/policies/${encodeURIComponent(origin.policyId)}">${esc(origin.policyName)}</a>, version ${origin.version}</dd><dt>Period</dt><dd>${esc(origin.period)}</dd><dt>Mode</dt><dd>${origin.mode === 'autopilot' ? `autopilot${autopilotWords(origin)}` : 'propose (a treasurer approves it in Discord)'}</dd><dt>Scheduled for</dt><dd>${when(origin.scheduledFor)}</dd>${
         origin.vetoedAt ? `<dt>Veto</dt><dd>Vetoed by ${person(origin.vetoedBy, names)}, ${when(origin.vetoedAt)}</dd>` : ''
-      }</dl></section>`
+      }</dl>${vetoControl({ guildId: d.guildId, run, origin, canAct: d.canAct ?? false, csrf: d.csrf ?? '' })}</section>`
     : ''
   const lines = table(
     'Lines',
@@ -93,7 +116,7 @@ export function runBody(d: { guildId: string; run: Run; origin: RunOrigin | unde
     .map((e) => `<li>${e.text}<br><span class="small muted">${when(e.at)}</span></li>`)
     .join('')
   return `<p class="small"><a href="/dashboard/${g}/runs">All runs</a></p>
-<h1>Run ${esc(run.id)} ${runPill(run.status)}</h1>${run.note ? `<p class="lede">${esc(run.note)}</p>` : ''}
+<h1>Run ${esc(run.id)} ${runPill(run.status)}</h1>${d.notice ?? ''}${run.note ? `<p class="lede">${esc(run.note)}</p>` : ''}
 <div class="grid"><section class="card"><h2>Summary</h2><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
 <p><a class="button secondary" href="/dashboard/${g}/runs/${encodeURIComponent(run.id)}/csv">Download CSV</a></p></section>${originCard}</div>
 <section class="card"><h2>Lines</h2>${lines}</section>

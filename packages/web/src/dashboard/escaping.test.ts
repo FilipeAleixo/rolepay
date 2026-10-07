@@ -26,7 +26,7 @@ describe('every string a person or Discord controls is escaped (XSS)', () => {
       evilPreview,
     )
     await h.policies.edit({ guildId: GUILD, policyId, actor: { id: TREASURER.id, roleIds: [ROLE] }, draft: { name: 'x', instruction: `Edited ${EVIL}`, schedule: { kind: 'weekly', weekday: 1, hour: 1, timezone: 'UTC' } } })
-    h.policies.linkRun(GUILD, run.id, { policyId, policyName: `Policy ${EVIL}`, version: 1, period: `period ${EVIL}`, mode: 'autopilot', scheduledFor: new Date(), executesAt: null, vetoedBy: MEMBER.id, vetoedAt: new Date(), executedAt: null })
+    h.policies.linkRun(GUILD, run.id, { policyId, policyRunId: 'prun_1', policyName: `Policy ${EVIL}`, version: 1, period: `period ${EVIL}`, mode: 'autopilot', scheduledFor: new Date(), executesAt: null, vetoedBy: MEMBER.id, vetoedAt: new Date(), executedAt: null, vetoable: false })
     h.policies.addEvent(GUILD, { at: new Date(), type: 'run.vetoed', actorId: MEMBER.id, policyId, runId: run.id, summary: `Summary ${EVIL}` })
 
     const { browser } = await h.signIn(identity({ id: TREASURER.id, name: `Tess ${EVIL}` }, [{ id: GUILD, name: `Listed ${EVIL}` }]))

@@ -1,9 +1,11 @@
 // The web app with the dashboard, over the real core services on in-memory fakes: a fake Discord
-// OAuth provider, a fake bot view of guild members and the in-memory policy port. No network.
-import { createRolepay, parseAmount } from '@rolepay/core'
+// OAuth provider, a fake bot view of guild members and the in-memory policy port (or, for the page
+// contract, another policy backend: core's own services through the server's adapters). No network.
+import { type ActivityReader, type RunProposer, createRolepay, parseAmount } from '@rolepay/core'
 import { FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import type { Hono } from 'hono'
 import { createWebApp } from '../src/index.js'
+import type { AuditPort, PolicyActor, PolicyPort } from '../src/dashboard/policyPort.js'
 import type { DiscordIdentity } from '../src/dashboard/ports.js'
 import { FakeDiscordOAuth, FakeGuildMembers, FakePasskeySessions, InMemoryPolicies, staticAssets } from '../src/testing/index.js'
 
@@ -81,17 +83,68 @@ export class TestBrowser {
   }
 }
 
-export function dashboardHarness(opts: { oauth?: boolean; origin?: string; policies?: boolean } = {}) {
+/** A dashboard action as the policy port received it, with the actor the dashboard read from Discord. */
+export type PortCall = { method: string; guildId: string; policyId?: string; actor: PolicyActor }
+
+/** Wraps a policy port so every action is recorded (reads are not), whatever implements it. */
+export function recording(port: PolicyPort, calls: PortCall[]): PolicyPort {
+  const record = (method: string, input: { guildId: string; policyId?: string; actor: PolicyActor }) =>
+    calls.push({ method, guildId: input.guildId, ...(input.policyId ? { policyId: input.policyId } : {}), actor: input.actor })
+  return {
+    list: (i) => port.list(i),
+    get: (i) => port.get(i),
+    preview: (i) => port.preview(i),
+    versions: (i) => port.versions(i),
+    upcoming: (i) => port.upcoming(i),
+    runOrigins: (i) => port.runOrigins(i),
+    create: (i) => (record('create', i), port.create(i)),
+    edit: (i) => (record('edit', i), port.edit(i)),
+    approve: (i) => (record('approve', i), port.approve(i)),
+    discard: (i) => (record('discard', i), port.discard(i)),
+    pause: (i) => (record('pause', i), port.pause(i)),
+    resume: (i) => (record('resume', i), port.resume(i)),
+    archive: (i) => (record('archive', i), port.archive(i)),
+    setMode: (i) => (record('setMode', i), port.setMode(i)),
+    veto: (i) => (record('veto', i), port.veto(i)),
+  }
+}
+
+/**
+ * Where the Policies and Audit pages get their data in a harness: `core` adds what the backend
+ * needs to core's services (the model and Discord activity), `attach` builds the ports once the
+ * services exist. The default is `InMemoryPolicies`.
+ */
+export type PolicyBackendSetup<B extends { policies: PolicyPort; audit: AuditPort }> = {
+  core?: { proposer?: RunProposer; activity?: ActivityReader; minVetoMinutes?: number }
+  attach(h: HarnessBase): B
+}
+
+export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditPort } = { policies: PolicyPort; audit: AuditPort }>(
+  opts: { oauth?: boolean; origin?: string; policies?: boolean; backend?: (clock: ManualClock) => PolicyBackendSetup<B> } = {},
+) {
   const origin = opts.origin ?? 'http://localhost:8787'
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
-  const rolepay = createRolepay({ chain, repositories: createMemoryRepositories({ clock }), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' })
+  const setup = opts.backend?.(clock)
+  const rolepay = createRolepay({
+    chain,
+    repositories: createMemoryRepositories({ clock }),
+    vault: new PlainKeyVault(),
+    ids: new SequentialIds(),
+    clock,
+    network: 'moderato',
+    ...(setup?.core ?? {}),
+  })
   const kv = new MemoryKeyValueStore(clock)
   const oauth = new FakeDiscordOAuth()
   const members = new FakeGuildMembers()
   const policies = new InMemoryPolicies(clock)
   policies.setApproverRole(GUILD, ROLE)
   const errors: unknown[] = []
+  const calls: PortCall[] = []
+  const base: HarnessBase = { rolepay, clock, chain, members, community, payee, activeKey, run }
+  const backend = setup?.attach(base) ?? null
+  const ports = backend ? { policies: recording(backend.policies, calls), audit: backend.audit } : { policies, audit: policies }
   const app = createWebApp({
     rolepay,
     clock,
@@ -110,7 +163,7 @@ export function dashboardHarness(opts: { oauth?: boolean; origin?: string; polic
       kv,
       oauth: opts.oauth === false ? null : oauth,
       members,
-      ...(opts.policies === false ? {} : { policies, audit: policies }),
+      ...(opts.policies === false ? {} : ports),
       onError: (e) => errors.push(e),
     },
   })
@@ -177,7 +230,19 @@ export function dashboardHarness(opts: { oauth?: boolean; origin?: string; polic
     return r.value
   }
 
-  return { app, origin, rolepay, chain, clock, kv, oauth, members, policies, errors, browser, signIn, community, payee, activeKey, run }
+  return { app, origin, rolepay, chain, clock, kv, oauth, members, policies, backend, calls, errors, browser, signIn, community, payee, activeKey, run }
+}
+
+/** What a policy backend may use to set itself up: core's services, the clock, the chain, the bot's member view, the helpers. */
+export type HarnessBase = {
+  rolepay: ReturnType<typeof createRolepay>
+  clock: ManualClock
+  chain: FakePayoutChain
+  members: FakeGuildMembers
+  community(over?: Record<string, unknown>): Promise<unknown>
+  payee(userId: string, address: string): Promise<void>
+  activeKey(limit?: bigint): Promise<unknown>
+  run(lines: [string, string][], opts?: { note?: string; by?: string; approve?: boolean; pay?: boolean }): Promise<{ id: string }>
 }
 
 export type DashboardHarness = ReturnType<typeof dashboardHarness>

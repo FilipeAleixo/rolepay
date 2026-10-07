@@ -202,7 +202,9 @@ export function policyRoutes(kit: DashboardKit): Hono {
   action('archive', 'archived', (p, a, id) => p.archive(ref(a, id)))
   action('mode', 'mode_changed', async (p, a, id) => {
     const m = ModeForm.safeParse(a.form)
-    return m.success ? p.setMode({ ...ref(a, id), mode: m.data.mode, vetoWindowHours: m.data.vetoWindowHours }) : badRequest(a, 'Choose propose or autopilot, and a veto window of 1 to 168 hours.')
+    return m.success
+      ? p.setMode({ ...ref(a, id), mode: m.data.mode, vetoWindowMinutes: m.data.vetoWindowHours * 60 })
+      : badRequest(a, 'Choose propose or autopilot, and a veto window of 1 to 168 hours.')
   })
 
   return app

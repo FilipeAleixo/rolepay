@@ -33,6 +33,7 @@ const DONE: Record<string, string> = {
   resumed: 'Resumed.',
   mode_changed: 'Mode switched.',
   archived: 'Archived. It will not run again.',
+  vetoed: 'Vetoed. This run is cancelled and nothing will be paid for it.',
 }
 const ERRORS: Record<string, string> = {
   not_permitted: 'The policy services refused: only the Treasurer role can do that.',
@@ -40,6 +41,19 @@ const ERRORS: Record<string, string> = {
   policy_not_found: 'That policy no longer exists.',
   concurrent_update: 'Someone changed it at the same moment. Reload and try again.',
   invalid_input: 'Some of the values were not valid.',
+  version_mismatch: 'That version is no longer the one waiting for approval. Reload and check what you approve.',
+  policy_blocked: 'It cannot be approved: the rule uses an amount the instruction does not state. Edit the instruction to state it.',
+  creator_cannot_approve: 'This community requires a second person: the author of a version cannot approve it or switch on its autopilot.',
+  invalid_veto_window: 'That veto window is not allowed here (at least 1 hour, at most 7 days).',
+  policy_not_approved: 'Approve the policy before switching on autopilot.',
+  community_not_found: 'This community is not registered with Rolepay.',
+  too_late: 'Too late to veto: the run has already been released for payment.',
+}
+
+/** "1 minute", "90 minutes", "1 hour", "24 hours". */
+export function vetoWords(minutes: number): string {
+  if (minutes % 60 === 0) return minutes === 60 ? '1 hour' : `${minutes / 60} hours`
+  return minutes === 1 ? '1 minute' : `${minutes} minutes`
 }
 
 export function notice(done: string | undefined, error: string | undefined): string {
@@ -86,7 +100,9 @@ function previewSection(d: { preview: PolicyPreview | { error: string }; names: 
               `${person(m.userId, d.names)}${m.registered ? '' : ` ${pill('not registered', 'warn')}`}`,
               metricWords(m.metrics),
               m.reasons.map((r) => esc(r)).join('<br>'),
-              m.registered ? money(m.amount, d.token) : `<span class="muted">${money(m.amount, d.token)}, not paid until they run <code>/payee link</code></span>`,
+              m.registered && m.amount !== null
+                ? money(m.amount, d.token)
+                : `<span class="muted">${m.amount === null ? 'nothing' : money(m.amount, d.token)}, not paid until they run <code>/payee link</code></span>`,
             ],
             { numeric: [3] },
           ),
@@ -97,7 +113,7 @@ function previewSection(d: { preview: PolicyPreview | { error: string }; names: 
   const near = p.nearMisses.length
     ? table('Just below the line', ['Person', 'Activity', 'Missing'], p.nearMisses.map((n) => row([person(n.userId, d.names), metricWords(n.metrics), esc(n.missing)])))
     : '<p class="muted">Nobody is just below the line.</p>'
-  const paid = p.matches.filter((m) => m.registered).length
+  const paid = p.matches.filter((m) => m.registered && m.amount !== null && m.amount > 0n).length
   const window = p.window ? `<p class="muted small">Counts activity from ${when(p.window.since)} to ${when(p.window.until)}, as of ${when(p.asOf)}.</p>` : ''
   const budget = p.remainingBudget === null ? '<span class="muted">unknown</span>' : money(p.remainingBudget, d.token)
   return `<section class="card"><h2>Next run</h2><p>${p.nextRunAt ? `On ${when(p.nextRunAt)}` : 'When it next runs'}, it would pay <strong>${money(p.total, d.token)}</strong> to ${paid} ${paid === 1 ? 'person' : 'people'}.</p>
@@ -143,7 +159,7 @@ function actionsSection(d: { base: string; policy: PolicyDetail; csrf: string })
   const mode = `<form method="post" action="${base}/mode">${csrfField(d.csrf)}<fieldset class="field"><legend>Mode</legend>
 <label><input type="radio" name="mode" value="propose"${p.mode === 'propose' ? ' checked' : ''}> Propose: each run waits for a Treasurer to approve it in Discord</label>
 <label><input type="radio" name="mode" value="autopilot"${p.mode === 'autopilot' ? ' checked' : ''}> Autopilot: each run pays after the veto window unless a Treasurer vetoes it</label>
-<label for="vetoWindowHours">Veto window (hours, at least 1)</label><input id="vetoWindowHours" name="vetoWindowHours" type="number" min="1" max="168" value="${p.vetoWindowHours}"></fieldset>
+<label for="vetoWindowHours">Veto window (hours, at least 1)</label><input id="vetoWindowHours" name="vetoWindowHours" type="number" min="1" max="168" value="${Math.max(1, Math.round(p.vetoWindowMinutes / 60))}"></fieldset>
 <button type="submit" class="secondary">Save mode</button></form>`
   return `<section class="card"><h2>Actions</h2>${pending}<div class="actions"><a class="button secondary" href="${base}/edit">Edit and recompile</a>${
     p.status === 'active' ? post('pause', 'Pause', 'secondary') : ''
@@ -169,7 +185,7 @@ export function policyBody(d: {
     .join(', ')
   const facts = [
     ['Schedule', scheduleWords(p.schedule)],
-    ['Mode', p.mode === 'autopilot' ? `Autopilot, veto window ${p.vetoWindowHours} h` : 'Propose (each run waits for approval)'],
+    ['Mode', p.mode === 'autopilot' ? `Autopilot, veto window ${vetoWords(p.vetoWindowMinutes)}` : 'Propose (each run waits for approval)'],
     ['Next run', p.nextRunAt && p.status === 'active' ? when(p.nextRunAt) : '<span class="muted">none</span>'],
     ['Caps', caps || '<span class="muted">the bot key limit only</span>'],
     ['Version', `${p.version}${p.approvedBy ? `, approved by ${person(p.approvedBy, d.names)}${p.approvedAt ? ` ${when(p.approvedAt)}` : ''}` : ', not approved yet'}`],
