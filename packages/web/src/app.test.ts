@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createRolepay } from '@rolepay/core'
 import { FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
-import { webHarness } from '../test/harness.js'
+import { approvedPolicy, registeredCommunity, setupLink, webHarness } from '../test/harness.js'
 import { createWebApp } from './app.js'
 import { TokenBucketLimiter } from './rateLimit.js'
 import { FakeDiscordOAuth, FakeGuildMembers, FakePasskeySessions, staticAssets } from './testing/index.js'
@@ -88,20 +88,31 @@ describe('the web app', () => {
     expect(directives['object-src']).toEqual(["'none'"])
   })
 
-  it('lets the setup page alone run WebAssembly in workers it makes itself, to mine the deposit-address salt', async () => {
+  it('lets the setup page alone run WebAssembly in workers it makes itself, to mine the deposit-address salt; every other response keeps the strict policy exactly', async () => {
     const h = webHarness()
-    const directives = async (path: string) => {
-      const csp = (await h.send(path)).headers.get('content-security-policy') ?? ''
-      return Object.fromEntries(csp.split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]))
+    await registeredCommunity(h)
+    const policy = await approvedPolicy(h)
+    const token = await setupLink(h)
+    const csp = async (path: string) => {
+      const res = await h.send(path)
+      return { status: res.status, csp: res.headers.get('content-security-policy') ?? '' }
     }
-    const setup = await directives('/setup/nope')
-    expect(setup['script-src']).toEqual(["'self'", "'wasm-unsafe-eval'"])
-    expect(setup['worker-src']).toEqual(['blob:'])
-    expect(setup['connect-src']).toEqual(["'self'", 'https://rpc.moderato.tempo.xyz', 'https://sponsor.moderato.tempo.xyz'])
-    for (const path of ['/', '/account', '/claim/nope', '/dashboard', '/setupx']) {
-      const other = await directives(path)
-      expect(other['script-src'], path).toEqual(["'self'"])
-      expect(other['worker-src'], path).toBeUndefined()
+    const directives = (s: string) => Object.fromEntries(s.split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]))
+    // The strict policy, as the test above checks it directive by directive.
+    const strict = (await csp('/claim/nope')).csp
+    expect(Object.keys(directives(strict))).toEqual(['default-src', 'script-src', 'style-src', 'connect-src', 'img-src', 'font-src', 'form-action', 'frame-ancestors', 'base-uri', 'object-src'])
+    // The setup page (a live link and a dead one): the strict policy plus exactly the two relaxations, font-src 'self' kept.
+    for (const path of [`/setup/${token}`, '/setup/nope']) {
+      const setup = await csp(path)
+      expect(setup.csp, path).toBe(strict.replace("script-src 'self'", "script-src 'self' 'wasm-unsafe-eval'; worker-src blob:"))
+      expect(directives(setup.csp)['font-src'], path).toEqual(["'self'"])
+    }
+    expect((await csp(`/setup/${token}`)).status).toBe(200)
+    // Every other page and endpoint, the policy's budget page under /setup/ included, keeps the strict policy exactly.
+    const budgetPage = `/setup/${token}/policies/${policy.id}`
+    expect((await csp(budgetPage)).status).toBe(200)
+    for (const path of ['/', '/account', '/claim/nope', '/dashboard', '/setupx', `/setup/${token}/state`, budgetPage, `${budgetPage}/state`, '/setup/nope/policies/pol_x', '/assets/rolepay.js']) {
+      expect((await csp(path)).csp, path).toBe(strict)
     }
   })
 

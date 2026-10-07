@@ -396,7 +396,7 @@ The demo controls never touch a treasury or a key: a run made with `run_now` or 
 The claim and setup pages, as an adapter over core like `packages/discord`: it calls core only through `@rolepay/core` services, and everything external is a port with a fake in `@rolepay/web/testing`.
 
 ```
-app.ts       the Hono app: security headers (a strict CSP: our one script, the inline styles by hash, fonts and images from this origin, connections only to us, the RPC and the sponsor; on /setup/ pages alone also 'wasm-unsafe-eval' and blob: workers, for mining the deposit-address salt; HSTS on https), same-origin POSTs only (CSRF), rate limits (public POSTs, and every request of the Discord sign-in), /webauthn, /assets, the fonts, the favicon and the home-screen icon, the routes
+app.ts       the Hono app: security headers (a strict CSP: our one script, the inline styles by hash, fonts and images from this origin, connections only to us, the RPC and the sponsor; on the setup page alone (`/setup/:token`, not its JSON endpoints or a policy's budget page) also 'wasm-unsafe-eval' and blob: workers, for mining the deposit-address salt; HSTS on https), same-origin POSTs only (CSRF), rate limits (public POSTs, and every request of the Discord sign-in), /webauthn, /assets, the fonts, the favicon and the home-screen icon, the routes
 rateLimit.ts TokenBucketLimiter, the in-memory RateLimiter
 routes/      landing.ts (/, the home page), claim.ts (/claim/:token), setup.ts (/setup/:token and its JSON endpoints), policyBudget.ts
              (/setup/:token/policies/:policyId, a policy's own budget), treasurer.ts (the treasury passkey gate and the key form, shared) and account.ts (/account)

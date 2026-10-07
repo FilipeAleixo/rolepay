@@ -45,12 +45,16 @@ const lastForwardedHop = (req: Request) => req.headers.get('x-forwarded-for')?.s
  * sponsor (the page signs and sends the treasurer's transactions itself), and no framing, plugins
  * or base-URL tricks. The JSON page config is a data block, never executed.
  *
- * `mining` (the setup page only): the page mines the deposit-address salt (TIP-1022's 32-bit
- * proof of work) with WebAssembly keccak in Web Workers that viem's `VirtualMaster.mineSaltAsync`
+ * `mining` (the setup page only, `SETUP_PAGE`): the page mines the deposit-address salt (TIP-1022's
+ * 32-bit proof of work) with WebAssembly keccak in Web Workers that viem's `VirtualMaster.mineSaltAsync`
  * starts from blob: URLs. So that page also allows compiling WebAssembly ('wasm-unsafe-eval', which
  * is not JavaScript eval) and workers from blob: URLs; both can only be started by script already
- * on the page, and scripts still come only from this origin.
+ * on the page, and scripts still come only from this origin. Its JSON endpoints and the policy
+ * budget pages under /setup/ mine nothing and keep the strict policy.
  */
+/** The treasurer setup page itself (`/setup/:token`), the one page that mines. */
+const SETUP_PAGE = /^\/setup\/[^/]+$/
+
 function contentSecurityPolicy(config: WebConfig, opts: { mining?: boolean } = {}): string {
   const origin = (u: string | null) => (u && URL.canParse(u) ? [new URL(u).origin] : [])
   const connect = ["'self'", ...new Set([...origin(config.rpcUrl), ...origin(config.sponsorUrl)])]
@@ -111,7 +115,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
     c.header('referrer-policy', c.res.headers.get('referrer-policy') === 'same-origin' ? 'same-origin' : 'no-referrer')
     c.header('x-content-type-options', 'nosniff')
     c.header('x-frame-options', 'DENY')
-    c.header('content-security-policy', c.req.path.startsWith('/setup/') ? setupCsp : csp)
+    c.header('content-security-policy', SETUP_PAGE.test(c.req.path) ? setupCsp : csp)
     // Browsers only honour HSTS over https; never sent for http://localhost.
     if (https) c.header('strict-transport-security', 'max-age=31536000')
   })
