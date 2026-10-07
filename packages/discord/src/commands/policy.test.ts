@@ -186,6 +186,22 @@ describe('the preview buttons', () => {
     expect(a.rest.channelPosts.map((p) => JSON.stringify(p.message))).not.toContain(expect.stringContaining('/setup/'))
   })
 
+  it('an RPC failure while preparing the budget offer never turns the approval into an error: the policy is approved, no offer is sent', async () => {
+    const a = await ready()
+    const { policyId } = await newPolicy(a)
+    // A key of its own waiting for the passkey, and then the chain stops answering.
+    await a.rolepay.policyKeys.provision({ guildId: GUILD, policyId, limit: 30_000_000n, periodSeconds: 86_400, expiresAt: Math.floor(a.clock.now().getTime() / 1000) + 86_400 })
+    a.chain.keyState = async () => {
+      throw new Error('HTTP request failed')
+    }
+    const approved = await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer, 'tok-approve-rpc'))
+    expect(body(approved).type).toBe(7)
+    expect(text(body(approved).data)).toContain('Policy: Help desk')
+    expect(a.rest.followUps.filter((f) => f.reply.token === 'tok-approve-rpc')).toEqual([])
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && p.value.status).toBe('active')
+  })
+
   it('an Approve from an outdated preview (the rule was edited since) is refused: nobody approves a version they did not see', async () => {
     const a = await ready()
     const { policyId } = await newPolicy(a)

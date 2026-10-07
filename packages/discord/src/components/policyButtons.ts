@@ -18,10 +18,21 @@ export const approvePolicyButton: PolicyButtonHandler = async ({ policyId, versi
   const r = await rolepay.policies.approve({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, policyId, version })
   if (!r.ok) return ephemeralReply(explainPolicyError(r.error, { community: guard.community }))
   const c = guard.community
-  const message = policyMessage(r.value, { token: c.payoutToken, approverRoleId: c.approverRoleId, nextRunAt: nextOccurrence(r.value.schedule, clock.now()) })
-  const budget = await rolepay.policyKeys.status({ guildId: ctx.guildId, policyId })
-  const link = budget.ok && budget.value.signs === 'own' ? null : await policyBudgetLink(deps, c, ctx, policyId)
-  return { kind: 'update', message, ...(link ? { followUp: policyBudgetOffer(r.value, link) } : {}) }
+  const policy = r.value
+  const message = policyMessage(policy, { token: c.payoutToken, approverRoleId: c.approverRoleId, nextRunAt: nextOccurrence(policy.schedule, clock.now()) })
+  return { kind: 'update', message, ...((await budgetOffer()) ?? {}) }
+
+  /** The offer is a courtesy: if the chain or the database does not answer, the approval stands and no offer is sent. */
+  async function budgetOffer() {
+    try {
+      const budget = await rolepay.policyKeys.status({ guildId: ctx.guildId, policyId })
+      const link = budget.ok && budget.value.signs === 'own' ? null : await policyBudgetLink(deps, c, ctx, policyId)
+      return link ? { followUp: policyBudgetOffer(policy, link) } : null
+    } catch (e) {
+      deps.onError?.(e)
+      return null
+    }
+  }
 }
 
 /** Discard: the author of the draft or an approver (core decides; an edit goes back to the approved version, paused). */

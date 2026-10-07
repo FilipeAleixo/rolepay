@@ -167,7 +167,11 @@ export const policyShowCommand: CommandHandler = async ({ options, ctx }, deps) 
       if (!detail.ok) return { ok: false, message: { content: explainPolicyError(detail.error) } }
       const p = detail.value.policy
       if (p.status === 'archived') return { ok: true, message: policyMessage(p, view(community)) }
-      const [preview, budget] = await Promise.all([rolepay.policies.preview({ guildId: ctx.guildId, policyId: p.id }), rolepay.policyKeys.status({ guildId: ctx.guildId, policyId: p.id })])
+      // The Budget line is read from the chain; if it does not answer, the rest of the policy is still shown.
+      const [preview, budget] = await Promise.all([
+        rolepay.policies.preview({ guildId: ctx.guildId, policyId: p.id }),
+        rolepay.policyKeys.status({ guildId: ctx.guildId, policyId: p.id }).catch(() => null),
+      ])
       // The treasury page link, for the approver role only (this answer is private to the caller).
       const link = holdsApproverRole(ctx.caller, community) ? await policyBudgetLink(deps, community, ctx, p.id) : null
       return {
@@ -176,7 +180,7 @@ export const policyShowCommand: CommandHandler = async ({ options, ctx }, deps) 
           ...view(community),
           nextRunAt: detail.value.nextRunAt,
           ...(preview.ok ? { preview: preview.value } : { previewProblem: explainPolicyError(preview.error, { community }) }),
-          ...(budget.ok ? { budget: budget.value } : {}),
+          ...(budget?.ok ? { budget: budget.value } : {}),
           ...(link ? { budgetUrl: link.url } : {}),
         }),
       }
