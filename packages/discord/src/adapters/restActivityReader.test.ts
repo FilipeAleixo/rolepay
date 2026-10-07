@@ -105,6 +105,38 @@ describe('RestActivityReader: members, names, messages, reactions', () => {
     })
   })
 
+  it('keeps role and channel names for a minute (a proposal reads them every time), then reads them again', async () => {
+    const rest = new FakeDiscordRest()
+    rest.roles.set(GUILD, [{ id: '400000000000000002', name: 'Mods' }])
+    let reads = 0
+    const getGuildRoles = rest.getGuildRoles.bind(rest)
+    rest.getGuildRoles = (guildId) => (reads++, getGuildRoles(guildId))
+    let now = 0
+    const reader = new RestActivityReader(rest, { now: () => now })
+    expect((await reader.guildNames(GUILD)).roles).toEqual([{ id: '400000000000000002', name: 'Mods' }])
+    rest.roles.set(GUILD, [{ id: '400000000000000003', name: 'Helpers' }])
+    now = 59_000
+    expect((await reader.guildNames(GUILD)).roles.map((r) => r.name)).toEqual(['Mods'])
+    expect(reads).toBe(1)
+    now = 60_000
+    expect((await reader.guildNames(GUILD)).roles.map((r) => r.name)).toEqual(['Helpers'])
+    expect(reads).toBe(2)
+  })
+
+  it('never keeps a failed read of the names', async () => {
+    const rest = new FakeDiscordRest()
+    let fail = true
+    const getGuildRoles = rest.getGuildRoles.bind(rest)
+    rest.getGuildRoles = async (guildId) => {
+      if (fail) throw new Error('Discord is down')
+      return getGuildRoles(guildId)
+    }
+    const reader = new RestActivityReader(rest, { now: () => 0 })
+    await expect(reader.guildNames(GUILD)).rejects.toThrow('Discord is down')
+    fail = false
+    expect(await reader.guildNames(GUILD)).toEqual({ roles: [], channels: [] })
+  })
+
   it('reads one message; a missing one is not_found', async () => {
     const rest = new FakeDiscordRest()
     const m = wireMessage({ channelId: HELP, authorId: ANA, at: minutesAgo(1), content: 'Winners', mentions: [RUI] })

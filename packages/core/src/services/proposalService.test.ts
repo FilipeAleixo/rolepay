@@ -198,7 +198,22 @@ describe('ProposalService: message mode', () => {
     w.proposer.onMessages = () => ({ code: 'could_not_propose', reason: 'refused', detail: 'stop_reason refusal', usage: null })
     expect(await fromMessage(w)).toEqual({ ok: false, error: { code: 'could_not_propose', reason: 'refused' } })
     expect(w.logs).toEqual([
-      { proposalId: null, mode: 'messages', outcome: 'could_not_propose', sourceMessages: 1, scannedMessages: 0, lines: 0, held: 0, unregistered: 0, model: 'fake-proposer', inputTokens: null, outputTokens: null, costUsd: null, latencyMs: null },
+      {
+        proposalId: null,
+        mode: 'messages',
+        outcome: 'could_not_propose',
+        sourceMessages: 1,
+        scannedMessages: 0,
+        lines: 0,
+        held: 0,
+        unregistered: 0,
+        model: 'fake-proposer',
+        inputTokens: null,
+        outputTokens: null,
+        costUsd: null,
+        latencyMs: null,
+        timings: { discordMs: 0, chainMs: 0, modelMs: 0, totalMs: 0 },
+      },
     ])
   })
 
@@ -221,6 +236,8 @@ describe('ProposalService: message mode', () => {
         outputTokens: 300,
         costUsd: '0.0108',
         latencyMs: 7,
+        // The test clock stands still; in production these are milliseconds per phase.
+        timings: { discordMs: 0, chainMs: 0, modelMs: 0, totalMs: 0 },
       },
     ])
     expect(JSON.stringify(w.logs)).not.toMatch(/Winners|indexer|bounties|claim page/)
@@ -533,5 +550,72 @@ describe('ProposalService: edit, discard, create', () => {
     demoAnswer(w)
     const p = await fromMessage(w)
     expect(p.ok && { remaining: p.value.remaining, problems: p.value.problems }).toEqual({ remaining: null, problems: ['no_active_key'] })
+  })
+})
+
+describe('ProposalService: latency (independent reads at the same time, time per phase in the log)', () => {
+  /** Counts reads in flight at once; each waits a moment, so reads that overlap meet. */
+  function overlapProbe() {
+    let inFlight = 0
+    let most = 0
+    const wrap =
+      <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+      async (...args: A): Promise<R> => {
+        inFlight++
+        most = Math.max(most, inFlight)
+        try {
+          await new Promise((r) => setTimeout(r, 5))
+          return await fn(...args)
+        } finally {
+          inFlight--
+        }
+      }
+    return { wrap, most: () => most }
+  }
+
+  it('criteria mode reads the role and channel names and the remaining budget at the same time', async () => {
+    const w = await world()
+    const probe = overlapProbe()
+    w.activity.guildNames = probe.wrap(w.activity.guildNames.bind(w.activity))
+    w.chain.keyState = probe.wrap(w.chain.keyState.bind(w.chain))
+    await w.proposals.proposeFromCriteria({ ...asTreasurer, instruction: 'pay 20 to every Mod' })
+    expect(probe.most()).toBe(2)
+  })
+
+  it('message mode reads the channel and the remaining budget at the same time', async () => {
+    const w = await world()
+    w.activity.addMessages(WINNERS)
+    const probe = overlapProbe()
+    w.activity.history = probe.wrap(w.activity.history.bind(w.activity))
+    w.chain.keyState = probe.wrap(w.chain.keyState.bind(w.chain))
+    await w.proposals.proposeFromMessages({ ...asTreasurer, instruction: '50 each', source: { kind: 'history', channelId: CHANNEL, since: minutesAgo(60) } })
+    expect(probe.most()).toBe(2)
+  })
+
+  it('logs the time spent reading Discord, reading the chain and waiting for the model, and the total', async () => {
+    const w = await world()
+    w.activity.addMessages(WINNERS)
+    const taking =
+      <A extends unknown[], R>(seconds: number, fn: (...args: A) => Promise<R>) =>
+      async (...args: A): Promise<R> => {
+        const r = await fn(...args)
+        w.clock.advance(seconds)
+        return r
+      }
+    w.activity.history = taking(0.3, w.activity.history.bind(w.activity))
+    w.chain.keyState = taking(0.2, w.chain.keyState.bind(w.chain))
+    demoAnswer(w)
+    const answer = w.proposer.onMessages
+    w.proposer.onMessages = (request) => {
+      w.clock.advance(2)
+      return answer(request)
+    }
+    await w.proposals.proposeFromMessages({ ...asTreasurer, instruction: '50 each', source: { kind: 'history', channelId: CHANNEL, since: minutesAgo(60) } })
+    const timings = w.logs[0]?.timings
+    expect(timings?.modelMs).toBe(2000)
+    // The two reads overlap, so each may include some of the other's time.
+    expect(timings?.discordMs).toBeGreaterThanOrEqual(300)
+    expect(timings?.chainMs).toBeGreaterThanOrEqual(200)
+    expect(timings?.totalMs).toBe(2500)
   })
 })

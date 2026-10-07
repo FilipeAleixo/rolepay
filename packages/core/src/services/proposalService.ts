@@ -40,6 +40,7 @@ import type { ProposerFailure, ProposerUsage, RunProposer } from '../ports/runPr
 import { type InvalidInput, invalidInput } from './common.js'
 import type { CommunityService } from './communityService.js'
 import type { PayRunService } from './payRunService.js'
+import { type Stopwatch, stopwatch, timedActivity } from './proposalTimings.js'
 
 export type ProposalServiceDeps = {
   communities: CommunityRepository
@@ -116,39 +117,48 @@ export class ProposalService {
     if (!gate.ok) return gate
     const { community, proposer } = gate.value
     const now = this.deps.clock.now()
+    const timer = stopwatch(this.deps.clock)
 
     let messages: SourceMessage[]
     let truncated = false
+    let remaining: Micros | null
     if (input.source.kind === 'messages') {
       const parsed = z.array(SourceMessageSchema).max(PROPOSAL_LIMITS.maxSourceMessages).safeParse(input.source.messages)
       if (!parsed.success) return invalidInput(parsed.error)
       messages = parsed.data
+      remaining = await this.remaining(community.id, timer)
     } else {
       if (!this.deps.activity) return err({ code: 'ai_not_configured' })
       const earliest = new Date(now.getTime() - PROPOSAL_LIMITS.maxLookbackDays * DAY_MS)
-      const read = await this.deps.activity.history({
-        channelId: input.source.channelId,
-        since: input.source.since < earliest ? earliest : input.source.since,
-        until: now,
-        limit: PROPOSAL_LIMITS.maxSourceMessages,
-      })
-      if (!read.ok) return this.fail('messages', read.error, { sourceMessages: 0 })
+      // The channel (Discord) and the remaining budget (the chain) are independent: read them at the same time.
+      const [read, left] = await Promise.all([
+        timedActivity(this.deps.activity, timer).history({
+          channelId: input.source.channelId,
+          since: input.source.since < earliest ? earliest : input.source.since,
+          until: now,
+          limit: PROPOSAL_LIMITS.maxSourceMessages,
+        }),
+        this.remaining(community.id, timer),
+      ])
+      if (!read.ok) return this.fail('messages', read.error, { sourceMessages: 0, timer })
       messages = read.value.messages
       truncated = read.value.truncated
+      remaining = left
     }
     if (messages.length === 0) return err({ code: 'source_empty' })
     if (messages.every((m) => m.content.trim() === '')) return err({ code: 'no_message_content' })
 
     const pseudo = pseudonymizeMessages({ instruction: instruction.data, messages })
-    const remaining = await this.remaining(community.id)
-    const answer = await proposer.fromMessages({
-      instruction: pseudo.instruction,
-      messages: pseudo.messages,
-      token: symbol(community),
-      remaining: remaining === null ? null : formatAmount(remaining),
-      maxLines: MAX_LINES_PER_RUN,
-    })
-    if (!answer.ok) return this.fail('messages', { code: 'could_not_propose', reason: answer.error.reason }, { sourceMessages: messages.length, usage: answer.error.usage })
+    const answer = await timer.time('modelMs', () =>
+      proposer.fromMessages({
+        instruction: pseudo.instruction,
+        messages: pseudo.messages,
+        token: symbol(community),
+        remaining: remaining === null ? null : formatAmount(remaining),
+        maxLines: MAX_LINES_PER_RUN,
+      }),
+    )
+    if (!answer.ok) return this.fail('messages', { code: 'could_not_propose', reason: answer.error.reason }, { sourceMessages: messages.length, usage: answer.error.usage, timer })
 
     const registered = await this.registered(community.id)
     const resolved = resolveMessageProposal(answer.value.raw, { map: pseudo.map, instruction: instruction.data, isRegistered: (id) => registered.has(id) })
@@ -176,7 +186,7 @@ export class ProposalService {
       ...assembled,
     })
     await this.deps.proposals.save(proposal)
-    this.record(proposal, { sourceMessages: messages.length, scannedMessages: 0, usage: answer.value.usage })
+    this.record(proposal, { sourceMessages: messages.length, scannedMessages: 0, usage: answer.value.usage, timer })
     return ok(proposal)
   }
 
@@ -191,27 +201,30 @@ export class ProposalService {
     const gate = await this.gate(input)
     if (!gate.ok) return gate
     const { community, proposer } = gate.value
-    const activity = this.deps.activity
+    const timer = stopwatch(this.deps.clock)
+    const activity = this.deps.activity && timedActivity(this.deps.activity, timer)
     if (!activity) return err({ code: 'ai_not_configured' })
     const now = this.deps.clock.now()
 
-    const names = await activity.guildNames(community.id)
+    // The names (Discord) and the remaining budget (the chain) are independent: read them at the same time.
+    const [names, remaining] = await Promise.all([activity.guildNames(community.id), this.remaining(community.id, timer)])
     const tokens = tokenizeInstruction(instruction.data, { guildId: community.id, roles: names.roles, channels: names.channels })
-    const remaining = await this.remaining(community.id)
-    const answer = await proposer.fromCriteria({
-      instruction: tokens.text,
-      today: now.toISOString().slice(0, 10),
-      maxLookbackDays: PROPOSAL_LIMITS.maxLookbackDays,
-      roles: tokens.roles,
-      channels: tokens.channels,
-      token: symbol(community),
-      remaining: remaining === null ? null : formatAmount(remaining),
-    })
-    if (!answer.ok) return this.fail('criteria', { code: 'could_not_propose', reason: answer.error.reason }, { usage: answer.error.usage })
+    const answer = await timer.time('modelMs', () =>
+      proposer.fromCriteria({
+        instruction: tokens.text,
+        today: now.toISOString().slice(0, 10),
+        maxLookbackDays: PROPOSAL_LIMITS.maxLookbackDays,
+        roles: tokens.roles,
+        channels: tokens.channels,
+        token: symbol(community),
+        remaining: remaining === null ? null : formatAmount(remaining),
+      }),
+    )
+    if (!answer.ok) return this.fail('criteria', { code: 'could_not_propose', reason: answer.error.reason }, { usage: answer.error.usage, timer })
     const usage = answer.value.usage
 
     const resolved = resolveCriteria(answer.value.raw, { refs: tokens.refs, now, instructionAmounts: amountsIn(instruction.data) })
-    if (!resolved.ok) return this.fail('criteria', resolved.error, { usage })
+    if (!resolved.ok) return this.fail('criteria', resolved.error, { usage, timer })
     const { criteria, plan } = resolved.value
 
     // Read what the criteria need, within the bounds.
@@ -309,7 +322,7 @@ export class ProposalService {
       ...assembled,
     })
     await this.deps.proposals.save(proposal)
-    this.record(proposal, { sourceMessages: 0, scannedMessages: scanned.length, usage })
+    this.record(proposal, { sourceMessages: 0, scannedMessages: scanned.length, usage, timer })
     return ok(proposal)
   }
 
@@ -417,8 +430,9 @@ export class ProposalService {
   }
 
   /** What the active bot key has left, read from the chain; null without an active key. */
-  private async remaining(guildId: string): Promise<Micros | null> {
-    const status = await this.deps.communityService.keyStatus({ guildId })
+  private async remaining(guildId: string, timer?: Stopwatch): Promise<Micros | null> {
+    const read = () => this.deps.communityService.keyStatus({ guildId })
+    const status = await (timer ? timer.time('chainMs', read) : read())
     return status.ok && status.value.key.status === 'active' && status.value.state.status === 'active' ? status.value.state.remaining : null
   }
 
@@ -447,22 +461,23 @@ export class ProposalService {
   private fail<E extends { code: string }>(
     mode: Proposal['mode'],
     error: E,
-    counts: { sourceMessages?: number; scannedMessages?: number; usage?: ProposerUsage | null },
+    counts: { sourceMessages?: number; scannedMessages?: number; usage?: ProposerUsage | null; timer?: Stopwatch },
   ): { ok: false; error: E } {
     this.log({ proposalId: null, mode, outcome: error.code, lines: 0, held: 0, unregistered: 0, ...counts })
     return err(error)
   }
 
-  private record(p: Proposal, counts: { sourceMessages: number; scannedMessages: number; usage: ProposerUsage }) {
+  private record(p: Proposal, counts: { sourceMessages: number; scannedMessages: number; usage: ProposerUsage; timer: Stopwatch }) {
     this.log({ proposalId: p.id, mode: p.mode, outcome: 'proposed', lines: p.lines.length, held: p.held.length, unregistered: p.unregistered.length, ...counts })
   }
 
-  private log(e: Omit<ProposalLogEntry, 'model' | 'inputTokens' | 'outputTokens' | 'costUsd' | 'latencyMs' | 'sourceMessages' | 'scannedMessages'> & {
+  private log(e: Omit<ProposalLogEntry, 'model' | 'inputTokens' | 'outputTokens' | 'costUsd' | 'latencyMs' | 'sourceMessages' | 'scannedMessages' | 'timings'> & {
     sourceMessages?: number
     scannedMessages?: number
     usage?: ProposerUsage | null
+    timer?: Stopwatch
   }) {
-    const { usage, ...rest } = e
+    const { usage, timer, ...rest } = e
     this.deps.log?.({
       sourceMessages: 0,
       scannedMessages: 0,
@@ -472,6 +487,7 @@ export class ProposalService {
       outputTokens: usage?.outputTokens ?? null,
       costUsd: usage?.costMicroUsd == null ? null : formatAmount(BigInt(usage.costMicroUsd)),
       latencyMs: usage?.latencyMs ?? null,
+      timings: timer?.done() ?? null,
     })
   }
 }

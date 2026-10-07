@@ -1,4 +1,16 @@
-import { type ActivityReader, type ChannelKind, DiscordIdSchema, type MemberFacts, type NamedChannel, type ReadError, type Result, type SourceMessage, err, ok } from '@rolepay/core'
+import {
+  type ActivityReader,
+  type ChannelKind,
+  DiscordIdSchema,
+  type MemberFacts,
+  type NamedChannel,
+  type NamedRole,
+  type ReadError,
+  type Result,
+  type SourceMessage,
+  err,
+  ok,
+} from '@rolepay/core'
 import { z } from 'zod'
 import { ChannelType } from '../api.js'
 import type { DiscordRest, RestError } from '../ports.js'
@@ -8,6 +20,8 @@ const PAGE = 100
 /** At most this many reactors per emoji (10 pages). */
 const MAX_REACTORS = 1000
 const MAX_CHANNELS_LISTED = 250
+/** Role and channel names change rarely; a proposal reads them every time, so they are kept this long. */
+const NAMES_TTL_MS = 60_000
 
 const RoleSchema = z.object({ id: DiscordIdSchema, name: z.string(), managed: z.boolean().optional() })
 const ChannelSchema = z.object({ id: DiscordIdSchema, name: z.string().nullable().optional(), type: z.number().int() })
@@ -39,15 +53,31 @@ const readError = (channelId: string, e: RestError): ReadError | null =>
  */
 export class RestActivityReader implements ActivityReader {
   private readonly concurrency: number
+  private readonly now: () => number
+  private readonly names = new Map<string, { at: number; value: Promise<{ roles: NamedRole[]; channels: NamedChannel[] }> }>()
 
   constructor(
     private readonly rest: Pick<DiscordRest, 'getMember' | 'getChannelMessages' | 'getMessage' | 'getReactions' | 'getGuildRoles' | 'getGuildChannels' | 'getActiveThreads'>,
-    opts: { concurrency?: number } = {},
+    opts: { concurrency?: number; now?: () => number } = {},
   ) {
     this.concurrency = opts.concurrency ?? 5
+    this.now = opts.now ?? Date.now
   }
 
-  async guildNames(guildId: string) {
+  /** Role and channel names, kept for a minute per server (a failed read is not kept). */
+  guildNames(guildId: string) {
+    const now = this.now()
+    const kept = this.names.get(guildId)
+    if (kept && now - kept.at < NAMES_TTL_MS) return kept.value
+    const value = this.readNames(guildId)
+    this.names.set(guildId, { at: now, value })
+    value.catch(() => {
+      if (this.names.get(guildId)?.value === value) this.names.delete(guildId)
+    })
+    return value
+  }
+
+  private async readNames(guildId: string) {
     const [roles, channels, threads] = await Promise.all([this.rest.getGuildRoles(guildId), this.rest.getGuildChannels(guildId), this.rest.getActiveThreads(guildId)])
     const list = <T>(r: Result<unknown, RestError>, schema: z.ZodType<T>, pick: (v: unknown) => unknown = (v) => v): T[] => {
       if (!r.ok) return []
