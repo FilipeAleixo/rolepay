@@ -1,6 +1,6 @@
 // Real core services on core's in-memory fakes, plus a fake Discord. Test-only: production
 // code in this package never imports @rolepay/core/adapters.
-import { type Payrun, createPayrun, parseAmount } from '@rolepay/core'
+import { type Rolepay, createRolepay, parseAmount } from '@rolepay/core'
 import { FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { RestActivityReader } from '../src/adapters/restActivityReader.js'
 import { FakeDiscordRest, RecordingQueue } from '../src/testing/fakeDiscordRest.js'
@@ -21,7 +21,7 @@ export async function harness(opts: { proposer?: FakeRunProposer | null } = {}) 
   chain.fund(TOKEN, TREASURY, usd('1000'))
   const rest = new FakeDiscordRest()
   const proposer = opts.proposer === undefined ? new FakeRunProposer() : opts.proposer
-  const payrun: Payrun = createPayrun({
+  const rolepay: Rolepay = createRolepay({
     chain,
     repositories: createMemoryRepositories({ clock }),
     vault: new PlainKeyVault(),
@@ -39,7 +39,7 @@ export async function harness(opts: { proposer?: FakeRunProposer | null } = {}) 
   }
 
   async function setupCommunity(opts: { approverRoleId?: string | null; activeKey?: boolean; limit?: string } = {}) {
-    const reg = await payrun.communities.register({
+    const reg = await rolepay.communities.register({
       guildId: GUILD,
       name: 'Test guild',
       treasuryAddress: TREASURY,
@@ -49,15 +49,15 @@ export async function harness(opts: { proposer?: FakeRunProposer | null } = {}) 
     })
     if (!reg.ok) throw new Error(reg.error.code)
     if (opts.activeKey === false) return
-    await payrun.communities.provisionBotKey({ guildId: GUILD, limit: usd(opts.limit ?? '100'), periodSeconds: 2_592_000, expiresAt: chain.time + 86_400 * 30 })
-    const auth = await payrun.communities.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+    await rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd(opts.limit ?? '100'), periodSeconds: 2_592_000, expiresAt: chain.time + 86_400 * 30 })
+    const auth = await rolepay.communities.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
     if (!auth.ok) throw new Error(auth.error.code)
   }
 
   async function registerPayee(userId: string, address: string) {
-    const link = await payrun.payees.issueLink({ guildId: GUILD, discordUserId: userId })
+    const link = await rolepay.payees.issueLink({ guildId: GUILD, discordUserId: userId })
     if (!link.ok) throw new Error(link.error.code)
-    const r = await payrun.payees.register({ token: link.value.token, address })
+    const r = await rolepay.payees.register({ token: link.value.token, address })
     if (!r.ok) throw new Error(r.error.code)
   }
 
@@ -69,7 +69,7 @@ export async function harness(opts: { proposer?: FakeRunProposer | null } = {}) 
 
   /** A run for Alice (1.5) and Bob (25), submitted and approved. */
   async function approvedRun(by = '300000000000000001') {
-    const r = await payrun.payRuns.create({
+    const r = await rolepay.payRuns.create({
       guildId: GUILD,
       createdBy: '300000000000000002',
       note: 'October mods',
@@ -79,11 +79,11 @@ export async function harness(opts: { proposer?: FakeRunProposer | null } = {}) 
       ],
     })
     if (!r.ok) throw new Error(r.error.code)
-    await payrun.payRuns.submit({ guildId: GUILD, runId: r.value.id, actor: '300000000000000002' })
-    const a = await payrun.payRuns.approve({ guildId: GUILD, runId: r.value.id, actor: by, actorCanApprove: true })
+    await rolepay.payRuns.submit({ guildId: GUILD, runId: r.value.id, actor: '300000000000000002' })
+    const a = await rolepay.payRuns.approve({ guildId: GUILD, runId: r.value.id, actor: by, actorCanApprove: true })
     if (!a.ok) throw new Error(a.error.code)
     return a.value
   }
 
-  return { clock, chain, payrun, rest, queue, sleep, setupCommunity, registerPayee, registerAll, approvedRun, proposer: proposer as FakeRunProposer }
+  return { clock, chain, rolepay, rest, queue, sleep, setupCommunity, registerPayee, registerAll, approvedRun, proposer: proposer as FakeRunProposer }
 }

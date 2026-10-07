@@ -1,4 +1,4 @@
-import type { Clock, NetworkName, Payrun } from '@rolepay/core'
+import type { Clock, NetworkName, Rolepay } from '@rolepay/core'
 import type { DiscordRest, ExecutionQueue, MemberDirectory, PendingSources } from '../ports.js'
 
 /** Operational settings for the Discord layer (the server builds these from env). */
@@ -28,7 +28,7 @@ export const devShortcutsOn = (c: Pick<DiscordAppConfig, 'devShortcuts' | 'netwo
 
 /** Everything the interaction handlers use. Core is reached only through its services. */
 export type DiscordAppDeps = {
-  payrun: Payrun
+  rolepay: Rolepay
   rest: DiscordRest
   queue: ExecutionQueue
   members: MemberDirectory

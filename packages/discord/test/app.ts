@@ -27,7 +27,7 @@ export async function appHarness(opts: { members?: MemberDirectory; config?: Par
   const h = await harness(opts.proposer === undefined ? {} : { proposer: opts.proposer })
   const errors: unknown[] = []
   const deps: DiscordAppDeps = {
-    payrun: h.payrun,
+    rolepay: h.rolepay,
     rest: h.rest,
     queue: h.queue,
     members: opts.members ?? new RestMemberDirectory(h.rest),

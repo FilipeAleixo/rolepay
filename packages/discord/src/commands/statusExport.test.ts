@@ -13,7 +13,7 @@ async function withRuns() {
   await a.registerAll()
   const mk = async (note: string) => {
     a.clock.advance(60)
-    const r = await a.payrun.payRuns.create({
+    const r = await a.rolepay.payRuns.create({
       guildId: GUILD,
       createdBy: ADMIN,
       note,
@@ -23,7 +23,7 @@ async function withRuns() {
       ],
     })
     if (!r.ok) throw new Error(r.error.code)
-    await a.payrun.payRuns.submit({ guildId: GUILD, runId: r.value.id, actor: ADMIN })
+    await a.rolepay.payRuns.submit({ guildId: GUILD, runId: r.value.id, actor: ADMIN })
     return r.value.id
   }
   const first = await mk('September')
@@ -49,7 +49,7 @@ describe('/payrun status', () => {
 
   it('an approved run that is not paid gets a Retry (a restart may have lost its job)', async () => {
     const a = await withRuns()
-    await a.payrun.payRuns.approve({ guildId: GUILD, runId: a.first, actor: '300000000000000001', actorCanApprove: true })
+    await a.rolepay.payRuns.approve({ guildId: GUILD, runId: a.first, actor: '300000000000000001', actorCanApprove: true })
     const d = await a.send(slashCommand(SCOPE, 'payrun', 'status', { run: a.first }, admin))
     expect(text(body(d))).toContain(`payrun:retry:${a.first}`)
   })

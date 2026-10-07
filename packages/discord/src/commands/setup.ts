@@ -63,7 +63,7 @@ export const setupCommand: CommandHandler = async ({ options, ctx }, deps) => {
 }
 
 async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: DiscordAppDeps): Promise<DeferredResult> {
-  const { payrun, config, clock } = deps
+  const { rolepay, config, clock } = deps
   const guildId = ctx.guildId
   const notices: string[] = []
   // Interactions carry no guild name; the bot reads it (no intent needed). Best effort.
@@ -74,7 +74,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
   const fees: Fees | null = o.fees ? { feeMode: o.fees, feeToken: o.fees === 'fee_budget' ? (o.fee_token ?? config.defaultFeeToken) : null } : null
   if (fees?.feeMode === 'fee_budget' && !fees.feeToken) return fail('fees:fee_budget needs `fee_token`: the token the bot pays network fees in.')
 
-  let community = await payrun.communities.get(guildId)
+  let community = await rolepay.communities.get(guildId)
   if (!community.ok) {
     if (o.ai_proposals !== undefined || o.proposer_role !== undefined) {
       return fail('AI proposals are set after the treasury exists: finish setup on the treasury page, then run `/payrun setup ai_proposals:true`.')
@@ -84,7 +84,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
     // rule as the treasury page link: Manage Server AND the approver role being set.
     const role = chosenRole(o, ctx)
     if (!('roleId' in role)) return role
-    const registered = await payrun.communities.register({
+    const registered = await rolepay.communities.register({
       guildId,
       name: guildName,
       treasuryAddress: o.treasury,
@@ -102,26 +102,26 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
     }
     if (o.token && o.token !== community.value.payoutToken) notices.push('The payout token cannot be changed once registered.')
     if (guildName && guildName !== community.value.name) {
-      const renamed = await payrun.communities.setName({ guildId, name: guildName })
+      const renamed = await rolepay.communities.setName({ guildId, name: guildName })
       if (renamed.ok) community = renamed
     }
     const actorRoleIds = ctx.caller.roles
     if (o.approver_role && o.approver_role !== community.value.approverRoleId) {
-      const updated = await payrun.communities.setApproverRole({ guildId, approverRoleId: o.approver_role, actorRoleIds })
+      const updated = await rolepay.communities.setApproverRole({ guildId, approverRoleId: o.approver_role, actorRoleIds })
       if (!updated.ok) {
         return fail(updated.error.code === 'not_permitted' ? notPermitted(community.value, 'the approver role', o.approver_role) : explainError(updated.error))
       }
       community = updated
     }
     if (o.separate_approver !== undefined && o.separate_approver !== community.value.requireSeparateApprover) {
-      const updated = await payrun.communities.setRequireSeparateApprover({ guildId, value: o.separate_approver, actorRoleIds })
+      const updated = await rolepay.communities.setRequireSeparateApprover({ guildId, value: o.separate_approver, actorRoleIds })
       if (!updated.ok) return fail(updated.error.code === 'not_permitted' ? notPermitted(community.value, 'who may approve') : explainError(updated.error))
       community = updated
     }
     const ai = o.ai_proposals !== undefined && o.ai_proposals !== community.value.aiProposals
     const proposerRole = o.proposer_role !== undefined && o.proposer_role !== community.value.proposerRoleId
     if (ai || proposerRole) {
-      const updated = await payrun.communities.setAiProposals({
+      const updated = await rolepay.communities.setAiProposals({
         guildId,
         ...(ai ? { enabled: o.ai_proposals } : {}),
         ...(proposerRole ? { proposerRoleId: o.proposer_role } : {}),
@@ -129,12 +129,12 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       })
       if (!updated.ok) return fail(updated.error.code === 'not_permitted' ? notPermitted(community.value, 'AI proposals') : explainError(updated.error))
       community = updated
-      if (ai && updated.value.aiProposals && !payrun.proposals.isConfigured()) {
+      if (ai && updated.value.aiProposals && !rolepay.proposals.isConfigured()) {
         notices.push('AI proposals are on for this server, but this payrun server has no Anthropic API key, so they cannot run yet.')
       }
     }
     if (fees && (fees.feeMode !== community.value.feeMode || fees.feeToken !== community.value.feeToken)) {
-      const switched = await payrun.communities.setFeeMode({ guildId, ...fees, actorRoleIds })
+      const switched = await rolepay.communities.setFeeMode({ guildId, ...fees, actorRoleIds })
       if (!switched.ok) return fail(switched.error.code === 'not_permitted' ? notPermitted(community.value, 'the fee mode') : explainError(switched.error))
       community = { ok: true, value: switched.value.community }
       if (switched.value.keyNeedsFeeBudget) {
@@ -144,14 +144,14 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
   }
 
   // Dev path only: issue a key here for `pnpm dev:authorize-key`. On the treasury page the treasurer chooses its limits.
-  let key = await payrun.communities.keyStatus({ guildId })
+  let key = await rolepay.communities.keyStatus({ guildId })
   const unusable = !key.ok || key.value.key.status === 'revoked' || key.value.state.status === 'revoked' || key.value.state.status === 'expired'
   if (o.new_key || (o.treasury && unusable)) {
     if (!isTreasurer(ctx, community.value)) {
       const role = community.value.approverRoleId
       return fail(`Only a member with ${role ? roleMention(role) : 'the approver role'} can issue a bot key here.`)
     }
-    const provisioned = await payrun.communities.provisionBotKey({
+    const provisioned = await rolepay.communities.provisionBotKey({
       guildId,
       limit,
       periodSeconds: config.botKey.periodSeconds,
@@ -159,7 +159,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       ...(community.value.feeMode === 'fee_budget' ? { feeBudget: DEV_FEE_BUDGET } : {}),
     })
     if (!provisioned.ok) return fail(explainError(provisioned.error))
-    key = await payrun.communities.keyStatus({ guildId })
+    key = await rolepay.communities.keyStatus({ guildId })
   }
 
   const link = isTreasurer(ctx, community.value) ? await issueLink(community.value, ctx, deps) : null
@@ -172,7 +172,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       setupLink: link,
       authorizeHint: config.authorizeHint?.replaceAll('{guildId}', guildId) ?? null,
       network: config.network,
-      aiConfigured: payrun.proposals.isConfigured(),
+      aiConfigured: rolepay.proposals.isConfigured(),
     }),
   }
 }
@@ -204,7 +204,7 @@ async function firstSetup(o: Options, fees: Fees | null, guildName: string | nul
     approverRoleId: role.roleId,
     requireSeparateApprover: o.separate_approver ?? false,
   }
-  const link = await deps.payrun.communities.issueSetupLink({ guildId: ctx.guildId, discordUserId: ctx.caller.userId, settings })
+  const link = await deps.rolepay.communities.issueSetupLink({ guildId: ctx.guildId, discordUserId: ctx.caller.userId, settings })
   if (!link.ok) return fail(explainError(link.error))
   return { ok: true, message: firstSetupMessage({ settings, setupLink: { url: setupUrl(deps, link.value.token), expiresAt: link.value.expiresAt } }) }
 }
@@ -212,7 +212,7 @@ async function firstSetup(o: Options, fees: Fees | null, guildName: string | nul
 const isTreasurer = (ctx: GuildContext, c: Community) => c.approverRoleId !== null && ctx.caller.roles.includes(c.approverRoleId)
 
 async function issueLink(c: Community, ctx: GuildContext, deps: DiscordAppDeps): Promise<SetupLinkView | null> {
-  const link = await deps.payrun.communities.issueSetupLink({
+  const link = await deps.rolepay.communities.issueSetupLink({
     guildId: c.id,
     discordUserId: ctx.caller.userId,
     settings: {

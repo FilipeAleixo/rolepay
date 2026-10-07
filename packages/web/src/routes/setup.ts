@@ -1,4 +1,4 @@
-import { AddressSchema, type Clock, type Community, type KeyStatusView, type Payrun, TOKEN_SYMBOLS, formatAmount, parseAmount } from '@rolepay/core'
+import { AddressSchema, type Clock, type Community, type KeyStatusView, type Rolepay, TOKEN_SYMBOLS, formatAmount, parseAmount } from '@rolepay/core'
 import { type Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { WebConfig } from '../config.js'
@@ -7,7 +7,7 @@ import type { PasskeySession, PasskeySessions } from '../ports.js'
 import { linkErrorPage } from '../views/page.js'
 import { setupPage } from '../views/setup.js'
 
-export type SetupRoutesDeps = { payrun: Payrun; sessions: PasskeySessions; config: WebConfig; clock: Clock; testnet: boolean }
+export type SetupRoutesDeps = { rolepay: Rolepay; sessions: PasskeySessions; config: WebConfig; clock: Clock; testnet: boolean }
 
 const DAY = 86_400
 const label = (token: string | null) => (token ? (TOKEN_SYMBOLS[token.toLowerCase()] ?? token) : null)
@@ -50,12 +50,12 @@ const keyJson = (s: KeyStatusView) => ({ address: s.key.address, status: s.key.s
  * Replacing a key revokes every live old key in the same transaction (one passkey prompt).
  */
 export function setupRoutes(deps: SetupRoutesDeps): Hono {
-  const { payrun, config } = deps
+  const { rolepay, config } = deps
   const app = new Hono()
 
   /** The link, the community it set up, and the passkey session that controls it, or the response to send. */
   async function treasurer(c: Context): Promise<{ ok: true; value: Treasurer } | { ok: false; response: Response }> {
-    const link = await payrun.communities.describeSetupLink({ token: c.req.param('token') as string })
+    const link = await rolepay.communities.describeSetupLink({ token: c.req.param('token') as string })
     if (!link.ok) return { ok: false, response: failure(linkStatus(link.error.code), link.error) }
     const community = link.value.community
     if (!community) return { ok: false, response: failure(409, { code: 'treasury_not_bound' }) }
@@ -70,7 +70,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
 
   app.get('/setup/:token', async (c) => {
     const token = c.req.param('token')
-    const link = await payrun.communities.describeSetupLink({ token })
+    const link = await rolepay.communities.describeSetupLink({ token })
     if (!link.ok) return c.html(linkErrorPage(link.error.code, '/payrun setup', deps.testnet), linkStatus(link.error.code) as 404)
     const { community, settings } = link.value
     const feeMode = community?.feeMode ?? settings.feeMode
@@ -106,12 +106,12 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
   })
 
   app.get('/setup/:token/state', async (c) => {
-    const link = await payrun.communities.describeSetupLink({ token: c.req.param('token') })
+    const link = await rolepay.communities.describeSetupLink({ token: c.req.param('token') })
     if (!link.ok) return failure(linkStatus(link.error.code), link.error)
     const community = link.value.community
     const session = await deps.sessions.current(c.req.raw)
-    const status = community ? await payrun.communities.keyStatus({ guildId: community.id }) : null
-    const keys = community ? await payrun.communities.listKeys({ guildId: community.id }) : null
+    const status = community ? await rolepay.communities.keyStatus({ guildId: community.id }) : null
+    const keys = community ? await rolepay.communities.listKeys({ guildId: community.id }) : null
     return jsonResponse(200, {
       ok: true,
       community: community
@@ -130,7 +130,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
   app.post('/setup/:token/treasury', async (c) => {
     const session = await deps.sessions.current(c.req.raw)
     if (!session) return failure(401, { code: 'no_passkey_session' })
-    const bound = await payrun.communities.bindTreasury({ token: c.req.param('token'), treasuryAddress: session.address })
+    const bound = await rolepay.communities.bindTreasury({ token: c.req.param('token'), treasuryAddress: session.address })
     if (!bound.ok) {
       const code = bound.error.code
       return failure(code === 'treasury_mismatch' ? 409 : code === 'invalid_input' ? 400 : linkStatus(code), bound.error)
@@ -156,7 +156,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     if (body.data.expiresAt <= now || body.data.expiresAt > now + (MAX_DAYS + 1) * DAY) {
       return failure(400, { code: 'invalid_input', issues: [`expiresAt: must be in the future and at most ${MAX_DAYS} days away`] })
     }
-    const provisioned = await payrun.communities.provisionBotKey({
+    const provisioned = await rolepay.communities.provisionBotKey({
       guildId: t.value.community.id,
       limit: limit.value,
       periodSeconds: body.data.periodDays === 0 ? null : body.data.periodDays * DAY,
@@ -177,7 +177,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     if (!t.ok) return t.response
     const keyAddress = await keyRef(c)
     if (!keyAddress) return failure(400, { code: 'invalid_input', issues: ['keyAddress: the key this page authorised'] })
-    const confirmed = await payrun.communities.confirmBotKey({ guildId: t.value.community.id, keyAddress })
+    const confirmed = await rolepay.communities.confirmBotKey({ guildId: t.value.community.id, keyAddress })
     if (!confirmed.ok) return failure(409, confirmed.error)
     return jsonResponse(200, { ok: true, key: confirmed.value })
   })
@@ -187,7 +187,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     if (!t.ok) return t.response
     const keyAddress = await keyRef(c)
     if (!keyAddress) return failure(400, { code: 'invalid_input', issues: ['keyAddress: the key this page revoked'] })
-    const revoked = await payrun.communities.confirmRevocation({ guildId: t.value.community.id, keyAddress })
+    const revoked = await rolepay.communities.confirmRevocation({ guildId: t.value.community.id, keyAddress })
     if (!revoked.ok) return failure(409, revoked.error)
     return jsonResponse(200, { ok: true, key: revoked.value })
   })

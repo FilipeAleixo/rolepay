@@ -27,8 +27,8 @@ const DEFAULT_SINCE_MS = 7 * UNIT_MS.d
  * mode). Either way the answer is a proposal, only for the caller, with Create, Edit and Discard.
  * Deferred: reading history and the model take longer than Discord's 3 seconds.
  */
-export const proposeCommand: CommandHandler = async ({ options, ctx, channels }, { payrun, clock }) => {
-  const guard = await requireProposer(ctx, payrun, { ai: true })
+export const proposeCommand: CommandHandler = async ({ options, ctx, channels }, { rolepay, clock }) => {
+  const guard = await requireProposer(ctx, rolepay, { ai: true })
   if (!guard.ok) return guard.reply
   const parsed = parseOptions(ProposeOptions, options)
   if (!parsed.ok) return parsed.reply
@@ -44,12 +44,12 @@ export const proposeCommand: CommandHandler = async ({ options, ctx, channels },
     ephemeral: true,
     work: async (): Promise<DeferredResult> => {
       const proposed = o.source
-        ? await payrun.proposals.proposeFromMessages({
+        ? await rolepay.proposals.proposeFromMessages({
             ...who,
             instruction: o.instruction,
             source: { kind: 'history', channelId: o.source, since: new Date(clock.now().getTime() - sinceMs) },
           })
-        : await payrun.proposals.proposeFromCriteria({ ...who, instruction: o.instruction })
+        : await rolepay.proposals.proposeFromCriteria({ ...who, instruction: o.instruction })
       if (!proposed.ok) return { ok: false, message: { content: explainProposalError(proposed.error, { community, token: community.payoutToken }) } }
       return { ok: true, message: proposalMessage(proposed.value, { approverRoleId: community.approverRoleId }) }
     },

@@ -17,7 +17,7 @@ async function setup(a: Awaited<ReturnType<typeof appHarness>>, values: Record<s
 }
 
 const keyAddress = async (a: Awaited<ReturnType<typeof appHarness>>) => {
-  const ks = await a.payrun.communities.keyStatus({ guildId: GUILD })
+  const ks = await a.rolepay.communities.keyStatus({ guildId: GUILD })
   return ks.ok ? ks.value.key.address : null
 }
 
@@ -27,7 +27,7 @@ describe('/payrun setup', () => {
     const { d } = await setup(a, { treasury: TREASURY }, { userId: ALICE, manageGuild: false })
     expect(isEphemeral(d)).toBe(true)
     expect(body(d).data?.content).toMatch(/Manage Server/)
-    expect((await a.payrun.communities.get(GUILD)).ok).toBe(false)
+    expect((await a.rolepay.communities.get(GUILD)).ok).toBe(false)
   })
 
   it('refuses a malformed treasury address before doing anything', async () => {
@@ -43,7 +43,7 @@ describe('/payrun setup', () => {
     expect(body(d)).toEqual({ type: 5, data: { flags: 64 } }) // deferred, only the admin sees it
     expect(final).toMatch(/approver_role/)
     expect(setupUrl(final)).toBeNull()
-    expect((await a.payrun.communities.get(GUILD)).ok).toBe(false)
+    expect((await a.rolepay.communities.get(GUILD)).ok).toBe(false)
   })
 
   it('the first setup link goes only to someone who holds the approver role too', async () => {
@@ -61,8 +61,8 @@ describe('/payrun setup', () => {
     expect(token).not.toBeNull()
     expect(final).toMatch(/passkey/)
     expect(final).toMatch(/only for you/i)
-    expect((await a.payrun.communities.get(GUILD)).ok).toBe(false) // registered when the treasury exists, on the page
-    expect(await a.payrun.communities.describeSetupLink({ token: token as string })).toMatchObject({
+    expect((await a.rolepay.communities.get(GUILD)).ok).toBe(false) // registered when the treasury exists, on the page
+    expect(await a.rolepay.communities.describeSetupLink({ token: token as string })).toMatchObject({
       ok: true,
       value: { guildId: GUILD, discordUserId: ADMIN, settings: { name: 'Mods guild', payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE } },
     })
@@ -71,7 +71,7 @@ describe('/payrun setup', () => {
   it('a first setup can choose fees from a fee budget (pathUSD by default on testnet)', async () => {
     const a = await appHarness()
     const { final } = await setup(a, { approver_role: TREASURER_ROLE, fees: 'fee_budget' }, treasurerAdmin)
-    const link = await a.payrun.communities.describeSetupLink({ token: setupUrl(final) as string })
+    const link = await a.rolepay.communities.describeSetupLink({ token: setupUrl(final) as string })
     expect(link).toMatchObject({ ok: true, value: { settings: { feeMode: 'fee_budget', feeToken: PATH_USD } } })
   })
 
@@ -89,23 +89,23 @@ describe('/payrun setup', () => {
     const a = await appHarness()
     a.rest.guilds.set(GUILD, 'Mods guild')
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { name: 'Mods guild' } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { name: 'Mods guild' } })
     a.rest.guilds.set(GUILD, 'Renamed guild')
     await setup(a, {})
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { name: 'Renamed guild' } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { name: 'Renamed guild' } })
   })
 
   it('switches fees between sponsored and a fee budget, and says when the key needs re-authorising', async () => {
     const a = await appHarness()
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
-    await a.payrun.communities.authorizeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })
+    await a.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })
     const toBudget = await setup(a, { fees: 'fee_budget' }, treasurerAdmin)
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'fee_budget', feeToken: PATH_USD } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'fee_budget', feeToken: PATH_USD } })
     expect(toBudget.final).toMatch(/From a fee budget in pathUSD/)
     expect(toBudget.final).toMatch(/fee budget/)
     expect(toBudget.final).toMatch(/new bot key/)
     const back = await setup(a, { fees: 'sponsor' }, treasurerAdmin)
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor', feeToken: null } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor', feeToken: null } })
     expect(back.final).toMatch(/Sponsored/)
   })
 
@@ -114,13 +114,13 @@ describe('/payrun setup', () => {
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     const { final } = await setup(a, { fees: 'fee_budget', fee_token: TOKEN }, treasurerAdmin)
     expect(final).toMatch(/fee token must differ/)
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor' } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'sponsor' } })
   })
 
   it('registers the community, provisions a bot key and says how to authorise it', async () => {
     const a = await appHarness()
     const { final } = await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
-    const c = await a.payrun.communities.get(GUILD)
+    const c = await a.rolepay.communities.get(GUILD)
     expect(c).toMatchObject({ ok: true, value: { treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE } })
     expect(final).toMatch(/Waiting for the treasury to authorise/)
     expect(final).toContain('100 AlphaUSD per 30 days')
@@ -133,7 +133,7 @@ describe('/payrun setup', () => {
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     const before = await keyAddress(a)
     const { final } = await setup(a, { approver_role: NEW_ROLE }, treasurerAdmin)
-    expect((await a.payrun.communities.get(GUILD)).ok && (await a.payrun.communities.get(GUILD))).toMatchObject({ value: { approverRoleId: NEW_ROLE } })
+    expect((await a.rolepay.communities.get(GUILD)).ok && (await a.rolepay.communities.get(GUILD))).toMatchObject({ value: { approverRoleId: NEW_ROLE } })
     expect(await keyAddress(a)).toBe(before)
     expect(final).toContain(`<@&${NEW_ROLE}>`)
   })
@@ -146,7 +146,7 @@ describe('/payrun setup', () => {
       const { final } = await setup(a, values, { userId: ADMIN, manageGuild: true, roles: [NEW_ROLE] })
       expect(final).toContain(`Only a member with <@&${TREASURER_ROLE}>`)
     }
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({
       ok: true,
       value: { approverRoleId: TREASURER_ROLE, feeMode: 'sponsor', requireSeparateApprover: false },
     })
@@ -156,20 +156,20 @@ describe('/payrun setup', () => {
     const a = await appHarness()
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     const on = await setup(a, { separate_approver: true }, treasurerAdmin)
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { requireSeparateApprover: true } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { requireSeparateApprover: true } })
     expect(on.final).toMatch(/created a run cannot approve it/)
 
     const b = await appHarness()
     const first = await setup(b, { approver_role: TREASURER_ROLE, separate_approver: true }, treasurerAdmin)
     expect(first.final).toMatch(/created a run cannot approve it/)
-    const link = await b.payrun.communities.describeSetupLink({ token: setupUrl(first.final) as string })
+    const link = await b.rolepay.communities.describeSetupLink({ token: setupUrl(first.final) as string })
     expect(link).toMatchObject({ ok: true, value: { settings: { requireSeparateApprover: true } } })
   })
 
   it('once the treasury has authorised the key, shows it active with its remaining limit', async () => {
     const a = await appHarness()
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
-    expect((await a.payrun.communities.authorizeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })).ok).toBe(true)
+    expect((await a.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })).ok).toBe(true)
     const { final } = await setup(a, {})
     expect(final).toMatch(/Active/)
     expect(final).toContain('100 AlphaUSD of 100 AlphaUSD left')
@@ -188,8 +188,8 @@ describe('/payrun setup', () => {
   it('a revoked key: the card says so; new_key (the dev path) provisions a fresh pending one', async () => {
     const a = await appHarness()
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
-    await a.payrun.communities.authorizeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })
-    await a.payrun.communities.revokeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })
+    await a.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })
+    await a.rolepay.communities.revokeBotKey({ guildId: GUILD, root: a.chain.rootSigner(TREASURY) })
     const revoked = await keyAddress(a)
     const plain = await setup(a, {})
     expect(plain.final).toMatch(/Revoked/)
@@ -204,7 +204,7 @@ describe('/payrun setup', () => {
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     const { final } = await setup(a, { treasury: '0x8888888888888888888888888888888888888888' }, treasurerAdmin)
     expect(final).toMatch(/cannot be changed/)
-    expect((await a.payrun.communities.get(GUILD)).ok && (await a.payrun.communities.get(GUILD))).toMatchObject({ value: { treasuryAddress: TREASURY } })
+    expect((await a.rolepay.communities.get(GUILD)).ok && (await a.rolepay.communities.get(GUILD))).toMatchObject({ value: { treasuryAddress: TREASURY } })
   })
 
   it('without an approver role, says nobody can approve yet', async () => {
@@ -225,20 +225,20 @@ describe('/payrun setup dev shortcuts (treasury, new_key, key_limit)', () => {
       expect(isEphemeral(d)).toBe(true)
       expect(body(d).data?.content).toMatch(NOT_HERE)
     }
-    expect((await a.payrun.communities.get(GUILD)).ok).toBe(false)
+    expect((await a.rolepay.communities.get(GUILD)).ok).toBe(false)
   })
 
   it('do not exist on any network but the Moderato testnet, even with the flag on', async () => {
     const a = await appHarness({ config: { network: 'mainnet', devShortcuts: true } })
     const { d } = await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     expect(body(d).data?.content).toMatch(NOT_HERE)
-    expect((await a.payrun.communities.get(GUILD)).ok).toBe(false)
+    expect((await a.rolepay.communities.get(GUILD)).ok).toBe(false)
   })
 
   it('a registered community: new_key is refused when the flag is off, and the pending key stays the same', async () => {
     const a = await appHarness({ config: { devShortcuts: false } })
     await a.setupCommunity({ activeKey: false })
-    await a.payrun.communities.provisionBotKey({ guildId: GUILD, limit: 1n, periodSeconds: null, expiresAt: a.chain.time + 86_400 })
+    await a.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: 1n, periodSeconds: null, expiresAt: a.chain.time + 86_400 })
     const before = await keyAddress(a)
     const { d } = await setup(a, { new_key: true, key_limit: '500' }, treasurerAdmin)
     expect(body(d).data?.content).toMatch(NOT_HERE)
@@ -249,10 +249,10 @@ describe('/payrun setup dev shortcuts (treasury, new_key, key_limit)', () => {
     const a = await appHarness()
     const squat = await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE })
     expect(squat.final).toContain(`<@&${TREASURER_ROLE}>`)
-    expect((await a.payrun.communities.get(GUILD)).ok).toBe(false)
+    expect((await a.rolepay.communities.get(GUILD)).ok).toBe(false)
     const noRole = await setup(a, { treasury: TREASURY })
     expect(noRole.final).toMatch(/approver_role/)
-    expect((await a.payrun.communities.get(GUILD)).ok).toBe(false)
+    expect((await a.rolepay.communities.get(GUILD)).ok).toBe(false)
 
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     const before = await keyAddress(a)
@@ -279,9 +279,9 @@ describe('/payrun setup: AI proposals (off by default; a treasurer switches them
     await a.setupCommunity()
     const { final } = await setup(a, { ai_proposals: true, proposer_role: PROPOSERS }, treasurerAdmin)
     expect(final).toContain(`On. <@&${TREASURER_ROLE}> and <@&${PROPOSERS}> can propose`)
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: true, proposerRoleId: PROPOSERS } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: true, proposerRoleId: PROPOSERS } })
     await setup(a, { ai_proposals: false }, treasurerAdmin)
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: false } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: false } })
   })
 
   it('Manage Server alone cannot switch them on or widen who proposes', async () => {
@@ -289,7 +289,7 @@ describe('/payrun setup: AI proposals (off by default; a treasurer switches them
     await a.setupCommunity()
     const { final } = await setup(a, { ai_proposals: true, proposer_role: PROPOSERS }, { userId: ADMIN, manageGuild: true, roles: [PROPOSERS] })
     expect(final).toMatch(/Only a member with .* can change AI proposals/)
-    expect(await a.payrun.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: false, proposerRoleId: null } })
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: false, proposerRoleId: null } })
   })
 
   it('on a payrun server without an Anthropic key the card says they are not available', async () => {

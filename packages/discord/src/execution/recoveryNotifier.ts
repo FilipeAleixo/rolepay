@@ -1,10 +1,10 @@
-import type { NetworkName, Payrun, RecoveryResult } from '@rolepay/core'
+import type { NetworkName, Rolepay, RecoveryResult } from '@rolepay/core'
 import type { DiscordRest, RunNotices } from '../ports.js'
 import { runMessage } from '../views/run.js'
 import { sendReceipts } from './receipts.js'
 
 export type RecoveryNotifierDeps = {
-  payrun: Payrun
+  rolepay: Rolepay
   rest: DiscordRest
   notices: RunNotices
   network: NetworkName
@@ -19,7 +19,7 @@ export type RecoveryNotifierDeps = {
  */
 export function createRecoveryNotifier(deps: RecoveryNotifierDeps): (results: RecoveryResult[]) => Promise<void> {
   async function report(result: RecoveryResult) {
-    const run = await deps.payrun.payRuns.get({ guildId: result.guildId, runId: result.runId })
+    const run = await deps.rolepay.payRuns.get({ guildId: result.guildId, runId: result.runId })
     if (!run.ok) return
     let receipts: { sent: number; total: number } | undefined
     if (run.value.status === 'paid') {

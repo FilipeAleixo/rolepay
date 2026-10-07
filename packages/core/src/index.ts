@@ -3,13 +3,13 @@
  * domain types/schemas callers need. Adapter implementations are NOT exported here;
  * composition roots import them from `@rolepay/core/adapters`.
  */
-import type { PayrunDeps } from './ports/deps.js'
+import type { RolepayDeps } from './ports/deps.js'
 import { CommunityService } from './services/communityService.js'
 import { PayeeService } from './services/payeeService.js'
 import { PayRunService } from './services/payRunService.js'
 import { ProposalService } from './services/proposalService.js'
 
-export type Payrun = {
+export type Rolepay = {
   communities: CommunityService
   payees: PayeeService
   payRuns: PayRunService
@@ -19,7 +19,7 @@ export type Payrun = {
 
 export const DEFAULT_LINK_TTL_SECONDS = 1800
 
-export function createPayrun(deps: PayrunDeps): Payrun {
+export function createRolepay(deps: RolepayDeps): Rolepay {
   const { chain, repositories: r, vault, ids, clock, network } = deps
   const communities = new CommunityService({
     communities: r.communities,

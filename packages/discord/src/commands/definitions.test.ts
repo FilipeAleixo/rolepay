@@ -60,9 +60,9 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
   })
 
   it('/payrun is shown to Manage Server by default; /payee to everyone; both only inside servers', () => {
-    const payrun = defs.find((d) => d.name === 'payrun')
+    const rolepay = defs.find((d) => d.name === 'payrun')
     const payee = defs.find((d) => d.name === 'payee')
-    expect(payrun?.default_member_permissions).toBe(String(Permission.ManageGuild))
+    expect(rolepay?.default_member_permissions).toBe(String(Permission.ManageGuild))
     expect(payee?.default_member_permissions).toBeUndefined()
     for (const d of all) expect(d.contexts).toEqual([0])
   })

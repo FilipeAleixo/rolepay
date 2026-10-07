@@ -29,7 +29,7 @@ describe('pay run end to end through the HTTP endpoint', () => {
     expect(text(s.rest.lastEdit('tok-setup'))).toContain(`pnpm dev:authorize-key ${GUILD}`)
 
     // 2. The treasury authorises the bot key (what `pnpm dev:authorize-key` does on testnet).
-    expect((await s.payrun.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })).ok).toBe(true)
+    expect((await s.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })).ok).toBe(true)
 
     // 3. Two people get their one-time links and register on the claim page.
     for (const [user, address] of [
@@ -94,16 +94,16 @@ describe('pay run end to end through the HTTP endpoint', () => {
 
   it('a crash after approval loses nothing: recovery reconciles, Retry finishes it, still one payment', async () => {
     const s = await testServer()
-    await s.payrun.communities.register({ guildId: GUILD, name: null, treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE })
-    await s.payrun.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 86_400, expiresAt: s.chain.time + 86_400 })
-    await s.payrun.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })
-    const link = await s.payrun.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
+    await s.rolepay.communities.register({ guildId: GUILD, name: null, treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE })
+    await s.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 86_400, expiresAt: s.chain.time + 86_400 })
+    await s.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })
+    const link = await s.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
     if (!link.ok) throw new Error(link.error.code)
-    await s.payrun.payees.register({ token: link.value.token, address: ADDR.alice })
-    const run = await s.payrun.payRuns.create({ guildId: GUILD, createdBy: ADMIN.userId, lines: [{ discordUserId: ALICE, amount: usd('5') }] })
+    await s.rolepay.payees.register({ token: link.value.token, address: ADDR.alice })
+    const run = await s.rolepay.payRuns.create({ guildId: GUILD, createdBy: ADMIN.userId, lines: [{ discordUserId: ALICE, amount: usd('5') }] })
     if (!run.ok) throw new Error(run.error.code)
-    await s.payrun.payRuns.submit({ guildId: GUILD, runId: run.value.id, actor: ADMIN.userId })
-    await s.payrun.payRuns.approve({ guildId: GUILD, runId: run.value.id, actor: TREASURER.userId, actorCanApprove: true })
+    await s.rolepay.payRuns.submit({ guildId: GUILD, runId: run.value.id, actor: ADMIN.userId })
+    await s.rolepay.payRuns.approve({ guildId: GUILD, runId: run.value.id, actor: TREASURER.userId, actorCanApprove: true })
     // The process "died" before the queued job ran: the run is approved, nothing executing.
 
     const status = await s.interact(slashCommand(SCOPE, 'payrun', 'status', { run: run.value.id }, ADMIN))
@@ -117,12 +117,12 @@ describe('pay run end to end through the HTTP endpoint', () => {
 
   it('a run left executing when the process died is finished by the next process: message updated, receipts once', async () => {
     const before = await testServer({ sleep: async () => Promise.reject(new Error('the process died')) })
-    await before.payrun.communities.register({ guildId: GUILD, name: 'Test guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE })
-    await before.payrun.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 86_400, expiresAt: before.chain.time + 86_400 })
-    await before.payrun.communities.authorizeBotKey({ guildId: GUILD, root: before.chain.rootSigner(TREASURY) })
-    const link = await before.payrun.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
+    await before.rolepay.communities.register({ guildId: GUILD, name: 'Test guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE })
+    await before.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 86_400, expiresAt: before.chain.time + 86_400 })
+    await before.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: before.chain.rootSigner(TREASURY) })
+    const link = await before.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
     if (!link.ok) throw new Error(link.error.code)
-    await before.payrun.payees.register({ token: link.value.token, address: ADDR.alice })
+    await before.rolepay.payees.register({ token: link.value.token, address: ADDR.alice })
     await before.interact(slashCommand(SCOPE, 'payrun', 'new', { amount: '5', users: `<@${ALICE}>` }, ADMIN, 'tok-new'))
     await before.drain()
     const runId = /payrun:approve:([^"]+)"/.exec(text(before.rest.lastEdit('tok-new')))?.[1] as string
@@ -131,7 +131,7 @@ describe('pay run end to end through the HTTP endpoint', () => {
     before.chain.faults.nextBroadcast = 'land_then_lose_response'
     await before.interact(buttonClick(SCOPE, `payrun:approve:${runId}`, TREASURER, 'tok-approve'))
     await before.drain()
-    expect((await before.payrun.payRuns.get({ guildId: GUILD, runId })).ok && (await before.payrun.payRuns.get({ guildId: GUILD, runId }))).toMatchObject({ value: { status: 'executing' } })
+    expect((await before.rolepay.payRuns.get({ guildId: GUILD, runId })).ok && (await before.rolepay.payRuns.get({ guildId: GUILD, runId }))).toMatchObject({ value: { status: 'executing' } })
     expect(before.rest.dms).toEqual([])
 
     // The next process: same database, a fresh Discord connection, the recovery sweep on start.
@@ -156,7 +156,7 @@ describe('pay run end to end through the HTTP endpoint', () => {
     const res = await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE }, TREASURER_ADMIN, 'tok-setup'))
     expect(text(await res.json())).toMatch(/dev shortcuts.*off/)
     await s.drain()
-    expect((await s.payrun.communities.get(GUILD)).ok).toBe(false)
+    expect((await s.rolepay.communities.get(GUILD)).ok).toBe(false)
   })
 
   it('the production setup: a treasurer gets the treasury page link, the passkey binds the treasury and authorises the key', async () => {

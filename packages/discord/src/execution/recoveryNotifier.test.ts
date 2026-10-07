@@ -13,12 +13,12 @@ async function recovered(opts: { remembered?: boolean } = {}) {
   await h.setupCommunity()
   await h.registerAll()
   const run = await h.approvedRun()
-  const paid = await h.payrun.payRuns.execute({ guildId: GUILD, runId: run.id })
+  const paid = await h.rolepay.payRuns.execute({ guildId: GUILD, runId: run.id })
   if (!paid.ok || paid.value.status !== 'paid') throw new Error('not paid')
   const notices = new MemoryRunNotices()
   if (opts.remembered !== false) await notices.rememberMessage(run.id, { channelId: CHANNEL, messageId: MESSAGE })
   const errors: unknown[] = []
-  const notify = createRecoveryNotifier({ payrun: h.payrun, rest: h.rest, notices, network: 'moderato', onError: (e) => errors.push(e) })
+  const notify = createRecoveryNotifier({ rolepay: h.rolepay, rest: h.rest, notices, network: 'moderato', onError: (e) => errors.push(e) })
   return { ...h, run, notices, notify, errors }
 }
 
@@ -78,12 +78,12 @@ describe('createRecoveryNotifier (a run the sweep finished after a restart)', ()
     await h.registerAll()
     const run = await h.approvedRun()
     h.chain.faults.nextBroadcast = 'drop'
-    expect(await h.payrun.payRuns.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'pending' } })
+    expect(await h.rolepay.payRuns.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'pending' } })
     await h.sleep(200_000)
-    expect(await h.payrun.payRuns.reconcile({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'failed' } })
+    expect(await h.rolepay.payRuns.reconcile({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'failed' } })
     const notices = new MemoryRunNotices()
     await notices.rememberMessage(run.id, { channelId: CHANNEL, messageId: MESSAGE })
-    await createRecoveryNotifier({ payrun: h.payrun, rest: h.rest, notices, network: 'moderato' })([{ guildId: GUILD, runId: run.id, status: 'failed' }])
+    await createRecoveryNotifier({ rolepay: h.rolepay, rest: h.rest, notices, network: 'moderato' })([{ guildId: GUILD, runId: run.id, status: 'failed' }])
     expect(text(h.rest.channelEdits[0]?.message)).toContain(`payrun:retry:${run.id}`)
     expect(h.rest.dms).toEqual([])
   })

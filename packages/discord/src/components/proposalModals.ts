@@ -10,8 +10,8 @@ import { proposalMessage } from '../views/proposal.js'
  * command opened this modal; the AI reads it (as untrusted data) and the proposal comes back
  * only for the caller. Deferred: the model takes longer than 3 seconds.
  */
-export const instructionModalSubmit: ModalHandler = async ({ id: messageId, fields, ctx }, { payrun, pendingSources }) => {
-  const guard = await requireProposer(ctx, payrun, { ai: true })
+export const instructionModalSubmit: ModalHandler = async ({ id: messageId, fields, ctx }, { rolepay, pendingSources }) => {
+  const guard = await requireProposer(ctx, rolepay, { ai: true })
   if (!guard.ok) return guard.reply
   const target = await pendingSources.take({ userId: ctx.caller.userId, messageId })
   if (!target) return ephemeralReply('That form expired. Right-click the message again and use Apps > Propose pay run.')
@@ -21,7 +21,7 @@ export const instructionModalSubmit: ModalHandler = async ({ id: messageId, fiel
     kind: 'defer',
     ephemeral: true,
     work: async (): Promise<DeferredResult> => {
-      const proposed = await payrun.proposals.proposeFromMessages({
+      const proposed = await rolepay.proposals.proposeFromMessages({
         guildId: ctx.guildId,
         actor: ctx.caller.userId,
         actorRoleIds: ctx.caller.roles,
@@ -62,12 +62,12 @@ export function parseEditLines(text: string): Result<{ discordUserId: string; am
 }
 
 /** Edit: the lines become exactly what was typed; the proposal message is updated in place. */
-export const editModalSubmit: ModalHandler = async ({ id: proposalId, fields, ctx }, { payrun }) => {
-  const guard = await requireProposer(ctx, payrun, { ai: false })
+export const editModalSubmit: ModalHandler = async ({ id: proposalId, fields, ctx }, { rolepay }) => {
+  const guard = await requireProposer(ctx, rolepay, { ai: false })
   if (!guard.ok) return guard.reply
   const parsed = parseEditLines(fields.lines ?? '')
   if (!parsed.ok) return ephemeralReply(explainProposalError(parsed.error))
-  const edited = await payrun.proposals.edit({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, proposalId, lines: parsed.value })
+  const edited = await rolepay.proposals.edit({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, proposalId, lines: parsed.value })
   if (!edited.ok) return ephemeralReply(explainProposalError(edited.error, { community: guard.community }))
   return { kind: 'update', message: proposalMessage(edited.value, { approverRoleId: guard.community.approverRoleId }) }
 }

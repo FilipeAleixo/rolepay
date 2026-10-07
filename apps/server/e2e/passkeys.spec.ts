@@ -38,11 +38,11 @@ test.afterEach(() => {
 test('a recipient creates a passkey on the claim page, and a returning one signs in with it', async ({ page }) => {
   const guildId = snowflake()
   const dev = privateKeyToAddress(generatePrivateKey()).toLowerCase()
-  const registered = await server.payrun.communities.register({ guildId, name: 'E2E guild', treasuryAddress: dev, payoutToken: TOKEN, feeMode: 'sponsor' })
+  const registered = await server.rolepay.communities.register({ guildId, name: 'E2E guild', treasuryAddress: dev, payoutToken: TOKEN, feeMode: 'sponsor' })
   expect(registered.ok).toBe(true)
   const auth = await virtualAuthenticator(page)
 
-  const first = await server.payrun.payees.issueLink({ guildId, discordUserId: '200000000000000001' })
+  const first = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000001' })
   if (!first.ok) throw new Error(first.error.code)
   await page.goto(`${server.url}/claim/${first.value.token}`)
   await expect(page.getByRole('heading', { name: 'Get paid by E2E guild' })).toBeVisible()
@@ -51,14 +51,14 @@ test('a recipient creates a passkey on the claim page, and a returning one signs
   const address = (await page.locator('#address').textContent())?.trim() as string
   expect(address).toMatch(/^0x[0-9a-f]{40}$/)
   expect(await auth.credentials()).toHaveLength(1)
-  expect(await server.payrun.payees.get({ guildId, discordUserId: '200000000000000001' })).toMatchObject({ ok: true, value: { address } })
+  expect(await server.rolepay.payees.get({ guildId, discordUserId: '200000000000000001' })).toMatchObject({ ok: true, value: { address } })
 
   // The link is spent.
   await page.goto(`${server.url}/claim/${first.value.token}`)
   await expect(page.getByRole('heading', { name: 'This link was already used.' })).toBeVisible()
 
   // The same person in another link (say another server): signs in with the existing passkey, same account.
-  const second = await server.payrun.payees.issueLink({ guildId, discordUserId: '200000000000000002' })
+  const second = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000002' })
   if (!second.ok) throw new Error(second.error.code)
   await page.goto(`${server.url}/claim/${second.value.token}`)
   await page.getByRole('button', { name: 'I already have a payrun passkey' }).click()
@@ -72,7 +72,7 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await virtualAuthenticator(page)
   const prompts = await passkeyPrompts(page)
   page.on('dialog', (d) => void d.accept())
-  const link = await server.payrun.communities.issueSetupLink({
+  const link = await server.rolepay.communities.issueSetupLink({
     guildId,
     discordUserId: TREASURER,
     settings: { name: 'E2E treasury guild', payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: ROLE },
@@ -85,7 +85,7 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await page.getByRole('button', { name: 'Create the treasury passkey' }).click()
   await expect(page.locator('#status')).toHaveText('Signed in as the treasury.')
   expect(await prompts()).toEqual({ create: 1, get: 0 })
-  const community = await server.payrun.communities.get(guildId)
+  const community = await server.rolepay.communities.get(guildId)
   if (!community.ok) throw new Error('not registered')
   const treasury = community.value.treasuryAddress
   expect(community.value).toMatchObject({ name: 'E2E treasury guild', approverRoleId: ROLE, feeMode: 'sponsor' })
@@ -120,7 +120,7 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await expect(page.locator('#status')).toContainText('The bot key is active')
   // One fingerprint for the authorisation: the root signs one transaction, no separate key signature.
   expect(await prompts()).toEqual({ create: 1, get: 1 })
-  const status = await server.payrun.communities.keyStatus({ guildId })
+  const status = await server.rolepay.communities.keyStatus({ guildId })
   expect(status).toMatchObject({ ok: true, value: { key: { status: 'active' }, state: { status: 'active', remaining: 5_000_000n } } })
   if (!status.ok) throw new Error(status.error.code)
   // The call scope on chain: only transferWithMemo on the payout token, to anyone.
@@ -138,15 +138,15 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
 
   // 4. The bot pays a run from the passkey treasury with its limited key.
   const payee = privateKeyToAddress(generatePrivateKey()).toLowerCase()
-  const claim = await server.payrun.payees.issueLink({ guildId, discordUserId: '200000000000000003' })
+  const claim = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000003' })
   if (!claim.ok) throw new Error(claim.error.code)
-  expect((await server.payrun.payees.register({ token: claim.value.token, address: payee })).ok).toBe(true)
-  const run = await server.payrun.payRuns.create({ guildId, createdBy: TREASURER, note: 'e2e', lines: [{ discordUserId: '200000000000000003', amount: 1_500_000n }] })
+  expect((await server.rolepay.payees.register({ token: claim.value.token, address: payee })).ok).toBe(true)
+  const run = await server.rolepay.payRuns.create({ guildId, createdBy: TREASURER, note: 'e2e', lines: [{ discordUserId: '200000000000000003', amount: 1_500_000n }] })
   if (!run.ok) throw new Error(JSON.stringify(run.error))
   const ref = { guildId, runId: run.value.id }
-  await server.payrun.payRuns.submit({ ...ref, actor: TREASURER })
-  await server.payrun.payRuns.approve({ ...ref, actor: TREASURER, actorCanApprove: true })
-  const paid = await server.payrun.payRuns.execute(ref)
+  await server.rolepay.payRuns.submit({ ...ref, actor: TREASURER })
+  await server.rolepay.payRuns.approve({ ...ref, actor: TREASURER, actorCanApprove: true })
+  const paid = await server.rolepay.payRuns.execute(ref)
   if (!paid.ok) throw new Error(JSON.stringify(paid.error, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)))
   expect(paid.value.status).toBe('paid')
   expect(await server.testnet.balance(TOKEN, payee)).toBe(1_500_000n)
@@ -162,7 +162,7 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await page.getByRole('button', { name: 'Replace the bot key with these limits' }).click()
   await expect(page.locator('#status')).toContainText('The bot key is active')
   expect(await prompts()).toEqual({ create: 0, get: 1 })
-  const replaced = await server.payrun.communities.keyStatus({ guildId })
+  const replaced = await server.rolepay.communities.keyStatus({ guildId })
   expect(replaced).toMatchObject({ ok: true, value: { key: { status: 'active' }, state: { status: 'active', remaining: 4_000_000n } } })
   expect(replaced.ok && replaced.value.key.address).not.toBe(oldKey)
   const oldOnChain = (await createPublicClient({ transport: http(NET.rpcUrl) }).readContract({
@@ -179,7 +179,7 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await page.getByRole('button', { name: 'Revoke the bot key' }).click()
   await expect(page.locator('#status')).toHaveText('The bot key is revoked.')
   expect(await prompts()).toEqual({ create: 0, get: 1 })
-  expect(await server.payrun.communities.keyStatus({ guildId })).toMatchObject({ ok: true, value: { key: { status: 'revoked' }, state: { status: 'revoked' } } })
+  expect(await server.rolepay.communities.keyStatus({ guildId })).toMatchObject({ ok: true, value: { key: { status: 'revoked' }, state: { status: 'revoked' } } })
 
   // 7. This browser forgets the passkey account (site data cleared) while the treasury session
   // is still live: the page must sign in before it can sign, and says so before the click.

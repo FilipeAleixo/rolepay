@@ -8,8 +8,8 @@ import { randomBytes } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { NETWORKS, TESTNET_TOKENS, createPayrun, parseAmount } from '@rolepay/core'
-import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@rolepay/core/adapters'
+import { NETWORKS, TESTNET_TOKENS, createRolepay, parseAmount } from '@rolepay/core'
+import { createTestnetTools, openRolepayAdapters, rootSignerFromPrivateKey } from '@rolepay/core/adapters'
 import { FakeDiscordRest, buttonClick, createTestSigner, slashCommand } from '@rolepay/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -66,10 +66,10 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
       PAYRUN_BOT_KEY_LIMIT: '10',
       PAYRUN_DEV_SHORTCUTS: 'true',
     })
-    const opened = await openPayrunAdapters(config.core)
+    const opened = await openRolepayAdapters(config.core)
     close = opened.close
     rest = new FakeDiscordRest()
-    server = composeServer({ config, payrun: createPayrun(opened.deps), rest, clock: opened.deps.clock, kv: opened.kv, web: { sessions, assets: staticAssets({}) }, log: () => {} })
+    server = composeServer({ config, rolepay: createRolepay(opened.deps), rest, clock: opened.deps.clock, kv: opened.kv, web: { sessions, assets: staticAssets({}) }, log: () => {} })
     interact = async (interaction) => {
       const body = JSON.stringify(interaction)
       const timestamp = String(Math.floor(Date.now() / 1000))
@@ -84,8 +84,8 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
     await interact(slashCommand(scope, 'payrun', 'setup', { treasury: root.address, approver_role: treasurerRole }, treasurerAdmin, 'tok-setup'))
     await server.drain()
     expect(text(rest.lastEdit('tok-setup'))).toMatch(/Waiting for the treasury to authorise/)
-    const payrun = createPayrun(opened.deps)
-    const authorized = await payrun.communities.authorizeBotKey({ guildId, root })
+    const rolepay = createRolepay(opened.deps)
+    const authorized = await rolepay.communities.authorizeBotKey({ guildId, root })
     if (!authorized.ok) throw new Error(JSON.stringify(authorized.error))
   })
 

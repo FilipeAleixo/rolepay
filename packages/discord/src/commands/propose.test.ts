@@ -17,7 +17,7 @@ async function ready(opts: { ai?: boolean; proposer?: null } = {}) {
   const a = await appHarness(opts.proposer === null ? { proposer: null } : {})
   await a.setupCommunity({ limit: '1000' })
   await a.registerAll()
-  if (opts.ai !== false) await a.payrun.communities.setAiProposals({ guildId: GUILD, enabled: true, proposerRoleId: PROPOSERS, actorRoleIds: [TREASURER_ROLE] })
+  if (opts.ai !== false) await a.rolepay.communities.setAiProposals({ guildId: GUILD, enabled: true, proposerRoleId: PROPOSERS, actorRoleIds: [TREASURER_ROLE] })
   return a
 }
 
@@ -177,7 +177,7 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
     const review = a.rest.followUps.at(-1)?.message
     expect(text(review)).toContain('Pay run awaiting approval')
     const runId = /payrun:approve:([^"]+)"/.exec(text(review))?.[1] as string
-    const run = await a.payrun.payRuns.get({ guildId: GUILD, runId })
+    const run = await a.rolepay.payRuns.get({ guildId: GUILD, runId })
     expect(run.ok && { status: run.value.status, total: run.value.total, note: run.value.note, createdBy: run.value.createdBy }).toEqual({
       status: 'pending_approval',
       total: usd('300'),
@@ -187,7 +187,7 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
     // A second click creates nothing.
     const again = await a.send(buttonClick(SCOPE, `proposal:create:${id}`, treasurer))
     expect(isEphemeral(again) && body(again).data?.content).toMatch(/already created/)
-    expect(await a.payrun.payRuns.list({ guildId: GUILD })).toHaveLength(1)
+    expect(await a.rolepay.payRuns.list({ guildId: GUILD })).toHaveLength(1)
   })
 
   it('Edit opens the lines as text; the submitted lines replace them in place', async () => {
@@ -208,7 +208,7 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
     const { a, id } = await proposed()
     const d = await a.send(buttonClick(SCOPE, `proposal:discard:${id}`, treasurer))
     expect(text(body(d))).toContain('Proposal discarded')
-    expect(await a.payrun.payRuns.list({ guildId: GUILD })).toEqual([])
+    expect(await a.rolepay.payRuns.list({ guildId: GUILD })).toEqual([])
     const create = await a.send(buttonClick(SCOPE, `proposal:create:${id}`, treasurer))
     expect(body(create).data?.content).toMatch(/discarded/)
   })
@@ -219,6 +219,6 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
       const d = await a.send(buttonClick(SCOPE, `proposal:${action}:${id}`, { userId: ALICE, roles: [MODS_ROLE], manageGuild: true }))
       expect(isEphemeral(d) && body(d).data?.content).toMatch(/Only members with/)
     }
-    expect(await a.payrun.payRuns.list({ guildId: GUILD })).toEqual([])
+    expect(await a.rolepay.payRuns.list({ guildId: GUILD })).toEqual([])
   })
 })

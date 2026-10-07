@@ -8,8 +8,8 @@ import type { ProposalLog } from './proposalLog.js'
 import type { CommunityRepository, PayeeRepository, ProposalRepository, RunRepository } from './repositories.js'
 import type { RunProposer } from './runProposer.js'
 
-/** Everything `createPayrun` needs: one implementation of each port. */
-export type PayrunDeps = {
+/** Everything `createRolepay` needs: one implementation of each port. */
+export type RolepayDeps = {
   chain: PayoutChain
   repositories: { communities: CommunityRepository; payees: PayeeRepository; runs: RunRepository; proposals: ProposalRepository }
   vault: KeyVault

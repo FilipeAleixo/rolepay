@@ -21,7 +21,7 @@ async function newRun(a: Awaited<ReturnType<typeof ready>>, values: Record<strin
   return { d, token, final: a.rest.lastEdit(token) }
 }
 
-const latestRun = async (a: Awaited<ReturnType<typeof ready>>): Promise<Run | undefined> => (await a.payrun.payRuns.list({ guildId: GUILD }))[0]
+const latestRun = async (a: Awaited<ReturnType<typeof ready>>): Promise<Run | undefined> => (await a.rolepay.payRuns.list({ guildId: GUILD }))[0]
 const linesOf = (r: Run | undefined) => r?.lines.map((l) => [l.payeeDiscordId, l.amount])
 
 describe('/payrun new', () => {

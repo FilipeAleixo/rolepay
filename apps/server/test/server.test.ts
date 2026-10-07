@@ -6,8 +6,8 @@ const ALICE = '200000000000000001'
 
 async function withLink() {
   const s = await testServer()
-  await s.payrun.communities.register({ guildId: GUILD, name: 'Test guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
-  const link = await s.payrun.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
+  await s.rolepay.communities.register({ guildId: GUILD, name: 'Test guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
+  const link = await s.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
   if (!link.ok) throw new Error(link.error.code)
   return { ...s, token: link.value.token }
 }
@@ -76,12 +76,12 @@ describe('web pages through the composed server', () => {
     const address = '0x1111111111111111111111111111111111111111'
     const res = await s.browserPost(`/claim/${s.token}`, address)
     expect(res.status).toBe(200)
-    expect(await s.payrun.payees.get({ guildId: GUILD, discordUserId: ALICE })).toMatchObject({ ok: true, value: { address } })
+    expect(await s.rolepay.payees.get({ guildId: GUILD, discordUserId: ALICE })).toMatchObject({ ok: true, value: { address } })
   })
 
   it('serves the setup page for a setup link, and the client bundle', async () => {
     const s = await testServer()
-    const link = await s.payrun.communities.issueSetupLink({
+    const link = await s.rolepay.communities.issueSetupLink({
       guildId: GUILD,
       discordUserId: ALICE,
       settings: { name: 'Test guild', payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: null },

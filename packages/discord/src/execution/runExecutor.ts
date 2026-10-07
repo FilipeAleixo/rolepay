@@ -1,4 +1,4 @@
-import type { NetworkName, Payrun, Run } from '@rolepay/core'
+import type { NetworkName, Rolepay, Run } from '@rolepay/core'
 import type { Message } from '../api.js'
 import type { DiscordRest, ExecutionJob, RunNotices } from '../ports.js'
 import { explainError } from '../views/errors.js'
@@ -6,7 +6,7 @@ import { type RunViewContext, runMessage } from '../views/run.js'
 import { sendReceipts } from './receipts.js'
 
 export type RunExecutorDeps = {
-  payrun: Payrun
+  rolepay: Rolepay
   rest: DiscordRest
   /** Where the review message is and whether receipts went out, shared with the recovery notifier. */
   notices: RunNotices
@@ -33,7 +33,7 @@ const OUTAGE =
  */
 export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) => Promise<void> {
   const maxChecks = deps.maxChecks ?? DEFAULT_MAX_CHECKS
-  const { payRuns } = deps.payrun
+  const { payRuns } = deps.rolepay
 
   return async (job) => {
     const ref = { guildId: job.guildId, runId: job.runId }

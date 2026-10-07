@@ -23,8 +23,8 @@ const fail = (content: string): DeferredResult => ({ ok: false, message: { conte
  * for approval and posts the review publicly, so the treasurer can approve in place.
  * Deferred, because role lookups go through Discord.
  */
-export const newRunCommand: CommandHandler = async ({ options, ctx }, { payrun, members, config }) => {
-  const guard = await requireOperator(ctx, payrun, 'Creating a pay run')
+export const newRunCommand: CommandHandler = async ({ options, ctx }, { rolepay, members, config }) => {
+  const guard = await requireOperator(ctx, rolepay, 'Creating a pay run')
   if (!guard.ok) return guard.reply
   const community = guard.community
   const parsed = parseOptions(NewRunOptions, options)
@@ -45,7 +45,7 @@ export const newRunCommand: CommandHandler = async ({ options, ctx }, { payrun, 
       const lines = listed.value.map((r) => ({ discordUserId: r.userId, amount: r.amount ?? amount.value }))
       if (o.role) {
         const already = new Set(lines.map((l) => l.discordUserId))
-        const candidates = (await payrun.payees.list({ guildId })).map((p) => p.discordUserId).filter((id) => !already.has(id))
+        const candidates = (await rolepay.payees.list({ guildId })).map((p) => p.discordUserId).filter((id) => !already.has(id))
         const holders = await members.withRole({ guildId, roleId: o.role, userIds: candidates })
         if (holders.length === 0 && lines.length === 0) {
           return fail(`No registered payee has ${roleMention(o.role)}. Members with the role register first with /payee link.`)
@@ -53,9 +53,9 @@ export const newRunCommand: CommandHandler = async ({ options, ctx }, { payrun, 
         lines.push(...holders.map((id) => ({ discordUserId: id, amount: amount.value })))
       }
 
-      const created = await payrun.payRuns.create({ guildId, createdBy: caller, note: o.note ?? null, lines })
+      const created = await rolepay.payRuns.create({ guildId, createdBy: caller, note: o.note ?? null, lines })
       if (!created.ok) return fail(explainError(created.error, { token: community.payoutToken }))
-      const submitted = await payrun.payRuns.submit({ guildId, runId: created.value.id, actor: caller })
+      const submitted = await rolepay.payRuns.submit({ guildId, runId: created.value.id, actor: caller })
       if (!submitted.ok) return fail(explainError(submitted.error))
       return { ok: true, message: runMessage(submitted.value, { network: config.network, approverRoleId: community.approverRoleId }) }
     },

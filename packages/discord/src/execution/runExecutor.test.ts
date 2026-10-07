@@ -22,7 +22,7 @@ async function ready(opts: Parameters<Harness['setupCommunity']>[0] = {}) {
   await h.registerAll()
   const run = await h.approvedRun()
   const notices = new MemoryRunNotices()
-  const execute = createRunExecutor({ payrun: h.payrun, rest: h.rest, notices, network: 'moderato', now: () => h.clock.now(), sleep: h.sleep })
+  const execute = createRunExecutor({ rolepay: h.rolepay, rest: h.rest, notices, network: 'moderato', now: () => h.clock.now(), sleep: h.sleep })
   return { ...h, run, notices, execute }
 }
 
@@ -37,7 +37,7 @@ describe('createRunExecutor', () => {
     expect(text(h.rest.edits[0]?.message)).toMatch(/Sending receipts/) // shown paid before the DMs go out
     expect(h.rest.dms.map((d) => d.userId)).toEqual([ALICE, BOB])
     expect(text(h.rest.dms[1]?.message)).toContain('25 AlphaUSD')
-    expect((await h.payrun.payRuns.get({ guildId: GUILD, runId: h.run.id })).ok && h.chain.landedTxCount).toBe(1)
+    expect((await h.rolepay.payRuns.get({ guildId: GUILD, runId: h.run.id })).ok && h.chain.landedTxCount).toBe(1)
   })
 
   it('remembers where the review message is, for an update after a restart', async () => {
@@ -63,7 +63,7 @@ describe('createRunExecutor', () => {
 
   it('a run that cannot start (no active key) explains why and offers Retry; nothing is paid', async () => {
     const h = await ready()
-    await h.payrun.communities.revokeBotKey({ guildId: GUILD, root: h.chain.rootSigner(TREASURY) })
+    await h.rolepay.communities.revokeBotKey({ guildId: GUILD, root: h.chain.rootSigner(TREASURY) })
     await h.execute(job(h.run.id))
     const final = text(h.rest.lastEdit('tok-approve'))
     expect(final).toMatch(/no active key/)
@@ -118,7 +118,7 @@ describe('createRunExecutor', () => {
     await h.execute(job(h.run.id))
     // While the job waits, the "rejected" tx lands from the mempool inside its window.
     const execute = createRunExecutor({
-      payrun: h.payrun,
+      rolepay: h.rolepay,
       rest: h.rest,
       notices: h.notices,
       network: 'moderato',
@@ -131,7 +131,7 @@ describe('createRunExecutor', () => {
     await execute(job(h.run.id, 'tok-retry'))
     expect(text(h.rest.lastEdit('tok-retry'))).toMatch(/"title":"Paid"/)
     expect(h.chain.landedTxCount).toBe(1)
-    const r = await h.payrun.payRuns.get({ guildId: GUILD, runId: h.run.id })
+    const r = await h.rolepay.payRuns.get({ guildId: GUILD, runId: h.run.id })
     expect(r.ok && r.value.attempts).toHaveLength(1) // no second attempt was ever signed
   })
 
@@ -143,7 +143,7 @@ describe('createRunExecutor', () => {
     // Every broadcast is dropped and time never advances: the outcome stays pending.
     h.chain.faults.nextBroadcast = 'drop'
     const execute = createRunExecutor({
-      payrun: h.payrun,
+      rolepay: h.rolepay,
       rest: h.rest,
       notices: new MemoryRunNotices(),
       network: 'moderato',

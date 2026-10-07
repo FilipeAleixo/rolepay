@@ -10,7 +10,7 @@ async function withPendingRun(opts: { approverRoleId?: string | null } = {}) {
   const a = await appHarness()
   await a.setupCommunity(opts)
   await a.registerAll()
-  const created = await a.payrun.payRuns.create({
+  const created = await a.rolepay.payRuns.create({
     guildId: GUILD,
     createdBy: ADMIN,
     note: 'October mods',
@@ -20,12 +20,12 @@ async function withPendingRun(opts: { approverRoleId?: string | null } = {}) {
     ],
   })
   if (!created.ok) throw new Error(created.error.code)
-  await a.payrun.payRuns.submit({ guildId: GUILD, runId: created.value.id, actor: ADMIN })
+  await a.rolepay.payRuns.submit({ guildId: GUILD, runId: created.value.id, actor: ADMIN })
   return { ...a, runId: created.value.id }
 }
 
 const status = async (a: Awaited<ReturnType<typeof withPendingRun>>) => {
-  const r = await a.payrun.payRuns.get({ guildId: GUILD, runId: a.runId })
+  const r = await a.rolepay.payRuns.get({ guildId: GUILD, runId: a.runId })
   return r.ok ? r.value.status : null
 }
 
@@ -52,7 +52,7 @@ describe('Approve button', () => {
     expect(await status(a)).toBe('approved')
 
     const b = await withPendingRun()
-    await b.payrun.communities.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [TREASURER_ROLE] })
+    await b.rolepay.communities.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [TREASURER_ROLE] })
     const own = await b.send(buttonClick(SCOPE, `payrun:approve:${b.runId}`, creatorTreasurer))
     expect(isEphemeral(own)).toBe(true)
     expect(body(own).data?.content).toMatch(/created .* cannot approve/)
@@ -86,7 +86,7 @@ describe('Approve button', () => {
         messageId: '810000000000000001', // the review message, so it can be updated after a restart
       },
     ])
-    const r = await a.payrun.payRuns.get({ guildId: GUILD, runId: a.runId })
+    const r = await a.rolepay.payRuns.get({ guildId: GUILD, runId: a.runId })
     expect(r.ok && r.value.approvedBy).toBe(TREASURER)
   })
 
@@ -119,7 +119,7 @@ describe('Cancel button', () => {
     const a = await withPendingRun()
     await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
     a.chain.faults.nextBroadcast = 'reject_but_keep_pending'
-    await a.payrun.payRuns.execute({ guildId: GUILD, runId: a.runId })
+    await a.rolepay.payRuns.execute({ guildId: GUILD, runId: a.runId })
     await a.chain.mine() // it was paid after all
     await a.sleep(200_000)
     const d = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, treasurer))
@@ -133,7 +133,7 @@ describe('Cancel button', () => {
     const a = await withPendingRun()
     await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
     a.chain.faults.nextBroadcast = 'reject_but_keep_pending'
-    await a.payrun.payRuns.execute({ guildId: GUILD, runId: a.runId })
+    await a.rolepay.payRuns.execute({ guildId: GUILD, runId: a.runId })
     const d = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, treasurer))
     expect(isEphemeral(d)).toBe(true)
     expect(body(d).data?.content).toMatch(/could still land/)
@@ -153,7 +153,7 @@ describe('Cancel button', () => {
 describe('Retry button', () => {
   it('an approver retries an approved run that has not been paid: queued and shown as paying', async () => {
     const a = await withPendingRun()
-    await a.payrun.payRuns.approve({ guildId: GUILD, runId: a.runId, actor: TREASURER, actorCanApprove: true })
+    await a.rolepay.payRuns.approve({ guildId: GUILD, runId: a.runId, actor: TREASURER, actorCanApprove: true })
     const d = await a.send(buttonClick(SCOPE, `payrun:retry:${a.runId}`, treasurer, 'tok-retry'))
     expect(body(d).type).toBe(7)
     expect(text(body(d))).toMatch(/Paying/)
@@ -162,10 +162,10 @@ describe('Retry button', () => {
 
   it('only approvers can retry, and only runs that can be paid again', async () => {
     const a = await withPendingRun()
-    await a.payrun.payRuns.approve({ guildId: GUILD, runId: a.runId, actor: TREASURER, actorCanApprove: true })
+    await a.rolepay.payRuns.approve({ guildId: GUILD, runId: a.runId, actor: TREASURER, actorCanApprove: true })
     const bystander = await a.send(buttonClick(SCOPE, `payrun:retry:${a.runId}`, { userId: CAROL }))
     expect(isEphemeral(bystander)).toBe(true)
-    await a.payrun.payRuns.execute({ guildId: GUILD, runId: a.runId }) // now paid
+    await a.rolepay.payRuns.execute({ guildId: GUILD, runId: a.runId }) // now paid
     const paid = await a.send(buttonClick(SCOPE, `payrun:retry:${a.runId}`, treasurer))
     expect(isEphemeral(paid)).toBe(true)
     expect(body(paid).data?.content).toMatch(/paid/)

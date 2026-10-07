@@ -1,4 +1,4 @@
-import { type Community, type Payrun, canPropose } from '@rolepay/core'
+import { type Community, type Rolepay, canPropose } from '@rolepay/core'
 import { type GuildContext, replyError } from '../app/handlers.js'
 import { type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canOperate } from '../app/permissions.js'
@@ -7,10 +7,10 @@ import { AI_NOT_CONFIGURED, AI_OFF, proposerOnly } from '../views/errors.js'
 /** The community, if the caller may operate it (create runs, read status, export). */
 export async function requireOperator(
   ctx: GuildContext,
-  payrun: Payrun,
+  rolepay: Rolepay,
   action: string,
 ): Promise<{ ok: true; community: Community } | { ok: false; reply: Outcome }> {
-  const community = await payrun.communities.get(ctx.guildId)
+  const community = await rolepay.communities.get(ctx.guildId)
   if (!community.ok) return { ok: false, reply: replyError(community.error) }
   if (!canOperate(ctx.caller, community.value)) return { ok: false, reply: ephemeralReply(`${action} needs Manage Server or the approver role.`) }
   return { ok: true, community: community.value }
@@ -24,11 +24,11 @@ export async function requireOperator(
  */
 export async function requireProposer(
   ctx: GuildContext,
-  payrun: Payrun,
+  rolepay: Rolepay,
   opts: { ai: boolean },
 ): Promise<{ ok: true; community: Community } | { ok: false; reply: Outcome }> {
-  if (opts.ai && !payrun.proposals.isConfigured()) return { ok: false, reply: ephemeralReply(AI_NOT_CONFIGURED) }
-  const community = await payrun.communities.get(ctx.guildId)
+  if (opts.ai && !rolepay.proposals.isConfigured()) return { ok: false, reply: ephemeralReply(AI_NOT_CONFIGURED) }
+  const community = await rolepay.communities.get(ctx.guildId)
   if (!community.ok) return { ok: false, reply: replyError(community.error) }
   if (!canPropose(community.value, ctx.caller.roles)) return { ok: false, reply: ephemeralReply(proposerOnly(community.value)) }
   if (opts.ai && !community.value.aiProposals) return { ok: false, reply: ephemeralReply(AI_OFF) }

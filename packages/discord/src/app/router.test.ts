@@ -31,7 +31,7 @@ describe('createDispatcher (the interaction router)', () => {
 
   it('a handler that throws ends in an ephemeral apology, and the error is reported', async () => {
     const a = await appHarness()
-    a.payrun.payees.issueLink = async () => {
+    a.rolepay.payees.issueLink = async () => {
       throw new Error('database is down')
     }
     const d = await a.send(slashCommand(SCOPE, 'payee', 'link', {}, { userId: ALICE }))

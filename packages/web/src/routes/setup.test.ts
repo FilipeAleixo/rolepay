@@ -53,7 +53,7 @@ describe('the treasurer setup page', () => {
     const res = await h.post(`/setup/${token}/treasury`, { address: OTHER_PASSKEY }, PASSKEY)
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ ok: true, treasury: PASSKEY })
-    expect(await h.payrun.communities.get(GUILD)).toMatchObject({
+    expect(await h.rolepay.communities.get(GUILD)).toMatchObject({
       ok: true,
       value: { treasuryAddress: PASSKEY, name: 'Mods guild', approverRoleId: ROLE, feeMode: 'fee_budget', feeToken: FEE_TOKEN },
     })
@@ -99,7 +99,7 @@ describe('the treasurer setup page', () => {
         scopes: [{ address: TOKEN, selector: 'transferWithMemo(address,uint256,bytes32)' }],
       },
     })
-    expect(await h.payrun.communities.keyStatus({ guildId: GUILD })).toMatchObject({ ok: true, value: { key: { status: 'pending_authorization', address: body.keyAddress } } })
+    expect(await h.rolepay.communities.keyStatus({ guildId: GUILD })).toMatchObject({ ok: true, value: { key: { status: 'pending_authorization', address: body.keyAddress } } })
   })
 
   it('a period of 0 days means one limit for the whole life of the key', async () => {
@@ -148,7 +148,7 @@ describe('the treasurer setup page', () => {
       expect(other.status).toBe(403)
       expect(await other.json()).toEqual({ ok: false, error: { code: 'not_the_treasury', treasuryAddress: PASSKEY } })
     }
-    expect((await h.payrun.communities.keyStatus({ guildId: GUILD })).ok).toBe(false)
+    expect((await h.rolepay.communities.keyStatus({ guildId: GUILD })).ok).toBe(false)
   })
 
   it('a dev-registered community whose treasury is not this passkey says so', async () => {
@@ -183,7 +183,7 @@ describe('the treasurer setup page', () => {
     await h.chain.revokeKey({ root: h.chain.rootSigner(PASSKEY), accessKey: provisioned.keyAddress })
     const revoked = await h.post(`/setup/${token}/key/revoked`, { keyAddress }, PASSKEY)
     expect(await revoked.json()).toMatchObject({ ok: true, key: { status: 'revoked' } })
-    expect(await h.payrun.communities.keyStatus({ guildId: GUILD })).toMatchObject({ ok: true, value: { key: { status: 'revoked' } } })
+    expect(await h.rolepay.communities.keyStatus({ guildId: GUILD })).toMatchObject({ ok: true, value: { key: { status: 'revoked' } } })
   })
 
   it('confirm and revoked name the key they are about; without it they do nothing', async () => {
@@ -262,7 +262,7 @@ describe('the treasurer setup page', () => {
       expect(await res.json()).toEqual({ ok: false, error: { code: 'sign_in_required' } })
     }
     expect(await json(await h.send(`/setup/${token}/state`, { passkey: forged }))).toMatchObject({ isTreasurer: false, signInRequired: true })
-    expect((await h.payrun.communities.keyStatus({ guildId: GUILD })).ok).toBe(false)
+    expect((await h.rolepay.communities.keyStatus({ guildId: GUILD })).ok).toBe(false)
 
     // The creator's own registration session goes on (create, then authorise: one prompt each),
     // and a session from a passkey login (a signature over a server challenge) always does.

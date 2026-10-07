@@ -30,7 +30,7 @@ async function community(opts: { limit?: string } = {}) {
   const s = await testServer()
   await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE, key_limit: opts.limit ?? '1000' }, TREASURER, 'tok-setup'))
   await s.drain()
-  expect((await s.payrun.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })).ok).toBe(true)
+  expect((await s.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })).ok).toBe(true)
   await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { ai_proposals: true }, TREASURER, 'tok-ai'))
   await s.drain()
   expect(text(s.rest.lastEdit('tok-ai'))).toContain("sends their text to Anthropic's API")

@@ -21,7 +21,7 @@ const EnvSchema = z.object({
 
 const DevShortcutsSchema = EnvSchema.pick({ PAYRUN_NETWORK: true, PAYRUN_DEV_SHORTCUTS: true })
 
-export type PayrunConfig = {
+export type RolepayConfig = {
   network: NetworkName
   chainId: number
   rpcUrl: string
@@ -61,7 +61,7 @@ export function devShortcutsEnabled(env: Record<string, string | undefined>): bo
 }
 
 /** Throws a ConfigError naming the bad variables. Never includes their values. */
-export function parseConfig(env: Record<string, string | undefined>): PayrunConfig {
+export function parseConfig(env: Record<string, string | undefined>): RolepayConfig {
   const parsed = EnvSchema.safeParse(env)
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.code === 'invalid_format' ? 'invalid format' : i.message.replace(/received .*/i, 'invalid value')}`)

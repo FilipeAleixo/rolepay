@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { type CDPSession, type Page } from '@playwright/test'
-import { NETWORKS, createPayrun } from '@rolepay/core'
-import { createTestnetTools, openPayrunAdapters } from '@rolepay/core/adapters'
+import { NETWORKS, createRolepay } from '@rolepay/core'
+import { createTestnetTools, openRolepayAdapters } from '@rolepay/core/adapters'
 import { FakeDiscordRest } from '@rolepay/discord/testing'
 import { bundledAssets, createPasskeys } from '@rolepay/web'
 import { generatePrivateKey } from 'viem/accounts'
@@ -29,12 +29,12 @@ export async function startServer(port: number) {
   })
   const testnet = createTestnetTools({ rpcUrl: config.core.rpcUrl })
   if ((await testnet.chainId()) !== 42431) throw new Error('e2e refuses any chain but Moderato')
-  const { deps, kv, close } = await openPayrunAdapters(config.core)
-  const payrun = createPayrun(deps)
+  const { deps, kv, close } = await openRolepayAdapters(config.core)
+  const rolepay = createRolepay(deps)
   const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
   const composed = composeServer({
     config,
-    payrun,
+    rolepay,
     rest: new FakeDiscordRest(),
     clock: deps.clock,
     kv,
@@ -45,7 +45,7 @@ export async function startServer(port: number) {
   await new Promise<void>((resolve) => server.once('listening', () => resolve()))
   return {
     url: `http://localhost:${port}`,
-    payrun,
+    rolepay,
     kv,
     testnet,
     async stop() {

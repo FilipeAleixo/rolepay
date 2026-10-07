@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createPayrun } from '@rolepay/core'
+import { createRolepay } from '@rolepay/core'
 import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { webHarness } from '../test/harness.js'
 import { createWebApp } from './app.js'
@@ -41,7 +41,7 @@ describe('the web app', () => {
     expect((await webHarness().send('/claim/nope')).headers.get('strict-transport-security')).toBeNull()
     const clock = new ManualClock()
     const app = createWebApp({
-      payrun: createPayrun({ chain: new FakePayoutChain(), repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' }),
+      rolepay: createRolepay({ chain: new FakePayoutChain(), repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' }),
       clock,
       sessions: new FakePasskeySessions(),
       assets: staticAssets({}),
@@ -56,7 +56,7 @@ describe('the web app', () => {
     const seen: { url: string; method: string; body: string }[] = []
     const clock = new ManualClock()
     const app = createWebApp({
-      payrun: createPayrun({ chain: new FakePayoutChain(), repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' }),
+      rolepay: createRolepay({ chain: new FakePayoutChain(), repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' }),
       clock,
       sessions: new FakePasskeySessions(),
       assets: staticAssets({}),
@@ -71,7 +71,7 @@ describe('the web app', () => {
     let calls = 0
     const clock = new ManualClock()
     const app = createWebApp({
-      payrun: createPayrun({ chain: new FakePayoutChain(), repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' }),
+      rolepay: createRolepay({ chain: new FakePayoutChain(), repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' }),
       clock,
       sessions: new FakePasskeySessions(),
       assets: staticAssets({}),

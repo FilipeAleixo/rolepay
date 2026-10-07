@@ -6,7 +6,7 @@ import { slashCommand } from '../testing/interactions.js'
 const tokenIn = (s: string) => new RegExp(`${CONFIG.claimBaseUrl}/([A-Za-z0-9_-]+)`).exec(s)?.[1]
 
 describe('/payee link', () => {
-  it('in a server that has not set up payrun, says so', async () => {
+  it('in a server that has not set up rolepay, says so', async () => {
     const a = await appHarness()
     const d = await a.send(slashCommand(SCOPE, 'payee', 'link', {}, { userId: ALICE }))
     expect(isEphemeral(d)).toBe(true)
@@ -20,7 +20,7 @@ describe('/payee link', () => {
     expect(isEphemeral(d)).toBe(true)
     const token = tokenIn(text(body(d)))
     expect(token).toBeDefined()
-    const described = await a.payrun.payees.describeLink({ token: token as string })
+    const described = await a.rolepay.payees.describeLink({ token: token as string })
     expect(described).toMatchObject({ ok: true, value: { guildId: GUILD, discordUserId: ALICE } })
     expect(text(body(d))).toMatch(/<t:\d+:R>/) // when it expires
     expect(text(body(d))).toMatch(/once/)

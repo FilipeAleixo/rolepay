@@ -1,8 +1,8 @@
 // The composition root: config from env, production adapters, core services, the
 // Discord adapter, an HTTP server. The only place (with scripts/) that opens adapters.
 import { serve } from '@hono/node-server'
-import { createPayrun } from '@rolepay/core'
-import { openPayrunAdapters } from '@rolepay/core/adapters'
+import { createRolepay } from '@rolepay/core'
+import { openRolepayAdapters } from '@rolepay/core/adapters'
 import { FetchDiscordRest, RestActivityReader } from '@rolepay/discord'
 import { bundledAssets, createPasskeys } from '@rolepay/web'
 import { composeServer } from './compose.js'
@@ -13,13 +13,13 @@ const log = (event: string, fields: Record<string, unknown> = {}) => console.log
 
 async function main() {
   const config = parseServerConfig(loadEnvironment())
-  const { deps, kv, close } = await openPayrunAdapters(config.core)
+  const { deps, kv, close } = await openRolepayAdapters(config.core)
   const rest = new FetchDiscordRest({ botToken: config.discord.botToken })
   // AI proposals read Discord through the bot's REST client; one log line per proposal (counts and cost, never text).
-  const payrun = createPayrun({ ...deps, activity: new RestActivityReader(rest), proposalLog: (entry) => log('proposal', entry) })
+  const rolepay = createRolepay({ ...deps, activity: new RestActivityReader(rest), proposalLog: (entry) => log('proposal', entry) })
   const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
   const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() }
-  const composed = composeServer({ config, payrun, rest, clock: deps.clock, kv, web, log })
+  const composed = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web, log })
   const recovery = composed.startRecovery()
 
   const server = serve({ fetch: composed.app.fetch, hostname: config.http.host, port: config.http.port }, (info) => {

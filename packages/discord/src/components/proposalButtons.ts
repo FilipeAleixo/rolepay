@@ -10,11 +10,11 @@ import { runMessage } from '../views/run.js'
  * turns into "created" for the caller, and the run's review is posted in the channel with Approve
  * and Cancel, exactly like one from /payrun new: the approval path is unchanged.
  */
-export const createProposalRunButton: ProposalButtonHandler = async ({ proposalId, ctx }, { payrun, config }) => {
-  const guard = await requireProposer(ctx, payrun, { ai: false })
+export const createProposalRunButton: ProposalButtonHandler = async ({ proposalId, ctx }, { rolepay, config }) => {
+  const guard = await requireProposer(ctx, rolepay, { ai: false })
   if (!guard.ok) return guard.reply
   const community = guard.community
-  const created = await payrun.proposals.createRun({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, proposalId })
+  const created = await rolepay.proposals.createRun({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, proposalId })
   if (!created.ok) return ephemeralReply(explainProposalError(created.error, { community, token: community.payoutToken }))
   return {
     kind: 'update',
@@ -24,19 +24,19 @@ export const createProposalRunButton: ProposalButtonHandler = async ({ proposalI
 }
 
 /** Edit: the lines as text in a modal (`@user=amount`), prefilled; held people as comments. */
-export const editProposalButton: ProposalButtonHandler = async ({ proposalId, ctx }, { payrun }) => {
-  const guard = await requireProposer(ctx, payrun, { ai: false })
+export const editProposalButton: ProposalButtonHandler = async ({ proposalId, ctx }, { rolepay }) => {
+  const guard = await requireProposer(ctx, rolepay, { ai: false })
   if (!guard.ok) return guard.reply
-  const p = await payrun.proposals.get({ guildId: ctx.guildId, proposalId })
+  const p = await rolepay.proposals.get({ guildId: ctx.guildId, proposalId })
   if (!p.ok) return replyError(p.error)
   if (p.value.status !== 'open') return ephemeralReply(explainProposalError({ code: 'proposal_closed', status: p.value.status }))
   return { kind: 'modal', modal: editModal(p.value) }
 }
 
-export const discardProposalButton: ProposalButtonHandler = async ({ proposalId, ctx }, { payrun }) => {
-  const guard = await requireProposer(ctx, payrun, { ai: false })
+export const discardProposalButton: ProposalButtonHandler = async ({ proposalId, ctx }, { rolepay }) => {
+  const guard = await requireProposer(ctx, rolepay, { ai: false })
   if (!guard.ok) return guard.reply
-  const discarded = await payrun.proposals.discard({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, proposalId })
+  const discarded = await rolepay.proposals.discard({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, proposalId })
   if (!discarded.ok) return ephemeralReply(explainProposalError(discarded.error, { community: guard.community }))
   return { kind: 'update', message: proposalDiscardedMessage(discarded.value) }
 }

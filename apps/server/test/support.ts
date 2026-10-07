@@ -1,8 +1,8 @@
 // A whole server on in-memory adapters and a fake Discord, driven through real HTTP requests
 // (Hono's app.request), with Discord-style Ed25519 signatures.
 import { randomBytes } from 'node:crypto'
-import { TESTNET_TOKENS, createPayrun, parseAmount } from '@rolepay/core'
-import { type KeyValueStore, type Payrun } from '@rolepay/core'
+import { TESTNET_TOKENS, createRolepay, parseAmount } from '@rolepay/core'
+import { type KeyValueStore, type Rolepay } from '@rolepay/core'
 import { FakePayoutChain, FakeRunProposer, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { RestActivityReader } from '@rolepay/discord'
 import { FakeDiscordRest, createTestSigner } from '@rolepay/discord/testing'
@@ -19,7 +19,7 @@ export const usd = (s: string) => {
   return r.value
 }
 
-type SharedState = { payrun: Payrun; chain: FakePayoutChain; clock: ManualClock; kv: KeyValueStore; rest: FakeDiscordRest; proposer: FakeRunProposer }
+type SharedState = { rolepay: Rolepay; chain: FakePayoutChain; clock: ManualClock; kv: KeyValueStore; rest: FakeDiscordRest; proposer: FakeRunProposer }
 
 /**
  * `from`: start a second server over the first one's database and chain, as a restarted
@@ -44,9 +44,9 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
   // A restarted process gets a fresh Discord connection; the AI proposals read through it.
   const rest = new FakeDiscordRest()
   const proposer = opts.from?.proposer ?? new FakeRunProposer()
-  const payrun =
-    opts.from?.payrun ??
-    createPayrun({
+  const rolepay =
+    opts.from?.rolepay ??
+    createRolepay({
       chain,
       repositories: createMemoryRepositories({ clock }),
       vault: new PlainKeyVault(),
@@ -62,7 +62,7 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
   const server = composeServer({
     web: { sessions, assets: staticAssets({ 'payrun.js': '' }) },
     config,
-    payrun,
+    rolepay,
     rest,
     clock,
     kv,
@@ -92,5 +92,5 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
       body: JSON.stringify(body),
     })
 
-  return { ...server, config, clock, chain, payrun, kv, rest, proposer, logs, interact, browserPost }
+  return { ...server, config, clock, chain, rolepay, kv, rest, proposer, logs, interact, browserPost }
 }

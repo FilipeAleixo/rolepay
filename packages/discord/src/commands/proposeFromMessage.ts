@@ -11,8 +11,8 @@ export const PROPOSE_MESSAGE_COMMAND = 'Propose pay run'
  * arrives with this interaction, text included, so this path needs no Message Content intent. It
  * is kept until the modal is submitted (Discord does not send it again), at most 15 minutes.
  */
-export const proposeFromMessageCommand: MessageCommandHandler = async ({ target, ctx }, { payrun, pendingSources }) => {
-  const guard = await requireProposer(ctx, payrun, { ai: true })
+export const proposeFromMessageCommand: MessageCommandHandler = async ({ target, ctx }, { rolepay, pendingSources }) => {
+  const guard = await requireProposer(ctx, rolepay, { ai: true })
   if (!guard.ok) return guard.reply
   if (!target.content.trim()) return ephemeralReply('That message has no text to read (only an image or an embed). Pick the message that names the people.')
   await pendingSources.put({ userId: ctx.caller.userId, messageId: target.id }, target)

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { type Clock, NETWORKS, type Payrun } from '@rolepay/core'
+import { type Clock, NETWORKS, type Rolepay } from '@rolepay/core'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
 import type { WebConfig } from './config.js'
@@ -9,7 +9,7 @@ import { setupRoutes } from './routes/setup.js'
 import { STYLE } from './views/page.js'
 
 export type WebAppDeps = {
-  payrun: Payrun
+  rolepay: Rolepay
   clock: Clock
   config: WebConfig
   sessions: PasskeySessions
@@ -116,7 +116,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
   })
 
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
-  app.route('/', claimRoutes({ payees: deps.payrun.payees, sessions: deps.sessions, ...chain }))
-  app.route('/', setupRoutes({ payrun: deps.payrun, sessions: deps.sessions, config, clock: deps.clock, testnet }))
+  app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))
+  app.route('/', setupRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))
   return app
 }

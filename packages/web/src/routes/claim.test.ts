@@ -36,7 +36,7 @@ describe('the recipient claim page', () => {
     const res = await h.post(`/claim/${token}`, { address: OTHER_PASSKEY }, PASSKEY)
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true, address: PASSKEY, communityName: 'Mods guild' })
-    expect(await h.payrun.payees.get({ guildId: GUILD, discordUserId: ALICE })).toMatchObject({ ok: true, value: { address: PASSKEY } })
+    expect(await h.rolepay.payees.get({ guildId: GUILD, discordUserId: ALICE })).toMatchObject({ ok: true, value: { address: PASSKEY } })
   })
 
   it('without a passkey session it registers nothing', async () => {
@@ -46,7 +46,7 @@ describe('the recipient claim page', () => {
     const res = await h.post(`/claim/${token}`)
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ ok: false, error: { code: 'no_passkey_session' } })
-    expect((await h.payrun.payees.get({ guildId: GUILD, discordUserId: ALICE })).ok).toBe(false)
+    expect((await h.rolepay.payees.get({ guildId: GUILD, discordUserId: ALICE })).ok).toBe(false)
   })
 
   it('the link works once', async () => {
@@ -57,7 +57,7 @@ describe('the recipient claim page', () => {
     const again = await h.post(`/claim/${token}`, {}, OTHER_PASSKEY)
     expect(again.status).toBe(410)
     expect(await again.json()).toEqual({ ok: false, error: { code: 'link_already_used' } })
-    expect(await h.payrun.payees.get({ guildId: GUILD, discordUserId: ALICE })).toMatchObject({ ok: true, value: { address: PASSKEY } })
+    expect(await h.rolepay.payees.get({ guildId: GUILD, discordUserId: ALICE })).toMatchObject({ ok: true, value: { address: PASSKEY } })
   })
 
   it('refuses a cross-site POST (CSRF): the Origin must be this server', async () => {
@@ -66,6 +66,6 @@ describe('the recipient claim page', () => {
     const token = await claimLink(h)
     const res = await h.send(`/claim/${token}`, { method: 'POST', body: '{}', passkey: PASSKEY, headers: { origin: 'https://evil.example' } })
     expect(res.status).toBe(403)
-    expect((await h.payrun.payees.get({ guildId: GUILD, discordUserId: ALICE })).ok).toBe(false)
+    expect((await h.rolepay.payees.get({ guildId: GUILD, discordUserId: ALICE })).ok).toBe(false)
   })
 })

@@ -19,7 +19,7 @@ import {
   openSqliteDatabase,
   rootSignerFromPrivateKey,
 } from '../src/adapters/index.js'
-import { NETWORKS, type Payrun, type Run, TESTNET_TOKENS, createPayrun, parseAmount } from '../src/index.js'
+import { NETWORKS, type Rolepay, type Run, TESTNET_TOKENS, createRolepay, parseAmount } from '../src/index.js'
 import type { RunRepository } from '../src/ports/repositories.js'
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../..')
@@ -69,7 +69,7 @@ const evidence: Record<string, unknown>[] = []
 const record = (entry: Record<string, unknown>) => {
   evidence.push({ at: new Date().toISOString(), ...entry })
   mkdirSync(RESULTS_DIR, { recursive: true })
-  writeFileSync(join(RESULTS_DIR, 'payrun.chain.json'), JSON.stringify(evidence, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), 2))
+  writeFileSync(join(RESULTS_DIR, 'rolepay.chain.json'), JSON.stringify(evidence, (_k, v) => (typeof v === 'bigint' ? v.toString() : v), 2))
 }
 
 describe('pay run end to end on Moderato (service level)', () => {
@@ -83,17 +83,17 @@ describe('pay run end to end on Moderato (service level)', () => {
   const testnet = createTestnetTools({ rpcUrl: NET.rpcUrl })
   let db: Awaited<ReturnType<typeof openSqliteDatabase>>
   let crashingRuns: CrashingRuns
-  let payrun: Payrun
+  let rolepay: Rolepay
   let firstRun: Run
   const restart = () =>
-    createPayrun({ chain, repositories: db.repositories, vault: new AesGcmKeyVault(masterKey), ids: new RandomIds(), clock: new SystemClock(), network: 'moderato' })
+    createRolepay({ chain, repositories: db.repositories, vault: new AesGcmKeyVault(masterKey), ids: new RandomIds(), clock: new SystemClock(), network: 'moderato' })
 
   beforeAll(async () => {
     expect(await testnet.chainId()).toBe(42431) // testnet only, never mainnet
     await testnet.ensureFunded(root.address, TOKEN, usd('100'))
     db = await openSqliteDatabase(join(dbDir, 'payrun.db'))
     crashingRuns = new CrashingRuns(db.repositories.runs)
-    payrun = createPayrun({
+    rolepay = createRolepay({
       chain,
       repositories: { ...db.repositories, runs: crashingRuns },
       vault: new AesGcmKeyVault(masterKey),
@@ -109,40 +109,40 @@ describe('pay run end to end on Moderato (service level)', () => {
   })
 
   it('registers the community (guild) with its own treasury account', async () => {
-    const r = await payrun.communities.register({ guildId, name: 'payrun chain test', treasuryAddress: root.address, payoutToken: TOKEN, feeMode: 'sponsor' })
+    const r = await rolepay.communities.register({ guildId, name: 'payrun chain test', treasuryAddress: root.address, payoutToken: TOKEN, feeMode: 'sponsor' })
     expect(r.ok).toBe(true)
   })
 
   it('provisions a bot access key; the chain does not know it yet', async () => {
-    const p = await payrun.communities.provisionBotKey({
+    const p = await rolepay.communities.provisionBotKey({
       guildId,
       limit: usd('10'),
       periodSeconds: 86_400,
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
     })
     if (!p.ok) throw new Error(JSON.stringify(p.error))
-    const s = await payrun.communities.keyStatus({ guildId })
+    const s = await rolepay.communities.keyStatus({ guildId })
     expect(s).toMatchObject({ ok: true, value: { key: { status: 'pending_authorization' }, state: { status: 'not_authorized' } } })
   })
 
   it('the treasury root authorises it (expiry, 10 USD/day limit, transferWithMemo scope), sponsored', async () => {
-    const a = await payrun.communities.authorizeBotKey({ guildId, root })
+    const a = await rolepay.communities.authorizeBotKey({ guildId, root })
     if (!a.ok) throw new Error(JSON.stringify(a.error))
     record({ step: 'authorize', tx: a.value.txHash, url: `${NET.explorerUrl}/tx/${a.value.txHash}` })
-    const s = await payrun.communities.keyStatus({ guildId })
+    const s = await rolepay.communities.keyStatus({ guildId })
     expect(s).toMatchObject({ ok: true, value: { key: { status: 'active' }, state: { status: 'active', remaining: usd('10') } } })
   })
 
   it('three payees register through one-time links', async () => {
     for (const [i, user] of mods.entries()) {
-      const link = await payrun.payees.issueLink({ guildId, discordUserId: user })
+      const link = await rolepay.payees.issueLink({ guildId, discordUserId: user })
       if (!link.ok) throw new Error(link.error.code)
-      expect((await payrun.payees.register({ token: link.value.token, address: addresses[i] as string })).ok).toBe(true)
+      expect((await rolepay.payees.register({ token: link.value.token, address: addresses[i] as string })).ok).toBe(true)
     }
   })
 
   it('creates, approves and executes a 3-line run in ONE sponsored batched tx; reconciles from memo events', async () => {
-    const created = await payrun.payRuns.create({
+    const created = await rolepay.payRuns.create({
       guildId,
       createdBy: mods[0] as string,
       note: 'chain test',
@@ -150,10 +150,10 @@ describe('pay run end to end on Moderato (service level)', () => {
     })
     if (!created.ok) throw new Error(JSON.stringify(created.error))
     const id = created.value.id
-    await payrun.payRuns.submit({ guildId, runId: id, actor: mods[0] as string })
-    await payrun.payRuns.approve({ guildId, runId: id, actor: '300000000000000101', actorCanApprove: true })
+    await rolepay.payRuns.submit({ guildId, runId: id, actor: mods[0] as string })
+    await rolepay.payRuns.approve({ guildId, runId: id, actor: '300000000000000101', actorCanApprove: true })
     const started = Date.now()
-    const r = await payrun.payRuns.execute({ guildId, runId: id })
+    const r = await rolepay.payRuns.execute({ guildId, runId: id })
     if (!r.ok) throw new Error(JSON.stringify(r.error, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)))
     expect(r.value.status).toBe('paid')
     firstRun = r.value.run
@@ -165,19 +165,19 @@ describe('pay run end to end on Moderato (service level)', () => {
     for (const [i, a] of addresses.entries()) expect(await testnet.balance(TOKEN, a)).toBe(firstRun.lines[i]?.amount)
     const events = await chain.findMemoTransfers({ token: TOKEN, from: root.address, memos: firstRun.lines.map((l) => l.memo), fromBlock: firstRun.attempts[0]?.fromBlock ?? 0n })
     expect(events.map((e) => e.txHash)).toEqual([txHash, txHash, txHash])
-    const s = await payrun.communities.keyStatus({ guildId })
+    const s = await rolepay.communities.keyStatus({ guildId })
     expect(s.ok && s.value.state.remaining).toBe(usd('10') - firstRun.total)
   })
 
   it('executing and reconciling the paid run again never pays twice', async () => {
-    const again = await payrun.payRuns.execute({ guildId, runId: firstRun.id })
+    const again = await rolepay.payRuns.execute({ guildId, runId: firstRun.id })
     expect(again).toMatchObject({ ok: true, value: { status: 'paid', run: { paidTxHash: firstRun.paidTxHash } } })
-    expect(await payrun.payRuns.reconcile({ guildId, runId: firstRun.id })).toMatchObject({ ok: true, value: { status: 'paid' } })
+    expect(await rolepay.payRuns.reconcile({ guildId, runId: firstRun.id })).toMatchObject({ ok: true, value: { status: 'paid' } })
     for (const [i, a] of addresses.entries()) expect(await testnet.balance(TOKEN, a)).toBe(firstRun.lines[i]?.amount)
   })
 
   it('crash after the tx landed but before it was recorded: a restarted process reconciles it to paid, once', async () => {
-    const created = await payrun.payRuns.create({
+    const created = await rolepay.payRuns.create({
       guildId,
       createdBy: mods[0] as string,
       note: 'crash test',
@@ -188,12 +188,12 @@ describe('pay run end to end on Moderato (service level)', () => {
     })
     if (!created.ok) throw new Error(created.error.code)
     const id = created.value.id
-    await payrun.payRuns.submit({ guildId, runId: id, actor: mods[0] as string })
-    await payrun.payRuns.approve({ guildId, runId: id, actor: '300000000000000101', actorCanApprove: true })
+    await rolepay.payRuns.submit({ guildId, runId: id, actor: mods[0] as string })
+    await rolepay.payRuns.approve({ guildId, runId: id, actor: '300000000000000101', actorCanApprove: true })
     const before = [await testnet.balance(TOKEN, addresses[0] as string), await testnet.balance(TOKEN, addresses[1] as string)]
 
     crashingRuns.crashOn = (next) => next.status === 'paid'
-    await expect(payrun.payRuns.execute({ guildId, runId: id })).rejects.toThrow('simulated crash')
+    await expect(rolepay.payRuns.execute({ guildId, runId: id })).rejects.toThrow('simulated crash')
     expect((await db.repositories.runs.get(id))?.status).toBe('executing')
 
     const recovered = await restart().payRuns.recoverInFlight()
@@ -205,28 +205,28 @@ describe('pay run end to end on Moderato (service level)', () => {
   })
 
   it('a run over the remaining limit is refused before anything is signed', async () => {
-    const created = await payrun.payRuns.create({ guildId, createdBy: mods[0] as string, note: null, lines: [{ discordUserId: mods[2] as string, amount: usd('5') }] })
+    const created = await rolepay.payRuns.create({ guildId, createdBy: mods[0] as string, note: null, lines: [{ discordUserId: mods[2] as string, amount: usd('5') }] })
     if (!created.ok) throw new Error(created.error.code)
-    await payrun.payRuns.submit({ guildId, runId: created.value.id, actor: mods[0] as string })
-    await payrun.payRuns.approve({ guildId, runId: created.value.id, actor: '300000000000000101', actorCanApprove: true })
-    expect(await payrun.payRuns.execute({ guildId, runId: created.value.id })).toMatchObject({ ok: false, error: { code: 'insufficient_limit' } })
+    await rolepay.payRuns.submit({ guildId, runId: created.value.id, actor: mods[0] as string })
+    await rolepay.payRuns.approve({ guildId, runId: created.value.id, actor: '300000000000000101', actorCanApprove: true })
+    expect(await rolepay.payRuns.execute({ guildId, runId: created.value.id })).toMatchObject({ ok: false, error: { code: 'insufficient_limit' } })
     expect((await db.repositories.runs.get(created.value.id))?.status).toBe('approved')
   })
 
   it('the root revokes the bot key; the chain reports it revoked and runs stop', async () => {
-    const r = await payrun.communities.revokeBotKey({ guildId, root })
+    const r = await rolepay.communities.revokeBotKey({ guildId, root })
     if (!r.ok) throw new Error(JSON.stringify(r.error))
     record({ step: 'revoke', tx: r.value.txHash, url: `${NET.explorerUrl}/tx/${r.value.txHash}` })
-    expect(await payrun.communities.keyStatus({ guildId })).toMatchObject({ ok: true, value: { state: { status: 'revoked' } } })
-    const created = await payrun.payRuns.create({ guildId, createdBy: mods[0] as string, note: null, lines: [{ discordUserId: mods[2] as string, amount: usd('0.1') }] })
+    expect(await rolepay.communities.keyStatus({ guildId })).toMatchObject({ ok: true, value: { state: { status: 'revoked' } } })
+    const created = await rolepay.payRuns.create({ guildId, createdBy: mods[0] as string, note: null, lines: [{ discordUserId: mods[2] as string, amount: usd('0.1') }] })
     if (!created.ok) throw new Error(created.error.code)
-    await payrun.payRuns.submit({ guildId, runId: created.value.id, actor: mods[0] as string })
-    await payrun.payRuns.approve({ guildId, runId: created.value.id, actor: '300000000000000101', actorCanApprove: true })
-    expect(await payrun.payRuns.execute({ guildId, runId: created.value.id })).toEqual({ ok: false, error: { code: 'no_active_key' } })
+    await rolepay.payRuns.submit({ guildId, runId: created.value.id, actor: mods[0] as string })
+    await rolepay.payRuns.approve({ guildId, runId: created.value.id, actor: '300000000000000101', actorCanApprove: true })
+    expect(await rolepay.payRuns.execute({ guildId, runId: created.value.id })).toEqual({ ok: false, error: { code: 'no_active_key' } })
   })
 
   it('exports the first run as CSV with the explorer link', async () => {
-    const r = await payrun.payRuns.exportCsv({ guildId, runId: firstRun.id })
+    const r = await rolepay.payRuns.exportCsv({ guildId, runId: firstRun.id })
     if (!r.ok) throw new Error(r.error.code)
     expect(r.value.csv).toContain(`${NET.explorerUrl}/tx/${firstRun.paidTxHash}`)
     expect(r.value.csv.split('\r\n')).toHaveLength(5)

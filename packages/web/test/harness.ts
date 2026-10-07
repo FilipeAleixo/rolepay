@@ -1,6 +1,6 @@
 // A web app over the real core services on in-memory fakes, with fake passkey sessions and
 // a stub client bundle. No network, no browser.
-import { createPayrun } from '@rolepay/core'
+import { createRolepay } from '@rolepay/core'
 import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { createWebApp } from '../src/index.js'
 import { FakePasskeySessions, staticAssets } from '../src/testing/index.js'
@@ -20,7 +20,7 @@ type Passkey = string | { address: string; proof: 'login' | 'registration'; issu
 export function webHarness() {
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
-  const payrun = createPayrun({
+  const rolepay = createRolepay({
     chain,
     repositories: createMemoryRepositories(),
     vault: new PlainKeyVault(),
@@ -30,7 +30,7 @@ export function webHarness() {
   })
   const sessions = new FakePasskeySessions()
   const app = createWebApp({
-    payrun,
+    rolepay,
     clock,
     sessions,
     assets: staticAssets({ 'payrun.js': 'console.log("payrun");'.repeat(100) }),
@@ -58,23 +58,23 @@ export function webHarness() {
   }
   const post = (path: string, body: unknown = {}, passkey?: Passkey) =>
     send(path, { method: 'POST', body: JSON.stringify(body), ...(passkey ? { passkey } : {}) })
-  return { app, payrun, chain, clock, sessions, send, post }
+  return { app, rolepay, chain, clock, sessions, send, post }
 }
 
 export async function registeredCommunity(h: ReturnType<typeof webHarness>, treasuryAddress = PASSKEY, over: Record<string, unknown> = {}) {
-  const r = await h.payrun.communities.register({ guildId: GUILD, name: 'Mods guild', treasuryAddress, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: ROLE, ...over })
+  const r = await h.rolepay.communities.register({ guildId: GUILD, name: 'Mods guild', treasuryAddress, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: ROLE, ...over })
   if (!r.ok) throw new Error(JSON.stringify(r.error))
   return r.value
 }
 
 export async function claimLink(h: ReturnType<typeof webHarness>, user = ALICE) {
-  const link = await h.payrun.payees.issueLink({ guildId: GUILD, discordUserId: user })
+  const link = await h.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: user })
   if (!link.ok) throw new Error(link.error.code)
   return link.value.token
 }
 
 export async function setupLink(h: ReturnType<typeof webHarness>, settings: Record<string, unknown> = {}) {
-  const link = await h.payrun.communities.issueSetupLink({
+  const link = await h.rolepay.communities.issueSetupLink({
     guildId: GUILD,
     discordUserId: TREASURER,
     settings: { name: 'Mods guild', payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: ROLE, ...settings },

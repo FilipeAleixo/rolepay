@@ -2,8 +2,8 @@
 // that /payrun setup provisioned, signing in-process with PAYRUN_TEST_ROOT_PRIVATE_KEY.
 // The production path is the treasury page: /payrun setup hands a treasurer the link, and the
 // passkey signs the authorisation in the browser.
-import { NETWORKS, createPayrun, parseConfig } from '@rolepay/core'
-import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@rolepay/core/adapters'
+import { NETWORKS, createRolepay, parseConfig } from '@rolepay/core'
+import { createTestnetTools, openRolepayAdapters, rootSignerFromPrivateKey } from '@rolepay/core/adapters'
 import { requireDevShortcuts } from '../src/devShortcuts.js'
 import { loadEnvironment } from '../src/env.js'
 
@@ -22,16 +22,16 @@ if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) {
 }
 const root = rootSignerFromPrivateKey(key as `0x${string}`)
 
-const { deps, close } = await openPayrunAdapters(config)
+const { deps, close } = await openRolepayAdapters(config)
 try {
-  const payrun = createPayrun(deps)
-  const community = await payrun.communities.get(guildId)
+  const rolepay = createRolepay(deps)
+  const community = await rolepay.communities.get(guildId)
   if (!community.ok) throw new Error(`Server ${guildId} is not registered. Run /payrun setup in Discord first.`)
   if (community.value.treasuryAddress !== root.address) {
     throw new Error(`Server ${guildId} is registered with treasury ${community.value.treasuryAddress}, but the dev root key controls ${root.address}.`)
   }
   await createTestnetTools({ rpcUrl: config.rpcUrl }).ensureFunded(root.address, community.value.payoutToken, 100_000_000n)
-  const result = await payrun.communities.authorizeBotKey({ guildId, root })
+  const result = await rolepay.communities.authorizeBotKey({ guildId, root })
   if (!result.ok) {
     const hint = result.error.code === 'no_pending_key' ? ' Run /payrun setup (or /payrun setup new_key:true) to provision one.' : ''
     throw new Error(`Could not authorise: ${result.error.code}.${hint}`)

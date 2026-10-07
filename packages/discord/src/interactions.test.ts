@@ -15,7 +15,7 @@ describe('createDiscordInteractions (verifier + router + endpoint in one call)',
     const signer = await createTestSigner()
     const endpoint = createDiscordInteractions({
       publicKey: signer.publicKeyHex,
-      deps: { payrun: h.payrun, rest: h.rest, queue: h.queue, members: new RestMemberDirectory(h.rest), pendingSources: new MemoryPendingSources(), clock: h.clock, config: CONFIG },
+      deps: { rolepay: h.rolepay, rest: h.rest, queue: h.queue, members: new RestMemberDirectory(h.rest), pendingSources: new MemoryPendingSources(), clock: h.clock, config: CONFIG },
     })
     const body = JSON.stringify({ id: '800000000000000001', application_id: '500000000000000001', type: 1, token: 't', version: 1 })
     const timestamp = String(Math.floor(Date.now() / 1000))
@@ -35,12 +35,12 @@ describe('createDiscordInteractions (verifier + router + endpoint in one call)',
     const h = await harness()
     await h.setupCommunity()
     await h.registerAll()
-    await h.payrun.communities.setAiProposals({ guildId: GUILD, enabled: true, actorRoleIds: [TREASURER_ROLE] })
+    await h.rolepay.communities.setAiProposals({ guildId: GUILD, enabled: true, actorRoleIds: [TREASURER_ROLE] })
     const signer = await createTestSigner()
     const background: Promise<unknown>[] = []
     const endpoint = createDiscordInteractions({
       publicKey: signer.publicKeyHex,
-      deps: { payrun: h.payrun, rest: h.rest, queue: h.queue, members: new RestMemberDirectory(h.rest), pendingSources: new MemoryPendingSources(), clock: h.clock, config: CONFIG },
+      deps: { rolepay: h.rolepay, rest: h.rest, queue: h.queue, members: new RestMemberDirectory(h.rest), pendingSources: new MemoryPendingSources(), clock: h.clock, config: CONFIG },
       waitUntil: (p) => void background.push(p),
     })
     const post = async (interaction: unknown) => {

@@ -1,5 +1,5 @@
-import type { PayrunConfig } from '../config/env.js'
-import type { PayrunDeps } from '../ports/deps.js'
+import type { RolepayConfig } from '../config/env.js'
+import type { RolepayDeps } from '../ports/deps.js'
 import type { KeyValueStore } from '../ports/keyValueStore.js'
 import { AnthropicRunProposer } from './anthropic/index.js'
 import { AesGcmKeyVault, RandomIds, SystemClock } from './crypto/index.js'
@@ -11,12 +11,12 @@ import { TempoPayoutChain } from './tempo/index.js'
  * Tempo chain, random IDs, system clock, and Anthropic's API when ANTHROPIC_API_KEY is set
  * (AI proposals; the Discord activity reader is added by the server). For composition roots:
  *
- *   const { deps, close } = await openPayrunAdapters(parseConfig(process.env))
- *   const payrun = createPayrun(deps)
+ *   const { deps, close } = await openRolepayAdapters(parseConfig(process.env))
+ *   const rolepay = createRolepay(deps)
  */
-export async function openPayrunAdapters(
-  config: PayrunConfig,
-): Promise<{ deps: PayrunDeps; kv: KeyValueStore; close: () => Promise<void> }> {
+export async function openRolepayAdapters(
+  config: RolepayConfig,
+): Promise<{ deps: RolepayDeps; kv: KeyValueStore; close: () => Promise<void> }> {
   const clock = new SystemClock()
   const db = await openSqliteDatabase(config.dbPath, { clock })
   return {

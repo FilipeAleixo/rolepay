@@ -30,12 +30,12 @@ function refuseUnlessApprover(ctx: GuildContext, community: Community): Outcome 
  * queues the payment and immediately turns the review into "paying" with no buttons, so
  * nobody can click twice. The queued job edits this message with the result.
  */
-export const approveButton: ButtonHandler = async ({ runId, messageId, ctx }, { payrun, queue, config }) => {
-  const community = await payrun.communities.get(ctx.guildId)
+export const approveButton: ButtonHandler = async ({ runId, messageId, ctx }, { rolepay, queue, config }) => {
+  const community = await rolepay.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
   const refused = refuseUnlessApprover(ctx, community.value)
   if (refused) return refused
-  const approved = await payrun.payRuns.approve({ guildId: ctx.guildId, runId, actor: ctx.caller.userId, actorCanApprove: true })
+  const approved = await rolepay.payRuns.approve({ guildId: ctx.guildId, runId, actor: ctx.caller.userId, actorCanApprove: true })
   if (!approved.ok) return replyError(approved.error)
   await queue.enqueue(executeJob(ctx, runId, messageId))
   return { kind: 'update', message: runMessage(approved.value, { network: config.network }) }
@@ -45,17 +45,17 @@ export const approveButton: ButtonHandler = async ({ runId, messageId, ctx }, { 
  * Cancel: the run's creator, an admin or an approver, while the run has not started paying. Core
  * refuses to cancel a failed run whose payments are on chain; the message then shows the truth.
  */
-export const cancelButton: ButtonHandler = async ({ runId, ctx }, { payrun, config }) => {
-  const community = await payrun.communities.get(ctx.guildId)
+export const cancelButton: ButtonHandler = async ({ runId, ctx }, { rolepay, config }) => {
+  const community = await rolepay.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
-  const run = await payrun.payRuns.get({ guildId: ctx.guildId, runId })
+  const run = await rolepay.payRuns.get({ guildId: ctx.guildId, runId })
   if (!run.ok) return replyError(run.error)
   const allowed = run.value.createdBy === ctx.caller.userId || canManageGuild(ctx.caller) || holdsApproverRole(ctx.caller, community.value)
   if (!allowed) return ephemeralReply('Only the person who created this run, an admin or an approver can cancel it.')
-  const cancelled = await payrun.payRuns.cancel({ guildId: ctx.guildId, runId, actor: ctx.caller.userId })
+  const cancelled = await rolepay.payRuns.cancel({ guildId: ctx.guildId, runId, actor: ctx.caller.userId })
   if (!cancelled.ok && cancelled.error.code === 'chain_shows_payments') {
     // Core has recorded what the chain shows: put the truth on the message, for everyone.
-    const current = await payrun.payRuns.get({ guildId: ctx.guildId, runId })
+    const current = await rolepay.payRuns.get({ guildId: ctx.guildId, runId })
     if (current.ok) return { kind: 'update', message: runMessage(current.value, { network: config.network, problem: explainError(cancelled.error) }) }
   }
   if (!cancelled.ok) return replyError(cancelled.error)
@@ -67,12 +67,12 @@ export const cancelButton: ButtonHandler = async ({ runId, ctx }, { payrun, conf
  * failure, or a restart lost the job) or a failure core marks retryable. Core re-checks
  * the chain for this run's memos before any new attempt.
  */
-export const retryButton: ButtonHandler = async ({ runId, messageId, ctx }, { payrun, queue, config }) => {
-  const community = await payrun.communities.get(ctx.guildId)
+export const retryButton: ButtonHandler = async ({ runId, messageId, ctx }, { rolepay, queue, config }) => {
+  const community = await rolepay.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
   const refused = refuseUnlessApprover(ctx, community.value)
   if (refused) return refused
-  const run = await payrun.payRuns.get({ guildId: ctx.guildId, runId })
+  const run = await rolepay.payRuns.get({ guildId: ctx.guildId, runId })
   if (!run.ok) return replyError(run.error)
   const r = run.value
   if (r.status === 'paid') return ephemeralReply('This run is already paid.')

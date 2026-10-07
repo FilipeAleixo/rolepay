@@ -1,4 +1,4 @@
-import { AddressSchema, ConfigError, DiscordIdSchema, type PayrunConfig, TESTNET_TOKENS, parseAmount, parseConfig } from '@rolepay/core'
+import { AddressSchema, ConfigError, DiscordIdSchema, type RolepayConfig, TESTNET_TOKENS, parseAmount, parseConfig } from '@rolepay/core'
 import type { DiscordAppConfig } from '@rolepay/discord'
 import type { WebConfig } from '@rolepay/web'
 import { z } from 'zod'
@@ -34,7 +34,7 @@ const ServerEnvSchema = z.object({
 })
 
 export type ServerConfig = {
-  core: PayrunConfig
+  core: RolepayConfig
   discord: { applicationId: string; publicKey: string; botToken: string; devGuildId: string | null }
   app: DiscordAppConfig
   http: { host: string; port: number }

@@ -1,4 +1,4 @@
-import type { Clock, KeyValueStore, Payrun } from '@rolepay/core'
+import type { Clock, KeyValueStore, Rolepay } from '@rolepay/core'
 import {
   type DiscordRest,
   InProcessExecutionQueue,
@@ -21,7 +21,7 @@ export type Log = (event: string, fields?: Record<string, unknown>) => void
 
 export type ServerDeps = {
   config: ServerConfig
-  payrun: Payrun
+  rolepay: Rolepay
   rest: DiscordRest
   clock: Clock
   /** Small records that must survive a restart (where a run's message is, receipts sent). The SQLite file in production. */
@@ -58,12 +58,12 @@ export const defaultRateLimits = () => ({
 export function composeServer(deps: ServerDeps) {
   const log: Log = deps.log ?? ((event, fields) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ...fields })))
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
-  const { config, payrun, rest } = deps
+  const { config, rolepay, rest } = deps
   const notices = new KvRunNotices(deps.kv)
 
   const queue = new InProcessExecutionQueue(
     createRunExecutor({
-      payrun,
+      rolepay,
       rest,
       notices,
       network: config.core.network,
@@ -84,7 +84,7 @@ export function composeServer(deps: ServerDeps) {
   const interactions = createDiscordInteractions({
     publicKey: config.discord.publicKey,
     deps: {
-      payrun,
+      rolepay,
       rest,
       queue,
       members: deps.members ?? new RestMemberDirectory(rest),
@@ -99,7 +99,7 @@ export function composeServer(deps: ServerDeps) {
   })
 
   const notifyRecovered = createRecoveryNotifier({
-    payrun,
+    rolepay,
     rest,
     notices,
     network: config.core.network,
@@ -109,7 +109,7 @@ export function composeServer(deps: ServerDeps) {
   const app = new Hono()
   app.get('/health', (c) => c.json({ ok: true, network: config.core.network, jobsInFlight: queue.size }))
   app.post('/discord/interactions', (c) => interactions(c.req.raw))
-  app.route('/', createWebApp({ payrun, clock: deps.clock, config: config.web, ...deps.web, rateLimits: deps.web.rateLimits ?? defaultRateLimits() }))
+  app.route('/', createWebApp({ rolepay, clock: deps.clock, config: config.web, ...deps.web, rateLimits: deps.web.rateLimits ?? defaultRateLimits() }))
 
   return {
     app,
@@ -119,7 +119,7 @@ export function composeServer(deps: ServerDeps) {
       startRecovery({
         // A run the sweep settles (typically after a restart) is reported in Discord as part of the sweep.
         recover: async () => {
-          const results = await payrun.payRuns.recoverInFlight()
+          const results = await rolepay.payRuns.recoverInFlight()
           await notifyRecovered(results)
           // Expired records (an abandoned proposal modal's message, old proposals) leave the disk too.
           await deps.kv.sweep().catch((error) => log('kv_sweep_error', errorFields(error)))
