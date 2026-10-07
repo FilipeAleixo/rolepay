@@ -81,7 +81,7 @@ curl -s https://rolepay-app.fly.dev/health      # {"ok":true,"network":"mainnet"
 fly logs -a rolepay-app --no-tail | grep '"listening"'
 ```
 
-The `listening` line must say `"network":"mainnet"`, `"chainId":4217`, `"payoutToken":"0x20c000000000000000000000b9537d11c60e8b50"`, `"fees":"fee_budget 0x20c0000000000000000000000000000000000000"`, `"publicUrl":"https://app.rolepay.app"`, `"passkeyRpId":"app.rolepay.app"`. The server refuses to start if the RPC answers for another chain; a `chain_check_failed` line means the RPC did not answer at start (it keeps running; check <https://rpc.tempo.xyz> and `fly machine restart`).
+The `listening` line must say `"network":"mainnet"`, `"chainId":4217`, `"payoutToken":"0x20c000000000000000000000b9537d11c60e8b50"`, `"fees":"fee_budget 0x20c0000000000000000000000000000000000000"`, `"publicUrl":"https://app.rolepay.app"`, `"passkeyRpId":"app.rolepay.app"`. The server refuses to start if the RPC answers for another chain; a `chain_check_failed` line means the RPC did not answer at start (it keeps running; check <https://rpc.tempo.xyz>, then `fly apps restart rolepay-app`).
 
 ## 4. DNS and the certificate (5 minutes, then a wait)
 

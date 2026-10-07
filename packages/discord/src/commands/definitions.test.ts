@@ -27,6 +27,16 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     expect(ROUTED_COMMANDS.filter((c) => !subcommands.includes(c))).toEqual(['rolepay policy run_now'])
   })
 
+  it('/rolepay setup fees: the choices say which default holds where (sponsored on testnet, a fee budget on mainnet, which has no sponsor)', () => {
+    const setup = (defs.find((c) => c.name === 'rolepay')?.options ?? []).find((o) => o.name === 'setup')
+    const fees = (setup?.options ?? []).find((o) => o.name === 'fees') as (Def & { choices?: { name: string; value: string }[] }) | undefined
+    expect(fees?.choices).toEqual([
+      { name: 'Sponsored (the testnet default)', value: 'sponsor' },
+      { name: 'From a fee budget the bot key carries (the mainnet default)', value: 'fee_budget' },
+    ])
+    expect((setup?.options ?? []).find((o) => o.name === 'fee_token')?.description).toBe('Fee budget token address (default: pathUSD)')
+  })
+
   it('/rolepay policy new|list|show|pause|resume|mode: the policy commands, hidden from members like the rest of /rolepay', () => {
     expect(subcommands.filter((c) => c.startsWith('rolepay policy '))).toEqual([
       'rolepay policy new',
