@@ -101,10 +101,12 @@ In about two minutes, as a recipient:
 
 1. Join the demo Discord server and run `/payee link`. Only you see the reply.
 2. Open the link and press **Create my passkey**, then confirm with your fingerprint or face. That is your Tempo account: no wallet, no seed phrase, nothing to install, no gas.
-3. Get included in a pay run, as the note with the invite says. The treasurer can draft the run with AI from the channel (right-click a message, Apps > Propose pay run) and approves it with one click.
+3. Get included in a pay run, as the note with the invite says. The treasurer can draft the run with AI (`/rolepay propose`, or right-click a message, Apps > Draft pay run with AI) or pay you directly (right-click your message, Apps > Pay the author, or right-click you, Apps > Pay with Rolepay), and approves it with one click.
 4. You get a DM receipt with your amount, and the transaction on Tempo's explorer shows everyone paid in one batch, each line with its memo.
 
 The treasurer side, in your own Discord server: run your own Rolepay with [`apps/server/README.md`](apps/server/README.md) (a Discord application, a tunnel and `pnpm dev`, about 20 minutes). Then `/rolepay setup approver_role:@Treasurer`, create the treasury with a passkey, get testnet funds, authorise the bot key, `/rolepay new`, and Approve.
+
+To pay one person, right-click their message, Apps > **Pay the author** (the run's note links the message), or right-click them, Apps > **Pay with Rolepay**: a form asks for the amount and a note, and the run goes to the Treasurer like any other.
 
 ## The trust model
 
@@ -123,10 +125,10 @@ What the code adds on top, what the chain guarantees on its own, and what is not
 
 AI proposes, the protocol limits, a human approves.
 
-- **From a message:** right-click the winners announcement, Apps > Propose pay run, and type "50 each, the indexer one 200". Or read a whole channel or thread: `/rolepay propose source:#bounties instruction:"pay everyone who closed a bounty, 50 each"`.
 - **From criteria:** `/rolepay propose instruction:"pay 20 to every Mod who answered at least 10 messages in #help this month"`. The model (Claude Sonnet 5.5) turns the instruction into a filter; Rolepay's code runs it over the registered payees. The member list never goes to the model.
+- **From messages:** read a whole channel or thread with `/rolepay propose source:#bounties instruction:"pay everyone who closed a bounty, 50 each"`, or one message: right-click the winners announcement, Apps > **Draft pay run with AI**, and type "50 each, the indexer one 200". The form says what happens: Rolepay reads the message and drafts lines for the people it names; nothing is paid until the Treasurer approves.
 - The answer is a proposal, not a run: one line per person with the amount and why (with a link to the message, or "34 replies"), what was left out and why, who is not registered yet, and the total against the bot key's remaining budget. Create pay run turns it into a normal run that still needs the treasurer's approval; Edit changes the lines; Discard drops it.
-- Code checks every line, whatever the model says: a line backed only by the recipient's own message ("pay me 10,000"), a line whose amount the instruction does not state, or one larger than the key's budget is held and shown, never paid. Even a run forced through stays under the bot key's on-chain limit.
+- Code checks every line, whatever the model says: a line backed only by the recipient's own message ("pay me 10,000"), a line whose amount the instruction does not state, or one larger than the key's budget is held and shown, never paid. Bots are never paid. When everyone is held for writing their own message ("2 each to everyone who wrote here today"), the proposal says that is a rule about activity and offers **Count who wrote** (criteria mode). Even a run forced through stays under the bot key's on-chain limit.
 - Off until a treasurer turns it on (`/rolepay setup ai_proposals:true`). Only the approver role, or an optional proposer role, can propose. Proposing from messages sends their text to Anthropic's API with user IDs replaced by tokens; logs keep counts and cost, never text.
 
 ## Standing policies
@@ -135,7 +137,7 @@ AI writes the rule once. Humans approve it. Code runs it. The chain caps it.
 
 - **Write it once.** A treasurer types a rule such as "every Monday: 1 per answered question in #help, max 50 a week each, for Mods" with `/rolepay policy new`. The model compiles it once into a filter and an amount rule.
 - **See who it applies to before approving.** Rolepay shows who it matches right now, with each person's count, why they match and the amount. Only the approver role activates it, and any edit needs a new approval.
-- **No AI at runtime.** On schedule, code alone runs the rule over the week since the last run. In propose mode each run waits for the usual one-tap approval. On autopilot it is posted with "pays at 18:00 unless vetoed" and a Veto button, then pays within the bot key's on-chain limit.
+- **No AI at runtime.** On schedule, code alone runs the rule over the week since the last run. In propose mode each run waits for the usual one-tap approval. On autopilot it is posted with "pays at 18:00 unless vetoed" and a Veto button, then pays within the bot key's on-chain limit, and its message then reads "Paid on autopilot after the veto window; no veto. Policy approved by @Treasurer (version 1)", never "Approved by" someone who did not approve that run.
 - **Held whole, never paid in part.** A run over the key's budget or the policy's cap is held and explained. Every step goes to an audit log, and one run per period holds across restarts and a second server on the same database.
 
 ## Repository
