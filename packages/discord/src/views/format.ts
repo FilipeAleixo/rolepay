@@ -19,7 +19,7 @@ export const relativeTime = (at: Date | number) => `<t:${Math.floor((typeof at =
 export const mention = (userId: string) => `<@${userId}>`
 export const roleMention = (roleId: string) => `<@&${roleId}>`
 
-/** Mentions in payrun's messages are for reading, never for pinging. */
+/** Mentions in Rolepay's messages are for reading, never for pinging. */
 export const NO_PINGS = { parse: [] as never[] }
 
 export const COLORS = { pending: 0xf0b232, working: 0x5865f2, paid: 0x23a55a, failed: 0xda373c, muted: 0x80848e } as const

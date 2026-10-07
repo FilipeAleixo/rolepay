@@ -15,14 +15,14 @@ const DEV_SETUP_OPTIONS = [
 ]
 
 /**
- * The slash commands, as JSON for `PUT /applications/{id}/commands`. /payrun is visible
+ * The slash commands, as JSON for `PUT /applications/{id}/commands`. /rolepay is visible
  * to Manage Server by default (admins can grant it to the Treasurer role in Server
  * Settings > Integrations); the handlers re-check permissions regardless. The dev shortcut
  * options exist only when `devShortcuts` is on (the handler refuses them otherwise anyway).
  */
 export const commandDefinitions = (opts: { devShortcuts: boolean }) => [
   {
-    name: 'payrun',
+    name: 'rolepay',
     description: 'Pay the people who run this server, in one stablecoin transaction',
     type: 1,
     ...GUILD_ONLY,

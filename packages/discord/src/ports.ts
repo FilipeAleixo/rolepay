@@ -19,7 +19,7 @@ export type RestError =
 
 export type RestResult = Result<void, RestError>
 
-/** Discord's REST API, as payrun uses it. Expected failures are results; network outages throw. */
+/** Discord's REST API, as Rolepay uses it. Expected failures are results; network outages throw. */
 export interface DiscordRest {
   /** Edits the interaction's original reply (or, for a button, the message the button is on). */
   editOriginal(reply: ReplyHandle, message: Message): Promise<RestResult>
@@ -67,7 +67,7 @@ export type ExecutionJob = {
 export type RunMessageRef = { channelId: string; messageId: string | null }
 
 /**
- * What payrun has told people about a run, kept outside the process (the server's database),
+ * What Rolepay has told people about a run, kept outside the process (the server's database),
  * so the recovery sweep can finish the story after a restart: where the review message is,
  * and whether the receipts went out. Receipts go out at most once per run.
  */

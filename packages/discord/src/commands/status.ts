@@ -8,7 +8,7 @@ const StatusOptions = z.object({ run: z.string().trim().min(1).max(64).optional(
 const RECENT = 10
 
 /**
- * /payrun status: one run in detail (immediate, from the database), or the overview
+ * /rolepay status: one run in detail (immediate, from the database), or the overview
  * (deferred, because the bot key is read from the chain). Both only for the caller.
  */
 export const statusCommand: CommandHandler = async ({ options, ctx }, { rolepay, config }) => {

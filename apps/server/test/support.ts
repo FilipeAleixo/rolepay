@@ -35,7 +35,7 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
     DISCORD_APP_ID: '500000000000000001',
     DISCORD_PUBLIC_KEY: signer.publicKeyHex,
     DISCORD_BOT_TOKEN: 'test-bot-token',
-    PUBLIC_URL: 'https://payrun.test',
+    PUBLIC_URL: 'https://rolepay.test',
   })
   const clock = opts.from?.clock ?? new ManualClock(new Date())
   const chain = opts.from?.chain ?? new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
@@ -88,7 +88,7 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
   const browserPost = (path: string, address: string, body: unknown = {}) =>
     server.app.request(path, {
       method: 'POST',
-      headers: { cookie: sessions.cookieFor(address), 'content-type': 'application/json', origin: 'https://payrun.test' },
+      headers: { cookie: sessions.cookieFor(address), 'content-type': 'application/json', origin: 'https://rolepay.test' },
       body: JSON.stringify(body),
     })
 

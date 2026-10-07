@@ -19,18 +19,18 @@ import { type Outcome, ephemeralReply, renderOutcome } from './outcome.js'
 
 /** `${command} ${subcommand}` -> handler. Kept in step with COMMAND_DEFINITIONS by a test. */
 const COMMANDS: Record<string, CommandHandler> = {
-  'payrun setup': setupCommand,
-  'payrun new': newRunCommand,
-  'payrun status': statusCommand,
-  'payrun export': exportCommand,
-  'payrun propose': proposeCommand,
+  'rolepay setup': setupCommand,
+  'rolepay new': newRunCommand,
+  'rolepay status': statusCommand,
+  'rolepay export': exportCommand,
+  'rolepay propose': proposeCommand,
   'payee link': payeeLinkCommand,
 }
 
 /** Right-click commands on a message, by their registered name. Kept in step with COMMAND_DEFINITIONS by a test. */
 const MESSAGE_COMMANDS: Record<string, MessageCommandHandler> = { [PROPOSE_MESSAGE_COMMAND]: proposeFromMessageCommand }
 
-const AUTOCOMPLETE: Record<string, AutocompleteHandler> = { 'payrun status': runChoices, 'payrun export': runChoices }
+const AUTOCOMPLETE: Record<string, AutocompleteHandler> = { 'rolepay status': runChoices, 'rolepay export': runChoices }
 
 const BUTTONS: Record<RunAction, ButtonHandler> = { approve: approveButton, cancel: cancelButton, retry: retryButton }
 const PROPOSAL_BUTTONS: Record<ProposalAction, ProposalButtonHandler> = { create: createProposalRunButton, edit: editProposalButton, discard: discardProposalButton }
@@ -64,13 +64,13 @@ export function createDispatcher(deps: DiscordAppDeps): Dispatch {
 }
 
 async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: DiscordAppDeps): Promise<Outcome> {
-  if (i.ctx.guildId === null) return ephemeralReply('payrun works inside a server. Run this command there.')
+  if (i.ctx.guildId === null) return ephemeralReply('Rolepay works inside a server. Run this command there.')
   const ctx: GuildContext = { ...i.ctx, guildId: i.ctx.guildId }
 
   switch (i.kind) {
     case 'command': {
       const handler = COMMANDS[`${i.command} ${i.sub}`]
-      return handler ? handler({ options: i.options, ctx, channels: i.channels }, deps) : ephemeralReply('Sorry, I do not know that command. Try /payrun status.')
+      return handler ? handler({ options: i.options, ctx, channels: i.channels }, deps) : ephemeralReply('Sorry, I do not know that command. Try /rolepay status.')
     }
     case 'autocomplete': {
       const handler = AUTOCOMPLETE[`${i.command} ${i.sub}`]

@@ -12,7 +12,7 @@ export type FetchDiscordRestOptions = {
 }
 
 const API = 'https://discord.com/api/v10'
-const USER_AGENT = 'DiscordBot (https://github.com/payrun, 0.1.0)'
+const USER_AGENT = 'DiscordBot (https://rolepay.app, 0.1.0)'
 const MAX_RATE_LIMIT_RETRIES = 3
 /** An edit can race Discord registering our deferred response; give it a moment before calling the token dead. */
 const WEBHOOK_404_RETRY_MS = [500, 1500]

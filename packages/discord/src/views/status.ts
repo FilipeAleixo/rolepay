@@ -19,22 +19,22 @@ export const runSummary = (r: Run) =>
     .filter(Boolean)
     .join(' · ')
 
-/** /payrun status without a run: recent runs, the approver role and the bot key. */
+/** /rolepay status without a run: recent runs, the approver role and the bot key. */
 export function statusMessage(v: { community: Community; runs: Run[]; key: KeyStatusView | null }): Message {
   const runs = v.runs.length
     ? v.runs.map((r) => `• ${runSummary({ ...r, note: r.note === null ? null : escapeMarkdown(r.note) })} · ${relativeTime(r.createdAt)}`).join('\n')
-    : 'No pay runs yet. Create one with `/payrun new`.'
+    : 'No pay runs yet. Create one with `/rolepay new`.'
   return {
     embeds: [
       {
-        title: 'payrun status',
+        title: 'rolepay status',
         color: COLORS.working,
         fields: [
-          { name: 'Approver role', value: v.community.approverRoleId ? roleMention(v.community.approverRoleId) : 'Not set (`/payrun setup approver_role:`)' },
-          { name: 'Bot key', value: v.key ? keyText(v.key) : 'None yet. Run `/payrun setup`.' },
+          { name: 'Approver role', value: v.community.approverRoleId ? roleMention(v.community.approverRoleId) : 'Not set (`/rolepay setup approver_role:`)' },
+          { name: 'Bot key', value: v.key ? keyText(v.key) : 'None yet. Run `/rolepay setup`.' },
           { name: 'Recent runs', value: runs.slice(0, 1024) },
         ],
-        footer: { text: 'Details of one run: /payrun status run:<id>' },
+        footer: { text: 'Details of one run: /rolepay status run:<id>' },
       },
     ],
     allowed_mentions: NO_PINGS,

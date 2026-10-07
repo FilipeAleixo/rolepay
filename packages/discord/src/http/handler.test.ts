@@ -4,7 +4,7 @@ import { createTestSigner } from '../testing/signer.js'
 import { type Dispatch, createInteractionsHandler } from './handler.js'
 import { createSignatureVerifier } from './verify.js'
 
-const URL = 'https://payrun.test/discord/interactions'
+const URL = 'https://rolepay.test/discord/interactions'
 
 async function setup(dispatch: Dispatch) {
   const signer = await createTestSigner()
@@ -39,7 +39,7 @@ describe('createInteractionsHandler', () => {
 
   it('a replayed signed request (same interaction ID, inside the 5-minute window) is refused and never dispatched again (L1)', async () => {
     let calls = 0
-    const { post } = await setup(async () => (calls++, { kind: 'respond', body: { type: 4, data: { content: 'https://payrun.test/claim/secret' } } }))
+    const { post } = await setup(async () => (calls++, { kind: 'respond', body: { type: 4, data: { content: 'https://rolepay.test/claim/secret' } } }))
     const interaction = { id: '900000000000000001', type: 2 }
     const timestamp = String(Math.floor(Date.now() / 1000))
     expect((await post(interaction, { timestamp })).status).toBe(200)
@@ -68,17 +68,17 @@ describe('createInteractionsHandler', () => {
     const { post } = await setup(async () => ({
       kind: 'respond',
       body: { type: 4, data: { content: 'here' } },
-      files: [{ name: 'payrun-run_1.csv', contentType: 'text/csv', data: 'a,b\n1,2\n' }],
+      files: [{ name: 'rolepay-run_1.csv', contentType: 'text/csv', data: 'a,b\n1,2\n' }],
     }))
     const res = await post({ type: 2 })
     expect(res.headers.get('content-type')).toMatch(/multipart\/form-data/)
     const form = await res.formData()
     expect(JSON.parse(form.get('payload_json') as string)).toEqual({
       type: 4,
-      data: { content: 'here', attachments: [{ id: 0, filename: 'payrun-run_1.csv' }] },
+      data: { content: 'here', attachments: [{ id: 0, filename: 'rolepay-run_1.csv' }] },
     })
     const file = form.get('files[0]') as File
-    expect(file.name).toBe('payrun-run_1.csv')
+    expect(file.name).toBe('rolepay-run_1.csv')
     expect(await file.text()).toBe('a,b\n1,2\n')
   })
 

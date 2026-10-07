@@ -23,7 +23,7 @@ describe('createDispatcher (the interaction router)', () => {
 
   it('an unknown command or button gets a polite ephemeral answer', async () => {
     const a = await appHarness()
-    const cmd = await a.send(slashCommand(SCOPE, 'payrun', 'teleport', {}, { userId: ADMIN, manageGuild: true }))
+    const cmd = await a.send(slashCommand(SCOPE, 'rolepay', 'teleport', {}, { userId: ADMIN, manageGuild: true }))
     expect(isEphemeral(cmd) && body(cmd).data?.content).toMatch(/do not know/)
     const btn = await a.send(buttonClick(SCOPE, 'something:else', { userId: ADMIN }))
     expect(isEphemeral(btn) && body(btn).data?.content).toMatch(/do not know/)

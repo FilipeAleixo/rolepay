@@ -8,7 +8,7 @@ import { runMessage } from '../views/run.js'
 /**
  * Create pay run: the normal create and submit in core (claimed once per proposal). The proposal
  * turns into "created" for the caller, and the run's review is posted in the channel with Approve
- * and Cancel, exactly like one from /payrun new: the approval path is unchanged.
+ * and Cancel, exactly like one from /rolepay new: the approval path is unchanged.
  */
 export const createProposalRunButton: ProposalButtonHandler = async ({ proposalId, ctx }, { rolepay, config }) => {
   const guard = await requireProposer(ctx, rolepay, { ai: false })

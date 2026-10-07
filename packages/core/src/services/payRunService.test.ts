@@ -557,7 +557,7 @@ describe('PayRunService: export', () => {
     await w.svc.execute({ guildId: GUILD, runId: run.id })
     const r = await w.svc.exportCsv({ guildId: GUILD, runId: run.id })
     if (!r.ok) throw new Error(r.error.code)
-    expect(r.value.filename).toBe(`payrun-${run.id}.csv`)
+    expect(r.value.filename).toBe(`rolepay-${run.id}.csv`)
     expect(r.value.csv).toContain('https://explore.testnet.tempo.xyz/tx/0x')
     expect(r.value.csv.split('\r\n')).toHaveLength(4)
     expect(await w.svc.exportCsv({ guildId: OTHER_GUILD, runId: run.id })).toEqual({ ok: false, error: { code: 'run_not_found' } })

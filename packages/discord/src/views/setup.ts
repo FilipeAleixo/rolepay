@@ -3,7 +3,7 @@ import type { Embed, Message } from '../api.js'
 import { COLORS, NO_PINGS, addressUrl, relativeTime, roleMention, shortAddress, tokenLabel } from './format.js'
 import { keyText } from './key.js'
 
-/** The treasury page link, issued to the person who ran /payrun setup. */
+/** The treasury page link, issued to the person who ran /rolepay setup. */
 export type SetupLinkView = { url: string; expiresAt: Date }
 
 export type SetupView = {
@@ -14,7 +14,7 @@ export type SetupView = {
   setupLink: SetupLinkView | null
   authorizeHint: string | null
   network: NetworkName
-  /** Whether this payrun server has an Anthropic API key (AI proposals can run at all). */
+  /** Whether this Rolepay server has an Anthropic API key (AI proposals can run at all). */
   aiConfigured: boolean
 }
 
@@ -25,10 +25,10 @@ export type SetupView = {
 export function aiText(c: Pick<Community, 'aiProposals' | 'approverRoleId' | 'proposerRoleId'>, configured: boolean): string {
   const privacy =
     "Privacy: proposing from messages sends their text to Anthropic's API, with user IDs replaced by tokens (names typed as plain text are sent as written). A criteria proposal sends only the instruction and this server's role and channel names."
-  if (!configured) return 'Not available on this payrun server (no Anthropic API key is configured).'
-  if (!c.aiProposals) return `Off. A member with the approver role turns them on with \`/payrun setup ai_proposals:true\`.\n${privacy}`
+  if (!configured) return 'Not available on this Rolepay server (no Anthropic API key is configured).'
+  if (!c.aiProposals) return `Off. A member with the approver role turns them on with \`/rolepay setup ai_proposals:true\`.\n${privacy}`
   const who = c.approverRoleId ? `${roleMention(c.approverRoleId)}${c.proposerRoleId ? ` and ${roleMention(c.proposerRoleId)}` : ''}` : 'Nobody (no approver role)'
-  return `On. ${who} can propose: right-click a message > Apps > Propose pay run, or \`/payrun propose\`. A proposal is a draft: the run it creates still needs approval.\n${privacy}`
+  return `On. ${who} can propose: right-click a message > Apps > Propose pay run, or \`/rolepay propose\`. A proposal is a draft: the run it creates still needs approval.\n${privacy}`
 }
 
 const approverText = (roleId: string | null, separate: boolean | undefined, unset: string) =>
@@ -41,21 +41,21 @@ const linkField = (link: SetupLinkView) => ({
   value: `[Open the treasury page](${link.url}) (only for you, works until ${relativeTime(link.expiresAt)}). There you sign with your passkey: authorise or change the bot key, see the deposit address, or revoke the key.`,
 })
 
-/** The admin's view of a community after /payrun setup: what is configured and what is left to do. */
+/** The admin's view of a community after /rolepay setup: what is configured and what is left to do. */
 export function setupMessage(v: SetupView): Message {
   const c = v.community
   const keyReady = v.key?.key.status === 'active' && v.key.state.status === 'active'
   const keyUnusable = !v.key || v.key.key.status === 'revoked' || v.key.state.status === 'revoked' || v.key.state.status === 'expired'
   const next: string[] = []
-  if (!c.approverRoleId) next.push('Set the approver role: `/payrun setup approver_role:@Treasurer`.')
+  if (!c.approverRoleId) next.push('Set the approver role: `/rolepay setup approver_role:@Treasurer`.')
   if (v.key?.key.status === 'pending_authorization') {
     next.push(`Authorise the bot key on the treasury page with the treasury passkey.${v.authorizeHint ? ` ${v.authorizeHint}` : ''}`)
   } else if (keyUnusable) {
     next.push('Authorise a new bot key on the treasury page with the treasury passkey.')
   }
-  if (keyReady && c.approverRoleId) next.push('Ready. Members register with `/payee link`; create a run with `/payrun new`.')
+  if (keyReady && c.approverRoleId) next.push('Ready. Members register with `/payee link`; create a run with `/rolepay new`.')
   if (!v.setupLink && c.approverRoleId) {
-    next.push(`The treasury page link goes to members with Manage Server and ${roleMention(c.approverRoleId)}: one of them runs /payrun setup.`)
+    next.push(`The treasury page link goes to members with Manage Server and ${roleMention(c.approverRoleId)}: one of them runs /rolepay setup.`)
   }
 
   const fields: NonNullable<Embed['fields']> = [
@@ -71,12 +71,12 @@ export function setupMessage(v: SetupView): Message {
   if (next.length) fields.push({ name: 'Next', value: next.map((n) => `• ${n}`).join('\n') })
 
   return {
-    embeds: [{ title: c.name ? `payrun setup: ${c.name}` : 'payrun setup', color: keyReady && c.approverRoleId ? COLORS.paid : COLORS.pending, fields }],
+    embeds: [{ title: c.name ? `Rolepay setup: ${c.name}` : 'rolepay setup', color: keyReady && c.approverRoleId ? COLORS.paid : COLORS.pending, fields }],
     allowed_mentions: NO_PINGS,
   }
 }
 
-/** The first /payrun setup: nothing is registered until the treasurer creates the treasury on the page. */
+/** The first /rolepay setup: nothing is registered until the treasurer creates the treasury on the page. */
 export function firstSetupMessage(v: {
   settings: { name: string | null; payoutToken: string; feeMode: string; feeToken: string | null; approverRoleId: string | null; requireSeparateApprover?: boolean }
   setupLink: SetupLinkView
@@ -85,10 +85,10 @@ export function firstSetupMessage(v: {
   return {
     embeds: [
       {
-        title: s.name ? `payrun setup: ${s.name}` : 'payrun setup',
+        title: s.name ? `Rolepay setup: ${s.name}` : 'rolepay setup',
         color: COLORS.pending,
         description:
-          "One step left, on the treasury page: create the community's Tempo account with your passkey (it becomes the account's root key, payrun never holds it), then choose what the bot may spend and authorise it.",
+          "One step left, on the treasury page: create the community's Tempo account with your passkey (it becomes the account's root key, Rolepay never holds it), then choose what the bot may spend and authorise it.",
         fields: [
           { name: 'Payout token', value: tokenLabel(s.payoutToken), inline: true },
           { name: 'Fees', value: feesText(s.feeMode, s.feeToken), inline: true },

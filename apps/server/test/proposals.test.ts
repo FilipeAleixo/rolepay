@@ -28,15 +28,15 @@ const text = (v: unknown) => JSON.stringify(v ?? null)
 /** A community with a 1000 AlphaUSD key, AI proposals on, and four registered payees (through their claim links). */
 async function community(opts: { limit?: string } = {}) {
   const s = await testServer()
-  await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE, key_limit: opts.limit ?? '1000' }, TREASURER, 'tok-setup'))
+  await s.interact(slashCommand(SCOPE, 'rolepay', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE, key_limit: opts.limit ?? '1000' }, TREASURER, 'tok-setup'))
   await s.drain()
   expect((await s.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })).ok).toBe(true)
-  await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { ai_proposals: true }, TREASURER, 'tok-ai'))
+  await s.interact(slashCommand(SCOPE, 'rolepay', 'setup', { ai_proposals: true }, TREASURER, 'tok-ai'))
   await s.drain()
   expect(text(s.rest.lastEdit('tok-ai'))).toContain("sends their text to Anthropic's API")
   for (const user of [ANA, RUI, LI, MALLORY]) {
     const res = await s.interact(slashCommand(SCOPE, 'payee', 'link', {}, { userId: user }))
-    const url = /https:\/\/payrun\.test(\/claim\/\S+)/.exec(((await res.json()) as { data: { content: string } }).data.content)?.[1] as string
+    const url = /https:\/\/rolepay\.test(\/claim\/\S+)/.exec(((await res.json()) as { data: { content: string } }).data.content)?.[1] as string
     expect((await s.browserPost(url, ADDR[user] as string)).status).toBe(200)
   }
   return s
@@ -81,10 +81,10 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     const review = text(s.rest.followUps.at(-1)?.message)
     expect(review).toContain('Pay run awaiting approval')
     expect(review).toContain('October bounties')
-    const runId = /payrun:approve:([^"]+)"/.exec(review)?.[1] as string
+    const runId = /rolepay:approve:([^"]+)"/.exec(review)?.[1] as string
 
-    // 4. The treasurer approves, exactly as for /payrun new; one batch pays everyone.
-    const approved = await json(await s.interact(buttonClick(SCOPE, `payrun:approve:${runId}`, TREASURER, 'tok-approve')))
+    // 4. The treasurer approves, exactly as for /rolepay new; one batch pays everyone.
+    const approved = await json(await s.interact(buttonClick(SCOPE, `rolepay:approve:${runId}`, TREASURER, 'tok-approve')))
     expect(approved.type).toBe(7)
     await s.drain()
     expect(text(s.rest.lastEdit('tok-approve'))).toMatch(/"title":"Paid"/)
@@ -108,7 +108,7 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     )
     // A model that obeys the injection, the worst case.
     s.proposer.onMessages = (r) => naiveMessageProposal(r, { gullible: true })
-    await s.interact(slashCommand(SCOPE, 'payrun', 'propose', { instruction: '50 each to the winners', source: CHANNEL, since: '1d' }, TREASURER, 'tok-propose'))
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: '50 each to the winners', source: CHANNEL, since: '1d' }, TREASURER, 'tok-propose'))
     await s.drain()
     const proposal = text(s.rest.lastEdit('tok-propose'))
     expect(proposal).toContain('100 AlphaUSD for 2 people')
@@ -119,8 +119,8 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     await s.interact(modalSubmit(SCOPE, `proposal-modal:edit:${proposalId}`, { lines: `<@${ANA}>=50\n<@${RUI}>=50\n<@${MALLORY}>=10000` }, TREASURER))
     await s.interact(buttonClick(SCOPE, `proposal:create:${proposalId}`, TREASURER))
     await s.drain()
-    const runId = /payrun:approve:([^"]+)"/.exec(text(s.rest.followUps.at(-1)?.message))?.[1] as string
-    await s.interact(buttonClick(SCOPE, `payrun:approve:${runId}`, TREASURER, 'tok-approve'))
+    const runId = /rolepay:approve:([^"]+)"/.exec(text(s.rest.followUps.at(-1)?.message))?.[1] as string
+    await s.interact(buttonClick(SCOPE, `rolepay:approve:${runId}`, TREASURER, 'tok-approve'))
     await s.drain()
     expect(text(s.rest.lastEdit('tok-approve'))).toMatch(/needs 10100 AlphaUSD but the bot key has 500 AlphaUSD left/)
     expect(s.chain.landedTxCount).toBe(0)
@@ -149,7 +149,7 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
         { amount: { kind: 'flat', amount: '20', per: null, cap: null, total: null, splitBy: null } },
         { hasRole: ['R1'], repliesIn: { channels: ['C1'], since: `${r.today.slice(0, 8)}01`, until: null, min: 10 } },
       )
-    await s.interact(slashCommand(SCOPE, 'payrun', 'propose', { instruction: 'pay 20 to every Mod who answered at least 10 messages in #help this month' }, TREASURER, 'tok-criteria'))
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'pay 20 to every Mod who answered at least 10 messages in #help this month' }, TREASURER, 'tok-criteria'))
     await s.drain()
     const proposal = text(s.rest.lastEdit('tok-criteria'))
     expect(proposal).toContain(`**Who:** Registered payees who have <@&${MODS_ROLE}> and who replied to other people at least 10 times in <#${HELP}>`)
@@ -158,8 +158,8 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     const proposalId = /proposal:create:([A-Za-z0-9_]+)/.exec(proposal)?.[1] as string
     await s.interact(buttonClick(SCOPE, `proposal:create:${proposalId}`, TREASURER))
     await s.drain()
-    const runId = /payrun:approve:([^"]+)"/.exec(text(s.rest.followUps.at(-1)?.message))?.[1] as string
-    await s.interact(buttonClick(SCOPE, `payrun:approve:${runId}`, TREASURER))
+    const runId = /rolepay:approve:([^"]+)"/.exec(text(s.rest.followUps.at(-1)?.message))?.[1] as string
+    await s.interact(buttonClick(SCOPE, `rolepay:approve:${runId}`, TREASURER))
     await s.drain()
     expect(s.chain.balance(TOKEN, ADDR[ANA] as string)).toBe(usd('20'))
     expect(s.chain.landedTxCount).toBe(1)

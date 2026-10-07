@@ -18,7 +18,7 @@ const NewRunOptions = z.object({
 const fail = (content: string): DeferredResult => ({ ok: false, message: { content } })
 
 /**
- * /payrun new: one amount per person, for registered payees holding `role` and/or the
+ * /rolepay new: one amount per person, for registered payees holding `role` and/or the
  * listed `users` (a listed `@bob=40` overrides the amount). Creates the run, submits it
  * for approval and posts the review publicly, so the treasurer can approve in place.
  * Deferred, because role lookups go through Discord.

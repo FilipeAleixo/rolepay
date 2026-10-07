@@ -5,7 +5,7 @@ import { requireOperator } from './guards.js'
 
 const ExportOptions = z.object({ run: z.string().trim().min(1).max(64).optional() })
 
-/** /payrun export: the run (default: the latest) as a CSV attachment, only for the caller. */
+/** /rolepay export: the run (default: the latest) as a CSV attachment, only for the caller. */
 export const exportCommand: CommandHandler = async ({ options, ctx }, { rolepay }) => {
   const guard = await requireOperator(ctx, rolepay, 'Exporting pay runs')
   if (!guard.ok) return guard.reply
@@ -13,7 +13,7 @@ export const exportCommand: CommandHandler = async ({ options, ctx }, { rolepay 
   if (!parsed.ok) return parsed.reply
 
   const runId = parsed.value.run ?? (await rolepay.payRuns.list({ guildId: ctx.guildId, limit: 1 }))[0]?.id
-  if (!runId) return ephemeralReply('No pay runs yet. Create one with `/payrun new`.')
+  if (!runId) return ephemeralReply('No pay runs yet. Create one with `/rolepay new`.')
   const exported = await rolepay.payRuns.exportCsv({ guildId: ctx.guildId, runId })
   if (!exported.ok) return replyError(exported.error)
   return {

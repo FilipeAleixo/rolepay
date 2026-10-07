@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 /**
  * Messages as Discord sends them (the target of a message command, channel history over REST),
- * validated with Zod and turned into core's SourceMessage. Only what payrun reads: author,
+ * validated with Zod and turned into core's SourceMessage. Only what Rolepay reads: author,
  * text, mentions, time, reply target and reactions. Without the Message Content intent Discord
  * sends `content` as "" for other people's messages; everything else is still there.
  */

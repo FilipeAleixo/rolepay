@@ -6,7 +6,7 @@ const USER = /^(?:<@!?(\d{17,20})>|(\d{17,20}))(?:[=:](.+))?$/
 const ROLE = /^<@&\d{17,20}>/
 
 /**
- * The `users` option of /payrun new: mentions or IDs, each optionally followed by its
+ * The `users` option of /rolepay new: mentions or IDs, each optionally followed by its
  * own amount (`@alice @bob=40`). Mentions in a string option arrive as `<@id>`.
  */
 export function parseRecipients(text: string): Result<RecipientSpec[], { code: 'invalid_input'; issues: string[] }> {

@@ -6,13 +6,13 @@ import { slashCommand } from '../testing/interactions.js'
 const admin = { userId: ADMIN, manageGuild: true }
 const treasurerAdmin = { userId: ADMIN, manageGuild: true, roles: [TREASURER_ROLE] }
 const PATH_USD = '0x20c0000000000000000000000000000000000000'
-const setupUrl = (final: string) => /https:\/\/payrun\.test\/setup\/([A-Za-z0-9_-]+)/.exec(final)?.[1] ?? null
+const setupUrl = (final: string) => /https:\/\/rolepay\.test\/setup\/([A-Za-z0-9_-]+)/.exec(final)?.[1] ?? null
 const NEW_ROLE = '400000000000000077'
 
 async function setup(a: Awaited<ReturnType<typeof appHarness>>, values: Record<string, string | boolean | undefined>, who: { userId: string; manageGuild?: boolean; roles?: string[] } = admin) {
   a.clock.advance(60) // time passes between admin commands (keys are ordered by creation time)
   const token = `tok-setup-${Math.random()}`
-  const d = await a.send(slashCommand(SCOPE, 'payrun', 'setup', values, who, token))
+  const d = await a.send(slashCommand(SCOPE, 'rolepay', 'setup', values, who, token))
   return { d, final: text(a.rest.lastEdit(token)) }
 }
 
@@ -21,7 +21,7 @@ const keyAddress = async (a: Awaited<ReturnType<typeof appHarness>>) => {
   return ks.ok ? ks.value.key.address : null
 }
 
-describe('/payrun setup', () => {
+describe('/rolepay setup', () => {
   it('needs Manage Server, and registers nothing otherwise', async () => {
     const a = await appHarness()
     const { d } = await setup(a, { treasury: TREASURY }, { userId: ALICE, manageGuild: false })
@@ -215,7 +215,7 @@ describe('/payrun setup', () => {
   })
 })
 
-describe('/payrun setup dev shortcuts (treasury, new_key, key_limit)', () => {
+describe('/rolepay setup dev shortcuts (treasury, new_key, key_limit)', () => {
   const NOT_HERE = /dev shortcuts.*off/i
 
   it('are refused unless ROLEPAY_DEV_SHORTCUTS is on, and then change nothing', async () => {
@@ -262,7 +262,7 @@ describe('/payrun setup dev shortcuts (treasury, new_key, key_limit)', () => {
   })
 })
 
-describe('/payrun setup: AI proposals (off by default; a treasurer switches them on)', () => {
+describe('/rolepay setup: AI proposals (off by default; a treasurer switches them on)', () => {
   const PROPOSERS = '400000000000000003'
 
   it('the card says they are off, how to turn them on, and that messages go to Anthropic', async () => {
@@ -270,7 +270,7 @@ describe('/payrun setup: AI proposals (off by default; a treasurer switches them
     await a.setupCommunity()
     const { final } = await setup(a, {}, treasurerAdmin)
     expect(final).toContain('"name":"AI proposals"')
-    expect(final).toContain('Off. A member with the approver role turns them on with `/payrun setup ai_proposals:true`')
+    expect(final).toContain('Off. A member with the approver role turns them on with `/rolepay setup ai_proposals:true`')
     expect(final).toContain("proposing from messages sends their text to Anthropic's API")
   })
 
@@ -292,11 +292,11 @@ describe('/payrun setup: AI proposals (off by default; a treasurer switches them
     expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { aiProposals: false, proposerRoleId: null } })
   })
 
-  it('on a payrun server without an Anthropic key the card says they are not available', async () => {
+  it('on a Rolepay server without an Anthropic key the card says they are not available', async () => {
     const a = await appHarness({ proposer: null })
     await a.setupCommunity()
     const { final } = await setup(a, { ai_proposals: true }, treasurerAdmin)
-    expect(final).toContain('Not available on this payrun server (no Anthropic API key is configured).')
+    expect(final).toContain('Not available on this Rolepay server (no Anthropic API key is configured).')
     expect(final).toContain('cannot run yet')
   })
 

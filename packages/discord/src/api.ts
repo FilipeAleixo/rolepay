@@ -1,5 +1,5 @@
 /**
- * The slice of Discord's wire format payrun uses: numeric enums and message payload
+ * The slice of Discord's wire format Rolepay uses: numeric enums and message payload
  * shapes. Kept small and explicit instead of pulling in a full Discord library.
  */
 
@@ -25,11 +25,11 @@ export const OptionType = { SubCommand: 1, SubCommandGroup: 2, String: 3, Intege
 export const ComponentType = { ActionRow: 1, Button: 2, TextInput: 4, Label: 18 } as const
 export const TextInputStyle = { Short: 1, Paragraph: 2 } as const
 
-/** Channel types payrun reads from (text, announcement, threads) or lists (forum). */
+/** Channel types Rolepay reads from (text, announcement, threads) or lists (forum). */
 export const ChannelType = { Text: 0, Voice: 2, Category: 4, Announcement: 5, AnnouncementThread: 10, PublicThread: 11, PrivateThread: 12, Forum: 15, Media: 16 } as const
 export const ButtonStyle = { Primary: 1, Secondary: 2, Success: 3, Danger: 4, Link: 5 } as const
 
-/** Permission bits payrun checks (from the interaction's member.permissions bitfield). */
+/** Permission bits Rolepay checks (from the interaction's member.permissions bitfield). */
 export const Permission = { Administrator: 1n << 3n, ManageGuild: 1n << 5n, ViewChannel: 1n << 10n, ReadMessageHistory: 1n << 16n } as const
 
 export type Embed = {
@@ -66,7 +66,7 @@ export type Modal = { custom_id: string; title: string; components: { type: type
 /** A file sent alongside a message (an attachment). */
 export type FileUpload = { name: string; contentType: string; data: string }
 
-/** A message as payrun builds it: what goes into a reply, an edit, a follow-up or a DM. */
+/** A message as Rolepay builds it: what goes into a reply, an edit, a follow-up or a DM. */
 export type Message = {
   content?: string
   embeds?: Embed[]

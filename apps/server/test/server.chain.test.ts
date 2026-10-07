@@ -62,7 +62,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
       DISCORD_APP_ID: '500000000000000001',
       DISCORD_PUBLIC_KEY: signer.publicKeyHex,
       DISCORD_BOT_TOKEN: 'fake-bot-token',
-      PUBLIC_URL: 'https://payrun.test',
+      PUBLIC_URL: 'https://rolepay.test',
       ROLEPAY_BOT_KEY_LIMIT: '10',
       ROLEPAY_DEV_SHORTCUTS: 'true',
     })
@@ -81,7 +81,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
     }
 
     // Setup over HTTP, then the dev path authorises the key with the in-process root.
-    await interact(slashCommand(scope, 'payrun', 'setup', { treasury: root.address, approver_role: treasurerRole }, treasurerAdmin, 'tok-setup'))
+    await interact(slashCommand(scope, 'rolepay', 'setup', { treasury: root.address, approver_role: treasurerRole }, treasurerAdmin, 'tok-setup'))
     await server.drain()
     expect(text(rest.lastEdit('tok-setup'))).toMatch(/Waiting for the treasury to authorise/)
     const rolepay = createRolepay(opened.deps)
@@ -97,7 +97,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
   it('links, a run, Approve, one sponsored batch on chain, receipts', async () => {
     for (const [i, user] of payees.entries()) {
       const res = (await (await interact(slashCommand(scope, 'payee', 'link', {}, { userId: user }))).json()) as { data: { content: string } }
-      const path = /https:\/\/payrun\.test(\/claim\/\S+)/.exec(res.data.content)?.[1] as string
+      const path = /https:\/\/rolepay\.test(\/claim\/\S+)/.exec(res.data.content)?.[1] as string
       // The claim page registers the passkey session's account (fake sessions here; the browser e2e uses real passkeys).
       const claimed = await server.app.request(path, {
         method: 'POST',
@@ -107,13 +107,13 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
       expect(claimed.status).toBe(200)
     }
 
-    await interact(slashCommand(scope, 'payrun', 'new', { amount: '0.01', users: `<@${payees[0]}> <@${payees[1]}>=0.02`, note: 'server chain test' }, admin, 'tok-new'))
+    await interact(slashCommand(scope, 'rolepay', 'new', { amount: '0.01', users: `<@${payees[0]}> <@${payees[1]}>=0.02`, note: 'server chain test' }, admin, 'tok-new'))
     await server.drain()
-    const runId = /payrun:approve:([^"]+)"/.exec(text(rest.lastEdit('tok-new')))?.[1] as string
+    const runId = /rolepay:approve:([^"]+)"/.exec(text(rest.lastEdit('tok-new')))?.[1] as string
     expect(runId).toBeDefined()
 
     const started = Date.now()
-    const approved = (await (await interact(buttonClick(scope, `payrun:approve:${runId}`, treasurer, 'tok-approve'))).json()) as { type: number }
+    const approved = (await (await interact(buttonClick(scope, `rolepay:approve:${runId}`, treasurer, 'tok-approve'))).json()) as { type: number }
     expect(approved.type).toBe(7)
     await server.drain()
 

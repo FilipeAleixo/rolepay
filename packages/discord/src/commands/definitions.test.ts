@@ -39,8 +39,8 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     }
   })
 
-  it('/payrun propose takes an instruction, and optionally a channel or thread to read and how far back', () => {
-    const propose = defs.find((d) => d.name === 'payrun')?.options?.find((o) => o.name === 'propose')
+  it('/rolepay propose takes an instruction, and optionally a channel or thread to read and how far back', () => {
+    const propose = defs.find((d) => d.name === 'rolepay')?.options?.find((o) => o.name === 'propose')
     expect(propose?.options?.map((o) => [o.name, o.type, o.required ?? false])).toEqual([
       ['instruction', OptionType.String, true],
       ['source', OptionType.Channel, false],
@@ -50,7 +50,7 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
 
   it('the dev shortcuts are registered only when they are on; by default they do not exist', () => {
     const setupOptions = (d: Def[]) =>
-      (d.find((c) => c.name === 'payrun')?.options?.find((o) => o.name === 'setup')?.options ?? []).map((o) => o.name)
+      (d.find((c) => c.name === 'rolepay')?.options?.find((o) => o.name === 'setup')?.options ?? []).map((o) => o.name)
     const dev = ['treasury', 'key_limit', 'new_key']
     for (const off of [COMMAND_DEFINITIONS, commandDefinitions({ devShortcuts: false })] as Def[][]) {
       expect(setupOptions(off)).not.toEqual(expect.arrayContaining([expect.stringMatching(/^(treasury|key_limit|new_key)$/)]))
@@ -59,8 +59,8 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     expect(setupOptions(commandDefinitions({ devShortcuts: true }) as Def[])).toEqual(expect.arrayContaining(dev))
   })
 
-  it('/payrun is shown to Manage Server by default; /payee to everyone; both only inside servers', () => {
-    const rolepay = defs.find((d) => d.name === 'payrun')
+  it('/rolepay is shown to Manage Server by default; /payee to everyone; both only inside servers', () => {
+    const rolepay = defs.find((d) => d.name === 'rolepay')
     const payee = defs.find((d) => d.name === 'payee')
     expect(rolepay?.default_member_permissions).toBe(String(Permission.ManageGuild))
     expect(payee?.default_member_permissions).toBeUndefined()

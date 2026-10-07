@@ -102,11 +102,11 @@ describe('Apps > Propose pay run (the message command)', () => {
   })
 })
 
-describe('/payrun propose', () => {
+describe('/rolepay propose', () => {
   it('with source: reads the channel, and the injection in it is left out and listed', async () => {
     const a = await ready()
     a.rest.addChannelMessages(WINNERS, ATTACK)
-    const d = await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: '50 each', source: CHANNEL, since: '24h' }, treasurer, 'tok-p'))
+    const d = await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: '50 each', source: CHANNEL, since: '24h' }, treasurer, 'tok-p'))
     expect(body(d)).toEqual({ type: 5, data: { flags: 64 } })
     const shown = text(a.rest.lastEdit('tok-p'))
     expect(shown).toContain('150 AlphaUSD for 3 people')
@@ -127,7 +127,7 @@ describe('/payrun propose', () => {
     a.rest.addChannelMessages(q, ...Array.from({ length: 12 }, (_, i) => wireMessage({ channelId: HELP, authorId: ALICE, at: ago(500 - i), replyTo: { id: q.id, authorId: CAROL } })))
     a.proposer.onCriteria = () =>
       emptyCriteria({ amount: { kind: 'flat', amount: '20', per: null, cap: null, total: null, splitBy: null } }, { hasRole: ['R1'], repliesIn: { channels: ['C1'], since: '2026-10-01', until: null, min: 10 } })
-    await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: 'pay 20 to every Mod who answered at least 10 messages in #help this month' }, treasurer, 'tok-c'))
+    await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'pay 20 to every Mod who answered at least 10 messages in #help this month' }, treasurer, 'tok-c'))
     const shown = text(a.rest.lastEdit('tok-c'))
     expect(shown).toContain(`**Who:** Registered payees who have <@&${MODS_ROLE}> and who replied to other people at least 10 times in <#${HELP}> since <t:1790812800:D>.`)
     expect(shown).toContain('**Amount:** 20 AlphaUSD each.')
@@ -137,15 +137,15 @@ describe('/payrun propose', () => {
 
   it('since goes with source, and is checked', async () => {
     const a = await ready()
-    expect(body(await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: 'x', since: '7d' }, treasurer))).data?.content).toMatch(/goes with `source`/)
-    expect(body(await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: 'x', source: CHANNEL, since: 'last week' }, treasurer))).data?.content).toMatch(/24h, 7d or 2w/)
+    expect(body(await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'x', since: '7d' }, treasurer))).data?.content).toMatch(/goes with `source`/)
+    expect(body(await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'x', source: CHANNEL, since: 'last week' }, treasurer))).data?.content).toMatch(/24h, 7d or 2w/)
   })
 
   it('never reads a channel the caller cannot read themselves', async () => {
     const a = await ready()
     a.rest.addChannelMessages(WINNERS)
     for (const channels of [{ [CHANNEL]: 1n << 10n }, {}] as Record<string, bigint>[]) {
-      const d = await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: '50 each', source: CHANNEL }, { ...treasurer, channels }))
+      const d = await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: '50 each', source: CHANNEL }, { ...treasurer, channels }))
       expect(isEphemeral(d) && body(d).data?.content).toMatch(/channel you can read yourself/)
     }
     expect(a.rest.reads).toEqual([])
@@ -155,7 +155,7 @@ describe('/payrun propose', () => {
   it('a channel the bot cannot read says which permissions it needs', async () => {
     const a = await ready()
     a.rest.forbiddenChannels.add(CHANNEL)
-    await a.send(slashCommand(SCOPE, 'payrun', 'propose', { instruction: '50 each', source: CHANNEL }, treasurer, 'tok-f'))
+    await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: '50 each', source: CHANNEL }, treasurer, 'tok-f'))
     expect(text(a.rest.lastEdit('tok-f'))).toMatch(/View Channel and Read Message History/)
   })
 })
@@ -176,7 +176,7 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
     expect(text(body(d))).toContain('Pay run created')
     const review = a.rest.followUps.at(-1)?.message
     expect(text(review)).toContain('Pay run awaiting approval')
-    const runId = /payrun:approve:([^"]+)"/.exec(text(review))?.[1] as string
+    const runId = /rolepay:approve:([^"]+)"/.exec(text(review))?.[1] as string
     const run = await a.rolepay.payRuns.get({ guildId: GUILD, runId })
     expect(run.ok && { status: run.value.status, total: run.value.total, note: run.value.note, createdBy: run.value.createdBy }).toEqual({
       status: 'pending_approval',

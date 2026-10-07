@@ -158,7 +158,7 @@ describe('FetchDiscordRest', () => {
   it('registers commands with PUT, for one guild (instant) or globally', async () => {
     const { fetch, calls } = fakeFetch({ status: 200, json: [] }, { status: 200, json: [] }, { status: 401, json: { code: 0 } })
     const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
-    const commands = [{ name: 'payrun', description: 'x' }]
+    const commands = [{ name: 'rolepay', description: 'x' }]
     expect((await rest.putCommands({ applicationId: REPLY.applicationId, guildId: '1094309218049937418', commands })).ok).toBe(true)
     expect((await rest.putCommands({ applicationId: REPLY.applicationId, commands })).ok).toBe(true)
     expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([

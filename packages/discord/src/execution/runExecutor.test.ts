@@ -67,7 +67,7 @@ describe('createRunExecutor', () => {
     await h.execute(job(h.run.id))
     const final = text(h.rest.lastEdit('tok-approve'))
     expect(final).toMatch(/no active key/)
-    expect(final).toContain('payrun:retry:')
+    expect(final).toContain('rolepay:retry:')
     expect(h.rest.dms).toEqual([])
     expect(h.chain.landedTxCount).toBe(0)
   })
@@ -93,7 +93,7 @@ describe('createRunExecutor', () => {
     await h.execute(job(h.run.id))
     const final = text(h.rest.lastEdit('tok-approve'))
     expect(final).toMatch(/did not land before its deadline/)
-    expect(final).toContain('payrun:retry:')
+    expect(final).toContain('rolepay:retry:')
     expect(h.chain.landedTxCount).toBe(0)
   })
 
@@ -101,7 +101,7 @@ describe('createRunExecutor', () => {
     const h = await ready()
     h.chain.faults.nextBroadcast = 'reject_but_keep_pending'
     await h.execute(job(h.run.id))
-    expect(text(h.rest.lastEdit('tok-approve'))).toContain('payrun:retry:')
+    expect(text(h.rest.lastEdit('tok-approve'))).toContain('rolepay:retry:')
     await h.chain.mine() // the tx the node "rejected" lands
     await h.sleep(200_000)
     await h.execute(job(h.run.id, 'tok-retry'))
@@ -135,7 +135,7 @@ describe('createRunExecutor', () => {
     expect(r.ok && r.value.attempts).toHaveLength(1) // no second attempt was ever signed
   })
 
-  it('stops polling after a bounded number of checks and says payrun keeps checking', async () => {
+  it('stops polling after a bounded number of checks and says Rolepay keeps checking', async () => {
     const h = await harness()
     await h.setupCommunity()
     await h.registerAll()
@@ -183,7 +183,7 @@ describe('createRunExecutor', () => {
     await expect(h.execute(job(h.run.id))).resolves.toBeUndefined()
     const final = text(h.rest.lastEdit('tok-approve'))
     expect(final).toMatch(/could not reach/i)
-    expect(final).toContain('payrun:retry:')
+    expect(final).toContain('rolepay:retry:')
     h.chain.keyState = original
   })
 })

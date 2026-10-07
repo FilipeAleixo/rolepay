@@ -35,10 +35,10 @@ const notPermitted = (c: Community, what: string, nextRoleId?: string) =>
     : `Only a member who holds ${nextRoleId ? roleMention(nextRoleId) : 'the approver role'} can set it as the approver role.`
 
 const DEV_SHORTCUTS_OFF =
-  '`treasury`, `new_key` and `key_limit` are testnet dev shortcuts, and they are off on this server. Run /payrun setup without them: the treasurer sets up the treasury and the bot key on the treasury page.'
+  '`treasury`, `new_key` and `key_limit` are testnet dev shortcuts, and they are off on this server. Run /rolepay setup without them: the treasurer sets up the treasury and the bot key on the treasury page.'
 
 /**
- * /payrun setup (Manage Server). The production path: a member who also holds the approver
+ * /rolepay setup (Manage Server). The production path: a member who also holds the approver
  * role gets a short-lived link to the treasury page, where the treasurer's passkey creates
  * the community account (the first time), authorises the bot key or revokes it. The command
  * itself sets the approver role, the fee mode and the server name. Dev path (Moderato with
@@ -47,7 +47,7 @@ const DEV_SHORTCUTS_OFF =
  * `pnpm dev:authorize-key`. Deferred, because the key status is read from the chain.
  */
 export const setupCommand: CommandHandler = async ({ options, ctx }, deps) => {
-  if (!canManageGuild(ctx.caller)) return ephemeralReply('Only members with Manage Server can run /payrun setup.')
+  if (!canManageGuild(ctx.caller)) return ephemeralReply('Only members with Manage Server can run /rolepay setup.')
   const parsed = parseOptions(SetupOptions, options)
   if (!parsed.ok) return parsed.reply
   const o = parsed.value
@@ -77,7 +77,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
   let community = await rolepay.communities.get(guildId)
   if (!community.ok) {
     if (o.ai_proposals !== undefined || o.proposer_role !== undefined) {
-      return fail('AI proposals are set after the treasury exists: finish setup on the treasury page, then run `/payrun setup ai_proposals:true`.')
+      return fail('AI proposals are set after the treasury exists: finish setup on the treasury page, then run `/rolepay setup ai_proposals:true`.')
     }
     if (!o.treasury) return firstSetup(o, fees, guildName, ctx, deps)
     // Dev path: register an existing treasury account (its root key signs elsewhere). The same
@@ -130,7 +130,7 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       if (!updated.ok) return fail(updated.error.code === 'not_permitted' ? notPermitted(community.value, 'AI proposals') : explainError(updated.error))
       community = updated
       if (ai && updated.value.aiProposals && !rolepay.proposals.isConfigured()) {
-        notices.push('AI proposals are on for this server, but this payrun server has no Anthropic API key, so they cannot run yet.')
+        notices.push('AI proposals are on for this server, but this Rolepay server has no Anthropic API key, so they cannot run yet.')
       }
     }
     if (fees && (fees.feeMode !== community.value.feeMode || fees.feeToken !== community.value.feeToken)) {
@@ -181,12 +181,12 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
 function chosenRole(o: Options, ctx: GuildContext): { ok: true; roleId: string } | DeferredResult {
   if (!o.approver_role) {
     return fail(
-      'The first /payrun setup needs `approver_role`: the role that approves pay runs (the Treasurer). A member with Manage Server who holds it gets the treasury page link.',
+      'The first /rolepay setup needs `approver_role`: the role that approves pay runs (the Treasurer). A member with Manage Server who holds it gets the treasury page link.',
     )
   }
   if (!ctx.caller.roles.includes(o.approver_role)) {
     return fail(
-      `The treasury page link goes to a member with Manage Server who also holds ${roleMention(o.approver_role)}. Give yourself the role, or ask a treasurer to run /payrun setup.`,
+      `The treasury page link goes to a member with Manage Server who also holds ${roleMention(o.approver_role)}. Give yourself the role, or ask a treasurer to run /rolepay setup.`,
     )
   }
   return { ok: true, roleId: o.approver_role }

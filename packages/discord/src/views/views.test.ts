@@ -177,7 +177,7 @@ describe('runMessage', () => {
     expect(text(runMessage(paid(), { ...ctx, receipts: { sent: 2, total: 2 } }))).toMatch(/to all 2 people/)
   })
 
-  it('a run still confirming on chain says payrun keeps checking', () => {
+  it('a run still confirming on chain says Rolepay keeps checking', () => {
     expect(text(runMessage(executing(), { ...ctx, stillConfirming: true }))).toMatch(/keeps checking/)
   })
 
@@ -225,7 +225,7 @@ describe('receiptDm', () => {
 
 describe('explainError', () => {
   it('turns core error codes into plain English', () => {
-    expect(explainError({ code: 'community_not_found' })).toMatch(/\/payrun setup/)
+    expect(explainError({ code: 'community_not_found' })).toMatch(/\/rolepay setup/)
     expect(explainError({ code: 'unregistered_payees', discordUserIds: [ALICE, BOB] })).toContain(`<@${ALICE}>, <@${BOB}>`)
     expect(explainError({ code: 'unregistered_payees', discordUserIds: [ALICE] })).toMatch(/\/payee link/)
     expect(explainError({ code: 'insufficient_limit', remaining: 2_000_000n, needed: 26_500_000n, periodEnd: 1_800_000_000 }, { token: '0x20c0000000000000000000000000000000000001' })).toBe(

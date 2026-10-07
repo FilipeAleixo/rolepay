@@ -19,7 +19,7 @@ const executeJob = (ctx: GuildContext, runId: string, messageId: string | null):
 /** The Treasurer check, from the roles Discord signed into the interaction. */
 function refuseUnlessApprover(ctx: GuildContext, community: Community): Outcome | null {
   if (!community.approverRoleId) {
-    return ephemeralReply('No approver role is set, so nobody can approve yet. An admin runs `/payrun setup approver_role:@Treasurer`.')
+    return ephemeralReply('No approver role is set, so nobody can approve yet. An admin runs `/rolepay setup approver_role:@Treasurer`.')
   }
   if (!holdsApproverRole(ctx.caller, community)) return ephemeralReply(`Only members with ${roleMention(community.approverRoleId)} can approve or retry pay runs.`)
   return null

@@ -17,14 +17,14 @@ async function ready() {
 
 async function newRun(a: Awaited<ReturnType<typeof ready>>, values: Record<string, string | undefined>, who: { userId: string; roles?: string[]; manageGuild?: boolean } = admin) {
   const token = `tok-new-${Math.random()}`
-  const d = await a.send(slashCommand(SCOPE, 'payrun', 'new', values, who, token))
+  const d = await a.send(slashCommand(SCOPE, 'rolepay', 'new', values, who, token))
   return { d, token, final: a.rest.lastEdit(token) }
 }
 
 const latestRun = async (a: Awaited<ReturnType<typeof ready>>): Promise<Run | undefined> => (await a.rolepay.payRuns.list({ guildId: GUILD }))[0]
 const linesOf = (r: Run | undefined) => r?.lines.map((l) => [l.payeeDiscordId, l.amount])
 
-describe('/payrun new', () => {
+describe('/rolepay new', () => {
   it('needs Manage Server or the approver role', async () => {
     const a = await ready()
     const { d } = await newRun(a, { amount: '10', users: `<@${ALICE}>` }, { userId: CAROL })
@@ -42,7 +42,7 @@ describe('/payrun new', () => {
   it('in a server without setup, says so', async () => {
     const a = await appHarness()
     const { d } = await newRun(a, { amount: '10', users: `<@${ALICE}>` })
-    expect(body(d).data?.content).toMatch(/\/payrun setup/)
+    expect(body(d).data?.content).toMatch(/\/rolepay setup/)
   })
 
   it('refuses a bad amount, or no recipients, at once and only to the caller', async () => {
@@ -67,8 +67,8 @@ describe('/payrun new', () => {
       [ALICE, usd('10')],
       [BOB, usd('40')],
     ])
-    expect(text(final)).toContain(`payrun:approve:${r?.id}`)
-    expect(text(final)).toContain(`payrun:cancel:${r?.id}`)
+    expect(text(final)).toContain(`rolepay:approve:${r?.id}`)
+    expect(text(final)).toContain(`rolepay:cancel:${r?.id}`)
     expect(text(final)).toContain(`<@&${TREASURER_ROLE}>`) // who may approve
     expect(text(final)).toContain('50 AlphaUSD')
   })

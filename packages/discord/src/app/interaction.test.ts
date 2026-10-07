@@ -17,7 +17,7 @@ describe('parseInteraction', () => {
       channel_id: '700000000000000001',
       member,
       data: {
-        name: 'payrun',
+        name: 'rolepay',
         options: [{ type: 1, name: 'new', options: [{ type: 3, name: 'amount', value: '25' }, { type: 8, name: 'role', value: '400000000000000002' }] }],
       },
     })
@@ -25,7 +25,7 @@ describe('parseInteraction', () => {
       ok: true,
       value: {
         kind: 'command',
-        command: 'payrun',
+        command: 'rolepay',
         sub: 'new',
         options: { amount: '25', role: '400000000000000002' },
         channels: {},
@@ -42,8 +42,8 @@ describe('parseInteraction', () => {
   })
 
   it('reads a button click', () => {
-    const r = parseInteraction({ ...base, type: 3, guild_id: '1094309218049937418', member, data: { custom_id: 'payrun:approve:run_1', component_type: 2 } })
-    expect(r.ok && r.value.kind === 'component' && r.value.customId).toBe('payrun:approve:run_1')
+    const r = parseInteraction({ ...base, type: 3, guild_id: '1094309218049937418', member, data: { custom_id: 'rolepay:approve:run_1', component_type: 2 } })
+    expect(r.ok && r.value.kind === 'component' && r.value.customId).toBe('rolepay:approve:run_1')
   })
 
   it('reads an autocomplete request and which option is focused', () => {
@@ -52,7 +52,7 @@ describe('parseInteraction', () => {
       type: 4,
       guild_id: '1094309218049937418',
       member,
-      data: { name: 'payrun', options: [{ type: 1, name: 'status', options: [{ type: 3, name: 'run', value: 'run_', focused: true }] }] },
+      data: { name: 'rolepay', options: [{ type: 1, name: 'status', options: [{ type: 3, name: 'run', value: 'run_', focused: true }] }] },
     })
     expect(r.ok && r.value.kind === 'autocomplete' && r.value.focused).toBe('run')
   })
@@ -101,7 +101,7 @@ describe('parseInteraction', () => {
       type: 2,
       guild_id: '1094309218049937418',
       member,
-      data: { name: 'payrun', options: [{ type: 1, name: 'propose', options: [{ type: 7, name: 'source', value: '700000000000000001' }] }], resolved: { channels: { '700000000000000001': { id: '700000000000000001', type: 0, permissions: '66560' } } } },
+      data: { name: 'rolepay', options: [{ type: 1, name: 'propose', options: [{ type: 7, name: 'source', value: '700000000000000001' }] }], resolved: { channels: { '700000000000000001': { id: '700000000000000001', type: 0, permissions: '66560' } } } },
     })
     expect(r.ok && r.value.kind === 'command' && r.value.channels).toEqual({ '700000000000000001': { permissions: 66560n } })
   })

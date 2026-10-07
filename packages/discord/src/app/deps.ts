@@ -6,18 +6,18 @@ export type DiscordAppConfig = {
   network: NetworkName
   /** `/payee link` replies with `${claimBaseUrl}/${token}`. The claim page itself lives elsewhere. */
   claimBaseUrl: string
-  /** `/payrun setup` hands the treasurer `${setupBaseUrl}/${token}`: the treasury page. */
+  /** `/rolepay setup` hands the treasurer `${setupBaseUrl}/${token}`: the treasury page. */
   setupBaseUrl: string
-  /** The fee token when `/payrun setup fees:fee_budget` names none (pathUSD on testnet). null = it must be named. */
+  /** The fee token when `/rolepay setup fees:fee_budget` names none (pathUSD on testnet). null = it must be named. */
   defaultFeeToken: string | null
   /** Payout token for a community registered without an explicit `token` option. */
   defaultPayoutToken: string
-  /** The bot key `/payrun setup` provisions when the community has none. */
+  /** The bot key `/rolepay setup` provisions when the community has none. */
   botKey: { limit: bigint; periodSeconds: number; validitySeconds: number }
-  /** A second way to authorise a pending key, shown in /payrun setup (the dev script on testnet). `{guildId}` is filled in. */
+  /** A second way to authorise a pending key, shown in /rolepay setup (the dev script on testnet). `{guildId}` is filled in. */
   authorizeHint: string | null
   /**
-   * The testnet dev shortcuts (`/payrun setup treasury:`, `new_key`, `key_limit`). Honoured only
+   * The testnet dev shortcuts (`/rolepay setup treasury:`, `new_key`, `key_limit`). Honoured only
    * on Moderato: on any other network they do not exist, whatever this says.
    */
   devShortcuts: boolean

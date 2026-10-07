@@ -23,7 +23,7 @@ export const ephemeralReply = (content: string): Outcome => ({ kind: 'reply', ep
 
 const GENERIC_FAILURE = 'Something went wrong on our side. Nothing was paid by this action; try again in a moment.'
 /** Discord refused the finished answer itself (too long, say): a short message instead of "thinking..." forever. */
-const UNSHOWABLE = 'payrun could not show this answer in Discord. Nothing was created or paid; try again with a narrower request.'
+const UNSHOWABLE = 'Rolepay could not show this answer in Discord. Nothing was created or paid; try again with a narrower request.'
 
 export function renderOutcome(outcome: Outcome, ctx: InteractionContext, rest: DiscordRest, onError?: (e: unknown) => void): Dispatched {
   switch (outcome.kind) {

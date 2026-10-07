@@ -12,8 +12,8 @@ import { harness, usd } from './harness.js'
 
 export const CONFIG: DiscordAppConfig = {
   network: 'moderato',
-  claimBaseUrl: 'https://payrun.test/claim',
-  setupBaseUrl: 'https://payrun.test/setup',
+  claimBaseUrl: 'https://rolepay.test/claim',
+  setupBaseUrl: 'https://rolepay.test/setup',
   defaultFeeToken: TESTNET_TOKENS.path_usd,
   defaultPayoutToken: TESTNET_TOKENS.alpha_usd,
   botKey: { limit: usd('100'), periodSeconds: 2_592_000, validitySeconds: 2_592_000 },

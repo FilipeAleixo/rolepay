@@ -23,7 +23,7 @@ const RECHECK_MS = 5_000
 /** Wait a little past the deadline the service names, so the chain's clock has passed it too. */
 const DEADLINE_SLACK_MS = 1_000
 const OUTAGE =
-  'payrun could not reach the Tempo network, so nothing was sent. Press Retry in a moment.'
+  'Rolepay could not reach the Tempo network, so nothing was sent. Press Retry in a moment.'
 
 /**
  * The job behind the Approve (and Retry) button: pay the run, keep checking while the

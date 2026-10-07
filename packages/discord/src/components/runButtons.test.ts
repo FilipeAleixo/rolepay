@@ -32,7 +32,7 @@ const status = async (a: Awaited<ReturnType<typeof withPendingRun>>) => {
 describe('Approve button', () => {
   it('only a member with the approver role can approve', async () => {
     const a = await withPendingRun()
-    const d = await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, { userId: CAROL, roles: [] }))
+    const d = await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, { userId: CAROL, roles: [] }))
     expect(isEphemeral(d)).toBe(true)
     expect(body(d).data?.content).toContain(`<@&${TREASURER_ROLE}>`)
     expect(await status(a)).toBe('pending_approval')
@@ -41,40 +41,47 @@ describe('Approve button', () => {
 
   it('Manage Server alone is not enough to approve', async () => {
     const a = await withPendingRun()
-    await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, { userId: ADMIN, manageGuild: true }))
+    await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, { userId: ADMIN, manageGuild: true }))
     expect(await status(a)).toBe('pending_approval')
   })
 
   it('the creator may approve their own run, unless the server requires a separate approver', async () => {
     const creatorTreasurer = { userId: ADMIN, roles: [TREASURER_ROLE] }
     const a = await withPendingRun()
-    await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, creatorTreasurer))
+    await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, creatorTreasurer))
     expect(await status(a)).toBe('approved')
 
     const b = await withPendingRun()
     await b.rolepay.communities.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [TREASURER_ROLE] })
-    const own = await b.send(buttonClick(SCOPE, `payrun:approve:${b.runId}`, creatorTreasurer))
+    const own = await b.send(buttonClick(SCOPE, `rolepay:approve:${b.runId}`, creatorTreasurer))
     expect(isEphemeral(own)).toBe(true)
     expect(body(own).data?.content).toMatch(/created .* cannot approve/)
     expect(await status(b)).toBe('pending_approval')
     expect(b.queue.jobs).toEqual([])
-    await b.send(buttonClick(SCOPE, `payrun:approve:${b.runId}`, treasurer))
+    await b.send(buttonClick(SCOPE, `rolepay:approve:${b.runId}`, treasurer))
     expect(await status(b)).toBe('approved')
+  })
+
+  it('a button posted before the rename to Rolepay (payrun:approve:) still approves', async () => {
+    const a = await withPendingRun()
+    const d = await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer, 'tok-approve'))
+    expect(text(body(d))).toMatch(/Paying/)
+    expect(await status(a)).toBe('approved')
   })
 
   it('with no approver role configured, nobody can approve, and the message says how to fix it', async () => {
     const a = await withPendingRun({ approverRoleId: null })
-    const d = await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
+    const d = await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, treasurer))
     expect(body(d).data?.content).toMatch(/approver_role/)
     expect(await status(a)).toBe('pending_approval')
   })
 
   it('an approver approves: the message turns into "paying" without buttons, and execution is queued', async () => {
     const a = await withPendingRun()
-    const d = await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer, 'tok-approve'))
+    const d = await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, treasurer, 'tok-approve'))
     expect(body(d).type).toBe(7) // update the message the button is on
     expect(text(body(d))).toMatch(/Paying/)
-    expect(text(body(d))).not.toContain('payrun:approve:')
+    expect(text(body(d))).not.toContain('rolepay:approve:')
     expect(await status(a)).toBe('approved')
     expect(a.queue.jobs).toEqual([
       {
@@ -92,8 +99,8 @@ describe('Approve button', () => {
 
   it('a second click (or a second treasurer) is told it is already approved, and nothing is queued twice', async () => {
     const a = await withPendingRun()
-    await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
-    const second = await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
+    await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, treasurer))
+    const second = await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, treasurer))
     expect(isEphemeral(second)).toBe(true)
     expect(body(second).data?.content).toMatch(/approved/)
     expect(a.queue.jobs).toHaveLength(1)
@@ -101,15 +108,15 @@ describe('Approve button', () => {
 
   it('a run from another server is not found', async () => {
     const a = await withPendingRun()
-    const d = await a.send(buttonClick({ guildId: '1094309218049937499' }, `payrun:approve:${a.runId}`, treasurer))
-    expect(body(d).data?.content).toMatch(/set up payrun|no pay run/)
+    const d = await a.send(buttonClick({ guildId: '1094309218049937499' }, `rolepay:approve:${a.runId}`, treasurer))
+    expect(body(d).data?.content).toMatch(/set up Rolepay|no pay run/)
   })
 })
 
 describe('Cancel button', () => {
   it('the creator can cancel; the message shows it cancelled', async () => {
     const a = await withPendingRun()
-    const d = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, { userId: ADMIN }))
+    const d = await a.send(buttonClick(SCOPE, `rolepay:cancel:${a.runId}`, { userId: ADMIN }))
     expect(body(d).type).toBe(7)
     expect(text(body(d))).toMatch(/Cancelled/)
     expect(await status(a)).toBe('cancelled')
@@ -117,24 +124,24 @@ describe('Cancel button', () => {
 
   it('a failed run whose payments are on chain cannot be cancelled: the message turns into the truth, with no Cancel', async () => {
     const a = await withPendingRun()
-    await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
+    await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, treasurer))
     a.chain.faults.nextBroadcast = 'reject_but_keep_pending'
     await a.rolepay.payRuns.execute({ guildId: GUILD, runId: a.runId })
     await a.chain.mine() // it was paid after all
     await a.sleep(200_000)
-    const d = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, treasurer))
+    const d = await a.send(buttonClick(SCOPE, `rolepay:cancel:${a.runId}`, treasurer))
     expect(body(d).type).toBe(7)
     expect(text(body(d))).toMatch(/"title":"Paid"/)
-    expect(text(body(d))).not.toContain('payrun:cancel:')
+    expect(text(body(d))).not.toContain('rolepay:cancel:')
     expect(await status(a)).toBe('paid')
   })
 
   it('a failed run whose last transaction could still land cannot be cancelled yet, and says until when', async () => {
     const a = await withPendingRun()
-    await a.send(buttonClick(SCOPE, `payrun:approve:${a.runId}`, treasurer))
+    await a.send(buttonClick(SCOPE, `rolepay:approve:${a.runId}`, treasurer))
     a.chain.faults.nextBroadcast = 'reject_but_keep_pending'
     await a.rolepay.payRuns.execute({ guildId: GUILD, runId: a.runId })
-    const d = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, treasurer))
+    const d = await a.send(buttonClick(SCOPE, `rolepay:cancel:${a.runId}`, treasurer))
     expect(isEphemeral(d)).toBe(true)
     expect(body(d).data?.content).toMatch(/could still land/)
     expect(await status(a)).toBe('failed')
@@ -142,10 +149,10 @@ describe('Cancel button', () => {
 
   it('an approver can cancel; a bystander cannot', async () => {
     const a = await withPendingRun()
-    const nope = await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, { userId: CAROL }))
+    const nope = await a.send(buttonClick(SCOPE, `rolepay:cancel:${a.runId}`, { userId: CAROL }))
     expect(isEphemeral(nope)).toBe(true)
     expect(await status(a)).toBe('pending_approval')
-    await a.send(buttonClick(SCOPE, `payrun:cancel:${a.runId}`, treasurer))
+    await a.send(buttonClick(SCOPE, `rolepay:cancel:${a.runId}`, treasurer))
     expect(await status(a)).toBe('cancelled')
   })
 })
@@ -154,7 +161,7 @@ describe('Retry button', () => {
   it('an approver retries an approved run that has not been paid: queued and shown as paying', async () => {
     const a = await withPendingRun()
     await a.rolepay.payRuns.approve({ guildId: GUILD, runId: a.runId, actor: TREASURER, actorCanApprove: true })
-    const d = await a.send(buttonClick(SCOPE, `payrun:retry:${a.runId}`, treasurer, 'tok-retry'))
+    const d = await a.send(buttonClick(SCOPE, `rolepay:retry:${a.runId}`, treasurer, 'tok-retry'))
     expect(body(d).type).toBe(7)
     expect(text(body(d))).toMatch(/Paying/)
     expect(a.queue.jobs.map((j) => j.reply.token)).toEqual(['tok-retry'])
@@ -163,10 +170,10 @@ describe('Retry button', () => {
   it('only approvers can retry, and only runs that can be paid again', async () => {
     const a = await withPendingRun()
     await a.rolepay.payRuns.approve({ guildId: GUILD, runId: a.runId, actor: TREASURER, actorCanApprove: true })
-    const bystander = await a.send(buttonClick(SCOPE, `payrun:retry:${a.runId}`, { userId: CAROL }))
+    const bystander = await a.send(buttonClick(SCOPE, `rolepay:retry:${a.runId}`, { userId: CAROL }))
     expect(isEphemeral(bystander)).toBe(true)
     await a.rolepay.payRuns.execute({ guildId: GUILD, runId: a.runId }) // now paid
-    const paid = await a.send(buttonClick(SCOPE, `payrun:retry:${a.runId}`, treasurer))
+    const paid = await a.send(buttonClick(SCOPE, `rolepay:retry:${a.runId}`, treasurer))
     expect(isEphemeral(paid)).toBe(true)
     expect(body(paid).data?.content).toMatch(/paid/)
     expect(a.queue.jobs).toEqual([])

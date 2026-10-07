@@ -21,9 +21,9 @@ const UNIT_MS = { h: 3_600_000, d: 86_400_000, w: 7 * 86_400_000 } as const
 const DEFAULT_SINCE_MS = 7 * UNIT_MS.d
 
 /**
- * /payrun propose instruction:"..." [source:#channel] [since:7d]. With `source` the AI reads that
+ * /rolepay propose instruction:"..." [source:#channel] [since:7d]. With `source` the AI reads that
  * channel's or thread's recent messages (message mode: needs the Message Content intent); without
- * it the AI turns the instruction into a filter that payrun runs over registered payees (criteria
+ * it the AI turns the instruction into a filter that Rolepay runs over registered payees (criteria
  * mode). Either way the answer is a proposal, only for the caller, with Create, Edit and Discard.
  * Deferred: reading history and the model take longer than Discord's 3 seconds.
  */

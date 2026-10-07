@@ -9,7 +9,7 @@ export type RunViewContext = {
   approverRoleId?: string | null
   /**
    * Why an approved run has not been paid yet (a pre-flight failure such as a revoked key), or
-   * why payrun stopped on a failed one (for example, the chain already shows its payments).
+   * why Rolepay stopped on a failed one (for example, the chain already shows its payments).
    */
   problem?: string
   /** A payment (or retry) is in progress: show it as paying whatever the stored status says. */
@@ -20,7 +20,7 @@ export type RunViewContext = {
   stillConfirming?: boolean
   /**
    * Show the node's or sponsor's own error text on a failure. Only for replies just to the caller
-   * (`/payrun status run:`): a public message shows the reason code alone (L2).
+   * (`/rolepay status run:`): a public message shows the reason code alone (L2).
    */
   showDetail?: boolean
 }
@@ -44,7 +44,7 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
   }
   if (ctx.receipts && run.status === 'paid') fields.push({ name: 'Receipts', value: receiptsText(ctx.receipts) })
   if (ctx.stillConfirming && run.status === 'executing') {
-    fields.push({ name: 'Confirming', value: 'The transaction is out but not confirmed yet. payrun keeps checking; /payrun status shows the result.' })
+    fields.push({ name: 'Confirming', value: 'The transaction is out but not confirmed yet. Rolepay keeps checking; /rolepay status shows the result.' })
   }
   const embed: Embed = {
     title: head.title,
@@ -62,7 +62,7 @@ export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; 
   const embed: Embed = {
     title: `You were paid ${money(line.amount, run.token)}`,
     color: COLORS.paid,
-    description: [`From **${escapeMarkdown(ctx.communityName ?? 'your Discord server')}**, through payrun on Tempo.`, run.note ? `Note: ${escapeMarkdown(run.note)}` : null]
+    description: [`From **${escapeMarkdown(ctx.communityName ?? 'your Discord server')}**, through Rolepay on Tempo.`, run.note ? `Note: ${escapeMarkdown(run.note)}` : null]
       .filter(Boolean)
       .join('\n'),
     fields: [
@@ -77,13 +77,13 @@ export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; 
 
 /**
  * Plain English for why an attempt failed, and whether it is safe to try again. Each says what
- * payrun actually checked, never "nothing was paid": Retry waits until the last transaction can
+ * Rolepay actually checked, never "nothing was paid": Retry waits until the last transaction can
  * no longer land and checks the chain for this run's payments before it sends anything.
  */
 export function explainFailure(failure: Failure, opts: { showDetail?: boolean } = {}): string {
   switch (failure.reason) {
     case 'rejected': {
-      // The detail starts with payrun's reason code ("insufficient_balance: ..."); the rest is the
+      // The detail starts with Rolepay's reason code ("insufficient_balance: ..."); the rest is the
       // node's or sponsor's own text, which can carry URLs and HTML. Public messages get the code.
       const code = /^([a-z_]+):/.exec(failure.detail)?.[1] ?? 'other'
       return `The network or the fee sponsor refused the transaction (${opts.showDetail ? failure.detail : code}). Retry is safe: it waits until that transaction can no longer land and checks the chain first.`

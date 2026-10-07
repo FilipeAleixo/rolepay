@@ -10,7 +10,7 @@ describe('/payee link', () => {
     const a = await appHarness()
     const d = await a.send(slashCommand(SCOPE, 'payee', 'link', {}, { userId: ALICE }))
     expect(isEphemeral(d)).toBe(true)
-    expect(body(d).data?.content).toMatch(/\/payrun setup/)
+    expect(body(d).data?.content).toMatch(/\/rolepay setup/)
   })
 
   it('replies only to the caller with a one-time claim link that is really theirs', async () => {

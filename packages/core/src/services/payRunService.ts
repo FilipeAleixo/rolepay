@@ -157,7 +157,7 @@ export class PayRunService {
     const run = await this.get(input)
     if (!run.ok) return run
     const explorer = NETWORKS[this.deps.network].explorerUrl
-    return ok({ filename: `payrun-${run.value.id}.csv`, csv: runToCsv(run.value, { explorerTxUrl: (h) => `${explorer}/tx/${h}` }) })
+    return ok({ filename: `rolepay-${run.value.id}.csv`, csv: runToCsv(run.value, { explorerTxUrl: (h) => `${explorer}/tx/${h}` }) })
   }
 
   /**

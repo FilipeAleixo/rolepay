@@ -86,7 +86,7 @@ describe('RestActivityReader: members, names, messages, reactions', () => {
     rest.roles.set(GUILD, [
       { id: GUILD, name: '@everyone' },
       { id: '400000000000000002', name: 'Mods' },
-      { id: '400000000000000009', name: 'payrun', managed: true },
+      { id: '400000000000000009', name: 'rolepay', managed: true },
     ])
     rest.channels.set(GUILD, [
       { id: HELP, name: 'help', type: 0 },
