@@ -6,6 +6,7 @@ export {
   MemoryAiUsageRepository,
   MemoryAuditLog,
   MemoryCommunityRepository,
+  MemoryPolicyKeyRepository,
   MemoryPolicyRepository,
   MemoryPolicyRunRepository,
   MemoryPayeeRepository,

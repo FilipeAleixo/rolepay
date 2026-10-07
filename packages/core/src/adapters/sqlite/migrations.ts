@@ -265,6 +265,27 @@ const migrations: Record<string, Migration> = {
       await db.schema.createIndex('ai_usage_policy').on('ai_usage').column('policy_id').execute()
     },
   },
+  '0008_policy_keys': {
+    async up(db: Kysely<unknown>) {
+      // A standing policy's own access key: the bot key's columns plus the policy, in a table apart
+      // from bot_keys so retiring or rotating the bot key can never touch it. The sealed secret is
+      // null once destroyed. A new table only, so it applies to a database with data as to an empty one.
+      await db.schema
+        .createTable('policy_keys')
+        .addColumn('address', 'text', (c) => c.primaryKey())
+        .addColumn('community_id', 'text', (c) => c.notNull().references('communities.id').onDelete('cascade'))
+        .addColumn('policy_id', 'text', (c) => c.notNull().references('policies.id').onDelete('cascade'))
+        .addColumn('sealed_secret', 'text')
+        .addColumn('status', 'text', (c) => c.notNull())
+        .addColumn('policy', 'text', (c) => c.notNull())
+        .addColumn('created_at', 'text', (c) => c.notNull())
+        .addColumn('authorized_at', 'text')
+        .addColumn('revoked_at', 'text')
+        .execute()
+      await db.schema.createIndex('policy_keys_policy').on('policy_keys').columns(['policy_id', 'created_at']).execute()
+      await db.schema.createIndex('policy_keys_community').on('policy_keys').columns(['community_id', 'created_at']).execute()
+    },
+  },
 }
 
 class InlineMigrations implements MigrationProvider {

@@ -3,11 +3,21 @@ import type { BotKey, Community, SetupLink } from '../../domain/community.js'
 import type { LinkToken, Payee } from '../../domain/payee.js'
 import type { AuditEvent, AuditQuery, NewAuditEvent } from '../../domain/policy/audit.js'
 import type { Policy, PolicyStatus, PolicyVersion } from '../../domain/policy/policy.js'
+import type { PolicyKey } from '../../domain/policy/policyKey.js'
 import type { PolicyRun, PolicyRunStatus } from '../../domain/policy/policyRun.js'
 import { err, ok } from '../../domain/result.js'
 import type { Run } from '../../domain/run.js'
 import type { Clock } from '../../ports/clock.js'
-import type { AiUsageRepository, AuditLog, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, RunRepository } from '../../ports/repositories.js'
+import type {
+  AiUsageRepository,
+  AuditLog,
+  CommunityRepository,
+  PayeeRepository,
+  PolicyKeyRepository,
+  PolicyRepository,
+  PolicyRunRepository,
+  RunRepository,
+} from '../../ports/repositories.js'
 import { KvProposalRepository } from '../kv/proposals.js'
 import { MemoryKeyValueStore } from './keyValue.js'
 
@@ -216,6 +226,27 @@ export class MemoryAuditLog implements AuditLog {
   }
 }
 
+/** Ties broken by address (descending), as SQLite orders them. */
+const newestKeyFirst = (a: PolicyKey, b: PolicyKey) => newestFirst(a, b) || (a.address < b.address ? 1 : a.address > b.address ? -1 : 0)
+
+export class MemoryPolicyKeyRepository implements PolicyKeyRepository {
+  private keys = new Map<string, PolicyKey>()
+
+  async save(key: PolicyKey) {
+    this.keys.set(key.address, copy(key))
+  }
+  async get(address: string) {
+    const k = this.keys.get(address)
+    return k ? copy(k) : null
+  }
+  async listByPolicy(policyId: string) {
+    return [...this.keys.values()].filter((k) => k.policyId === policyId).sort(newestKeyFirst).map(copy)
+  }
+  async listByCommunity(communityId: string) {
+    return [...this.keys.values()].filter((k) => k.communityId === communityId).sort(newestKeyFirst).map(copy)
+  }
+}
+
 export class MemoryAiUsageRepository implements AiUsageRepository {
   private rows: AiUsage[] = []
 
@@ -250,6 +281,7 @@ export function createMemoryRepositories(opts: { clock?: Clock } = {}) {
     proposals: new KvProposalRepository(new MemoryKeyValueStore(clock), clock),
     policies: new MemoryPolicyRepository(),
     policyRuns: new MemoryPolicyRunRepository(),
+    policyKeys: new MemoryPolicyKeyRepository(),
     audit: new MemoryAuditLog(),
     aiUsage: new MemoryAiUsageRepository(),
   }

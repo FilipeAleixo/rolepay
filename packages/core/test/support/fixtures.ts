@@ -4,6 +4,7 @@ import type { BotKey, Community, SetupLink } from '../../src/domain/community.js
 import type { LinkToken, Payee } from '../../src/domain/payee.js'
 import type { NewAuditEvent } from '../../src/domain/policy/audit.js'
 import type { Policy, PolicyVersion } from '../../src/domain/policy/policy.js'
+import type { PolicyKey } from '../../src/domain/policy/policyKey.js'
 import type { PolicyRun } from '../../src/domain/policy/policyRun.js'
 import type { Proposal } from '../../src/domain/proposal/proposal.js'
 import { type Run, type RunEvent, newRun, transition } from '../../src/domain/run.js'
@@ -62,6 +63,16 @@ export function botKey(over: Partial<BotKey> = {}): BotKey {
     createdAt: T0,
     authorizedAt: null,
     revokedAt: null,
+    ...over,
+  }
+}
+
+/** The fixture policy's own key, waiting for the treasury passkey: 30 a week. */
+export function policyKey(over: Partial<PolicyKey> = {}): PolicyKey {
+  return {
+    ...botKey({ address: '0x6666666666666666666666666666666666666666', sealedSecret: 'sealed:v1:policy' }),
+    policy: { ...botKey().policy, limit: 30_000_000n, periodSeconds: 604_800 },
+    policyId: 'pol_fixture01',
     ...over,
   }
 }

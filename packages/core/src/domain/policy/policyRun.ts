@@ -35,8 +35,9 @@ export const PolicyRunUnregisteredSchema = z.object({ discordUserId: DiscordIdSc
 /**
  * Why Rolepay stopped instead of paying, with the numbers when there are some (`total` against
  * `limit`). Codes: over_budget, no_active_key, over_policy_cap, too_many_lines, the key checks
- * (key_revoked, insufficient_limit, ...), policy_not_active, autopilot_off, approver_changed,
- * and any refusal from approving the run (creator_cannot_approve, ...).
+ * (key_revoked, insufficient_limit, ...), over_policy_budget and policy_key_inactive (a policy
+ * with its own key: that key's budget, or that key cannot pay), policy_not_active, autopilot_off,
+ * approver_changed, and any refusal from approving the run (creator_cannot_approve, ...).
  */
 export const HoldSchema = z.object({ code: z.string().regex(/^[a-z_]{1,40}$/), total: z.bigint().nonnegative().nullable(), limit: z.bigint().nonnegative().nullable() })
 export type Hold = z.infer<typeof HoldSchema>
@@ -62,7 +63,7 @@ export const PolicyRunSchema = z.object({
   lines: z.array(PolicyRunLineSchema).max(1000),
   unregistered: z.array(PolicyRunUnregisteredSchema).max(POLICY_LIMITS.maxUnregistered),
   total: z.bigint().nonnegative(),
-  /** What the bot key had left when the run was made; null = no active key. */
+  /** What the key that pays this policy (its own, or the bot key) had left when the run was made; null = that key cannot pay. */
   remaining: z.bigint().nonnegative().nullable(),
   /** About the counts: scan_truncated (the 10,000-message bound), lookback_clamped. */
   problems: z.array(z.string().regex(/^[a-z_]{1,40}$/)).max(10),
@@ -82,17 +83,34 @@ export type PolicyRun = z.infer<typeof PolicyRunSchema>
 
 /**
  * Why a run cannot be paid as computed, in the order they are checked: more people than one run
- * holds, over the policy's cap per run, no active bot key, over what the key has left. The
+ * holds, over the policy's cap per run, no active key, over what the key has left. The
  * scheduler holds a run on the first (whole, never in part); a preview lists them all.
+ * `key`: whose budget `remaining` is. A policy with its own key (`policy`) is held against that
+ * key alone, as `policy_key_inactive` or `over_policy_budget`; the bot key's codes are unchanged.
  */
-export function runGuards(input: { lines: number; total: Micros; caps: PolicyCaps; remaining: Micros | null }): Hold[] {
+export function runGuards(input: { lines: number; total: Micros; caps: PolicyCaps; remaining: Micros | null; key?: 'bot' | 'policy' }): Hold[] {
   const { total } = input
+  const own = input.key === 'policy'
   const out: Hold[] = []
   if (input.lines > MAX_LINES_PER_RUN) out.push({ code: 'too_many_lines', total, limit: null })
   if (input.caps.perRun !== null && total > input.caps.perRun) out.push({ code: 'over_policy_cap', total, limit: input.caps.perRun })
-  if (input.remaining === null) out.push({ code: 'no_active_key', total, limit: null })
-  else if (total > input.remaining) out.push({ code: 'over_budget', total, limit: input.remaining })
+  if (input.remaining === null) out.push({ code: own ? 'policy_key_inactive' : 'no_active_key', total, limit: null })
+  else if (total > input.remaining) out.push({ code: own ? 'over_policy_budget' : 'over_budget', total, limit: input.remaining })
   return out
+}
+
+/**
+ * The hold an execute refusal becomes when autopilot releases a run. A refusal of the policy's
+ * own key gets the same codes as at generation (`over_policy_budget`, `policy_key_inactive`); the
+ * bot key's keep their codes, with what the key had left as the limit when it says.
+ */
+export function policyKeyHold(e: { code: string; remaining?: Micros; key?: 'policy'; [detail: string]: unknown }, total: Micros): Hold {
+  const limit = e.code === 'insufficient_limit' && e.remaining !== undefined ? e.remaining : null
+  if (e.key === 'policy') {
+    if (e.code === 'insufficient_limit') return { code: 'over_policy_budget', total, limit }
+    if (['key_revoked', 'key_not_authorized', 'key_expired', 'key_expires_too_soon'].includes(e.code)) return { code: 'policy_key_inactive', total, limit: null }
+  }
+  return { code: e.code, total, limit }
 }
 
 export function newPolicyRun(input: {

@@ -75,6 +75,44 @@ describe('sqlite: migrations and persistence', () => {
     expect(await again.repositories.aiUsage.list(f.GUILD)).toEqual([row])
   })
 
+  it('0008 adds policy_keys to a database 0007 left, with a community, its bot key, a policy and AI spend in it, and keeps them', async () => {
+    const path = join(dir, 'before-policy-keys.db')
+    const sqlite = new BetterSqlite3(path)
+    sqlite.pragma('foreign_keys = ON')
+    const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+    await migrateTo(before as unknown as Kysely<unknown>, '0007_ai_usage')
+    const communities = new SqliteCommunityRepository(before)
+    await communities.insert(f.community())
+    const bot = f.botKey({ status: 'active', authorizedAt: f.at(1) })
+    await communities.saveBotKey(bot)
+    await new SqliteRunRepository(before).insert(f.run())
+    await new SqlitePolicyRepository(before).insert(f.policy(), f.policyVersion())
+    const tables = () => (sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((t) => t.name)
+    expect(tables()).toContain('ai_usage')
+    expect(tables()).not.toContain('policy_keys')
+    await before.destroy()
+
+    const after = await openSqliteDatabase(path)
+    expect(await after.repositories.communities.listBotKeys(f.GUILD)).toEqual([bot])
+    expect(await after.repositories.runs.get('run_fixture01')).toEqual(f.run())
+    expect(await after.repositories.policies.get('pol_fixture01')).toEqual(f.policy())
+    const own = f.policyKey({ status: 'active', authorizedAt: f.at(2) })
+    await after.repositories.policyKeys.save(own)
+    expect(await after.repositories.policyKeys.listByPolicy('pol_fixture01')).toEqual([own])
+    // The policy key is not a bot key: nothing that lists, retires or rotates bot keys sees it.
+    expect(await after.repositories.communities.listBotKeys(f.GUILD)).toEqual([bot])
+    await after.close()
+    const again = await openSqliteDatabase(path)
+    opened.push(again)
+    expect(await again.repositories.policyKeys.get(own.address)).toEqual(own)
+  })
+
+  it('a policy key belongs to a policy of a community: one for an unknown policy is refused', async () => {
+    const db = await fresh()
+    await db.repositories.communities.insert(f.community())
+    await expect(db.repositories.policyKeys.save(f.policyKey({ policyId: 'pol_missing' }))).rejects.toThrow()
+  })
+
   it('keeps key-value records across reopen', async () => {
     const path = join(dir, 'reopen-kv.db')
     const a = await openSqliteDatabase(path)

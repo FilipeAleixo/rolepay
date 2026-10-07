@@ -434,6 +434,13 @@ export function auditSummary(e: AuditEvent, symbol: string): string {
       return 'Archived it: it will not run again.'
     case 'policy.mode_changed':
       return d.to === 'autopilot' ? `Switched on autopilot: each run pays after a veto window of ${vetoWords(num('vetoWindowMinutes'))} unless vetoed.` : 'Switched to propose: each run waits for approval.'
+    case 'policy_key.authorized': {
+      const period = typeof d.periodSeconds === 'number' ? (d.periodSeconds % 86_400 === 0 ? (d.periodSeconds === 86_400 ? ' every day' : ` every ${d.periodSeconds / 86_400} days`) : ` every ${d.periodSeconds} seconds`) : ' in total'
+      const until = typeof d.expiresAt === 'string' ? `, until ${utc(new Date(d.expiresAt))}` : ''
+      return `The treasury passkey gave the policy its own key on chain: up to ${amount('limit')}${period}${until}${num('replaced') ? ', replacing its previous key' : ''}.`
+    }
+    case 'policy_key.revoked':
+      return "The treasury passkey revoked the policy's own key on chain: the policy pays nothing until it gets a new one."
     case 'policy_run.generated': {
       const unregistered = num('unregistered')
       const when = typeof d.executeAfter === 'string' ? `, pays at ${utc(new Date(d.executeAfter))} unless vetoed` : ', waiting for approval'

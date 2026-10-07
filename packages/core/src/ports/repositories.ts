@@ -3,6 +3,7 @@ import type { BotKey, Community, SetupLink } from '../domain/community.js'
 import type { LinkToken, Payee } from '../domain/payee.js'
 import type { AuditEvent, AuditQuery, NewAuditEvent } from '../domain/policy/audit.js'
 import type { Policy, PolicyStatus, PolicyVersion } from '../domain/policy/policy.js'
+import type { PolicyKey } from '../domain/policy/policyKey.js'
 import type { PolicyRun, PolicyRunStatus } from '../domain/policy/policyRun.js'
 import type { Proposal } from '../domain/proposal/proposal.js'
 import type { Result } from '../domain/result.js'
@@ -96,6 +97,21 @@ export interface PolicyRunRepository {
   listByStatus(statuses: readonly PolicyRunStatus[]): Promise<PolicyRun[]>
   /** Compare-and-set on `rev`, like runs. */
   update(next: PolicyRun): Promise<'updated' | 'conflict'>
+}
+
+/**
+ * Standing policies' own access keys, sealed like the bot key (one table apart from it, so nothing
+ * that retires or rotates the bot key can touch them). Written only by PolicyKeyService; pay runs
+ * read them to sign a policy's runs.
+ */
+export interface PolicyKeyRepository {
+  /** Upsert by key address. */
+  save(key: PolicyKey): Promise<void>
+  get(address: string): Promise<PolicyKey | null>
+  /** One policy's keys, newest first. */
+  listByPolicy(policyId: string): Promise<PolicyKey[]>
+  /** Every policy key of a community, newest first. */
+  listByCommunity(communityId: string): Promise<PolicyKey[]>
 }
 
 /** The append-only audit stream. */
