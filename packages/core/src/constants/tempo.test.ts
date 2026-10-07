@@ -20,7 +20,7 @@ describe('Tempo tokens', () => {
   })
 
   it('lists the tokens a payee may hold on each network, every one with a symbol', () => {
-    expect(KNOWN_TOKENS.moderato).toEqual([TESTNET_TOKENS.alpha_usd, TESTNET_TOKENS.path_usd, TESTNET_TOKENS.beta_usd])
+    expect(KNOWN_TOKENS.moderato).toEqual([TESTNET_TOKENS.alpha_usd, TESTNET_TOKENS.path_usd, TESTNET_TOKENS.beta_usd, TESTNET_TOKENS.theta_usd])
     expect(KNOWN_TOKENS.mainnet).toEqual([MAINNET_TOKENS.usdc_e, MAINNET_TOKENS.path_usd, MAINNET_TOKENS.ousd, MAINNET_TOKENS.usdt0])
     for (const network of Object.keys(NETWORKS) as (keyof typeof NETWORKS)[]) {
       for (const token of KNOWN_TOKENS[network]) expect(TOKEN_SYMBOLS[token]).toBeTruthy()

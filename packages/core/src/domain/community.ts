@@ -28,6 +28,11 @@ export const CommunitySchema = z
     aiProposals: z.boolean().default(false),
     /** A role that may propose runs with AI besides the approver role. null = the approver role only. */
     proposerRoleId: DiscordIdSchema.nullable().default(null),
+    /**
+     * Pay each person in the stablecoin they prefer (swapped on Tempo's DEX in the same batch). Off by
+     * default; the treasurer turns it on from the setup page, and the bot key needs the swap scope.
+     */
+    preferredTokens: z.boolean().default(false),
     createdAt: z.date(),
     updatedAt: z.date(),
   })

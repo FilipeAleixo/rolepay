@@ -95,6 +95,31 @@ describe('newRun', () => {
   })
 })
 
+describe('newRun: a line paid in the payee\'s preferred stablecoin', () => {
+  const BETA = '0x20c0000000000000000000000000000000000002'
+  const base = { id: 'run_swap1', communityId: GUILD, token: TOKEN, note: null, createdBy: ALICE, now: t0 }
+
+  it('keeps the swap (the token delivered and the most of the run token it may spend) on its line, with the same memo layout', () => {
+    const r = newRun({
+      ...base,
+      lines: [
+        { payeeDiscordId: ALICE, address: A1, amount: 5_000_000n, swap: { token: BETA, maxIn: 5_050_000n } },
+        { payeeDiscordId: BOB, address: A2, amount: 2_000_000n },
+      ],
+    })
+    if (!r.ok) throw new Error(r.error.code)
+    expect(r.value.lines[0]).toEqual({ line: 1, payeeDiscordId: ALICE, address: A1, amount: 5_000_000n, memo: encodeMemo('run_swap1', 1), swap: { token: BETA, maxIn: 5_050_000n } })
+    expect(r.value.lines[1]).not.toHaveProperty('swap')
+    expect(r.value.total).toBe(7_000_000n)
+  })
+
+  it('refuses a swap into the run token itself, or a maximum input below the amount', () => {
+    const line = (swap: { token: string; maxIn: bigint }) => [{ payeeDiscordId: ALICE, address: A1, amount: 5_000_000n, swap }]
+    expect(newRun({ ...base, lines: line({ token: TOKEN, maxIn: 5_050_000n }) })).toMatchObject({ ok: false, error: { code: 'invalid_run' } })
+    expect(newRun({ ...base, lines: line({ token: BETA, maxIn: 4_999_999n }) })).toMatchObject({ ok: false, error: { code: 'invalid_run' } })
+  })
+})
+
 describe('transition: the happy path', () => {
   it('draft -> pending_approval -> approved -> executing -> paid', () => {
     const r = apply(draft(), submit, approve, start, signed, paid)

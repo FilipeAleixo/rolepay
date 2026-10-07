@@ -10,6 +10,11 @@ export const PayeeSchema = z.object({
   communityId: DiscordIdSchema,
   discordUserId: DiscordIdSchema,
   address: AddressSchema,
+  /**
+   * The USD stablecoin they want to receive. null = the community's payout token (the default). Used
+   * only while the community has preferred tokens on, and only if it is still one it can deliver.
+   */
+  preferredToken: AddressSchema.nullable().default(null),
   registeredAt: z.date(),
   updatedAt: z.date(),
 })

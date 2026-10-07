@@ -1,4 +1,5 @@
 import { formatAmount } from './money.js'
+import { lineToken } from './reconcile.js'
 import type { Run } from './run.js'
 
 const COLUMNS = [
@@ -15,6 +16,7 @@ const COLUMNS = [
   'paid_at',
   'approved_by',
   'note',
+  'delivered_token',
 ] as const
 
 /**
@@ -26,7 +28,11 @@ export function csvCell(value: string): string {
   return /[",\r\n]/.test(defused) ? `"${defused.replace(/"/g, '""')}"` : defused
 }
 
-/** Accounting export for one run: one row per payout line. */
+/**
+ * Accounting export for one run: one row per payout line. `token` is the run's (what the treasury
+ * pays in); `delivered_token`, added last so existing columns keep their places, is what the payee
+ * received: the same token, or the stablecoin they prefer, bought on the DEX in the same transaction.
+ */
 export function runToCsv(run: Run, opts: { explorerTxUrl: (txHash: string) => string }): string {
   const rows = run.lines.map((l) => [
     run.id,
@@ -42,6 +48,7 @@ export function runToCsv(run: Run, opts: { explorerTxUrl: (txHash: string) => st
     run.paidAt?.toISOString() ?? '',
     run.approvedBy ?? '',
     run.note ?? '',
+    lineToken(run, l),
   ])
   return [COLUMNS as readonly string[], ...rows].map((r) => `${r.map(csvCell).join(',')}\r\n`).join('')
 }

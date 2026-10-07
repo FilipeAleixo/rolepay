@@ -72,7 +72,7 @@ async function live() {
   await communities.provisionBotKey({ guildId: GUILD, limit: usd(1000), expiresAt: chain.time + 30 * 86_400 })
   await communities.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner('0x9999999999999999999999999999999999999999') })
   for (const [i, id] of [ANA, RUI, LI, MALLORY].entries()) {
-    await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address: `0x${String(i + 1).repeat(40)}`, registeredAt: T0, updatedAt: T0 })
+    await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address: `0x${String(i + 1).repeat(40)}`, preferredToken: null, registeredAt: T0, updatedAt: T0 })
   }
   return { proposals, activity, logs }
 }

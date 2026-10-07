@@ -80,6 +80,8 @@ export class PayeeService {
       communityId: link.communityId,
       discordUserId: link.discordUserId,
       address: parsed.data.address,
+      // A new address keeps the stablecoin they chose.
+      preferredToken: existing?.preferredToken ?? null,
       registeredAt: existing?.registeredAt ?? now,
       updatedAt: now,
     }
