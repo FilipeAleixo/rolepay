@@ -139,7 +139,7 @@ Rolepay runs on Fly.io as one always-on machine per network, built from the repo
 | `rolepay-demo` | `fly.demo.toml` | <https://demo.rolepay.app> (also <https://rolepay-demo.fly.dev>) | Moderato testnet, for judges | live |
 | `rolepay-app` | `fly.app.toml` | <https://app.rolepay.app> | mainnet | prepared, not created (its header lists what is still owed) |
 
-The demo: region `cdg` (Paris), one `shared-cpu-1x` machine with 512 MB and 512 MB of swap, never stopped (`min_machines_running = 1`, no auto-stop: Discord needs an answer within 3 seconds, so no cold starts), health checked on `GET /health`. The SQLite file is `/data/rolepay.db` on the encrypted 1 GB volume `rolepay_demo_data` (Fly snapshots it daily, five days kept). Memory: the compiled server uses about 130 MB (the client bundle is built with the image, so no page request starts esbuild), which leaves about 330 MB available. About US$4.20 a month for the machine (Fly's Paris price, October 2026) plus US$0.15 for the volume; the shared IPv4 is free (no dedicated one).
+The demo: region `iad` (Ashburn, Virginia; moved from `cdg` on 2026-10-07 to sit next to Discord, whose servers are in the US: each Discord-to-server hop took 1 to 3 s from Paris), one `shared-cpu-1x` machine with 512 MB and 512 MB of swap, never stopped (`min_machines_running = 1`, no auto-stop: Discord needs an answer within 3 seconds, so no cold starts), health checked on `GET /health`. The SQLite file is `/data/rolepay.db` on the encrypted 1 GB volume `rolepay_demo_data` (Fly snapshots it daily, five days kept). Memory: the compiled server uses about 130 MB (the client bundle is built with the image, so no page request starts esbuild), which leaves about 330 MB available. About US$4.20 a month for the machine (Fly's price, October 2026) plus US$0.15 for the volume; the shared IPv4 is free (no dedicated one).
 
 **Settings.** Non-secret ones are in the `[env]` block of the Fly config: the network, `PUBLIC_URL`, `ROLEPAY_RP_ID` (the demo's passkeys bind to `demo.rolepay.app` only), `HOST=0.0.0.0`, `PORT`, `ROLEPAY_DB_PATH`, `ROLEPAY_CLIENT_IP_HEADER=Fly-Client-IP` (the per-client rate limits key on the IP Fly's proxy saw, which a client cannot forge) and `ROLEPAY_AI_DAILY_CAP` (at most 50 model calls a UTC day on the server). Dev shortcuts are off; the demo controls are on (`ROLEPAY_DEMO_CONTROLS=true`: `run_now` and veto windows down to a minute, for the Treasurer role only, so judges can see autopilot without waiting a week). Secrets, set with `fly secrets` and never written anywhere else:
 
@@ -152,7 +152,7 @@ The demo: region `cdg` (Paris), one `shared-cpu-1x` machine with 512 MB and 512 
 
 ```bash
 fly apps create rolepay-demo
-fly volumes create rolepay_demo_data --app rolepay-demo --region cdg --size 1
+fly volumes create rolepay_demo_data --app rolepay-demo --region iad --size 1
 # Secrets from .env without printing them, and a fresh master key:
 { grep -E '^(DISCORD_APP_ID|DISCORD_PUBLIC_KEY|DISCORD_BOT_TOKEN|ANTHROPIC_API_KEY)=' .env; echo "ROLEPAY_MASTER_KEY=$(openssl rand -hex 32)"; } \
   | fly secrets import --app rolepay-demo --stage
