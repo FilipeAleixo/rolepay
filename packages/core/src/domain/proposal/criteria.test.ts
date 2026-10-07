@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { type Criteria, type CriteriaEvidence, type ScannedMessage, evaluateCriteria, needsMembers, resolveCriteria, scanPlan, seenUsers } from './criteria.js'
-import type { RawCriteriaProposal } from './raw.js'
+import type { RawActivity, RawAnchor, RawCriteriaProposal } from './raw.js'
 
 const NOW = new Date('2026-10-06T12:00:00.000Z')
 const HELP = '700000000000000001'
@@ -22,29 +22,20 @@ const refs = {
   emojis: { ':pepe:': '<:pepe:123456789012345678>' },
 }
 
+// The raw shape has no nulls (structured outputs cap union-typed fields): "" and [] mean "not set".
+const rule = (r: Partial<RawCriteriaProposal['amount']> & Pick<RawCriteriaProposal['amount'], 'kind'>): RawCriteriaProposal['amount'] => ({ amount: '', per: '', cap: '', total: '', splitBy: '', ...r })
+const act = (metric: RawActivity['metric'], channels: string[], since: string, until = '', min = 1): RawActivity => ({ metric, channels, since, until, min })
+const anchor = (kind: RawAnchor['kind'], fields: Partial<Omit<RawAnchor, 'kind'>>): RawAnchor => ({ kind, message: '', thread: '', emoji: '', ...fields })
 const raw = (over: Partial<RawCriteriaProposal> = {}, conditions: Partial<RawCriteriaProposal['conditions']> = {}): RawCriteriaProposal => ({
   understood: true,
-  problem: null,
-  conditions: {
-    hasRole: [],
-    lacksRole: [],
-    joinedBefore: null,
-    joinedAfter: null,
-    messagesIn: null,
-    activeDaysIn: null,
-    repliesIn: null,
-    reactedTo: null,
-    mentionedIn: null,
-    postedIn: null,
-    paidInRun: null,
-    ...conditions,
-  },
+  problem: '',
+  conditions: { hasRole: [], lacksRole: [], joinedBefore: '', joinedAfter: '', activity: [], anchors: [], paidInRun: '', ...conditions },
   exclude: [],
   excludeProposer: false,
-  amount: { kind: 'flat', amount: '20', per: null, cap: null, total: null, splitBy: null },
+  amount: rule({ kind: 'flat', amount: '20' }),
   overrides: [],
-  perPersonCap: null,
-  note: null,
+  perPersonCap: '',
+  note: '',
   assumptions: [],
   ...over,
 })
@@ -52,7 +43,7 @@ const resolve = (r: RawCriteriaProposal, amounts = [usd(20)]) => resolveCriteria
 
 describe('resolveCriteria (the model writes the filter, code checks it)', () => {
   it('maps tokens to Discord IDs and dates to a window that ends now', () => {
-    const r = resolve(raw({ exclude: ['U1'], excludeProposer: true }, { hasRole: ['R2'], repliesIn: { channels: ['C1'], since: '2026-09-06', until: null, min: 10 } }))
+    const r = resolve(raw({ exclude: ['U1'], excludeProposer: true }, { hasRole: ['R2'], activity: [act('replies', ['C1'], '2026-09-06', '', 10)] }))
     expect(r).toMatchObject({
       ok: true,
       value: {
@@ -65,13 +56,13 @@ describe('resolveCriteria (the model writes the filter, code checks it)', () => 
   })
 
   it('cuts the lookback to 31 days and says so', () => {
-    const r = resolve(raw({}, { messagesIn: { channels: ['C1'], since: '2026-01-01', until: null, min: 1 } }))
+    const r = resolve(raw({}, { activity: [act('messages', ['C1'], '2026-01-01')] }))
     expect(r.ok && r.value.criteria.messagesIn?.since).toEqual(new Date(NOW.getTime() - 31 * 86_400_000))
     expect(r.ok && r.value.lookbackClamped).toBe(true)
   })
 
   it('an end day counts up to its last moment, never past now', () => {
-    const r = resolve(raw({}, { messagesIn: { channels: ['C1'], since: '2026-09-10', until: '2026-09-20', min: 1 } }))
+    const r = resolve(raw({}, { activity: [act('messages', ['C1'], '2026-09-10', '2026-09-20')] }))
     expect(r.ok && r.value.criteria.messagesIn?.until).toEqual(new Date('2026-09-20T23:59:59.999Z'))
   })
 
@@ -82,8 +73,8 @@ describe('resolveCriteria (the model writes the filter, code checks it)', () => 
   it('refuses unknown tokens, bad dates, missing amounts and too many channels, listing why', () => {
     const r = resolve(
       raw(
-        { amount: { kind: 'perUnit', amount: '1', per: 'replies', cap: null, total: null, splitBy: null }, exclude: ['U9'] },
-        { hasRole: ['R9'], messagesIn: { channels: ['C1', 'C2', 'C3'], since: 'last month', until: null, min: 1 }, reactedTo: { message: 'M7', emoji: null } },
+        { amount: rule({ kind: 'perUnit', amount: '1', per: 'replies' }), exclude: ['U9'] },
+        { hasRole: ['R9'], activity: [act('messages', ['C1', 'C2', 'C3'], 'last month')], anchors: [anchor('reactedTo', { message: 'M7' })] },
       ),
     )
     expect(r.ok).toBe(false)
@@ -97,7 +88,7 @@ describe('resolveCriteria (the model writes the filter, code checks it)', () => 
 
   it('refuses more than 5 channels in one proposal', () => {
     const many = { ...refs, channels: Object.fromEntries(['1', '2', '3', '4', '5', '6'].map((n) => [`C${n}`, `70000000000000001${n}`])) }
-    const r = resolveCriteria(raw({}, { messagesIn: { channels: ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'], since: '2026-10-01', until: null, min: 1 } }), {
+    const r = resolveCriteria(raw({}, { activity: [act('messages', ['C1', 'C2', 'C3', 'C4', 'C5', 'C6'], '2026-10-01')] }), {
       refs: many,
       now: NOW,
       instructionAmounts: [usd(20)],
@@ -109,12 +100,12 @@ describe('resolveCriteria (the model writes the filter, code checks it)', () => 
     const r = resolve(
       raw(
         {
-          amount: { kind: 'pool', amount: null, per: null, cap: null, total: '500', splitBy: 'messages' },
+          amount: rule({ kind: 'pool', total: '500', splitBy: 'messages' }),
           overrides: [{ user: 'U1', amount: '100' }],
           perPersonCap: '150',
           note: '  October help desk ',
         },
-        { messagesIn: { channels: ['C1'], since: '2026-10-01', until: null, min: 1 } },
+        { activity: [act('messages', ['C1'], '2026-10-01')] },
       ),
       [usd(500), usd(100), usd(150)],
     )
@@ -125,30 +116,102 @@ describe('resolveCriteria (the model writes the filter, code checks it)', () => 
   })
 
   it('notes an amount the instruction never stated (a model error a person must check)', () => {
-    const r = resolve(raw({ amount: { kind: 'flat', amount: '25', per: null, cap: null, total: null, splitBy: null } }))
+    const r = resolve(raw({ amount: rule({ kind: 'flat', amount: '25' }) }))
     expect(r.ok && r.value.amountsInInstruction).toBe(false)
   })
 
   it('tokens that are object built-ins ("constructor", "__proto__") are unknown, never a function', () => {
-    const r = resolve(raw({ exclude: ['constructor'] }, { hasRole: ['__proto__'], reactedTo: { message: 'toString', emoji: null } }))
+    const r = resolve(raw({ exclude: ['constructor'] }, { hasRole: ['__proto__'], anchors: [anchor('reactedTo', { message: 'toString' })] }))
     expect(r.ok).toBe(false)
     expect(!r.ok && r.error.code === 'criteria_invalid' && r.error.issues.length).toBe(3)
   })
 
   it('a custom emoji maps back to its Discord form; a long one is cut', () => {
-    expect(resolve(raw({}, { reactedTo: { message: 'M1', emoji: ':pepe:' } }))).toMatchObject({ ok: true, value: { criteria: { reactedTo: { emoji: '<:pepe:123456789012345678>' } } } })
-    const long = resolve(raw({}, { reactedTo: { message: 'M1', emoji: 'x'.repeat(500) } }))
+    expect(resolve(raw({}, { anchors: [anchor('reactedTo', { message: 'M1', emoji: ':pepe:' })] }))).toMatchObject({ ok: true, value: { criteria: { reactedTo: { emoji: '<:pepe:123456789012345678>' } } } })
+    const long = resolve(raw({}, { anchors: [anchor('reactedTo', { message: 'M1', emoji: 'x'.repeat(500) })] }))
     expect(long.ok && long.value.criteria.reactedTo?.emoji?.length).toBe(100)
   })
 
   it('reactions, mentions, threads and past runs', () => {
-    const r = resolve(raw({}, { reactedTo: { message: 'M1', emoji: '✅' }, mentionedIn: { message: 'M1' }, postedIn: { thread: 'C3' }, paidInRun: 'last' }))
+    const r = resolve(
+      raw({}, { anchors: [anchor('reactedTo', { message: 'M1', emoji: '✅' }), anchor('mentionedIn', { message: 'M1' }), anchor('postedIn', { thread: 'C3' })], paidInRun: 'last' }),
+    )
     expect(r).toMatchObject({
       ok: true,
       value: { criteria: { reactedTo: { ...MSG, emoji: '✅' }, mentionedIn: MSG, postedIn: { threadId: THREAD }, paidInRun: { last: true, runId: null } } },
     })
     expect(resolve(raw({}, { paidInRun: 'run_abc' }))).toMatchObject({ ok: true, value: { criteria: { paidInRun: { last: false, runId: 'run_abc' } } } })
     expect(resolve(raw({}, { paidInRun: 'not a run id with spaces' })).ok).toBe(false)
+  })
+
+  it('"" and [] mean not set: nothing in the raw answer becomes a null condition', () => {
+    expect(resolve(raw())).toMatchObject({
+      ok: true,
+      value: {
+        criteria: {
+          joinedBefore: null,
+          joinedAfter: null,
+          messagesIn: null,
+          activeDaysIn: null,
+          repliesIn: null,
+          reactedTo: null,
+          mentionedIn: null,
+          postedIn: null,
+          paidInRun: null,
+        },
+        plan: { perPersonCap: null },
+        note: null,
+      },
+    })
+    expect(resolve(raw({}, { anchors: [anchor('reactedTo', { message: 'M1', emoji: '  ' })] }))).toMatchObject({ ok: true, value: { criteria: { reactedTo: { emoji: null } } } })
+    expect(resolve(raw({ understood: false, problem: ' ' }))).toMatchObject({ ok: false, error: { code: 'criteria_unclear', problem: expect.stringMatching(/could not be expressed/) } })
+  })
+
+  it('each activity metric maps to its window, with join dates and a perUnit cap', () => {
+    const r = resolve(
+      raw(
+        { amount: rule({ kind: 'perUnit', amount: '2', per: 'activeDays', cap: '30' }) },
+        {
+          joinedBefore: '2026-09-01',
+          joinedAfter: '2026-01-01',
+          activity: [act('messages', ['C1'], '2026-10-01', '', 5), act('activeDays', ['C2'], '2026-10-01', '2026-10-03', 2), act('replies', ['C1', 'C2'], '2026-10-02')],
+        },
+      ),
+      [usd(2), usd(30)],
+    )
+    expect(r).toMatchObject({
+      ok: true,
+      value: {
+        criteria: {
+          joinedBefore: new Date('2026-09-01T00:00:00Z'),
+          joinedAfter: new Date('2026-01-01T00:00:00Z'),
+          messagesIn: { channelIds: [HELP], min: 5, until: NOW },
+          activeDaysIn: { channelIds: [GENERAL], min: 2, until: new Date('2026-10-03T23:59:59.999Z') },
+          repliesIn: { channelIds: [HELP, GENERAL], min: 1, since: new Date('2026-10-02T00:00:00Z') },
+        },
+        plan: { rule: { kind: 'perUnit', amount: usd(2), per: 'activeDays', cap: usd(30) } },
+      },
+    })
+  })
+
+  it('refuses a metric or an anchor kind given twice, an anchor without its token, and a rule missing its unit', () => {
+    const r = resolve(
+      raw(
+        { amount: rule({ kind: 'perUnit', amount: '1' }) },
+        {
+          activity: [act('messages', ['C1'], '2026-10-01'), act('messages', ['C2'], '2026-10-01')],
+          anchors: [anchor('reactedTo', { message: 'M1' }), anchor('reactedTo', { message: 'M1', emoji: '✅' }), anchor('mentionedIn', {}), anchor('postedIn', {})],
+        },
+      ),
+    )
+    const issues = !r.ok && r.error.code === 'criteria_invalid' ? r.error.issues.join(' | ') : ''
+    expect(issues).toMatch(/messages: given twice/)
+    expect(issues).toMatch(/reacted to: given twice/)
+    expect(issues).toMatch(/mentioned in: say which message/)
+    expect(issues).toMatch(/posted in: say which thread/)
+    expect(issues).toMatch(/what the amount is per/)
+    const pool = resolve(raw({ amount: rule({ kind: 'pool', total: '20' }) }))
+    expect(!pool.ok && pool.error.code === 'criteria_invalid' && pool.error.issues.join(' | ')).toMatch(/how to split it/)
   })
 })
 

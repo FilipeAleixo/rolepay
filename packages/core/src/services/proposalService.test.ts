@@ -318,8 +318,8 @@ describe('ProposalService: criteria mode', () => {
     )
     w.proposer.onCriteria = () =>
       emptyCriteria(
-        { amount: { kind: 'flat', amount: '20', per: null, cap: null, total: null, splitBy: null }, note: 'October help desk', assumptions: ['"this month" means since 6 September'] },
-        { hasRole: ['R2'], repliesIn: { channels: ['C2'], since, until: null, min: 10 } },
+        { amount: { kind: 'flat', amount: '20', per: '', cap: '', total: '', splitBy: '' }, note: 'October help desk', assumptions: ['"this month" means since 6 September'] },
+        { hasRole: ['R2'], activity: [{ metric: 'replies', channels: ['C2'], since, until: '', min: 10 }] },
       )
     return w
   }
@@ -365,7 +365,7 @@ describe('ProposalService: criteria mode', () => {
   it('a pool split by replies, exact to the micro-unit', async () => {
     const w = await criteriaWorld()
     w.proposer.onCriteria = () =>
-      emptyCriteria({ amount: { kind: 'pool', amount: null, per: null, cap: null, total: '100', splitBy: 'replies' } }, { repliesIn: { channels: ['C2'], since, until: null, min: 1 } })
+      emptyCriteria({ amount: { kind: 'pool', amount: '', per: '', cap: '', total: '100', splitBy: 'replies' } }, { activity: [{ metric: 'replies', channels: ['C2'], since, until: '', min: 1 }] })
     const r = await w.proposals.proposeFromCriteria({ ...asTreasurer, instruction: 'split 100 between everyone who answered in #help, by replies' })
     if (!r.ok) throw new Error(JSON.stringify(r.error))
     // Registered: Ana 12, Rui 3, Li 15 (30 replies); Dave is not registered and takes no share.
@@ -381,7 +381,7 @@ describe('ProposalService: criteria mode', () => {
   it('reacted to a message (the attendance post), linked in the instruction', async () => {
     const w = await criteriaWorld()
     w.activity.setReactions(CHANNEL, '810000000000000050', '✅', [ANA, LI, '200000000000000777'])
-    w.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '5', per: null, cap: null, total: null, splitBy: null } }, { reactedTo: { message: 'M1', emoji: '✅' } })
+    w.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '5', per: '', cap: '', total: '', splitBy: '' } }, { anchors: [{ kind: 'reactedTo', message: 'M1', thread: '', emoji: '✅' }] })
     const r = await w.proposals.proposeFromCriteria({ ...asTreasurer, instruction: `5 to everyone who reacted ✅ to https://discord.com/channels/${GUILD}/${CHANNEL}/810000000000000050` })
     expect(r.ok && r.value.lines.map((l) => l.discordUserId)).toEqual([ANA, LI])
     expect(r.ok && r.value.lines[0]?.sources).toEqual([{ channelId: CHANNEL, messageId: '810000000000000050' }])
@@ -394,7 +394,7 @@ describe('ProposalService: criteria mode', () => {
     await w.payRuns.submit({ guildId: GUILD, runId: run.value.id, actor: TREASURER })
     await w.payRuns.approve({ guildId: GUILD, runId: run.value.id, actor: TREASURER, actorCanApprove: true })
     expect((await w.payRuns.execute({ guildId: GUILD, runId: run.value.id })).ok).toBe(true)
-    w.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '30', per: null, cap: null, total: null, splitBy: null } }, { paidInRun: 'last' })
+    w.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '30', per: '', cap: '', total: '', splitBy: '' } }, { paidInRun: 'last' })
     const r = await w.proposals.proposeFromCriteria({ ...asTreasurer, instruction: '30 to everyone paid in the last run' })
     expect(r.ok && r.value.lines.map((l) => l.discordUserId)).toEqual([RUI])
     expect(r.ok && r.value.criteria?.paidInRun).toEqual({ last: true, runId: run.value.id })
