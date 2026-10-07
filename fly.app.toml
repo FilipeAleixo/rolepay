@@ -1,18 +1,21 @@
-# Fly.io: the Rolepay MAINNET app, https://app.rolepay.app. PREPARED, NOT CREATED: real money.
-# The steps are the demo's (apps/server/README.md, "Deploying") with this file, after:
-#   - its own Discord application (never the demo's) and its own ROLEPAY_MASTER_KEY, as secrets;
-#   - ROLEPAY_PAYOUT_TOKEN below (config refuses mainnet without it) and, for fee_budget mode,
-#     ROLEPAY_FEE_TOKEN (mainnet has no sponsor configured);
-#   - the mainnet prerequisites in docs/ARCHITECTURE.md (the setup page served from a separate
-#     static origin the bot server cannot change).
+# Fly.io: the Rolepay MAINNET app, https://app.rolepay.app (Tempo mainnet, chain 4217). REAL MONEY.
+# Prepared, not created. The founder's runbook is apps/server/MAINNET.md: the production Discord
+# application, the app and its volume, the secrets, DNS, the first deploy, funding the treasury and
+# how to stop everything. `apps/server/test/flyConfig.test.ts` checks this file parses into a safe
+# mainnet server (no testnet controls, USDC.e payouts, a pathUSD fee budget, its own passkey domain).
+#
+# Secrets (fly secrets, never here): a NEW ROLEPAY_MASTER_KEY for this app alone, DISCORD_APP_ID,
+# DISCORD_PUBLIC_KEY and DISCORD_BOT_TOKEN of the production "Rolepay" application (never the dev
+# one), ROLEPAY_DISCORD_CLIENT_SECRET (the dashboard sign-in) and optionally ANTHROPIC_API_KEY.
 #
 #   fly apps create rolepay-app
 #   fly volumes create rolepay_app_data --app rolepay-app --region cdg --size 1
-#   fly deploy -c fly.app.toml --ha=false
+#   fly deploy -c fly.app.toml --local-only --ha=false
 #   fly certs add app.rolepay.app -a rolepay-app
 
 app = "rolepay-app"
 primary_region = "cdg"
+# The server drains payments in flight on SIGTERM (up to 10 s) before closing the database.
 kill_signal = "SIGTERM"
 kill_timeout = "20s"
 swap_size_mb = 512
@@ -23,22 +26,37 @@ swap_size_mb = 512
 [env]
   ROLEPAY_NETWORK = "mainnet"
   ROLEPAY_ALLOW_MAINNET = "true"
+  # Never on mainnet (config refuses both off the Moderato testnet anyway).
   ROLEPAY_DEV_SHORTCUTS = "false"
+  ROLEPAY_DEMO_CONTROLS = "false"
   PUBLIC_URL = "https://app.rolepay.app"
   # Its own passkey domain: passkeys from the demo never work here, and the reverse.
   ROLEPAY_RP_ID = "app.rolepay.app"
   HOST = "0.0.0.0"
   PORT = "8787"
   ROLEPAY_DB_PATH = "/data/rolepay.db"
+  # Fly's proxy sets Fly-Client-IP; the per-client rate limits key on it.
   ROLEPAY_CLIENT_IP_HEADER = "Fly-Client-IP"
-  ROLEPAY_AI_DAILY_CAP = "50"
-  # Required before the first deploy: the mainnet stablecoin new communities are paid in.
-  # ROLEPAY_PAYOUT_TOKEN = "0x..."
+  # At most this many Anthropic calls a UTC day on the whole server (AI is off per community until a treasurer turns it on).
+  ROLEPAY_AI_DAILY_CAP = "20"
+  # New communities are paid in USDC.e (Circle's USDC bridged by Stargate; tokenlist.tempo.xyz/list/4217).
+  ROLEPAY_PAYOUT_TOKEN = "0x20c000000000000000000000b9537d11c60e8b50"
+  # Mainnet has no public fee sponsor: the bot pays each run's fee from a fee budget in pathUSD.
+  ROLEPAY_FEE_TOKEN = "0x20c0000000000000000000000000000000000000"
+  # What the treasury page suggests for a pilot: 25 USDC.e per 30 days, a key that expires after
+  # 14 days, 0.5 pathUSD of fees per period. The treasurer can change each before signing.
+  ROLEPAY_BOT_KEY_LIMIT = "25"
+  ROLEPAY_BOT_KEY_PERIOD_DAYS = "30"
+  ROLEPAY_BOT_KEY_VALIDITY_DAYS = "14"
+  ROLEPAY_BOT_KEY_FEE_BUDGET = "0.5"
 
+# The SQLite file (runs, payees, passkey credentials, sealed bot keys) lives on this 1 GB volume.
+# Fly snapshots it daily and keeps five days.
 [mounts]
   source = "rolepay_app_data"
   destination = "/data"
 
+# Always on: Discord interactions must be answered within 3 seconds, so no cold starts.
 [http_service]
   internal_port = 8787
   force_https = true
@@ -58,6 +76,7 @@ swap_size_mb = 512
     path = "/health"
     timeout = "5s"
 
+# The compiled server (node dist/main.js) uses about 130 MB, leaving about 330 MB available.
 [[vm]]
   size = "shared-cpu-1x"
   memory = "512mb"

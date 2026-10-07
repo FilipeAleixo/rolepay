@@ -55,6 +55,10 @@ async function main() {
       url: `http://${config.http.host}:${info.port}`,
       interactions: '/discord/interactions',
       network: config.core.network,
+      chainId: config.core.chainId,
+      // What a new community starts with: its payout token, and who pays fees (no sponsor: a fee budget in this token).
+      payoutToken: config.app.defaultPayoutToken,
+      fees: config.app.sponsor ? 'sponsor' : `fee_budget ${config.app.defaultFeeToken}`,
       db: config.core.dbPath,
       publicUrl: config.web.origin,
       passkeyRpId: config.web.rpId,
