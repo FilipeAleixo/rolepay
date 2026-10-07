@@ -94,4 +94,11 @@ describe('fly.demo.toml (the testnet demo, https://demo.rolepay.app)', () => {
     expect(c.core).toMatchObject({ network: 'moderato', demoControls: true, devShortcuts: false })
     expect(c.web).toMatchObject({ origin: 'https://demo.rolepay.app', rpId: 'demo.rolepay.app' })
   })
+
+  it('ticks the policy scheduler every 10 seconds, so a one-minute veto window pays soon after it ends; the default stays 30', () => {
+    expect(parseServerConfig({ ...SECRETS, ...flyEnv('fly.demo.toml') }).policies.schedulerIntervalMs).toBe(10_000)
+    // The mainnet app keeps the default.
+    expect(flyEnv('fly.app.toml').ROLEPAY_SCHEDULER_INTERVAL_SECONDS).toBeUndefined()
+    expect(parseServerConfig({ ...SECRETS, ...flyEnv('fly.app.toml') }).policies.schedulerIntervalMs).toBe(30_000)
+  })
 })
