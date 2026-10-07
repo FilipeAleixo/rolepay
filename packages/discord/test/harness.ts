@@ -1,7 +1,7 @@
 // Real core services on core's in-memory fakes, plus a fake Discord. Test-only: production
 // code in this package never imports @rolepay/core/adapters.
 import { type Rolepay, createRolepay, parseAmount } from '@rolepay/core'
-import { FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { RestActivityReader } from '../src/adapters/restActivityReader.js'
 import { FakeDiscordRest, RecordingQueue } from '../src/testing/fakeDiscordRest.js'
 import { ADDR, ALICE, BOB, CAROL, GUILD, T0, TOKEN, TREASURER_ROLE, TREASURY } from './fixtures.js'
@@ -24,6 +24,8 @@ export async function harness(opts: { proposer?: FakeRunProposer | null; demoCon
   chain.fund(TOKEN, TREASURY, usd('1000'))
   const rest = new FakeDiscordRest()
   const proposer = opts.proposer === undefined ? new FakeRunProposer() : opts.proposer
+  // Deposit addresses: an in-memory registry and transfer log (the fake masterId is a salt's last 4 bytes).
+  const fundingChain = new FakeFundingChain()
   const rolepay: Rolepay = createRolepay({
     chain,
     repositories: createMemoryRepositories({ clock }),
@@ -36,6 +38,7 @@ export async function harness(opts: { proposer?: FakeRunProposer | null; demoCon
     // As the server runs with the testnet demo controls on: veto windows down to a minute, and daily schedules.
     minVetoMinutes: 1,
     demoControls: opts.demoControls ?? true,
+    fundingChain,
   })
   const queue = new RecordingQueue()
   /** Moves the service clock and chain time together, as real waiting would. */
@@ -91,5 +94,13 @@ export async function harness(opts: { proposer?: FakeRunProposer | null; demoCon
     return a.value
   }
 
-  return { clock, chain, rolepay, rest, queue, sleep, setupCommunity, registerPayee, registerAll, approvedRun, proposer: proposer as FakeRunProposer }
+  /** The treasury registered as a virtual-address master (as the setup page does), recorded by Rolepay. */
+  async function setUpDepositAddresses() {
+    const { txHash, masterId } = fundingChain.register(TREASURY, `0x${'00'.repeat(28)}58e21090`)
+    const r = await rolepay.funding.confirmMaster({ guildId: GUILD, masterId, txHash })
+    if (!r.ok) throw new Error(r.error.code)
+    return r.value
+  }
+
+  return { clock, chain, fundingChain, rolepay, rest, queue, sleep, setupCommunity, registerPayee, registerAll, approvedRun, setUpDepositAddresses, proposer: proposer as FakeRunProposer }
 }

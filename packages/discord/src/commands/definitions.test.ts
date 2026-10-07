@@ -27,6 +27,14 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     expect(ROUTED_COMMANDS.filter((c) => !subcommands.includes(c))).toEqual(['rolepay policy run_now'])
   })
 
+  it('/rolepay fund new|list: funding sources, a name up to 80 characters, in every build (no flag)', () => {
+    expect(subcommands.filter((c) => c.startsWith('rolepay fund '))).toEqual(['rolepay fund new', 'rolepay fund list'])
+    const fund = defs.find((d) => d.name === 'rolepay')?.options?.find((o) => o.name === 'fund')
+    const name = fund?.options?.find((o) => o.name === 'new')?.options?.[0] as (Def & { max_length?: number }) | undefined
+    expect([name?.name, name?.type, name?.required, name?.max_length]).toEqual(['name', OptionType.String, true, 80])
+    for (const o of [fund, ...(fund?.options ?? [])]) expect((o?.description ?? '').length).toBeLessThanOrEqual(100)
+  })
+
   it('/rolepay setup fees: the choices say which default holds where (sponsored on testnet, a fee budget on mainnet, which has no sponsor)', () => {
     const setup = (defs.find((c) => c.name === 'rolepay')?.options ?? []).find((o) => o.name === 'setup')
     const fees = (setup?.options ?? []).find((o) => o.name === 'fees') as (Def & { choices?: { name: string; value: string }[] }) | undefined

@@ -188,3 +188,18 @@ describe('the proposal buttons and forms', () => {
     expect(messageProblems(proposalMessage(p, { approverRoleId: TREASURER_ROLE }), { ephemeral: true })).toEqual([])
   })
 })
+
+describe('funding sources', () => {
+  it('/rolepay fund new and list fit, with the longest names (every character escaped) and the most sources a list shows', async () => {
+    const a = await appHarness()
+    await a.setupCommunity()
+    await a.setUpDepositAddresses()
+    for (let i = 0; i < 25; i++) {
+      const d = await a.send(slashCommand(SCOPE, 'rolepay', 'fund new', { name: `${i}${'*_'.repeat(39)}` }, treasurer))
+      expect(responseProblems(body(d))).toEqual([])
+    }
+    const list = await a.send(slashCommand(SCOPE, 'rolepay', 'fund list', {}, treasurer))
+    expect(responseProblems(body(list))).toEqual([])
+    expect(body(list).data?.content).toMatch(/And \d+ more on the dashboard\./)
+  })
+})

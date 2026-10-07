@@ -8,6 +8,8 @@ export type DiscordAppConfig = {
   claimBaseUrl: string
   /** `/rolepay setup` hands the treasurer `${setupBaseUrl}/${token}`: the treasury page. */
   setupBaseUrl: string
+  /** The web dashboard (`${dashboardBaseUrl}/${guildId}/funding` for funding sources). Absent: replies link no page. */
+  dashboardBaseUrl?: string | null
   /** The fee token when `/rolepay setup fees:fee_budget` names none (pathUSD on testnet). null = it must be named. */
   defaultFeeToken: string | null
   /** Payout token for a community registered without an explicit `token` option. */

@@ -1,5 +1,6 @@
 import { ResponseType } from '../api.js'
 import { exportCommand } from '../commands/export.js'
+import { fundListCommand, fundNewCommand } from '../commands/fund.js'
 import { newRunCommand } from '../commands/newRun.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
 import {
@@ -53,6 +54,8 @@ const COMMANDS: Record<string, CommandHandler> = {
   'rolepay policy mode': policyModeCommand,
   /** Demo control; registered only with ROLEPAY_DEMO_CONTROLS on Moderato, refused otherwise. */
   'rolepay policy run_now': policyRunNowCommand,
+  'rolepay fund new': fundNewCommand,
+  'rolepay fund list': fundListCommand,
   'payee link': payeeLinkCommand,
 }
 
