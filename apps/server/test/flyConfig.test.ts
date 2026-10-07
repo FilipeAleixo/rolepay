@@ -76,10 +76,11 @@ describe('fly.app.toml (the mainnet app, https://app.rolepay.app)', () => {
     }
   })
 
-  it('one always-on machine with 512 MB in Paris, the database on a volume at /data, a health check', () => {
+  it('one always-on machine with 512 MB next to Discord (iad, as the demo), the database on a volume at /data, a health check', () => {
     const t = flyTables('fly.app.toml')
     const get = (table: string, key: string) => t.get(table)?.get(key)
-    expect([get('', 'app'), get('', 'primary_region')]).toEqual(['"rolepay-app"', '"cdg"'])
+    expect([get('', 'app'), get('', 'primary_region')]).toEqual(['"rolepay-app"', '"iad"'])
+    expect(get('', 'primary_region')).toBe(flyTables('fly.demo.toml').get('')?.get('primary_region'))
     expect([get('mounts', 'source'), get('mounts', 'destination')]).toEqual(['"rolepay_app_data"', '"/data"'])
     expect([get('http_service', 'force_https'), get('http_service', 'auto_stop_machines'), get('http_service', 'min_machines_running')]).toEqual(['true', '"off"', '1'])
     expect([get('http_service.checks', 'method'), get('http_service.checks', 'path')]).toEqual(['"GET"', '"/health"'])

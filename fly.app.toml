@@ -9,12 +9,14 @@
 # one), ROLEPAY_DISCORD_CLIENT_SECRET (the dashboard sign-in) and optionally ANTHROPIC_API_KEY.
 #
 #   fly apps create rolepay-app
-#   fly volumes create rolepay_app_data --app rolepay-app --region cdg --size 1
+#   fly volumes create rolepay_app_data --app rolepay-app --region iad --size 1
 #   fly deploy -c fly.app.toml --local-only --ha=false
 #   fly certs add app.rolepay.app -a rolepay-app
 
 app = "rolepay-app"
-primary_region = "cdg"
+# Ashburn, next to Discord's servers, as the demo since 2026-10-07: from Paris each Discord-to-server
+# hop took 1 to 3 s, against Discord's 3-second deadline for an answer.
+primary_region = "iad"
 # The server drains payments in flight on SIGTERM (up to 10 s) before closing the database.
 kill_signal = "SIGTERM"
 kill_timeout = "20s"

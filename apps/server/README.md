@@ -1,8 +1,8 @@
 # @rolepay/server
 
-The Rolepay server: Hono on Node, the composition root over `@rolepay/core`, `@rolepay/discord` and `@rolepay/web`. It serves the Discord interactions endpoint (`POST /discord/interactions`), `GET /health`, the recipient claim page (`/claim/:token`), the treasurer setup page (`/setup/:token`), the passkey ceremonies (`/webauthn/*`), the client bundle (`/assets/rolepay.js`) and the web dashboard (`/dashboard`, with "Sign in with Discord" at `/auth/discord`), and runs the crash-recovery sweep and the policy scheduler every 30 seconds.
+The Rolepay server: Hono on Node, the composition root over `@rolepay/core`, `@rolepay/discord` and `@rolepay/web`. It serves the Discord interactions endpoint (`POST /discord/interactions`), `GET /health`, the recipient claim page (`/claim/:token`), the treasurer setup page (`/setup/:token`), the payee's account page (`/account`: sign in with the passkey, see the balance, send it on), the passkey ceremonies (`/webauthn/*`), the client bundle (`/assets/rolepay.js`) and the web dashboard (`/dashboard`, with "Sign in with Discord" at `/auth/discord`), and runs the crash-recovery sweep and the policy scheduler every 30 seconds.
 
-Everything below is testnet (Moderato). Secrets go only in the repo-root `.env`, which is gitignored.
+Everything below is testnet (Moderato). Secrets go only in the repo-root `.env`, which is gitignored. Mainnet (real money, <https://app.rolepay.app>) has its own runbook: [`MAINNET.md`](MAINNET.md).
 
 ## One-time setup (about 20 minutes)
 
@@ -124,7 +124,7 @@ Optional: stop the server with Ctrl-C right after clicking Approve on a new run,
 | `pnpm dev:authorize-key <guildId>` | Testnet dev shortcut (`ROLEPAY_DEV_SHORTCUTS=true`): the dev treasury authorises the pending bot key |
 | `pnpm --filter @rolepay/server test` | Server tests (no network) |
 | `pnpm --filter @rolepay/server test:chain` | Opt-in: the Discord flow over HTTP on Moderato, fake Discord REST |
-| `pnpm test:e2e` | Opt-in: Playwright in Chromium. The passkey flows with a virtual authenticator on `http://localhost:8799` and Moderato; the dashboard walk (fake Discord OAuth, core's policy services on in-memory adapters, a scripted model, no network) on `http://localhost:8797` |
+| `pnpm test:e2e` | Opt-in: Playwright in Chromium. The passkey flows with a virtual authenticator on `http://localhost:8799` and Moderato; the mainnet path rehearsed on Moderato with no sponsor (fees in pathUSD, a payee sending on from `/account`) on `http://localhost:8798`; the dashboard walk (fake Discord OAuth, core's policy services on in-memory adapters, a scripted model, no network) on `http://localhost:8797` |
 | `ROLEPAY_AI_LIVE=true pnpm test:ai-live` | Opt-in: three real Anthropic API calls (a few cents) with `ANTHROPIC_API_KEY` from `.env` |
 | `pnpm --filter @rolepay/core test:chain` | Opt-in: service-level runs on Moderato, including one autopilot policy payout after a one-minute veto window |
 
@@ -137,7 +137,7 @@ Rolepay runs on Fly.io as one always-on machine per network, built from the repo
 | App | Config | URL | Network | Status |
 | --- | --- | --- | --- | --- |
 | `rolepay-demo` | `fly.demo.toml` | <https://demo.rolepay.app> (also <https://rolepay-demo.fly.dev>) | Moderato testnet, for judges | live |
-| `rolepay-app` | `fly.app.toml` | <https://app.rolepay.app> | mainnet | prepared, not created (its header lists what is still owed) |
+| `rolepay-app` | `fly.app.toml` | <https://app.rolepay.app> | mainnet (USDC.e payouts, fees from a pathUSD fee budget) | prepared, not created: the steps are in [`MAINNET.md`](MAINNET.md) |
 
 The demo: region `iad` (Ashburn, Virginia; moved from `cdg` on 2026-10-07 to sit next to Discord, whose servers are in the US: each Discord-to-server hop took 1 to 3 s from Paris), one `shared-cpu-1x` machine with 512 MB and 512 MB of swap, never stopped (`min_machines_running = 1`, no auto-stop: Discord needs an answer within 3 seconds, so no cold starts), health checked on `GET /health`. The SQLite file is `/data/rolepay.db` on the encrypted 1 GB volume `rolepay_demo_data` (Fly snapshots it daily, five days kept). Memory: the compiled server uses about 130 MB (the client bundle is built with the image, so no page request starts esbuild), which leaves about 330 MB available. About US$4.20 a month for the machine (Fly's price, October 2026) plus US$0.15 for the volume; the shared IPv4 is free (no dedicated one).
 
