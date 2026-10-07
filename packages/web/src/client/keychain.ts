@@ -84,8 +84,8 @@ export type KeyForm = { limit: string; periodDays: string; validityDays: string;
 export type KeyPage = { payoutToken: string; feeToken: string | null }
 type Built = { ok: true; value: WireAuthorization } | { ok: false; error: string }
 
-/** A plain decimal amount with at most 6 decimals, to micro-units, without floats. */
-function micros(text: string): bigint | null {
+/** A plain positive decimal amount with at most 6 decimals, to micro-units, without floats. null otherwise. */
+export function parseMicros(text: string): bigint | null {
   const m = /^(\d+)(?:\.(\d{1,6}))?$/.exec(text)
   if (!m) return null
   const value = BigInt(m[1] as string) * 1_000_000n + BigInt((m[2] ?? '').padEnd(6, '0'))
@@ -103,7 +103,7 @@ function days(text: string, min: number): number | null {
  * and period, an expiry from this device's clock, and only transferWithMemo on the payout token.
  */
 export function buildAuthorization(form: KeyForm, page: KeyPage, nowSeconds: number): Built {
-  const limit = micros(form.limit)
+  const limit = parseMicros(form.limit)
   if (limit === null) return { ok: false, error: `"${form.limit}" is not an amount: use a number like 100 or 12.5` }
   const period = days(form.periodDays, 0)
   if (period === null) return { ok: false, error: `the reset period must be a whole number of days from 0 to ${MAX_DAYS}` }
@@ -112,7 +112,7 @@ export function buildAuthorization(form: KeyForm, page: KeyPage, nowSeconds: num
   const every = period === 0 ? {} : { period: period * DAY }
   const limits: WireAuthorization['limits'] = [{ token: page.payoutToken, limit: limit.toString(), ...every }]
   if (page.feeToken) {
-    const fee = micros(form.feeBudget ?? '')
+    const fee = parseMicros(form.feeBudget ?? '')
     if (fee === null) return { ok: false, error: 'the fee budget must be an amount, for example 1' }
     limits.push({ token: page.feeToken, limit: fee.toString(), ...every })
   }

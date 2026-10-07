@@ -99,6 +99,8 @@ export function composeServer(deps: ServerDeps) {
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const { config, rolepay, rest } = deps
   const notices = new KvRunNotices(deps.kv)
+  // Every receipt links the payee's account page on this server, where they see and move the money.
+  const accountUrl = `${config.web.origin}/account`
 
   const queue = new InProcessExecutionQueue(
     createRunExecutor({
@@ -106,6 +108,7 @@ export function composeServer(deps: ServerDeps) {
       rest,
       notices,
       network: config.core.network,
+      accountUrl,
       now: () => deps.clock.now(),
       sleep,
       onError: (error, job) => log('job_error', { runId: job.runId, ...errorFields(error) }),
@@ -117,7 +120,7 @@ export function composeServer(deps: ServerDeps) {
 
   // Tells each policy's channel what the scheduler did (and edits those messages later), sharing
   // the run message records with the executor and the recovery sweep.
-  const policyNotifier = createPolicyNotifier({ rolepay, rest, notices, network: config.core.network, onError: (error) => log('policy_notify_error', errorFields(error)) })
+  const policyNotifier = createPolicyNotifier({ rolepay, rest, notices, network: config.core.network, accountUrl, onError: (error) => log('policy_notify_error', errorFields(error)) })
   /** One scheduler pass and its announcement: what the interval runs (and the tests call). */
   const tickPolicies = async () => {
     const report = await rolepay.scheduler.tick()
@@ -159,6 +162,7 @@ export function composeServer(deps: ServerDeps) {
     rest,
     notices,
     network: config.core.network,
+    accountUrl,
     onError: (error) => log('recovery_notify_error', errorFields(error)),
   })
 

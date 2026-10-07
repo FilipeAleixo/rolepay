@@ -72,6 +72,8 @@ describe('pay run end to end through the HTTP endpoint', () => {
     expect(final).toMatch(/to all 2 people/)
     expect(s.rest.dms.map((d) => d.userId)).toEqual([ALICE, BOB])
     expect(text(s.rest.dms[1]?.message)).toContain('40 AlphaUSD')
+    // Each receipt says where the payee sees and moves the money: this server's account page.
+    expect(text(s.rest.dms[1]?.message)).toContain('https://rolepay.test/account')
     expect(s.chain.balance(TOKEN, ADDR.alice)).toBe(usd('10'))
     expect(s.chain.balance(TOKEN, ADDR.bob)).toBe(usd('40'))
     expect(s.chain.landedTxCount).toBe(1)
@@ -142,6 +144,7 @@ describe('pay run end to end through the HTTP endpoint', () => {
     expect(after.rest.channelEdits[0]).toMatchObject({ channelId: CHANNEL, messageId: '810000000000000001' })
     expect(text(after.rest.channelEdits[0]?.message)).toMatch(/"title":"Paid"/)
     expect(after.rest.dms.map((d) => d.userId)).toEqual([ALICE])
+    expect(text(after.rest.dms[0]?.message)).toContain('https://rolepay.test/account')
     expect(after.chain.landedTxCount).toBe(1)
 
     // Another sweep (or process) tells nobody again.

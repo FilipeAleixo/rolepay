@@ -8,6 +8,8 @@ export type RecoveryNotifierDeps = {
   rest: DiscordRest
   notices: RunNotices
   network: NetworkName
+  /** The server's account page, linked from every receipt. */
+  accountUrl?: string | null
   onError?: (error: unknown) => void
 }
 

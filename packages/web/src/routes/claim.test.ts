@@ -15,6 +15,13 @@ describe('the recipient claim page', () => {
     expect(res.headers.get('referrer-policy')).toBe('no-referrer')
   })
 
+  it('once registered, points to the account page, where the payee sees and moves what they are paid', async () => {
+    const h = webHarness()
+    await registeredCommunity(h)
+    const html = await (await h.send(`/claim/${await claimLink(h)}`)).text()
+    expect(html).toMatch(/<section data-step="done" hidden>[\s\S]*<a href="\/account">your Rolepay account<\/a>[\s\S]*<\/section>/)
+  })
+
   it('an unknown, used or expired link says what to do, with no client code', async () => {
     const h = webHarness()
     await registeredCommunity(h)

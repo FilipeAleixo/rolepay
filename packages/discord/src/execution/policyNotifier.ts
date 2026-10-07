@@ -11,6 +11,8 @@ export type PolicyNotifierDeps = {
   /** Where each run's message is and whether its receipts went out, shared with the executor and the recovery sweep. */
   notices: RunNotices
   network: NetworkName
+  /** The server's account page, linked from every receipt. */
+  accountUrl?: string | null
   onError?: (error: unknown) => void
 }
 

@@ -29,6 +29,7 @@ export function claimPage(config: ClaimPageConfig, testnet: boolean): string {
   <h2>You will be paid here</h2>
   <p><code id="address"></code></p>
   <p>Nothing to install. Payments from ${name} arrive in this account, and Discord sends you a receipt each time. You can close this page.</p>
+  <p>To see your balance or send your money on, sign in to <a href="/account">your Rolepay account</a> with the same passkey.</p>
   <p class="muted"><a id="explorer" href="#" target="_blank" rel="noreferrer">See the account on the explorer</a></p>
 </section>
 <p id="status" role="status" aria-live="polite"></p>

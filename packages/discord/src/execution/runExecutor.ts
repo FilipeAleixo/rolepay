@@ -26,6 +26,8 @@ export type RunExecutorDeps = {
   /** Where the review message is and whether receipts went out, shared with the recovery notifier. */
   notices: RunNotices
   network: NetworkName
+  /** The server's account page, linked from every receipt (where a payee sees and moves the money). */
+  accountUrl?: string | null
   now: () => Date
   sleep: (ms: number) => Promise<void>
   /** How many times to re-check a pending outcome before handing over to the recovery sweep. */

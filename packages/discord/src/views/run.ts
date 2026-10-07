@@ -68,8 +68,11 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
   return { embeds: [embed], components: rows(buttonsFor(run, ctx)), allowed_mentions: NO_PINGS }
 }
 
-/** The DM a payee gets once their line is paid. */
-export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; communityName: string | null }): Message {
+/**
+ * The DM a payee gets once their line is paid. `accountUrl` is the server's account page, where
+ * the payee signs in with their passkey to see the balance and send it on.
+ */
+export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; communityName: string | null; accountUrl?: string | null }): Message {
   const tx = run.paidTxHash
   const embed: Embed = {
     title: `You were paid ${money(line.amount, run.token)}`,
@@ -81,9 +84,13 @@ export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; 
       { name: 'To your account', value: shortAddress(line.address), inline: true },
       { name: 'Pay run', value: `${run.id}, line ${line.line}`, inline: true },
       ...(tx ? [{ name: 'Transaction', value: txUrl(ctx.network, tx) }] : []),
+      ...(ctx.accountUrl ? [{ name: 'Your money', value: `To see your balance or send it on, sign in with your passkey at ${ctx.accountUrl}` }] : []),
     ],
   }
-  const link: Button[] = tx ? [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'View transaction', url: txUrl(ctx.network, tx) }] : []
+  const link: Button[] = [
+    ...(tx ? [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'View transaction', url: txUrl(ctx.network, tx) } as const] : []),
+    ...(ctx.accountUrl ? [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Your account', url: ctx.accountUrl } as const] : []),
+  ]
   return { embeds: [embed], components: rows(link), allowed_mentions: NO_PINGS }
 }
 

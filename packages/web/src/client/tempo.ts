@@ -38,6 +38,24 @@ export async function revokeAccessKey(c: ChainConfig, root: Account.Account, key
   return receipt.transactionHash as string
 }
 
+/**
+ * A payee sends their own money on: a plain TIP-20 transfer from their passkey account, one passkey
+ * prompt. Sponsored when a sponsor is configured; otherwise its fee is paid in `c.feeToken` (the
+ * account page passes the token being sent, the one the payee holds).
+ */
+export async function sendToken(c: ChainConfig, from: Account.Account, token: string, to: string, amount: bigint) {
+  const receipt = await client(c, from).writeContractSync({
+    address: token as `0x${string}`,
+    abi: Abis.tip20,
+    functionName: 'transfer',
+    args: [to as `0x${string}`, amount],
+    throwOnReceiptRevert: true,
+    ...feeFields(c),
+  } as never)
+  if (receipt.status !== 'success') throw new Error(`the transfer ${receipt.transactionHash} reverted`)
+  return receipt.transactionHash as string
+}
+
 export async function balanceOf(c: ChainConfig, token: string, address: string): Promise<bigint> {
   return (await client(c).readContract({ address: token as `0x${string}`, abi: Abis.tip20, functionName: 'balanceOf', args: [address as `0x${string}`] })) as bigint
 }

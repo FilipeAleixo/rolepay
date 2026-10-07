@@ -6,6 +6,7 @@ import type { WebConfig } from './config.js'
 import { type DashboardDeps, dashboardRoutes } from './dashboard/index.js'
 import { DASHBOARD_STYLE } from './dashboard/views/layout.js'
 import type { Assets, PasskeySessions, RateLimiter } from './ports.js'
+import { accountRoutes } from './routes/account.js'
 import { claimRoutes } from './routes/claim.js'
 import { setupRoutes } from './routes/setup.js'
 import { STYLE } from './views/page.js'
@@ -130,6 +131,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
 
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
   app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))
+  app.route('/', accountRoutes({ config, testnet }))
   app.route('/', setupRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))
   if (deps.dashboard) app.route('/', dashboardRoutes({ ...deps.dashboard, rolepay: deps.rolepay, clock: deps.clock, config, testnet }))
   return app
