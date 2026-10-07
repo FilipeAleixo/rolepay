@@ -176,3 +176,96 @@ describe('FakePayoutChain (the chain double behind every service unit test)', ()
     expect(chain.blockNumber).toBeGreaterThan(blockNumber)
   })
 })
+
+describe('FakePayoutChain: swaps on the stablecoin DEX (lines paid in a preferred stablecoin)', () => {
+  const BETA = OTHER
+  const DEX = '0xdec0000000000000000000000000000000000000'
+  const THETA = '0x20c0000000000000000000000000000000000003'
+  let chain: FakePayoutChain
+  let key: { address: `0x${string}`; secret: string }
+  const lines = [
+    { to: A1 as `0x${string}`, amount: 5_000_000n, memo: encodeMemo('run_s', 1), swap: { token: BETA as `0x${string}`, maxIn: 5_050_000n } },
+    { to: A2 as `0x${string}`, amount: 2_000_000n, memo: encodeMemo('run_s', 2) },
+  ]
+  const sign = (transfers = lines) =>
+    chain.signBatch({ account: TREASURY, accessKeySecret: key.secret, token: TOKEN, transfers, validBefore: chain.time + 120, fee: { mode: 'sponsor' } })
+  const remaining = async (token: string) => (await chain.keyState({ account: TREASURY, accessKey: key.address, token: token as `0x${string}`, feeToken: null })).remaining
+
+  async function authorize(scopes: { address: string; selector: string }[], limits = [TOKEN, BETA]) {
+    const r = await chain.authorizeKey({
+      root: chain.rootSigner(TREASURY),
+      accessKey: key.address,
+      authorization: { expiry: chain.time + 3600, limits: limits.map((token) => ({ token: token as `0x${string}`, limit: 10_000_000n })), scopes: scopes as never },
+    })
+    expect(r.ok).toBe(true)
+  }
+  const ALL = [
+    { address: TOKEN, selector: 'transferWithMemo(address,uint256,bytes32)' },
+    { address: DEX, selector: 'swapExactAmountOut(address,address,uint128,uint128)' },
+    { address: BETA, selector: 'transferWithMemo(address,uint256,bytes32)' },
+  ]
+
+  beforeEach(async () => {
+    chain = new FakePayoutChain({ startTime: 1_700_000_000 })
+    chain.fund(TOKEN, TREASURY, 100_000_000n)
+    chain.setSwapRoute(TOKEN, BETA, { inPerOutBps: 9_960, liquidity: 50_000_000n })
+    key = await chain.newAccessKey()
+  })
+
+  it("quotes exact output at the route's rate, rounded up; no_route without a pair or past its liquidity", async () => {
+    expect(await chain.quoteSwap({ tokenIn: TOKEN, tokenOut: BETA, amountOut: 5_000_000n })).toEqual({ kind: 'quoted', amountIn: 4_980_000n })
+    expect(await chain.quoteSwap({ tokenIn: TOKEN, tokenOut: BETA, amountOut: 3n })).toEqual({ kind: 'quoted', amountIn: 3n })
+    expect(await chain.quoteSwap({ tokenIn: TOKEN, tokenOut: THETA, amountOut: 1n })).toMatchObject({ kind: 'no_route' })
+    expect(await chain.quoteSwap({ tokenIn: TOKEN, tokenOut: BETA, amountOut: 50_000_001n })).toMatchObject({ kind: 'no_route' })
+  })
+
+  it('lands the swap and the transfers atomically: each payee gets their token with its memo, the treasury pays the quote, each limit is charged what moved', async () => {
+    await authorize(ALL)
+    const signed = await sign()
+    if (!signed.ok) throw new Error(signed.error.detail)
+    const out = await chain.broadcast(signed.value.rawTx)
+    expect(out).toMatchObject({ kind: 'confirmed' })
+    expect(chain.balance(BETA, A1)).toBe(5_000_000n)
+    expect(chain.balance(TOKEN, A2)).toBe(2_000_000n)
+    expect(chain.balance(TOKEN, TREASURY)).toBe(100_000_000n - 2_000_000n - 4_980_000n)
+    expect(chain.balance(BETA, TREASURY)).toBe(0n)
+    expect(await remaining(TOKEN)).toBe(10_000_000n - 2_000_000n - 4_980_000n)
+    expect(await remaining(BETA)).toBe(5_000_000n)
+    const found = await chain.findMemoTransfers({ token: BETA, from: TREASURY, memos: [lines[0]?.memo as `0x${string}`], fromBlock: 0n })
+    expect(found).toEqual([expect.objectContaining({ token: BETA, to: A1, amount: 5_000_000n })])
+  })
+
+  it('refuses a key without the DEX swap or the preferred token\'s transferWithMemo, a swap over its maximum, and a route without liquidity', async () => {
+    await authorize(ALL.filter((s) => s.address !== DEX))
+    expect(await sign()).toMatchObject({ ok: false, error: { reason: 'call_not_allowed' } })
+    key = await chain.newAccessKey()
+    await authorize(ALL.filter((s) => s.address !== BETA))
+    expect(await sign()).toMatchObject({ ok: false, error: { reason: 'call_not_allowed' } })
+
+    key = await chain.newAccessKey()
+    await authorize(ALL)
+    const tight = [{ ...lines[0], swap: { token: BETA as `0x${string}`, maxIn: 4_979_999n } }] as typeof lines
+    expect(await sign(tight)).toMatchObject({ ok: false, error: { reason: 'swap_failed' } })
+    chain.setSwapRoute(TOKEN, BETA, null)
+    expect(await sign()).toMatchObject({ ok: false, error: { reason: 'swap_failed' } })
+  })
+
+  it("a price that moves past the maximum after signing reverts the whole batch: nobody is paid, no limit is charged", async () => {
+    await authorize(ALL)
+    const signed = await sign()
+    if (!signed.ok) throw new Error(signed.error.detail)
+    chain.setSwapRoute(TOKEN, BETA, { inPerOutBps: 10_200, liquidity: 50_000_000n })
+    expect(await chain.broadcast(signed.value.rawTx)).toMatchObject({ kind: 'reverted' })
+    expect(chain.balance(BETA, A1)).toBe(0n)
+    expect(chain.balance(TOKEN, A2)).toBe(0n)
+    expect(await remaining(TOKEN)).toBe(10_000_000n)
+  })
+
+  it("charges a swap's input to the input token's limit, and a preferred token's deliveries to its own: either one short refuses the batch", async () => {
+    await authorize(ALL, [TOKEN])
+    expect(await sign()).toMatchObject({ ok: false, error: { reason: 'spending_limit_exceeded' } })
+    key = await chain.newAccessKey()
+    await authorize(ALL, [BETA])
+    expect(await sign()).toMatchObject({ ok: false, error: { reason: 'spending_limit_exceeded' } })
+  })
+})

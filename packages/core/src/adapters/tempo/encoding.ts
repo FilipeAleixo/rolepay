@@ -1,17 +1,32 @@
 import { type Hex, type Log, encodeFunctionData, parseEventLogs } from 'viem'
 import { Abis } from 'viem/tempo'
+import { STABLECOIN_DEX_ADDRESS } from '../../constants/tempo.js'
+import { swapLegs } from '../../domain/delivery.js'
 import type { Address } from '../../domain/ids.js'
 import type { MemoTransfer } from '../../domain/reconcile.js'
 import type { BatchTransfer, ChainRejectReason } from '../../ports/payoutChain.js'
 
 export type Call = { to: Address; data: Hex }
 
-/** One `transferWithMemo` call per line (ported from the spike's batch builder). */
+/**
+ * The calls of one pay run's batch (ported from the spike's batch builder). First, for the lines paid
+ * in a preferred stablecoin, one exact-output swap per delivered token on the stablecoin DEX: buy
+ * exactly the lines' total of it, spending at most the sum of their maxima of `token`. The DEX has
+ * no swap to a recipient, so its output lands in the treasury. Then one `transferWithMemo` per line,
+ * in line order, each in the token it delivers and with its own memo: reconciliation finds every
+ * line by memo exactly as before. A run with no swapped line has no DEX call at all. One
+ * transaction: if any swap would spend more than its maximum, the whole batch reverts.
+ */
 export function buildBatchCalls(token: Address, transfers: BatchTransfer[]): Call[] {
-  return transfers.map((t) => ({
-    to: token,
+  const swaps = swapLegs(transfers).map((leg) => ({
+    to: STABLECOIN_DEX_ADDRESS as Address,
+    data: encodeFunctionData({ abi: Abis.stablecoinDex, functionName: 'swapExactAmountOut', args: [token, leg.token, leg.amountOut, leg.maxIn] }),
+  }))
+  const sends = transfers.map((t) => ({
+    to: t.swap?.token ?? token,
     data: encodeFunctionData({ abi: Abis.tip20, functionName: 'transferWithMemo', args: [t.to, t.amount, t.memo] }),
   }))
+  return [...swaps, ...sends]
 }
 
 const lc = <T extends string>(s: T) => s.toLowerCase() as T
@@ -41,6 +56,7 @@ export function classifyChainError(text: string): ChainRejectReason | null {
   if (/SpendingLimitExceeded/i.test(text)) return 'spending_limit_exceeded'
   if (/CallNotAllowed/i.test(text)) return 'call_not_allowed'
   if (/InsufficientBalance|insufficient (funds|balance)/i.test(text)) return 'insufficient_balance'
+  if (/MaxInputExceeded|InsufficientLiquidity/i.test(text)) return 'swap_failed'
   return null
 }
 

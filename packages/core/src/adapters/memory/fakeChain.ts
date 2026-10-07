@@ -1,4 +1,6 @@
+import { STABLECOIN_DEX_ADDRESS, SWAP_EXACT_AMOUNT_OUT_SIGNATURE, TRANSFER_WITH_MEMO_SIGNATURE } from '../../constants/tempo.js'
 import type { KeyAuthorization, KeyState } from '../../domain/community.js'
+import { type SwapQuote, swapLegs } from '../../domain/delivery.js'
 import { type Hex, bytesToHex, hexToBytes } from '../../domain/hex.js'
 import type { Address } from '../../domain/ids.js'
 import type { MemoTransfer } from '../../domain/reconcile.js'
@@ -14,16 +16,21 @@ import type {
 } from '../../ports/payoutChain.js'
 
 type Limit = { limit: bigint; remaining: bigint; period: number | null; periodEnd: number | null }
+type Scope = { address: string; selector: string; recipients: string[] | null }
 type KeyRecord = {
   address: Address
   secret: string
   account: Address | null
   expiry: number
   limits: Map<string, Limit>
-  recipients: string[] | null
-  scopeToken: string | null
+  /** The calls the key may make: a target, a selector (the function signature) and, for a transfer, an optional recipient allowlist. */
+  scopes: Scope[]
   revoked: boolean
 }
+/** A route on the fake stablecoin DEX: what one unit of output costs in input (basis points of par) and how much output it can deliver. */
+type Route = { inPerOutBps: number; liquidity: bigint }
+/** What a batch would do: what each token's limit is charged, and each swap's input and output. */
+type Plan = { charges: Map<string, bigint>; legs: { token: string; amountOut: bigint; amountIn: bigint }[] }
 type Payload = { n: number; account: Address; key: Address; token: Address; transfers: BatchTransfer[]; validBefore: number }
 type Landed = { txHash: Hex; blockNumber: bigint; status: 'success' | 'reverted'; transfers: MemoTransfer[] }
 
@@ -54,6 +61,7 @@ export class FakePayoutChain implements PayoutChain {
   private events: MemoTransfer[] = []
   private pending: Hex[] = []
   private counter = 0
+  private routes = new Map<string, Route>()
 
   constructor(opts: { startTime?: number } = {}) {
     this.time = opts.startTime ?? 1_700_000_000
@@ -69,6 +77,12 @@ export class FakePayoutChain implements PayoutChain {
   advance(seconds: number) {
     this.time += seconds
     this.blockNumber += BigInt(Math.max(1, seconds))
+  }
+  /** Sets (or with null removes) the DEX route from `tokenIn` to `tokenOut`. Without one, a swap has no route. */
+  setSwapRoute(tokenIn: string, tokenOut: string, route: Route | null) {
+    const key = `${lc(tokenIn)}>${lc(tokenOut)}`
+    if (route) this.routes.set(key, { ...route })
+    else this.routes.delete(key)
   }
   rootSigner(address: Address): RootSigner {
     return { address: lc(address) as Address, kind: 'fake', [FAKE_ROOT]: true } as RootSigner
@@ -93,7 +107,7 @@ export class FakePayoutChain implements PayoutChain {
     const n = ++this.counter
     const address = `0x${'ac'.repeat(10)}${n.toString(16).padStart(20, '0')}` as Address
     const secret = `fake-secret-${n}`
-    this.keys.set(address, { address, secret, account: null, expiry: 0, limits: new Map(), recipients: null, scopeToken: null, revoked: false })
+    this.keys.set(address, { address, secret, account: null, expiry: 0, limits: new Map(), scopes: [], revoked: false })
     return { address, secret }
   }
 
@@ -131,9 +145,7 @@ export class FakePayoutChain implements PayoutChain {
         { limit: l.limit, remaining: l.limit, period: l.period ?? null, periodEnd: l.period ? this.time + l.period : null },
       ]),
     )
-    const scope = a.scopes[0]
-    k.scopeToken = scope ? lc(scope.address) : null
-    k.recipients = scope?.recipients ? scope.recipients.map(lc) : null
+    k.scopes = a.scopes.map((s) => ({ address: lc(s.address), selector: s.selector, recipients: s.recipients ? s.recipients.map(lc) : null }))
     return ok({ txHash: this.nextHash(0xa0) })
   }
 
@@ -153,14 +165,15 @@ export class FakePayoutChain implements PayoutChain {
     fee: FeePayment
   }) {
     const k = [...this.keys.values()].find((x) => x.secret === input.accessKeySecret)
-    const refusal = this.check(k, input.account, input.token, input.transfers)
-    if (refusal) return err({ code: 'rejected' as const, reason: refusal, detail: `fake chain: ${refusal}` })
+    // Filling the tx simulates it: a batch that would revert is refused here, as the node does.
+    const plan = this.plan(k, input.account, input.token, input.transfers)
+    if ('refusal' in plan) return err({ code: 'rejected' as const, reason: plan.refusal, detail: `fake chain: ${plan.refusal}` })
     const payload: Payload = {
       n: ++this.counter,
       account: lc(input.account) as Address,
       key: (k as KeyRecord).address,
       token: lc(input.token) as Address,
-      transfers: input.transfers.map((t) => ({ ...t, to: lc(t.to) as Address })),
+      transfers: input.transfers.map((t) => ({ ...t, to: lc(t.to) as Address, ...(t.swap ? { swap: { token: lc(t.swap.token) as Address, maxIn: t.swap.maxIn } } : {}) })),
       validBefore: input.validBefore,
     }
     const rawTx = encodePayload(payload)
@@ -188,6 +201,11 @@ export class FakePayoutChain implements PayoutChain {
     const landed = this.land(payload)
     if (fault === 'land_then_lose_response') return { kind: 'unknown', detail: 'fake: landed, response lost' }
     return this.outcome(landed)
+  }
+
+  async quoteSwap(input: { tokenIn: Address; tokenOut: Address; amountOut: bigint }): Promise<SwapQuote> {
+    const amountIn = this.quote(input.tokenIn, input.tokenOut, input.amountOut)
+    return amountIn === null ? { kind: 'no_route', detail: 'fake DEX: InsufficientLiquidity' } : { kind: 'quoted', amountIn }
   }
 
   async lookupTx(txHash: Hex): Promise<TxLookup> {
@@ -226,18 +244,25 @@ export class FakePayoutChain implements PayoutChain {
     const txHash = hex32(0x7e, payload.n)
     const k = this.keys.get(payload.key) as KeyRecord
     this.blockNumber += 1n
-    const refusal = this.check(k, payload.account, payload.token, payload.transfers)
+    const plan = this.plan(k, payload.account, payload.token, payload.transfers)
     let landed: Landed
-    if (refusal) {
+    if ('refusal' in plan) {
       landed = { txHash, blockNumber: this.blockNumber, status: 'reverted', transfers: [] }
     } else {
-      const total = payload.transfers.reduce((s, t) => s + t.amount, 0n)
-      const limit = this.currentLimit(k, payload.token) as Limit
-      limit.remaining -= total
-      this.fund(payload.token, payload.account, -total)
-      const transfers = payload.transfers.map((t) => {
-        this.fund(payload.token, t.to, t.amount)
-        return { txHash, blockNumber: this.blockNumber, token: payload.token, from: payload.account, ...t }
+      for (const [token, amount] of plan.charges) (this.currentLimit(k, token) as Limit).remaining -= amount
+      // The swaps first: the payout token goes to the DEX, the bought token lands in the treasury.
+      for (const leg of plan.legs) {
+        this.fund(payload.token, payload.account, -leg.amountIn)
+        this.fund(payload.token, STABLECOIN_DEX_ADDRESS, leg.amountIn)
+        this.fund(leg.token, payload.account, leg.amountOut)
+        const route = this.routes.get(`${lc(payload.token)}>${leg.token}`) as Route
+        route.liquidity -= leg.amountOut
+      }
+      const transfers = payload.transfers.map(({ swap, ...t }) => {
+        const token = (swap ? lc(swap.token) : payload.token) as Address
+        this.fund(token, payload.account, -t.amount)
+        this.fund(token, t.to, t.amount)
+        return { txHash, blockNumber: this.blockNumber, token, from: payload.account, ...t }
       })
       this.events.push(...transfers)
       landed = { txHash, blockNumber: this.blockNumber, status: 'success', transfers }
@@ -262,16 +287,43 @@ export class FakePayoutChain implements PayoutChain {
     return l
   }
 
-  private check(k: KeyRecord | undefined, account: string, token: string, transfers: BatchTransfer[]): ChainRejectReason | null {
-    if (!k || k.account === null || k.account !== lc(account)) return 'key_not_authorized'
-    if (k.revoked) return 'key_revoked'
-    if (k.expiry <= this.time) return 'key_expired'
-    if (k.scopeToken !== lc(token)) return 'call_not_allowed'
-    if (k.recipients && transfers.some((t) => !k.recipients?.includes(lc(t.to)))) return 'call_not_allowed'
-    const total = transfers.reduce((s, t) => s + t.amount, 0n)
-    if ((this.currentLimit(k, token)?.remaining ?? 0n) < total) return 'spending_limit_exceeded'
-    if (this.balance(token, account) < total) return 'insufficient_balance'
-    return null
+  /** Input for exactly `amountOut` on the route right now (rounded up), or null with no route or not enough liquidity. */
+  private quote(tokenIn: string, tokenOut: string, amountOut: bigint): bigint | null {
+    const route = this.routes.get(`${lc(tokenIn)}>${lc(tokenOut)}`)
+    if (!route || route.liquidity < amountOut) return null
+    return (amountOut * BigInt(route.inPerOutBps) + 9_999n) / 10_000n
+  }
+
+  private allowed(k: KeyRecord, target: string, selector: string, recipient: string | null): boolean {
+    return k.scopes.some((s) => s.address === lc(target) && s.selector === selector && (recipient === null || s.recipients === null || s.recipients.includes(recipient)))
+  }
+
+  /**
+   * What the batch would do, or why the chain refuses it. As on Tempo: every call must be in the
+   * key's scope; a swap may not take more than its maximum; each token's limit is charged what
+   * leaves the treasury in it (transfers, and a swap's actual input in the token it sells).
+   */
+  private plan(k: KeyRecord | undefined, account: string, token: string, transfers: BatchTransfer[]): Plan | { refusal: ChainRejectReason } {
+    if (!k || k.account === null || k.account !== lc(account)) return { refusal: 'key_not_authorized' }
+    if (k.revoked) return { refusal: 'key_revoked' }
+    if (k.expiry <= this.time) return { refusal: 'key_expired' }
+    const legs: Plan['legs'] = []
+    for (const leg of swapLegs(transfers)) {
+      if (!this.allowed(k, STABLECOIN_DEX_ADDRESS, SWAP_EXACT_AMOUNT_OUT_SIGNATURE, null)) return { refusal: 'call_not_allowed' }
+      const amountIn = this.quote(token, leg.token, leg.amountOut)
+      if (amountIn === null || amountIn > leg.maxIn) return { refusal: 'swap_failed' }
+      legs.push({ token: lc(leg.token), amountOut: leg.amountOut, amountIn })
+    }
+    for (const t of transfers) if (!this.allowed(k, t.swap?.token ?? token, TRANSFER_WITH_MEMO_SIGNATURE, lc(t.to))) return { refusal: 'call_not_allowed' }
+    const charges = new Map<string, bigint>()
+    const charge = (t: string, amount: bigint) => charges.set(lc(t), (charges.get(lc(t)) ?? 0n) + amount)
+    for (const leg of legs) charge(token, leg.amountIn)
+    for (const t of transfers) charge(t.swap?.token ?? token, t.amount)
+    for (const [t, amount] of charges) if ((this.currentLimit(k, t)?.remaining ?? 0n) < amount) return { refusal: 'spending_limit_exceeded' }
+    // The payout token pays the plain lines and the swaps; what a swap buys covers its lines.
+    const payoutOut = transfers.filter((t) => !t.swap).reduce((s, t) => s + t.amount, 0n) + legs.reduce((s, l) => s + l.amountIn, 0n)
+    if (this.balance(token, account) < payoutOut) return { refusal: 'insufficient_balance' }
+    return { charges, legs }
   }
 
   private nextHash(prefix: number) {

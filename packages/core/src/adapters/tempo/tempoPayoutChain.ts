@@ -1,8 +1,9 @@
-import { type Account as ViemAccount, type Hex, type Log, type Transport, keccak256 } from 'viem'
+import { type Account as ViemAccount, BaseError, ContractFunctionRevertedError, type Hex, type Log, type Transport, keccak256 } from 'viem'
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts'
 import { Abis, Account, createClient, http, withRelay } from 'viem/tempo'
-import { NETWORKS, type NetworkName, VALID_BEFORE_SECONDS } from '../../constants/tempo.js'
+import { NETWORKS, type NetworkName, STABLECOIN_DEX_ADDRESS, VALID_BEFORE_SECONDS } from '../../constants/tempo.js'
 import type { KeyAuthorization, KeyState } from '../../domain/community.js'
+import type { SwapQuote } from '../../domain/delivery.js'
 import type { Address } from '../../domain/ids.js'
 import type { MemoTransfer } from '../../domain/reconcile.js'
 import { type Result, err, ok } from '../../domain/result.js'
@@ -164,6 +165,22 @@ export class TempoPayoutChain implements PayoutChain {
     } catch (e) {
       const s = errorSummary(e)
       return rejected(classifyChainError(s) ?? (/fetch failed|HTTP request failed|took too long/i.test(s) ? 'unavailable' : 'other'), s)
+    }
+  }
+
+  async quoteSwap(input: { tokenIn: Address; tokenOut: Address; amountOut: bigint }): Promise<SwapQuote> {
+    try {
+      const amountIn = await this.reader.readContract({
+        address: STABLECOIN_DEX_ADDRESS,
+        abi: Abis.stablecoinDex,
+        functionName: 'quoteSwapExactAmountOut',
+        args: [input.tokenIn, input.tokenOut, input.amountOut],
+      })
+      return { kind: 'quoted', amountIn: amountIn as bigint }
+    } catch (e) {
+      // The DEX reverting (no pair, InsufficientLiquidity) is an answer; an RPC failure is not.
+      if (e instanceof BaseError && e.walk((x) => x instanceof ContractFunctionRevertedError)) return { kind: 'no_route', detail: errorSummary(e) }
+      throw e
     }
   }
 

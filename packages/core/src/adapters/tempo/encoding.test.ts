@@ -1,5 +1,6 @@
-import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, type Log } from 'viem'
-import { Abis } from 'viem/tempo'
+import { decodeFunctionData, encodeAbiParameters, encodeFunctionData, encodeEventTopics, getAddress, type Log, toFunctionSelector } from 'viem'
+import { Abis, Addresses } from 'viem/tempo'
+import { STABLECOIN_DEX_ADDRESS, SWAP_EXACT_AMOUNT_OUT_SIGNATURE, TRANSFER_WITH_MEMO_SIGNATURE } from '../../constants/tempo.js'
 import { describe, expect, it } from 'vitest'
 import { encodeMemo } from '../../domain/memo.js'
 import { buildBatchCalls, classifyChainError, errorSummary, memoTransfersFromLogs } from './encoding.js'
@@ -23,6 +24,47 @@ describe('buildBatchCalls', () => {
       expect(d.functionName).toBe('transferWithMemo')
       expect(d.args).toEqual([transfers[i]?.to, transfers[i]?.amount, transfers[i]?.memo])
     })
+  })
+})
+
+describe('buildBatchCalls with lines paid in a preferred stablecoin', () => {
+  const BETA = '0x20c0000000000000000000000000000000000002'
+  const THETA = '0x20c0000000000000000000000000000000000003'
+  const A3 = '0x3333333333333333333333333333333333333333'
+  const transfers = [
+    { to: A1, amount: 5_000_000n, memo: encodeMemo('r2', 1), swap: { token: BETA, maxIn: 5_050_000n } },
+    { to: A2, amount: 2_000_000n, memo: encodeMemo('r2', 2) },
+    { to: A3, amount: 1_000_000n, memo: encodeMemo('r2', 3), swap: { token: BETA, maxIn: 1_010_000n } },
+    { to: A1, amount: 3_000_000n, memo: encodeMemo('r2', 4), swap: { token: THETA, maxIn: 3_030_000n } },
+  ] as const
+
+  it('the constants are the DEX viem knows and the exact-output swap it encodes', () => {
+    expect(STABLECOIN_DEX_ADDRESS).toBe(Addresses.stablecoinDex.toLowerCase())
+    const swap = Abis.stablecoinDex.find((x) => x.type === 'function' && x.name === 'swapExactAmountOut')
+    expect(toFunctionSelector(SWAP_EXACT_AMOUNT_OUT_SIGNATURE)).toBe(toFunctionSelector(swap as never))
+    expect(toFunctionSelector(TRANSFER_WITH_MEMO_SIGNATURE)).toBe('0x95777d59')
+  })
+
+  it('first one exact-output DEX swap per delivered token (the lines summed, at most their maxima summed), then one transferWithMemo per line in its own token, each with its memo', () => {
+    const calls = buildBatchCalls(TOKEN, [...transfers])
+    expect(calls).toHaveLength(2 + 4)
+    const decode = (i: number, abi: typeof Abis.stablecoinDex | typeof Abis.tip20) => decodeFunctionData({ abi, data: calls[i]?.data as `0x${string}` })
+    expect(calls[0]?.to).toBe(STABLECOIN_DEX_ADDRESS)
+    expect(decode(0, Abis.stablecoinDex)).toEqual({ functionName: 'swapExactAmountOut', args: [getAddress(TOKEN), getAddress(BETA), 6_000_000n, 6_060_000n] })
+    expect(calls[1]?.to).toBe(STABLECOIN_DEX_ADDRESS)
+    expect(decode(1, Abis.stablecoinDex)).toEqual({ functionName: 'swapExactAmountOut', args: [getAddress(TOKEN), getAddress(THETA), 3_000_000n, 3_030_000n] })
+    expect(calls.slice(2).map((c) => c.to)).toEqual([BETA, TOKEN, BETA, THETA])
+    transfers.forEach((t, i) => {
+      expect(decode(2 + i, Abis.tip20)).toEqual({ functionName: 'transferWithMemo', args: [t.to, t.amount, t.memo] })
+    })
+  })
+
+  it('a run with no swapped line encodes exactly as before: no DEX call at all', () => {
+    const plain = [{ to: A1 as `0x${string}`, amount: 1n, memo: encodeMemo('r3', 1) }]
+    expect(buildBatchCalls(TOKEN, plain)).toEqual([
+      { to: TOKEN, data: encodeFunctionData({ abi: Abis.tip20, functionName: 'transferWithMemo', args: [A1, 1n, encodeMemo('r3', 1)] }) },
+    ])
+    expect(buildBatchCalls(TOKEN, plain).some((c) => c.to === STABLECOIN_DEX_ADDRESS)).toBe(false)
   })
 })
 
@@ -56,6 +98,8 @@ describe('classifyChainError (definitive refusals vs ambiguous failures)', () =>
     ['CallNotAllowed', 'call_not_allowed'],
     ['AccountKeychainError(KeyNotFound)', 'key_not_authorized'],
     ['InsufficientBalance(1, 2)', 'insufficient_balance'],
+    ['execution reverted: Stablecoin DEX error: MaxInputExceeded(MaxInputExceeded)', 'swap_failed'],
+    ['Error: InsufficientLiquidity()', 'swap_failed'],
   ] as const)('%s -> %s', (text, reason) => {
     expect(classifyChainError(text)).toBe(reason)
   })
