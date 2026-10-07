@@ -57,6 +57,8 @@ export interface PayoutChain {
   /** A fresh access-key pair. The secret goes straight into the KeyVault. */
   newAccessKey(): Promise<{ address: Address; secret: string }>
   keyState(input: { account: Address; accessKey: Address; token: Address; feeToken: Address | null }): Promise<KeyState>
+  /** What `account` holds in `token` (micro-units), for display. Throws on an RPC failure. */
+  balanceOf(input: { token: Address; account: Address }): Promise<Micros>
   authorizeKey(input: { root: RootSigner; accessKey: Address; authorization: KeyAuthorization }): Promise<Result<{ txHash: Hex }, ChainRejection>>
   revokeKey(input: { root: RootSigner; accessKey: Address }): Promise<Result<{ txHash: Hex }, ChainRejection>>
   /**
