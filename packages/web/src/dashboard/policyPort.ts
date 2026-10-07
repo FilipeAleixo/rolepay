@@ -228,3 +228,40 @@ export interface AiUsagePort {
   /** What compiling each version of a policy cost, by version number; a version made without the model is absent. */
   compiles(input: { guildId: string; policyId: string }): Promise<Record<number, AiCallView>>
 }
+
+// ---- what was paid, week by week ---------------------------------------------------------
+
+/** One UTC week (Monday 00:00 to Monday 00:00) of paid runs. Money is bigint micro-units of the payout token. */
+export type PaidWeekView = {
+  /** Monday 00:00 UTC. */
+  start: Date
+  /** Sent by runs a policy made. */
+  policy: bigint
+  /** Sent by runs made by hand. */
+  manual: bigint
+  /** How many runs were paid. */
+  runs: number
+  /** The week in progress: what it shows is so far. */
+  partial: boolean
+}
+
+/** Paid runs only (a draft, a run waiting for approval, a failed or cancelled run sent nothing), summed per week. */
+export type PaidByWeekView = {
+  /** The payout token's address. */
+  token: string
+  /** Oldest first; the last one is the current week. */
+  weeks: PaidWeekView[]
+  total: bigint
+  policy: bigint
+  manual: bigint
+  runs: number
+}
+
+/**
+ * What was paid each week, runs a policy made apart from runs made by hand (which runs a policy
+ * made is policy knowledge, so it comes through the seam). Absent: the Overview leaves the chart out.
+ */
+export interface PayoutsPort {
+  /** The last 12 UTC weeks, the current one last; null for a community Rolepay does not know. */
+  paidByWeek(input: { guildId: string }): Promise<PaidByWeekView | null>
+}

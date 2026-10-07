@@ -5,7 +5,7 @@ import { AUDIT_EVENT_TYPES, type AuditEvent, type AuditEventType, createRolepay,
 import { FakeActivityReader, FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories, unclearCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { scriptedProposer } from '../test/coreBackend.js'
-import { aiUsagePortFromCore, auditPortFromCore, auditSummary, policyPortFromCore, toCoreSchedule, toPortSchedule } from './policySeam.js'
+import { aiUsagePortFromCore, auditPortFromCore, auditSummary, payoutsPortFromCore, policyPortFromCore, toCoreSchedule, toPortSchedule } from './policySeam.js'
 
 const GUILD = '1094309218049937418'
 const ROLE = '400000000000000001'
@@ -276,5 +276,50 @@ describe('aiUsagePortFromCore: the AI spend, read from the rows core writes', ()
     expect(await ai.proposals({ guildId: GUILD, limit: 10 })).toEqual([{ ...call, mode: 'messages', actorId: TREASURER, outcome: 'proposed', runId: made.value.run.id }])
     expect(await ai.compiles({ guildId: GUILD, policyId })).toEqual({ 1: call, 2: call })
     expect(await ai.compiles({ guildId: GUILD, policyId: 'pol_unknown' })).toEqual({})
+  })
+})
+
+describe('payoutsPortFromCore: what was paid each week, from the runs core paid', () => {
+  it('the last 12 UTC weeks, a policy run apart from a run made by hand, paid runs only; null for an unknown community', async () => {
+    const w = await world()
+    const ALICE = '200000000000000011'
+    const must = <T>(r: { ok: true; value: T } | { ok: false; error: { code: string } }): T => {
+      if (!r.ok) throw new Error(r.error.code)
+      return r.value
+    }
+    // Alice is a Mod who answered three questions in #help, registered, and the treasury has a key.
+    const activity = w.activity as FakeActivityReader
+    activity.setMember(ALICE, { roleIds: ['400000000000000002'], joinedAt: null })
+    for (let i = 0; i < 3; i++) {
+      activity.addMessages({ id: String(810000000000000200n + BigInt(i)), channelId: '700000000000000002', authorId: ALICE, authorIsBot: false, content: '', mentionIds: [], at: new Date(w.clock.now().getTime() - (i + 1) * 60_000), replyTo: { messageId: '810000000000000000', authorId: '200000000000000090' } })
+    }
+    const link = must(await w.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: ALICE }))
+    must(await w.rolepay.payees.register({ token: link.token, address: '0x1111111111111111111111111111111111111111' }))
+    must(await w.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 30 * 86_400, expiresAt: Math.floor(w.clock.now().getTime() / 1000) + 60 * 86_400 }))
+    must(await w.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: w.chain.rootSigner(TREASURY) }))
+    w.chain.fund(TOKEN, TREASURY, usd('1000'))
+    const pay = async (runId: string) => {
+      must(await w.rolepay.payRuns.approve({ guildId: GUILD, runId, actor: TREASURER, actorCanApprove: true }))
+      expect(must(await w.rolepay.payRuns.execute({ guildId: GUILD, runId })).status).toBe('paid')
+    }
+    // A policy's run (1 per answer: 3 AlphaUSD), and a run made by hand (5), both paid; a third waits for approval.
+    const policy = must(await w.rolepay.policies.create({ ...asTreasurer, name: 'Help desk', instruction: RULE, schedule: toCoreSchedule(MONDAY) }))
+    must(await w.rolepay.policies.approve({ ...asTreasurer, policyId: policy.id, version: 1 }))
+    const made = must(await w.rolepay.scheduler.runNow({ ...asTreasurer, policyId: policy.id }))
+    if (!made.run) throw new Error(`no run: ${made.policyRun.status}`)
+    await pay(made.run.id)
+    const byHand = must(await w.rolepay.payRuns.create({ guildId: GUILD, createdBy: TREASURER, lines: [{ discordUserId: ALICE, amount: usd('5') }] }))
+    must(await w.rolepay.payRuns.submit({ guildId: GUILD, runId: byHand.id, actor: TREASURER }))
+    await pay(byHand.id)
+    const waiting = must(await w.rolepay.payRuns.create({ guildId: GUILD, createdBy: TREASURER, lines: [{ discordUserId: ALICE, amount: usd('7') }] }))
+    must(await w.rolepay.payRuns.submit({ guildId: GUILD, runId: waiting.id, actor: TREASURER }))
+
+    const port = payoutsPortFromCore(w.rolepay)
+    const view = await port.paidByWeek({ guildId: GUILD })
+    expect(view).toMatchObject({ token: TOKEN, total: usd('8'), policy: usd('3'), manual: usd('5'), runs: 2 })
+    expect(view?.weeks).toHaveLength(12)
+    expect(view?.weeks[11]).toEqual({ start: new Date('2026-10-05T00:00:00Z'), policy: usd('3'), manual: usd('5'), runs: 2, partial: true })
+    expect(view?.weeks[0]?.start).toEqual(new Date('2026-07-20T00:00:00Z'))
+    expect(await port.paidByWeek({ guildId: '1094309218049937499' })).toBeNull()
   })
 })

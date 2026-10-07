@@ -30,6 +30,7 @@ import type {
   AiUsagePort,
   AuditEventView,
   AuditPort,
+  PayoutsPort,
   PolicyActor,
   PolicyDetail,
   PolicyError,
@@ -515,6 +516,23 @@ export function aiUsagePortFromCore(rolepay: Rolepay): AiUsagePort {
         if (u.policyVersion !== null && !(u.policyVersion in byVersion)) byVersion[u.policyVersion] = callOf(u)
       }
       return byVersion
+    },
+  }
+}
+
+// ---- what was paid, week by week -----------------------------------------------------------
+
+/**
+ * The dashboard's PayoutsPort over `rolepay.payRuns.paidByWeek`: the last 12 UTC weeks of paid
+ * runs, runs a policy made apart from runs made by hand, in bigint micro-units of the payout token.
+ */
+export function payoutsPortFromCore(rolepay: Rolepay): PayoutsPort {
+  return {
+    async paidByWeek({ guildId }) {
+      const r = await rolepay.payRuns.paidByWeek({ guildId, weeks: 12 })
+      if (!r.ok) return null
+      const { token, weeks, total, policy, manual, runs } = r.value
+      return { token, weeks: weeks.map((w) => ({ start: w.start, policy: w.policy, manual: w.manual, runs: w.runs, partial: w.partial })), total, policy, manual, runs }
     },
   }
 }

@@ -8,6 +8,7 @@ import type { DiscordIdentity, DiscordOAuth, GuildMember, GuildMembers, OAuthErr
 import type { Assets, PasskeySession, PasskeySessions } from '../ports.js'
 
 export { InMemoryAiUsage } from './inMemoryAiUsage.js'
+export { InMemoryPayouts } from './inMemoryPayouts.js'
 export { InMemoryPolicies } from './inMemoryPolicies.js'
 
 const COOKIE = 'fake_passkey'

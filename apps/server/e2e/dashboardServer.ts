@@ -12,7 +12,7 @@ import { FakeDiscordRest, wireMessage } from '@rolepay/discord/testing'
 import { FakeDiscordOAuth, FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
 import { composeServer } from '../src/compose.js'
 import { parseServerConfig } from '../src/config.js'
-import { auditPortFromCore, policyPortFromCore } from '../src/policySeam.js'
+import { auditPortFromCore, payoutsPortFromCore, policyPortFromCore } from '../src/policySeam.js'
 
 export const GUILD = '1094309218049937418'
 export const ROLE = '400000000000000001'
@@ -117,7 +117,7 @@ export async function startDashboardServer(port: number) {
     web: {
       sessions: new FakePasskeySessions(),
       assets: staticAssets({}),
-      dashboard: { oauth, policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay) },
+      dashboard: { oauth, policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay), payouts: payoutsPortFromCore(rolepay) },
     },
     log: () => {},
   })
