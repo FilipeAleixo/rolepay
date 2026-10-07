@@ -61,6 +61,17 @@ export const defaultRateLimits = () => ({
 })
 
 /**
+ * The budget for junk on `POST /discord/interactions`: requests that FAIL the Ed25519 signature
+ * check, per client, a burst of 10 then one every 5 seconds. A request that passes the check never
+ * takes from it, because Discord sends every server's interactions from the same few addresses, and
+ * there is no overall budget, which junk from many addresses could spend for everyone. A client
+ * over its budget is answered 429 before its body is read or any signature checked.
+ */
+export const defaultInteractionLimit = () => new TokenBucketLimiter({ capacity: 10, refillPerSecond: 0.2 })
+/** Seconds until a client over the interaction budget has a request again (one token at 0.2 a second). */
+const INTERACTION_RETRY_AFTER = '5'
+
+/**
  * The dashboard's policy port, with each successful veto announced in Discord: the run's message
  * (posted with "pays at ... unless vetoed" and a Veto button) turns into "Vetoed by". A run that
  * was not made by a core policy (another port) is left alone.
@@ -177,11 +188,22 @@ export function composeServer(deps: ServerDeps) {
   // no Content-Length, so one request cannot exhaust a 512 MB machine.
   app.use(bodyLimit({ maxSize: MAX_BODY_BYTES, onError: (c) => c.json({ ok: false, error: { code: 'body_too_large' } }, 413) }))
   app.get('/health', (c) => c.json({ ok: true, network: config.core.network, jobsInFlight: queue.size }))
-  app.post('/discord/interactions', (c) => interactions(c.req.raw))
   // Behind Fly the client is Fly-Client-IP, which Fly's proxy sets (ROLEPAY_CLIENT_IP_HEADER);
-  // otherwise the web layer takes the last X-Forwarded-For hop (the one the tunnel appended).
+  // otherwise the last X-Forwarded-For hop (the one the tunnel appended), as the web layer takes it.
   const header = config.http.clientIpHeader
-  const clientKey = header ? { clientKey: (req: Request) => req.headers.get(header)?.trim() || 'direct' } : {}
+  const clientIp = (req: Request) => (header ? req.headers.get(header) : req.headers.get('x-forwarded-for')?.split(',').at(-1))?.trim() || null
+  const interactionLimit = defaultInteractionLimit()
+  app.post('/discord/interactions', async (c) => {
+    // A request with no client address (no proxy in front) is never limited: all such requests
+    // would share one budget, and junk could then shut Discord out with it.
+    const client = clientIp(c.req.raw)
+    if (client && !(await interactionLimit.peek(client))) return c.text('too many requests with an invalid signature', 429, { 'retry-after': INTERACTION_RETRY_AFTER })
+    const res = await interactions(c.req.raw)
+    // 401 is the handler's answer to a failed signature check, and only to that: only junk takes from the budget.
+    if (client && res.status === 401) await interactionLimit.take(client)
+    return res
+  })
+  const clientKey = header ? { clientKey: (req: Request) => clientIp(req) ?? 'direct' } : {}
   const rateLimits = { ...(deps.web.rateLimits ?? defaultRateLimits()), ...clientKey }
   const { dashboard: given, ...web } = deps.web
   // A veto on the dashboard updates the run's message in Discord too, as the Veto button does there.

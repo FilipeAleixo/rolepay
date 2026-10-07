@@ -112,5 +112,8 @@ export async function testServer(
       body: JSON.stringify(body),
     })
 
-  return { ...server, config, clock, chain, rolepay, kv, rest, proposer, logs, interact, browserPost }
+  /** Discord's signature over `text` (the timestamp, then the body). */
+  const sign = (text: string) => signer.sign(text)
+
+  return { ...server, config, clock, chain, rolepay, kv, rest, proposer, logs, interact, browserPost, sign }
 }

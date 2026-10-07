@@ -31,6 +31,13 @@ export class TokenBucketLimiter implements RateLimiter {
     return allowed
   }
 
+  /** Whether `take` would allow a request from `key` now, without taking one or keeping anything for an unknown key. */
+  async peek(key: string): Promise<boolean> {
+    const b = this.buckets.get(key)
+    if (!b) return this.opts.capacity >= 1
+    return Math.min(this.opts.capacity, b.tokens + ((this.now() - b.at) / 1000) * this.opts.refillPerSecond) >= 1
+  }
+
   /** A bucket that has refilled says nothing a fresh one would not: drop it. */
   private forgetFull(now: number) {
     for (const [key, b] of this.buckets) {

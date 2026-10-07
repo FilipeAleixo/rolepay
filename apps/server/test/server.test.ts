@@ -55,6 +55,69 @@ describe('server routes', () => {
     expect((await post('203.0.113.8', '198.51.100.0')).status).not.toBe(429)
   })
 
+  describe('POST /discord/interactions: junk is limited per client, Discord never is', () => {
+    const ping = (n: number) => ({ id: String(800000000000100000n + BigInt(n)), application_id: '500000000000000001', type: 1, token: 't', version: 1 })
+    /** A PING from a client (as the proxy in front reports it), signed as Discord signs, or with a well-formed forged signature. */
+    const from = async (s: Awaited<ReturnType<typeof testServer>>, client: Record<string, string>, n: number, signed: boolean) => {
+      const body = JSON.stringify(ping(n))
+      const timestamp = String(Math.floor(Date.now() / 1000))
+      const signature = signed ? await s.sign(timestamp + body) : 'ab'.repeat(64)
+      const headers = { 'content-type': 'application/json', 'x-signature-timestamp': timestamp, 'x-signature-ed25519': signature, ...client }
+      return s.app.request('/discord/interactions', { method: 'POST', body, headers })
+    }
+
+    it('never limits a request that passes the signature check, even in bulk from one client', async () => {
+      const s = await testServer()
+      const discord = { 'x-forwarded-for': '203.0.113.7' }
+      const statuses = []
+      for (let i = 0; i < 100; i++) statuses.push((await from(s, discord, i, true)).status)
+      expect(new Set(statuses)).toEqual(new Set([200]))
+      // And they took nothing from that client's budget: it still has all 10 failed checks.
+      const failed = []
+      for (let i = 0; i < 10; i++) failed.push((await from(s, discord, 1000 + i, false)).status)
+      expect(new Set(failed)).toEqual(new Set([401]))
+    })
+
+    it('after 10 failed signature checks from one client, answers it 429 without checking a signature; other clients are unaffected', async () => {
+      const s = await testServer()
+      const junk = { 'x-forwarded-for': '203.0.113.7' }
+      const statuses = []
+      for (let i = 0; i < 10; i++) statuses.push((await from(s, junk, i, false)).status)
+      expect(new Set(statuses)).toEqual(new Set([401]))
+
+      const verify = vi.spyOn(crypto.subtle, 'verify')
+      try {
+        const limited = await from(s, junk, 10, false)
+        expect(limited.status).toBe(429)
+        expect(limited.headers.get('retry-after')).toBe('5')
+        expect(verify).not.toHaveBeenCalled() // no Ed25519 work for a client over its budget
+      } finally {
+        verify.mockRestore()
+      }
+
+      // Other clients, junk or Discord, are answered as usual.
+      expect((await from(s, { 'x-forwarded-for': '203.0.113.8' }, 11, false)).status).toBe(401)
+      expect((await from(s, { 'x-forwarded-for': '203.0.113.9' }, 12, true)).status).toBe(200)
+    })
+
+    it('behind Fly, the client is Fly-Client-IP: a forged X-Forwarded-For buys no fresh budget', async () => {
+      const s = await testServer({ env: { ROLEPAY_CLIENT_IP_HEADER: 'Fly-Client-IP' } })
+      const statuses = []
+      for (let i = 0; i < 11; i++) statuses.push((await from(s, { 'fly-client-ip': '203.0.113.7', 'x-forwarded-for': `198.51.100.${i}` }, i, false)).status)
+      expect(statuses.slice(0, 10).every((st) => st === 401)).toBe(true)
+      expect(statuses[10]).toBe(429)
+      expect((await from(s, { 'fly-client-ip': '203.0.113.8', 'x-forwarded-for': '198.51.100.0' }, 20, true)).status).toBe(200)
+    })
+
+    it('a request with no client address (no proxy in front) is never limited: such requests would all share one budget, and junk could shut Discord out with it', async () => {
+      const s = await testServer()
+      const statuses = []
+      for (let i = 0; i < 20; i++) statuses.push((await from(s, {}, i, false)).status)
+      expect(new Set(statuses)).toEqual(new Set([401]))
+      expect((await from(s, {}, 20, true)).status).toBe(200)
+    })
+  })
+
   it('a replayed signed interaction (inside the 5-minute window) never mints a second claim link', async () => {
     const s = await withLink()
     const link = slashCommand({ guildId: GUILD, channelId: '700000000000000001' }, 'payee', 'link', {}, { userId: ALICE })
