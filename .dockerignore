@@ -29,3 +29,6 @@ README.md
 Dockerfile
 .dockerignore
 fly.*.toml
+
+# The hackathon films (Remotion) are not part of the app.
+video
