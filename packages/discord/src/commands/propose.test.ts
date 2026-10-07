@@ -49,7 +49,8 @@ describe('Apps > Propose pay run (the message command)', () => {
     expect(body(opened)).toMatchObject({ type: 9, data: { custom_id: `proposal-modal:instruct:${WINNERS.id}`, title: 'Propose pay run' } })
 
     const submitted = await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each, the indexer one 200' }, treasurer, { token: 'tok-instruct' }))
-    expect(body(submitted)).toEqual({ type: 5, data: { flags: 64 } })
+    // At once, only for the caller: what is happening; the proposal then replaces it.
+    expect(body(submitted)).toEqual({ type: 4, data: { content: 'Reading the message and drafting a proposal…', flags: 64 } })
     const shown = text(a.rest.lastEdit('tok-instruct'))
     expect(shown).toContain('Pay run proposal')
     expect(shown).toContain(`<@${ALICE}>  50 AlphaUSD · bug in the claim page · [source](https://discord.com/channels/${GUILD}/${CHANNEL}/${WINNERS.id})`)
@@ -116,7 +117,7 @@ describe('/rolepay propose', () => {
     const a = await ready()
     a.rest.addChannelMessages(WINNERS, ATTACK)
     const d = await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: '50 each', source: CHANNEL, since: '24h' }, treasurer, 'tok-p'))
-    expect(body(d)).toEqual({ type: 5, data: { flags: 64 } })
+    expect(body(d)).toEqual({ type: 4, data: { content: 'Reading the channel and drafting a proposal…', flags: 64 } })
     const shown = text(a.rest.lastEdit('tok-p'))
     expect(shown).toContain('150 AlphaUSD for 3 people')
     expect(shown).toContain('Ignored instructions in messages')
@@ -136,7 +137,8 @@ describe('/rolepay propose', () => {
     a.rest.addChannelMessages(q, ...Array.from({ length: 12 }, (_, i) => wireMessage({ channelId: HELP, authorId: ALICE, at: ago(500 - i), replyTo: { id: q.id, authorId: CAROL } })))
     a.proposer.onCriteria = () =>
       emptyCriteria({ amount: { kind: 'flat', amount: '20', per: '', cap: '', total: '', splitBy: '' } }, { hasRole: ['R1'], activity: [{ metric: 'replies', channels: ['C1'], since: '2026-10-01', until: '', min: 10 }] })
-    await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'pay 20 to every Mod who answered at least 10 messages in #help this month' }, treasurer, 'tok-c'))
+    const d = await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'pay 20 to every Mod who answered at least 10 messages in #help this month' }, treasurer, 'tok-c'))
+    expect(body(d)).toEqual({ type: 4, data: { content: 'Drafting a proposal…', flags: 64 } })
     const shown = text(a.rest.lastEdit('tok-c'))
     expect(shown).toContain(`**Who:** Registered payees who have <@&${MODS_ROLE}> and who replied to other people at least 10 times in <#${HELP}> since <t:1790812800:D>.`)
     expect(shown).toContain('**Amount:** 20 AlphaUSD each.')

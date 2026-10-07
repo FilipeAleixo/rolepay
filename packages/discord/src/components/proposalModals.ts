@@ -3,7 +3,7 @@ import type { ModalHandler } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'
 import { requireProposer } from '../commands/guards.js'
 import { explainProposalError } from '../views/errors.js'
-import { proposalMessage } from '../views/proposal.js'
+import { DRAFTING, proposalMessage } from '../views/proposal.js'
 
 /**
  * The instruction for a "Propose pay run" message command. The target message was kept when the
@@ -20,6 +20,7 @@ export const instructionModalSubmit: ModalHandler = async ({ id: messageId, fiel
   return {
     kind: 'defer',
     ephemeral: true,
+    placeholder: DRAFTING.message,
     work: async (): Promise<DeferredResult> => {
       const proposed = await rolepay.proposals.proposeFromMessages({
         guildId: ctx.guildId,

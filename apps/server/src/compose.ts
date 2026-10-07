@@ -96,6 +96,8 @@ export function composeServer(deps: ServerDeps) {
     },
     waitUntil,
     interactionLog: new KvInteractionLog(deps.kv),
+    // One line per request: kind, command or button name, ms until the response, its type, ok (never options or text).
+    onResponse: (timing) => log('interaction', timing),
   })
 
   const notifyRecovered = createRecoveryNotifier({

@@ -11,11 +11,11 @@ import { type ProposalAction, type ProposalModal, type RunAction, decodeCustomId
 import { createProposalRunButton, discardProposalButton, editProposalButton } from '../components/proposalButtons.js'
 import { editModalSubmit, instructionModalSubmit } from '../components/proposalModals.js'
 import { approveButton, cancelButton, retryButton } from '../components/runButtons.js'
-import type { Dispatch } from '../http/handler.js'
+import type { Dispatch, InteractionLabel } from '../http/handler.js'
 import type { DiscordAppDeps } from './deps.js'
 import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext, MessageCommandHandler, ModalHandler, ProposalButtonHandler } from './handlers.js'
 import { type ParsedInteraction, parseInteraction } from './interaction.js'
-import { type Outcome, ephemeralReply, renderOutcome } from './outcome.js'
+import { type Outcome, ephemeralReply, renderLate, renderOutcome } from './outcome.js'
 
 /** `${command} ${subcommand}` -> handler. Kept in step with COMMAND_DEFINITIONS by a test. */
 const COMMANDS: Record<string, CommandHandler> = {
@@ -40,26 +40,68 @@ export const ROUTED_COMMANDS = Object.keys(COMMANDS)
 export const ROUTED_MESSAGE_COMMANDS = Object.keys(MESSAGE_COMMANDS)
 
 const GENERIC_FAILURE = 'Something went wrong on our side. Nothing was paid by this action; try again in a moment.'
+const NO_CHOICES: Outcome = { kind: 'choices', choices: [] }
+
+/**
+ * Discord shows "This interaction failed" when the first answer takes more than 3 seconds. A handler
+ * not done by this deadline (a slow chain or Discord read, the model, a cold path) is acknowledged
+ * with a deferred response, and its answer is delivered by an edit or a follow-up when it is ready.
+ */
+export const ACK_DEADLINE_MS = 1500
 
 /**
  * The interaction router: parse, route to a handler, render its outcome. Handlers are
  * thin: they parse input, check permissions, call one core service and return a view.
  */
-export function createDispatcher(deps: DiscordAppDeps): Dispatch {
+export function createDispatcher(deps: DiscordAppDeps, opts: { ackDeadlineMs?: number } = {}): Dispatch {
+  const deadlineMs = opts.ackDeadlineMs ?? ACK_DEADLINE_MS
   return async (raw) => {
     const parsed = parseInteraction(raw)
     if (!parsed.ok) return { kind: 'invalid', reason: parsed.error.detail }
     const interaction = parsed.value
-    if (interaction.kind === 'ping') return { kind: 'respond', body: { type: ResponseType.Pong } }
+    if (interaction.kind === 'ping') return { kind: 'respond', body: { type: ResponseType.Pong }, label: { kind: 'ping', name: '' } }
 
-    let outcome: Outcome
-    try {
-      outcome = await route(interaction, deps)
-    } catch (error) {
+    let failed = false
+    const pending = route(interaction, deps).catch((error): Outcome => {
       deps.onError?.(error)
-      outcome = interaction.kind === 'autocomplete' ? { kind: 'choices', choices: [] } : ephemeralReply(GENERIC_FAILURE)
-    }
-    return renderOutcome(outcome, interaction.ctx, deps.rest, deps.onError)
+      failed = true
+      return interaction.kind === 'autocomplete' ? NO_CHOICES : ephemeralReply(GENERIC_FAILURE)
+    })
+    const label = labelOf(interaction)
+    const outcome = await within(pending, deadlineMs)
+    if (outcome) return { ...renderOutcome(outcome, interaction.ctx, deps.rest, deps.onError), label, failed }
+    // Too slow for Discord's 3 seconds: acknowledge now, deliver the answer when it is ready.
+    if (interaction.kind === 'autocomplete') return { ...renderOutcome(NO_CHOICES, interaction.ctx, deps.rest), label, late: true }
+    const ack = interaction.kind === 'component' || (interaction.kind === 'modal' && interaction.messageId) ? 'update' : 'reply'
+    return { ...renderLate(pending, ack, interaction.ctx, deps.rest, deps.onError), label, late: true }
+  }
+}
+
+/** The value if it settles within `ms`, else null. The timer never outlives the race. */
+async function within<T>(work: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const deadline = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms)
+  })
+  try {
+    return await Promise.race([work, deadline])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** For the log: the command, button or form name, never its options, IDs or text. */
+function labelOf(i: Exclude<ParsedInteraction, { kind: 'ping' }>): InteractionLabel {
+  switch (i.kind) {
+    case 'command':
+    case 'autocomplete':
+      return { kind: i.kind, name: i.sub ? `${i.command} ${i.sub}` : i.command }
+    case 'message_command':
+      return { kind: i.kind, name: i.command }
+    case 'component':
+    case 'modal':
+      // `rolepay:approve:<runId>` -> `rolepay:approve`
+      return { kind: i.kind, name: i.customId.split(':').slice(0, 2).join(':') }
   }
 }
 

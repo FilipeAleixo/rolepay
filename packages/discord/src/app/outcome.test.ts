@@ -30,6 +30,12 @@ describe('renderOutcome', () => {
     expect(rest.lastEdit('tok')).toEqual({ content: 'done' })
   })
 
+  it('a deferral with a placeholder says at once what is happening, then edits it into the answer', async () => {
+    const { d, rest } = await render({ kind: 'defer', ephemeral: true, placeholder: 'Drafting a proposal…', work: async () => ({ ok: true, message: { content: 'done' } }) })
+    expect(d.body).toEqual({ type: 4, data: { content: 'Drafting a proposal…', flags: 64 } })
+    expect(rest.lastEdit('tok')).toEqual({ content: 'done' })
+  })
+
   it('a public deferral that fails removes the placeholder and tells only the caller', async () => {
     const { d, rest } = await render({ kind: 'defer', ephemeral: false, work: async () => ({ ok: false, message: { content: 'nobody to pay' } }) })
     expect(d.body).toEqual({ type: 5, data: {} })

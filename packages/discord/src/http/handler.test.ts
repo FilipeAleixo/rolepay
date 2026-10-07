@@ -1,19 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import { MemoryInteractionLog } from '../testing/index.js'
 import { createTestSigner } from '../testing/signer.js'
-import { type Dispatch, createInteractionsHandler } from './handler.js'
+import { type Dispatch, type InteractionTiming, createInteractionsHandler } from './handler.js'
 import { createSignatureVerifier } from './verify.js'
 
 const URL = 'https://rolepay.test/discord/interactions'
 
-async function setup(dispatch: Dispatch) {
+async function setup(dispatch: Dispatch, opts: { now?: () => number } = {}) {
   const signer = await createTestSigner()
   const background: Promise<unknown>[] = []
+  const timings: InteractionTiming[] = []
   const handler = createInteractionsHandler({
     verify: createSignatureVerifier(signer.publicKeyHex),
     dispatch,
     waitUntil: (p) => background.push(p),
     seen: new MemoryInteractionLog(),
+    onResponse: (t) => timings.push(t),
+    ...(opts.now ? { now: opts.now } : {}),
   })
   const post = async (payload: unknown, opts: { sign?: boolean; raw?: string; timestamp?: string } = {}) => {
     const body = opts.raw ?? JSON.stringify(payload)
@@ -22,7 +25,7 @@ async function setup(dispatch: Dispatch) {
     if (opts.sign !== false) headers['x-signature-ed25519'] = await signer.sign(timestamp + body)
     return handler(new Request(URL, { method: 'POST', headers, body }))
   }
-  return { post, background }
+  return { post, background, timings }
 }
 
 describe('createInteractionsHandler', () => {
@@ -116,5 +119,38 @@ describe('createInteractionsHandler', () => {
     expect(res.status).toBe(500)
     expect(await res.text()).not.toContain('secret')
     expect(reported).toHaveLength(1)
+  })
+
+  it('logs one line per request: kind, name, milliseconds until the response, its type and whether it went well', async () => {
+    let clock = 1000
+    const { post, timings } = await setup(
+      async () => {
+        clock += 42 // the handler's work
+        return { kind: 'respond', body: { type: 7, data: { content: 'Approved, paying: secret text' } }, label: { kind: 'component', name: 'rolepay:approve' } }
+      },
+      { now: () => clock },
+    )
+    await post({ id: '900000000000000010', type: 3 })
+    expect(timings).toEqual([{ kind: 'component', name: 'rolepay:approve', ms: 42, status: 200, responseType: 7, ok: true, late: false }])
+    expect(JSON.stringify(timings)).not.toContain('secret')
+  })
+
+  it('logs a late acknowledgement and a failed handler as such', async () => {
+    const late = await setup(async () => ({ kind: 'respond', body: { type: 6 }, label: { kind: 'component', name: 'rolepay:cancel' }, late: true }))
+    await late.post({ type: 3 })
+    expect(late.timings[0]).toMatchObject({ name: 'rolepay:cancel', responseType: 6, ok: true, late: true })
+    const failed = await setup(async () => ({ kind: 'respond', body: { type: 4 }, label: { kind: 'command', name: 'payee link' }, failed: true }))
+    await failed.post({ type: 2 })
+    expect(failed.timings[0]).toMatchObject({ name: 'payee link', responseType: 4, ok: false })
+  })
+
+  it('logs refused requests too: a bad signature, a shape it cannot read', async () => {
+    const { post, timings } = await setup(async () => ({ kind: 'invalid', reason: 'unknown shape' }))
+    await post({ type: 1 }, { sign: false })
+    await post({ type: 99 })
+    expect(timings.map((t) => [t.kind, t.status, t.responseType, t.ok])).toEqual([
+      ['unverified', 401, null, false],
+      ['invalid', 400, null, false],
+    ])
   })
 })

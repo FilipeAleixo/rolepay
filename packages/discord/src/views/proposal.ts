@@ -202,6 +202,13 @@ function fields(p: Proposal): NonNullable<Embed['fields']> {
 
 export type ProposalViewContext = { approverRoleId: string | null }
 
+/** Shown at once while a proposal is drafted (reading Discord and the model take a few seconds), then replaced by it. */
+export const DRAFTING = {
+  message: 'Reading the message and drafting a proposal…',
+  channel: 'Reading the channel and drafting a proposal…',
+  criteria: 'Drafting a proposal…',
+} as const
+
 export function proposalMessage(p: Proposal, ctx: ProposalViewContext): Message {
   const title = p.editedBy ? 'Pay run proposal (edited)' : 'Pay run proposal'
   const head = header(p).join('\n')

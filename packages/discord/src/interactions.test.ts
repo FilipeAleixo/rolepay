@@ -54,7 +54,7 @@ describe('createDiscordInteractions (verifier + router + endpoint in one call)',
     const opened = (await (await post(messageCommand({ guildId: GUILD, channelId: CHANNEL }, 'Propose pay run', target, who))).json()) as { type: number }
     expect(opened.type).toBe(9)
     const submitted = (await (await post(modalSubmit({ guildId: GUILD, channelId: CHANNEL }, `proposal-modal:instruct:${target.id}`, { instruction: '10 each' }, who, { token: 'tok-signed' }))).json()) as { type: number }
-    expect(submitted).toEqual({ type: 5, data: { flags: 64 } })
+    expect(submitted).toEqual({ type: 4, data: { content: 'Reading the message and drafting a proposal…', flags: 64 } })
     await Promise.all(background)
     expect(JSON.stringify(h.rest.lastEdit('tok-signed'))).toContain('20 AlphaUSD for 2 people')
   })

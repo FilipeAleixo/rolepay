@@ -67,7 +67,7 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
 
     // 2. The instruction: deferred, only the treasurer sees the proposal.
     const submitted = await json(await s.interact(modalSubmit(SCOPE, `proposal-modal:instruct:${winners.id}`, { instruction: '50 each, the indexer one 200, note: October bounties' }, TREASURER, { token: 'tok-instruct' })))
-    expect(submitted).toEqual({ type: 5, data: { flags: 64 } })
+    expect(submitted).toEqual({ type: 4, data: { content: 'Reading the message and drafting a proposal…', flags: 64 } })
     await s.drain()
     const proposal = text(s.rest.lastEdit('tok-instruct'))
     expect(proposal).toContain('300 AlphaUSD for 3 people')
@@ -98,6 +98,17 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     expect(logged).toHaveLength(1)
     expect(logged[0]?.fields).toMatchObject({ mode: 'messages', outcome: 'proposed', sourceMessages: 1, lines: 3, model: 'fake-proposer' })
     expect(text(s.logs)).not.toMatch(/Winners|indexer|claim page|October bounties/)
+
+    // One line per interaction: what was asked and how fast the first answer went, never options or text.
+    const answered = s.logs.filter((l) => l.event === 'interaction').map((l) => l.fields ?? {})
+    // The setup's own interactions come first; these are the flow's four.
+    expect(answered.slice(-4).map((f) => [f.kind, f.name, f.status, f.responseType, f.ok, f.late])).toEqual([
+      ['message_command', 'Propose pay run', 200, 9, true, false],
+      ['modal', 'proposal-modal:instruct', 200, 4, true, false],
+      ['component', 'proposal:create', 200, 7, true, false],
+      ['component', 'rolepay:approve', 200, 7, true, false],
+    ])
+    expect(answered.every((f) => typeof f.ms === 'number' && f.ms < 1500)).toBe(true)
   })
 
   it('a channel with an injection in it: the attack is held, and even typed in by hand the bot key refuses it', async () => {

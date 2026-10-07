@@ -4,7 +4,7 @@ import { type CommandHandler, parseOptions } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'
 import { canReadHistory } from '../app/permissions.js'
 import { explainProposalError } from '../views/errors.js'
-import { proposalMessage } from '../views/proposal.js'
+import { DRAFTING, proposalMessage } from '../views/proposal.js'
 import { requireProposer } from './guards.js'
 
 const ProposeOptions = z.object({
@@ -42,6 +42,7 @@ export const proposeCommand: CommandHandler = async ({ options, ctx, channels },
   return {
     kind: 'defer',
     ephemeral: true,
+    placeholder: o.source ? DRAFTING.channel : DRAFTING.criteria,
     work: async (): Promise<DeferredResult> => {
       const proposed = o.source
         ? await rolepay.proposals.proposeFromMessages({
