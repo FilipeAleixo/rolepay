@@ -14,6 +14,7 @@ import {
 } from '@rolepay/discord'
 import { type Assets, type PasskeySessions, type PolicyPort, type RateLimiter, TokenBucketLimiter, createWebApp } from '@rolepay/web'
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import type { ServerConfig } from './config.js'
 import { type DashboardOverrides, dashboardDeps } from './dashboard.js'
 import { errorFields } from './logging.js'
@@ -21,6 +22,9 @@ import { startRecovery } from './recovery.js'
 import { startScheduler } from './scheduler.js'
 
 export type Log = (event: string, fields?: Record<string, unknown>) => void
+
+/** The largest request body the server reads (1 MB). */
+export const MAX_BODY_BYTES = 1024 * 1024
 
 export type ServerDeps = {
   config: ServerConfig
@@ -167,6 +171,10 @@ export function composeServer(deps: ServerDeps) {
   })
 
   const app = new Hono()
+  // No request needs more than a few kilobytes (a Discord interaction with a long message, a passkey
+  // ceremony); a bigger body is refused before anything reads it, counted as it arrives when it has
+  // no Content-Length, so one request cannot exhaust a 512 MB machine.
+  app.use(bodyLimit({ maxSize: MAX_BODY_BYTES, onError: (c) => c.json({ ok: false, error: { code: 'body_too_large' } }, 413) }))
   app.get('/health', (c) => c.json({ ok: true, network: config.core.network, jobsInFlight: queue.size }))
   app.post('/discord/interactions', (c) => interactions(c.req.raw))
   // Behind Fly the client is Fly-Client-IP, which Fly's proxy sets (ROLEPAY_CLIENT_IP_HEADER);

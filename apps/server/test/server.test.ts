@@ -76,6 +76,29 @@ describe('server routes', () => {
     expect(await sweep.mock.results[0]?.value).toBe(1)
   })
 
+  it('refuses a request body over 1 MB before anything reads it, so one request cannot exhaust a small machine', async () => {
+    const s = await testServer()
+    const big = 'x'.repeat(1024 * 1024 + 1)
+    const headers = { 'content-type': 'application/json', origin: 'https://rolepay.test' }
+    for (const path of ['/discord/interactions', '/webauthn/register/options', '/claim/not-a-token', '/setup/not-a-token/key']) {
+      const res = await s.app.request(path, { method: 'POST', body: big, headers })
+      expect([path, res.status]).toEqual([path, 413])
+      expect(await res.json()).toEqual({ ok: false, error: { code: 'body_too_large' } })
+    }
+    // Without a Content-Length (a stream) it is counted as it arrives.
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(big))
+        c.close()
+      },
+    })
+    const streamed = await s.app.request('/discord/interactions', { method: 'POST', body: stream, headers, duplex: 'half' } as RequestInit)
+    expect(streamed.status).toBe(413)
+    // A normal interaction still goes through.
+    const ping = { id: '800000000000000002', application_id: '500000000000000001', type: 1, token: 't', version: 1 }
+    expect((await s.interact(ping)).status).toBe(200)
+  })
+
   it('anything else is 404', async () => {
     const s = await testServer()
     expect((await s.app.request('/nope')).status).toBe(404)
