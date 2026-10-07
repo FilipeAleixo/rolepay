@@ -2,7 +2,7 @@
 // key's authorisation and revocation, signed with the passkey.
 import { $, busy, explainPasskeyError, fill, formatMicros, get, post, shortAddress, show, status } from './dom.js'
 import { treasuryFeeToken } from './fees.js'
-import { type KeyForm, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
+import { type KeyForm, STABLECOIN_DEX, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
 import { passkeys } from './passkey.js'
 import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, faucet, revokeAccessKey } from './tempo.js'
 
@@ -242,7 +242,9 @@ export function startSetup(config: SetupConfig) {
         ? config.tokenLabel
         : token.toLowerCase() === config.feeToken?.toLowerCase()
           ? (config.feeTokenLabel ?? token)
-          : (config.swapTokens.find((t) => t.address.toLowerCase() === token.toLowerCase())?.label ?? (token.toLowerCase().startsWith('0xdec0') ? "Tempo's stablecoin exchange" : token)),
+          : token.toLowerCase() === STABLECOIN_DEX
+            ? "Tempo's stablecoin exchange"
+            : (config.swapTokens.find((t) => t.address.toLowerCase() === token.toLowerCase())?.label ?? token),
     date,
   }
   const nowSeconds = () => Math.floor(Date.now() / 1000)

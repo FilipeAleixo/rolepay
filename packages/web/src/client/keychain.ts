@@ -81,7 +81,7 @@ export const TRANSFER_WITH_MEMO = 'transferWithMemo(address,uint256,bytes32)'
 /** With preferred stablecoins on, the one DEX call the key may make too (core's SWAP_EXACT_AMOUNT_OUT_SIGNATURE). */
 export const SWAP_EXACT_AMOUNT_OUT = 'swapExactAmountOut(address,address,uint128,uint128)'
 /** Tempo's stablecoin exchange, lowercase like every address the page compares. */
-const STABLECOIN_DEX = Addresses.stablecoinDex.toLowerCase()
+export const STABLECOIN_DEX = Addresses.stablecoinDex.toLowerCase()
 
 export type KeyForm = { limit: string; periodDays: string; validityDays: string; feeBudget?: string }
 /**
