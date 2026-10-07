@@ -158,6 +158,39 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       expect((await repo.listByStatus('pending_approval')).map((r) => r.id)).toEqual(['run_a'])
       expect((await repo.listByStatus('draft')).map((r) => r.id).sort()).toEqual(['run_b', 'run_c'])
     })
+
+    it('lists a community\'s paid runs paid at or after a time, newest payment first, with nothing else', async () => {
+      const paid = (id: string, paidAt: Date, communityId = f.GUILD) => {
+        const r = f.advance(
+          f.run({ id, communityId }),
+          { type: 'submit', actor: f.ALICE },
+          { type: 'approve', actor: f.TREASURER },
+          { type: 'start_attempt', fromBlock: 1n, validBefore: 1_800_000_000 },
+          { type: 'record_signed', txHash: HASH, rawTx: '0x76f8aa' },
+          { type: 'mark_paid', txHash: HASH, blockNumber: 2n },
+        )
+        return { ...r, paidAt }
+      }
+      const store = async (r: ReturnType<typeof paid>) => {
+        await repo.insert(f.run({ id: r.id, communityId: r.communityId }))
+        // Straight to the paid row: the contract is about what is listed, not the state machine.
+        expect(await repo.update({ ...r, version: 1 })).toBe('updated')
+      }
+      await store(paid('run_old', f.at(-1)))
+      await store(paid('run_edge', f.at(0)))
+      await store(paid('run_new', f.at(60)))
+      await store(paid('run_foreign', f.at(30), f.OTHER_GUILD))
+      await repo.insert(f.run({ id: 'run_draft' }))
+      const failed = f.advance(f.run({ id: 'run_failed' }), { type: 'submit', actor: f.ALICE }, { type: 'approve', actor: f.TREASURER }, { type: 'start_attempt', fromBlock: 1n, validBefore: 1_800_000_000 }, { type: 'mark_failed', reason: 'rejected', detail: 'x' })
+      await repo.insert(f.run({ id: 'run_failed' }))
+      await repo.update({ ...failed, version: 1 })
+
+      const listed = await repo.listPaid(f.GUILD, { since: f.at(0) })
+      expect(listed.map((r) => r.id)).toEqual(['run_new', 'run_edge'])
+      expect(listed[0]).toEqual({ ...paid('run_new', f.at(60)), version: 1 })
+      expect((await repo.listPaid(f.GUILD, { since: f.at(-3600) })).map((r) => r.id)).toEqual(['run_new', 'run_edge', 'run_old'])
+      expect(await repo.listPaid(f.GUILD, { since: f.at(61) })).toEqual([])
+    })
   })
 
   describe(`${name}: AiUsageRepository`, () => {

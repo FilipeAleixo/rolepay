@@ -270,6 +270,21 @@ export class SqliteRunRepository implements RunRepository {
     return this.hydrate(await this.db.selectFrom('runs').selectAll().where('status', '=', status).orderBy('created_at', 'desc').execute())
   }
 
+  async listPaid(communityId: string, opts: { since: Date }) {
+    // paid_at is ISO text in UTC, so text order is time order.
+    return this.hydrate(
+      await this.db
+        .selectFrom('runs')
+        .selectAll()
+        .where('community_id', '=', communityId)
+        .where('status', '=', 'paid')
+        .where('paid_at', '>=', iso(opts.since))
+        .orderBy('paid_at', 'desc')
+        .orderBy('id', 'desc')
+        .execute(),
+    )
+  }
+
   async update(next: Run) {
     const { id, ...rest } = runRow(next)
     const res = await this.db

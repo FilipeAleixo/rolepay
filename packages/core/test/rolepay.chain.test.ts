@@ -56,6 +56,7 @@ class CrashingRuns implements RunRepository {
   get = (id: string) => this.inner.get(id)
   listByCommunity = (c: string, o?: { limit?: number }) => this.inner.listByCommunity(c, o)
   listByStatus = (s: Run['status']) => this.inner.listByStatus(s)
+  listPaid = (c: string, o: { since: Date }) => this.inner.listPaid(c, o)
   async update(next: Run) {
     if (this.crashOn?.(next)) {
       this.crashOn = null

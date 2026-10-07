@@ -40,6 +40,8 @@ export interface RunRepository {
   /** Newest first. */
   listByCommunity(communityId: string, opts?: { limit?: number }): Promise<Run[]>
   listByStatus(status: RunStatus): Promise<Run[]>
+  /** One community's paid runs, paid at or after `since`, newest payment first (the dashboard's weekly totals). */
+  listPaid(communityId: string, opts: { since: Date }): Promise<Run[]>
   /**
    * Compare-and-set on `version`: stores `next` only if the stored run is at
    * `next.version - 1`. This is what stops two workers from executing one run.

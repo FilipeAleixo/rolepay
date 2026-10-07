@@ -99,6 +99,13 @@ export class MemoryRunRepository implements RunRepository {
   async listByStatus(status: Run['status']) {
     return [...this.runs.values()].filter((r) => r.status === status).sort(newestFirst).map(copy)
   }
+  async listPaid(communityId: string, opts: { since: Date }) {
+    const paidAt = (r: Run) => r.paidAt?.getTime() ?? 0
+    return [...this.runs.values()]
+      .filter((r) => r.communityId === communityId && r.status === 'paid' && r.paidAt !== null && paidAt(r) >= opts.since.getTime())
+      .sort((a, b) => paidAt(b) - paidAt(a) || (b.id < a.id ? -1 : 1))
+      .map(copy)
+  }
   async update(next: Run) {
     const stored = this.runs.get(next.id)
     if (!stored || stored.version !== next.version - 1) return 'conflict' as const

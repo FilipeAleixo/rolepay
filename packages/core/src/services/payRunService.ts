@@ -3,7 +3,8 @@ import { MAX_NOTE_LENGTH } from '../constants/limits.js'
 import { NETWORKS, type NetworkName, VALID_BEFORE_MARGIN_SECONDS, VALID_BEFORE_SECONDS } from '../constants/tempo.js'
 import { type BotKey, type Community, type KeyCheckError, botKeyContext, checkKeyForRun } from '../domain/community.js'
 import { runToCsv } from '../domain/csv.js'
-import { DiscordIdSchema } from '../domain/ids.js'
+import { type Address, DiscordIdSchema } from '../domain/ids.js'
+import { type PaidByWeek, firstWeekStart, paidByWeek } from '../domain/paidByWeek.js'
 import { type MatchResult, matchTransfers } from '../domain/reconcile.js'
 import { type Result, err, ok } from '../domain/result.js'
 import { type Failure, type NewRunError, type Run, type RunEvent, type RunStatus, currentAttempt, newRun, transition } from '../domain/run.js'
@@ -11,7 +12,7 @@ import type { Clock } from '../ports/clock.js'
 import type { IdGenerator } from '../ports/idGenerator.js'
 import type { KeyVault } from '../ports/keyVault.js'
 import type { BroadcastOutcome, FeePayment, PayoutChain } from '../ports/payoutChain.js'
-import type { CommunityRepository, PayeeRepository, RunRepository } from '../ports/repositories.js'
+import type { CommunityRepository, PayeeRepository, PolicyRunRepository, RunRepository } from '../ports/repositories.js'
 import type { AuditTrail } from './auditTrail.js'
 import type { RunLeases } from '../ports/runLeases.js'
 import { type InvalidInput, invalidInput } from './common.js'
@@ -20,6 +21,8 @@ export type PayRunServiceDeps = {
   runs: RunRepository
   payees: PayeeRepository
   communities: CommunityRepository
+  /** Read only: which policy made a run (the weekly totals split policy runs from runs made by hand). */
+  policyRuns: PolicyRunRepository
   chain: PayoutChain
   vault: KeyVault
   ids: IdGenerator
@@ -49,6 +52,9 @@ export const CreateRunInputSchema = z.object({
   lines: z.array(z.object({ discordUserId: DiscordIdSchema, amount: z.bigint().positive() })),
 })
 export type CreateRunInput = z.input<typeof CreateRunInputSchema>
+
+export const PaidByWeekInputSchema = z.object({ guildId: DiscordIdSchema, weeks: z.number().int().min(1).max(52).default(12) })
+export type PaidByWeekInput = z.input<typeof PaidByWeekInputSchema>
 
 type RunRef = { guildId: string; runId: string }
 type NotFound = { code: 'run_not_found' }
@@ -174,6 +180,25 @@ export class PayRunService {
 
   list(input: { guildId: string; limit?: number }): Promise<Run[]> {
     return this.deps.runs.listByCommunity(input.guildId, { limit: input.limit ?? 25 })
+  }
+
+  /**
+   * What paid runs sent in each of the last `weeks` UTC weeks (Monday 00:00 start, the current week
+   * last and partial), in the payout token, split into runs a policy made and runs made by hand.
+   * For the dashboard's Overview. Reads the community's paid runs in the window and, for each, the
+   * policy run that made it (if any).
+   */
+  async paidByWeek(input: PaidByWeekInput): Promise<Result<PaidByWeek & { token: Address }, InvalidInput | { code: 'community_not_found' }>> {
+    const parsed = PaidByWeekInputSchema.safeParse(input)
+    if (!parsed.success) return invalidInput(parsed.error)
+    const { guildId, weeks } = parsed.data
+    const community = await this.deps.communities.get(guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const now = this.deps.clock.now()
+    const runs = await this.deps.runs.listPaid(guildId, { since: firstWeekStart(now, weeks) })
+    const origins = await Promise.all(runs.map((r) => this.deps.policyRuns.getByRunId(r.id)))
+    const policyRunIds = new Set(origins.flatMap((pr) => (pr && pr.communityId === guildId && pr.runId ? [pr.runId] : [])))
+    return ok({ token: community.payoutToken, ...paidByWeek(runs, { now, weeks, token: community.payoutToken, policyRunIds }) })
   }
 
   async exportCsv(input: RunRef): Promise<Result<{ filename: string; csv: string }, NotFound>> {

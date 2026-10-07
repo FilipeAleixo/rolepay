@@ -7,6 +7,7 @@ import { ManualClock, PlainKeyVault, SequentialIds } from '../adapters/memory/su
 import type { Run } from '../domain/run.js'
 import type { RunRepository } from '../ports/repositories.js'
 import type { RunLeases } from '../ports/runLeases.js'
+import * as f from '../../test/support/fixtures.js'
 import { CommunityService } from './communityService.js'
 import { PayRunService } from './payRunService.js'
 
@@ -28,6 +29,7 @@ class CrashingRuns implements RunRepository {
   get = (id: string) => this.inner.get(id)
   listByCommunity = (c: string, o?: { limit?: number }) => this.inner.listByCommunity(c, o)
   listByStatus = (s: Run['status']) => this.inner.listByStatus(s)
+  listPaid = (c: string, o: { since: Date }) => this.inner.listPaid(c, o)
   async update(next: Run) {
     if (this.crashOnUpdate?.(next)) {
       this.crashOnUpdate = null
@@ -46,7 +48,7 @@ async function world(opts: { limit?: bigint; fund?: bigint } = {}) {
   const ids = new SequentialIds()
   const communitySvc = new CommunityService({ communities: repos.communities, chain, vault, clock, network: 'moderato', ids, setupLinkTtlSeconds: 1800 })
   const makeService = (leases: RunLeases | null = null) =>
-    new PayRunService({ runs, payees: repos.payees, communities: repos.communities, chain, vault, ids, clock, network: 'moderato', leases })
+    new PayRunService({ runs, payees: repos.payees, communities: repos.communities, policyRuns: repos.policyRuns, chain, vault, ids, clock, network: 'moderato', leases })
 
   await communitySvc.register({ guildId: GUILD, name: 'Mods', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
   await communitySvc.register({ guildId: OTHER_GUILD, name: 'Other', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
@@ -691,6 +693,52 @@ describe('PayRunService: one worker per run (the Approve job, the recovery sweep
     // The settled run was not even looked up on chain: the sweep read it first and left it.
     expect(sweptLookups).toHaveLength(1)
     expect(w.chain.landedTxCount).toBe(2)
+  })
+})
+
+describe('PayRunService: what was paid each week (the dashboard)', () => {
+  async function paidRun(w: World, lines = LINES): Promise<Run> {
+    const run = await approvedRun(w, lines)
+    const r = await w.svc.execute({ guildId: GUILD, runId: run.id })
+    if (!r.ok || r.value.status !== 'paid') throw new Error('the run did not pay')
+    return r.value.run
+  }
+
+  it('sums paid runs per UTC week by when they were paid, split into runs a policy made and runs made by hand, and nothing else', async () => {
+    const w = await world({ limit: 100_000_000n })
+    const byHand = await paidRun(w) // Tuesday 2026-10-06: the week of Monday 2026-10-05
+    w.clock.advance(7 * 86_400)
+    const byPolicy = await paidRun(w, [{ discordUserId: ALICE, amount: 62_000_000n }]) // the week of 2026-10-12, the current one
+    await w.repos.policyRuns.claim(f.policyRun({ runId: byPolicy.id }))
+    await approvedRun(w) // approved, never paid
+    const waiting = await w.svc.create({ guildId: GUILD, createdBy: ALICE, note: null, lines: LINES })
+    if (!waiting.ok) throw new Error(waiting.error.code)
+    // A policy run of another community that names one of these runs does not make it a policy's.
+    await w.repos.policyRuns.claim(f.policyRun({ id: 'prun_foreign', policyId: 'pol_other', communityId: OTHER_GUILD, periodKey: 'other', runId: byHand.id }))
+
+    const r = await w.svc.paidByWeek({ guildId: GUILD })
+    if (!r.ok) throw new Error(r.error.code)
+    expect(r.value.token).toBe(TOKEN)
+    expect(r.value.weeks).toHaveLength(12)
+    expect(r.value.since).toEqual(new Date('2026-07-27T00:00:00Z'))
+    expect(r.value.weeks.slice(10)).toEqual([
+      { start: new Date('2026-10-05T00:00:00Z'), policy: 0n, manual: 3_500_000n, runs: 1, partial: false },
+      { start: new Date('2026-10-12T00:00:00Z'), policy: 62_000_000n, manual: 0n, runs: 1, partial: true },
+    ])
+    expect(r.value.weeks.slice(0, 10).every((week) => week.runs === 0)).toBe(true)
+    expect(r.value).toMatchObject({ total: 65_500_000n, policy: 62_000_000n, manual: 3_500_000n, runs: 2 })
+  })
+
+  it('takes the number of weeks (1 to 52), and refuses an unknown community or a bad value', async () => {
+    const w = await world()
+    await paidRun(w)
+    const four = await w.svc.paidByWeek({ guildId: GUILD, weeks: 4 })
+    expect(four.ok && four.value.weeks.map((week) => week.manual)).toEqual([0n, 0n, 0n, 3_500_000n])
+    const other = await w.svc.paidByWeek({ guildId: OTHER_GUILD })
+    expect(other.ok && other.value.total).toBe(0n)
+    expect(await w.svc.paidByWeek({ guildId: '1094309218049937499' })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+    expect(await w.svc.paidByWeek({ guildId: GUILD, weeks: 0 })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+    expect(await w.svc.paidByWeek({ guildId: GUILD, weeks: 53 })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
   })
 })
 
