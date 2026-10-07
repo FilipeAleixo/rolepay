@@ -12,6 +12,7 @@ import type { IdGenerator } from '../ports/idGenerator.js'
 import type { KeyVault } from '../ports/keyVault.js'
 import type { BroadcastOutcome, FeePayment, PayoutChain } from '../ports/payoutChain.js'
 import type { CommunityRepository, PayeeRepository, RunRepository } from '../ports/repositories.js'
+import type { RunLeases } from '../ports/runLeases.js'
 import { type InvalidInput, invalidInput } from './common.js'
 
 export type PayRunServiceDeps = {
@@ -23,7 +24,20 @@ export type PayRunServiceDeps = {
   ids: IdGenerator
   clock: Clock
   network: NetworkName
+  /**
+   * One worker per run at a time (the Approve job, the recovery sweep, another instance): each
+   * execute, reconcile and swept run holds the run's lease. Without leases only the version
+   * compare-and-set separates workers, which is enough for money but lets two of them repeat a
+   * broadcast and race to record it.
+   */
+  leases?: RunLeases | null
 }
+
+/**
+ * How long one execute or reconcile may hold a run. Longer than the slowest step: a sync broadcast
+ * the public RPC leaves hanging for about a minute, then up to a minute of receipt polling.
+ */
+const RUN_LEASE_SECONDS = 180
 
 export const CreateRunInputSchema = z.object({
   guildId: DiscordIdSchema,
@@ -163,8 +177,14 @@ export class PayRunService {
   /**
    * Pays an approved run (or retries a retryable failed one) as one batched tx.
    * Idempotent: a paid run reports paid; an executing run is reconciled, never re-signed.
+   * `concurrent_update` when another worker holds the run right now (or changed it under us):
+   * read it again and follow that worker, never send anything of your own meanwhile.
    */
-  async execute(input: RunRef): Promise<Result<ExecuteOutcome, ExecuteError>> {
+  execute(input: RunRef): Promise<Result<ExecuteOutcome, ExecuteError>> {
+    return this.leased(input.runId, () => this.executeHeld(input))
+  }
+
+  private async executeHeld(input: RunRef): Promise<Result<ExecuteOutcome, ExecuteError>> {
     const loaded = await this.get(input)
     if (!loaded.ok) return loaded
     const run = loaded.value
@@ -226,28 +246,40 @@ export class PayRunService {
     return this.settle(recorded.value, await this.deps.chain.broadcast(signed.value.rawTx), community)
   }
 
-  /** Brings an executing run up to date with the chain. Never signs anything new. */
-  async reconcile(input: RunRef): Promise<Result<ExecuteOutcome, ExecuteError>> {
-    const loaded = await this.get(input)
-    if (!loaded.ok) return loaded
-    const run = loaded.value
-    if (run.status === 'paid') return ok({ status: 'paid', run })
-    if (run.status === 'failed' && run.failure) return ok({ status: 'failed', run, failure: run.failure })
-    if (run.status !== 'executing') return err({ code: 'illegal_state', status: run.status })
-    return this.reconcileRun(run)
+  /** Brings an executing run up to date with the chain. Never signs anything new. `concurrent_update` as for execute. */
+  reconcile(input: RunRef): Promise<Result<ExecuteOutcome, ExecuteError>> {
+    return this.leased(input.runId, async (): Promise<Result<ExecuteOutcome, ExecuteError>> => {
+      const loaded = await this.get(input)
+      if (!loaded.ok) return loaded
+      const run = loaded.value
+      if (run.status === 'paid') return ok({ status: 'paid', run })
+      if (run.status === 'failed' && run.failure) return ok({ status: 'failed', run, failure: run.failure })
+      if (run.status !== 'executing') return err({ code: 'illegal_state', status: run.status })
+      return this.reconcileRun(run)
+    })
   }
 
   /**
-   * Startup sweep: reconcile every run a crash may have left in `executing`. Each run is on its
+   * The recovery sweep: reconcile every run a crash may have left in `executing`. Each run is on its
    * own: one that throws (an RPC outage, a log range the node refuses) is reported as an error
    * and the sweep carries on, so one bad run cannot stall every run after it.
+   *
+   * A run some worker is handling is not the sweep's: it skips the runs `skip` names (the caller's
+   * own jobs, in flight or waiting between steps) and the runs another worker holds the lease of,
+   * and it reads each run again once it holds it, so a run settled since the listing is left alone.
+   * Skipped runs are not in the results: whoever handles them reports them.
    */
-  async recoverInFlight(): Promise<RecoveryResult[]> {
+  async recoverInFlight(opts: { skip?: (ref: RunRef) => boolean } = {}): Promise<RecoveryResult[]> {
     const results: RecoveryResult[] = []
-    for (const run of await this.deps.runs.listByStatus('executing')) {
-      const ref = { guildId: run.communityId, runId: run.id }
+    for (const listed of await this.deps.runs.listByStatus('executing')) {
+      const ref = { guildId: listed.communityId, runId: listed.id }
+      if (opts.skip?.(ref)) continue
       try {
-        const r = await this.reconcileRun(run)
+        const r = await this.leased(ref.runId, async () => {
+          const run = await this.deps.runs.get(ref.runId)
+          return run?.status === 'executing' ? this.reconcileRun(run) : null
+        })
+        if (r === null || (!r.ok && r.error.code === 'concurrent_update')) continue
         results.push(r.ok ? { ...ref, status: r.value.status } : { ...ref, status: 'error', error: r.error.code })
       } catch (e) {
         results.push({ ...ref, status: 'error', error: 'unexpected', detail: redactUrls(e instanceof Error ? e.message : String(e)) })
@@ -257,6 +289,21 @@ export class PayRunService {
   }
 
   // ---- internals -------------------------------------------------------------
+
+  /**
+   * Runs one step on a run while holding its lease, and gives the lease back after, also when the
+   * step throws. Another worker holding the run: `concurrent_update`, and the step does not run.
+   */
+  private async leased<T>(runId: string, step: () => Promise<T>): Promise<T | Result<never, Conflict>> {
+    const leases = this.deps.leases
+    if (!leases) return step()
+    if (!(await leases.acquire(runId, RUN_LEASE_SECONDS))) return err({ code: 'concurrent_update' })
+    try {
+      return await step()
+    } finally {
+      await leases.release(runId)
+    }
+  }
 
   private async reconcileRun(run: Run): Promise<Result<ExecuteOutcome, ExecuteError>> {
     const community = await this.deps.communities.get(run.communityId)

@@ -30,7 +30,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     ids,
     setupLinkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
   })
-  const payRuns = new PayRunService({ runs: r.runs, payees: r.payees, communities: r.communities, chain, vault, ids, clock, network })
+  const payRuns = new PayRunService({ runs: r.runs, payees: r.payees, communities: r.communities, chain, vault, ids, clock, network, leases: deps.leases ?? null })
   return {
     communities,
     payees: new PayeeService({

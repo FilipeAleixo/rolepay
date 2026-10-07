@@ -6,6 +6,7 @@ import type { PayoutChain } from './payoutChain.js'
 import type { ActivityReader } from './activityReader.js'
 import type { ProposalLog } from './proposalLog.js'
 import type { CommunityRepository, PayeeRepository, ProposalRepository, RunRepository } from './repositories.js'
+import type { RunLeases } from './runLeases.js'
 import type { RunProposer } from './runProposer.js'
 
 /** Everything `createRolepay` needs: one implementation of each port. */
@@ -24,4 +25,6 @@ export type RolepayDeps = {
   activity?: ActivityReader | null
   /** One line per proposal: counts, latency, cost. */
   proposalLog?: ProposalLog
+  /** One worker per pay run at a time, across processes (`KvRunLeases` in production). */
+  leases?: RunLeases
 }
