@@ -14,4 +14,21 @@ describe('explainPasskeyError (what the page tells a person when something fails
     expect(text).not.toContain('Request body')
     expect(text).toBe('Something went wrong (HttpRequestError). The details are in the browser console; try again in a moment.')
   })
+
+  /** What the Accounts SDK throws: its RPC wrapper around the original error. */
+  const wrapped = (cause: Error) => Object.assign(new Error(cause.message, { cause }), { name: 'RpcResponse.InternalError' })
+
+  it('names a passkey the server does not know (remembered from before a reset) plainly', () => {
+    expect(explainPasskeyError(wrapped(new Error('Unknown credential')))).toBe(
+      'This server does not know that passkey (it may be from before the server was reset). Create a new passkey, or sign in with another one.',
+    )
+  })
+
+  it("never shows the SDK's wrapper name: the wrapped error's own name, or none", () => {
+    expect(explainPasskeyError(wrapped(new Error('Request failed')))).toBe('Something went wrong. The details are in the browser console; try again in a moment.')
+    expect(explainPasskeyError(wrapped(Object.assign(new Error('fetch failed'), { name: 'TypeError' })))).toBe(
+      'Something went wrong (TypeError). The details are in the browser console; try again in a moment.',
+    )
+    expect(explainPasskeyError(Object.assign(new Error('no cause'), { name: 'RpcResponse.InternalError' }))).toBe('Something went wrong. The details are in the browser console; try again in a moment.')
+  })
 })

@@ -62,11 +62,20 @@ export function formatMicros(micros: string): string {
   return frac ? `${whole}.${frac}` : `${whole}`
 }
 
+/** The Accounts SDK's wrappers (RpcResponse.InternalError and the like), which say nothing to a person. */
+const SDK_WRAPPER = /^(RpcResponse|Provider)\./
+
 /** A passkey prompt the person closed, or any other failure, in plain English. */
 export function explainPasskeyError(error: unknown): string {
   const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
   if (/NotAllowedError|cancel|abort|timed out/i.test(text)) return 'The passkey prompt was closed before it finished. Try again.'
   if (/InvalidStateError|already registered|excludeCredentials/i.test(text)) return 'This device already has a Rolepay passkey. Use "sign in" instead.'
+  // Handler.webAuthn's answer for a passkey it does not hold (the device remembers it from before a reset).
+  if (/Unknown credential/i.test(text)) return 'This server does not know that passkey (it may be from before the server was reset). Create a new passkey, or sign in with another one.'
   // The details (which can carry RPC URLs and request bodies) are in the console, not on the page.
-  return `Something went wrong${error instanceof Error && error.name !== 'Error' ? ` (${error.name})` : ''}. The details are in the browser console; try again in a moment.`
+  // Under the SDK's wrapper, the name worth showing is the one of the error it wraps, if any.
+  let named: unknown = error
+  for (let i = 0; i < 4 && named instanceof Error && SDK_WRAPPER.test(named.name) && named.cause instanceof Error; i++) named = named.cause
+  const name = named instanceof Error && named.name !== 'Error' && !SDK_WRAPPER.test(named.name) ? named.name : null
+  return `Something went wrong${name ? ` (${name})` : ''}. The details are in the browser console; try again in a moment.`
 }
