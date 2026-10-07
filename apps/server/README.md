@@ -89,8 +89,9 @@ Optional: stop the server with Ctrl-C right after clicking Approve on a new run,
 
 | Command | What it does |
 | --- | --- |
-| `pnpm dev` | Runs the server with reload on code changes |
-| `pnpm start` | Runs the server without reload |
+| `pnpm dev` | Runs the server with reload on code changes (tsx, the TypeScript sources) |
+| `pnpm build` | Compiles the server to `dist/main.js` and builds the client bundle `dist/rolepay.js` (what the image runs) |
+| `pnpm start` | Builds, then runs the compiled server without reload, as production does |
 | `pnpm register-commands` | Registers the slash commands (guild if `DISCORD_DEV_GUILD_ID` is set, else global) |
 | `pnpm dev:treasury` | Testnet dev shortcut (`ROLEPAY_DEV_SHORTCUTS=true`): prints and funds the dev treasury (`ROLEPAY_TEST_ROOT_PRIVATE_KEY`) |
 | `pnpm dev:authorize-key <guildId>` | Testnet dev shortcut (`ROLEPAY_DEV_SHORTCUTS=true`): the dev treasury authorises the pending bot key |
@@ -99,11 +100,11 @@ Optional: stop the server with Ctrl-C right after clicking Approve on a new run,
 | `pnpm test:e2e` | Opt-in: Playwright in Chromium with a virtual passkey authenticator, the real server on `http://localhost:8799`, Moderato |
 | `ROLEPAY_AI_LIVE=true pnpm test:ai-live` | Opt-in: three real Anthropic API calls (a few cents) with `ANTHROPIC_API_KEY` from `.env` |
 
-Settings are listed in the repo-root `.env.example`. The SQLite file defaults to `rolepay.db` at the repo root, shared by the server and the dev scripts; it also holds the passkey credentials and sessions (so returning users can sign in after a restart). An install from before the rename keeps its `payrun.db`: when that file exists at the repo root and `ROLEPAY_DB_PATH` is unset, it is the one used. If something looks stuck, the server logs one JSON line per event (`interaction_error`, `job_error`, `recovery`, `recovery_notify_error`, `proposal`); they never include tokens, keys or message text.
+Settings are listed in the repo-root `.env.example`. The SQLite file defaults to `rolepay.db` at the repo root, shared by the server and the dev scripts; it also holds the passkey credentials and sessions (so returning users can sign in after a restart). An install from before the rename keeps its `payrun.db`: when that file exists at the repo root and `ROLEPAY_DB_PATH` is unset, it is the one used. If something looks stuck, the server logs one JSON line per event (`interaction`, `interaction_error`, `job_error`, `recovery`, `recovery_notify_error`, `proposal`); they never include tokens, keys or message text.
 
 ## Deploying
 
-Rolepay runs on Fly.io as one always-on machine per network, built from the repo-root `Dockerfile` (Node 22, the server's production dependencies only, run with tsx as `pnpm start` does, as the unprivileged `node` user).
+Rolepay runs on Fly.io as one always-on machine per network, built from the repo-root `Dockerfile` (Node 22, the server's production dependencies only, compiled to JavaScript when the image is built and run with `node dist/main.js` as `pnpm start` does, as the unprivileged `node` user).
 
 | App | Config | URL | Network | Status |
 | --- | --- | --- | --- | --- |
@@ -147,7 +148,9 @@ fly checks list -a rolepay-demo
 fly ssh console -a rolepay-demo      # a shell on the machine (the database is /data/rolepay.db)
 ```
 
-The server logs one JSON line per event (`listening`, `interaction_error`, `job_error`, `recovery`, `proposal`, ...), never tokens, keys or message text. A `proposal` line with outcome `could_not_propose` and no tokens used, many times in a day, is usually the daily cap.
+The server logs one JSON line per event (`listening`, `interaction`, `interaction_error`, `job_error`, `recovery`, `proposal`, ...), never tokens, keys or message text. A `proposal` line with outcome `could_not_propose` and no tokens used, many times in a day, is usually the daily cap.
+
+**Is it fast enough for Discord?** Each request logs one `interaction` line: `kind` and `name` (the command, button or form, never options, IDs or text), `ms` until the response was handed back, `responseType`, `ok`, and `late` (the handler was slower than 1.5 seconds, so Rolepay acknowledged it with a deferred response and delivered the answer by an edit). Discord shows "This interaction failed" past 3 seconds, so `ms` should stay well under that. A `proposal` line's `timings` splits a proposal into Discord reads, chain reads and the model call (milliseconds, overlapping when they run at the same time), plus the total. `fly logs -a rolepay-demo --no-tail | grep '"interaction"'` lists them.
 
 ## Upgrading a setup from before the rename (payrun)
 
