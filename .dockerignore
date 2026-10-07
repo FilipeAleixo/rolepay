@@ -1,4 +1,4 @@
-# The image needs the package manifests, the lockfile and the TypeScript sources the server runs.
+# The image needs the package manifests, the lockfile and the TypeScript sources it compiles.
 # Never secrets or databases.
 .env
 .env.*
@@ -11,6 +11,7 @@
 .github
 .chain-results
 **/node_modules
+**/dist
 **/coverage
 **/test-results
 **/playwright-report

@@ -1,10 +1,13 @@
 // The composition root: config from env, production adapters, core services, the
 // Discord adapter, an HTTP server. The only place (with scripts/) that opens adapters.
+// Production runs it compiled (`pnpm build`, then `node dist/main.js`); `pnpm dev` runs it with tsx.
+import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { createRolepay, deprecatedEnvNames } from '@rolepay/core'
 import { openRolepayAdapters } from '@rolepay/core/adapters'
 import { FetchDiscordRest, RestActivityReader } from '@rolepay/discord'
 import { bundledAssets, createPasskeys } from '@rolepay/web'
+import { prebuiltAssets } from './assets.js'
 import { composeServer } from './compose.js'
 import { parseServerConfig } from './config.js'
 import { loadEnvironment } from './env.js'
@@ -22,7 +25,8 @@ async function main() {
   // AI proposals read Discord through the bot's REST client; one log line per proposal (counts and cost, never text).
   const rolepay = createRolepay({ ...deps, activity: new RestActivityReader(rest), proposalLog: (entry) => log('proposal', entry) })
   const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
-  const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() }
+  const assets = prebuiltAssets(join(import.meta.dirname, 'rolepay.js')) ?? bundledAssets()
+  const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets }
   const composed = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web, log })
   const recovery = composed.startRecovery()
 
