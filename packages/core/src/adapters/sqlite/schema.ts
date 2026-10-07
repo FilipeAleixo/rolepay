@@ -34,6 +34,20 @@ export interface BotKeysTable {
   revoked_at: string | null
 }
 
+/** A standing policy's own access key (0008): the bot key's shape, bound to one policy. */
+export interface PolicyKeysTable {
+  address: string
+  community_id: string
+  policy_id: string
+  /** null once the key is revoked or replaced (the secret is destroyed). */
+  sealed_secret: string | null
+  status: string
+  policy: string
+  created_at: string
+  authorized_at: string | null
+  revoked_at: string | null
+}
+
 export interface PayeesTable {
   community_id: string
   discord_user_id: string
@@ -216,4 +230,5 @@ export interface Database {
   policy_runs: PolicyRunsTable
   audit_events: AuditEventsTable
   ai_usage: AiUsageTable
+  policy_keys: PolicyKeysTable
 }

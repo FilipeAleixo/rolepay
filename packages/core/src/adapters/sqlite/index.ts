@@ -6,6 +6,7 @@ import { KvProposalRepository } from '../kv/proposals.js'
 import { SqliteAiUsageRepository } from './aiUsageRepository.js'
 import { SqliteKeyValueStore } from './keyValue.js'
 import { migrateToLatest } from './migrations.js'
+import { SqlitePolicyKeyRepository } from './policyKeyRepository.js'
 import { SqliteAuditLog, SqlitePolicyRepository, SqlitePolicyRunRepository } from './policyRepositories.js'
 import { SqliteCommunityRepository, SqlitePayeeRepository, SqliteRunRepository } from './repositories.js'
 import type { Database } from './schema.js'
@@ -29,6 +30,7 @@ export async function openSqliteDatabase(path: string, options: { clock?: Clock 
       proposals: new KvProposalRepository(kv, clock),
       policies: new SqlitePolicyRepository(db),
       policyRuns: new SqlitePolicyRunRepository(db),
+      policyKeys: new SqlitePolicyKeyRepository(db),
       audit: new SqliteAuditLog(db),
       aiUsage: new SqliteAiUsageRepository(db),
     },

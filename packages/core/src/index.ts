@@ -9,6 +9,7 @@ import { AuditService, AuditTrail } from './services/auditTrail.js'
 import { CommunityService } from './services/communityService.js'
 import { PayeeService } from './services/payeeService.js'
 import { PayRunService } from './services/payRunService.js'
+import { PolicyKeyService } from './services/policyKeyService.js'
 import { PolicyService } from './services/policyService.js'
 import { ProposalService } from './services/proposalService.js'
 import { SchedulerService } from './services/schedulerService.js'
@@ -21,6 +22,8 @@ export type Rolepay = {
   proposals: ProposalService
   /** Standing policies: the AI writes the rule once, a treasurer approves it, code runs it. */
   policies: PolicyService
+  /** A policy's own access key ("its own budget"): authorised by the treasury passkey, used for that policy's runs only. */
+  policyKeys: PolicyKeyService
   /** Runs approved policies on schedule, with code only; the server calls `tick()` on an interval. */
   scheduler: SchedulerService
   /** The audit stream: every policy and run event, filterable, as CSV. */
@@ -45,7 +48,8 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     setupLinkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
   })
   const audit = new AuditTrail({ log: r.audit, policyRuns: r.policyRuns, clock, ...(deps.onAuditError ? { onError: deps.onAuditError } : {}) })
-  const payRuns = new PayRunService({ runs: r.runs, payees: r.payees, communities: r.communities, policyRuns: r.policyRuns, chain, vault, ids, clock, network, audit, leases: deps.leases ?? null })
+  const policyKeys = new PolicyKeyService({ communities: r.communities, policies: r.policies, policyKeys: r.policyKeys, chain, vault, clock, audit, communityService: communities })
+  const payRuns = new PayRunService({ runs: r.runs, payees: r.payees, communities: r.communities, policyRuns: r.policyRuns, policyKeys: r.policyKeys, chain, vault, ids, clock, network, audit, leases: deps.leases ?? null })
   const policies = new PolicyService({
     communities: r.communities,
     payees: r.payees,
@@ -57,6 +61,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     proposer: deps.proposer ?? null,
     activity: deps.activity ?? null,
     communityService: communities,
+    policyKeys,
     payRuns,
     audit,
     aiUsage: r.aiUsage,
@@ -90,6 +95,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
       ...(deps.proposalLog ? { log: deps.proposalLog } : {}),
     }),
     policies,
+    policyKeys,
     scheduler: new SchedulerService({
       communities: r.communities,
       payees: r.payees,
@@ -100,6 +106,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
       clock,
       activity: deps.activity ?? null,
       communityService: communities,
+      policyKeys,
       payRuns,
       audit,
       demoControls,

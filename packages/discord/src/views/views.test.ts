@@ -310,6 +310,15 @@ describe('explainError', () => {
       'This run needs 26.5 AlphaUSD but the bot key has 2 AlphaUSD left this period (it resets <t:1800000000:R>).',
     )
     expect(explainError({ code: 'key_revoked' })).toMatch(/revoked/)
+    // The same checks on a policy's own key name that key, never the bot key's.
+    expect(explainError({ code: 'insufficient_limit', remaining: 2_000_000n, needed: 26_500_000n, periodEnd: 1_800_000_000, key: 'policy' }, { token: '0x20c0000000000000000000000000000000000001' })).toBe(
+      "This run needs 26.5 AlphaUSD but this policy's own key has 2 AlphaUSD left this period (it resets <t:1800000000:R>). Nothing was paid; the chain would refuse it anyway.",
+    )
+    for (const code of ['key_revoked', 'key_expired', 'key_expires_too_soon', 'key_not_authorized', 'fee_budget_exhausted', 'odd']) {
+      const said = explainError({ code, key: 'policy' })
+      expect(said, code).toContain("policy's own key")
+      expect(said, code).not.toMatch(/\/rolepay setup to issue/)
+    }
     expect(explainError({ code: 'invalid_input', issues: ['amount: too small'] })).toContain('amount: too small')
   })
 

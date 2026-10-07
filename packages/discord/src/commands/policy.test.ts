@@ -1,7 +1,7 @@
 import { emptyCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { SCOPE, appHarness, body, isEphemeral, text } from '../../test/app.js'
-import { ADMIN, ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
+import { ADMIN, ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE, TREASURY } from '../../test/fixtures.js'
 import { autocomplete, buttonClick, slashCommand } from '../testing/interactions.js'
 import { wireMessage } from '../testing/messages.js'
 
@@ -168,6 +168,40 @@ describe('the preview buttons', () => {
     expect(p.ok && p.value.status).toBe('active')
   })
 
+  it("after Approve, the approver alone is offered the policy's own budget: a private link to the treasury page for this policy", async () => {
+    const a = await ready()
+    const { policyId } = await newPolicy(a)
+    await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer, 'tok-approve'))
+    const offer = a.rest.followUps.find((f) => f.reply.token === 'tok-approve')?.message
+    expect(offer?.flags).toBe(64)
+    expect(offer?.content).toContain('Give **Help desk** its own budget')
+    expect(offer?.content).toContain('can never spend more than that, whatever the bot key has left')
+    const button = offer?.components?.[0]?.components[0] as { style: number; label: string; url: string }
+    expect(button).toMatchObject({ style: 5, label: 'Give this policy its own budget' })
+    const m = new RegExp(`^https://rolepay\\.test/setup/([^/]+)/policies/${policyId}$`).exec(button.url)
+    expect(m).not.toBeNull()
+    const link = await a.rolepay.communities.describeSetupLink({ token: decodeURIComponent(m?.[1] ?? '') })
+    expect(link).toMatchObject({ ok: true, value: { guildId: GUILD, discordUserId: TREASURER } })
+    // Nothing went to the channel.
+    expect(a.rest.channelPosts.map((p) => JSON.stringify(p.message))).not.toContain(expect.stringContaining('/setup/'))
+  })
+
+  it('an RPC failure while preparing the budget offer never turns the approval into an error: the policy is approved, no offer is sent', async () => {
+    const a = await ready()
+    const { policyId } = await newPolicy(a)
+    // A key of its own waiting for the passkey, and then the chain stops answering.
+    await a.rolepay.policyKeys.provision({ guildId: GUILD, policyId, limit: 30_000_000n, periodSeconds: 86_400, expiresAt: Math.floor(a.clock.now().getTime() / 1000) + 86_400 })
+    a.chain.keyState = async () => {
+      throw new Error('HTTP request failed')
+    }
+    const approved = await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer, 'tok-approve-rpc'))
+    expect(body(approved).type).toBe(7)
+    expect(text(body(approved).data)).toContain('Policy: Help desk')
+    expect(a.rest.followUps.filter((f) => f.reply.token === 'tok-approve-rpc')).toEqual([])
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && p.value.status).toBe('active')
+  })
+
   it('an Approve from an outdated preview (the rule was edited since) is refused: nobody approves a version they did not see', async () => {
     const a = await ready()
     const { policyId } = await newPolicy(a)
@@ -246,6 +280,37 @@ describe('/rolepay policy list, show, pause, resume, mode', () => {
     const nobody = await a.send(slashCommand(SCOPE, 'rolepay', 'policy list', {}, { userId: BOB, roles: [MODS_ROLE] }))
     expect(isEphemeral(nobody)).toBe(true)
     expect(text(body(nobody).data)).not.toContain(policyId)
+  })
+
+  it("show says whose budget pays the policy: the bot key's, shared; then its own, read from the chain (chain-enforced)", async () => {
+    const a = await ready()
+    const { policyId } = await newPolicy(a)
+    await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy show', { policy: policyId }, treasurer, 'tok-shared'))
+    const shared = a.rest.lastEdit('tok-shared')
+    expect(text(shared)).toContain("Shared: it pays from the bot key's budget, with manual runs, AI-proposed runs and other policies.")
+    // The approver gets the treasury page link in this private answer.
+    expect(text(shared)).toContain('Give this policy its own budget')
+    expect(text(shared)).toMatch(new RegExp(`https://rolepay\\.test/setup/[^/"]+/policies/${policyId}`))
+
+    // The treasury gives it 30 a week; 10 is spent.
+    const ref = { guildId: GUILD, policyId }
+    await a.rolepay.policyKeys.provision({ ...ref, limit: 30_000_000n, periodSeconds: 7 * 86_400, expiresAt: Math.floor(a.clock.now().getTime() / 1000) + 30 * 86_400 })
+    const auth = await a.rolepay.policyKeys.authorize({ ...ref, root: a.chain.rootSigner(TREASURY) })
+    if (!auth.ok) throw new Error(JSON.stringify(auth.error))
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy show', { policy: policyId }, treasurer, 'tok-own'))
+    const own = text(a.rest.lastEdit('tok-own'))
+    expect(own).toContain('Own budget: 30 of 30 AlphaUSD left this period (chain-enforced)')
+    expect(own).toContain('Manage its budget')
+    // A reader without the approver role sees the budget, never a treasury link.
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy show', { policy: policyId }, writer, 'tok-reader'))
+    const read = text(a.rest.lastEdit('tok-reader'))
+    expect(read).toContain('Own budget: 30 of 30 AlphaUSD left this period (chain-enforced)')
+    expect(read).not.toContain('/setup/')
+
+    await a.rolepay.policyKeys.revoke({ ...ref, root: a.chain.rootSigner(TREASURY), actor: TREASURER })
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy show', { policy: policyId }, treasurer, 'tok-revoked'))
+    expect(text(a.rest.lastEdit('tok-revoked'))).toContain('Own budget: its key is revoked, so it pays nothing until a treasurer gives it a new one. It never falls back to the bot key.')
   })
 
   it('autocomplete offers the policies by name', async () => {

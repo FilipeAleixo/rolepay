@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { POLICY_RUN_STATUSES, type PolicyRun, type PolicyRunEvent, PolicyRunSchema, movePolicyRun, newPolicyRun, runGuards } from './policyRun.js'
+import { POLICY_RUN_STATUSES, type PolicyRun, type PolicyRunEvent, PolicyRunSchema, movePolicyRun, newPolicyRun, policyKeyHold, runGuards } from './policyRun.js'
 
 const GUILD = '1094309218049937418'
 const TREASURER = '300000000000000001'
@@ -109,5 +109,24 @@ describe('PolicyRun: the guards that hold a run whole', () => {
     expect(runGuards({ lines: 1, total: 5n, caps: { perRun: null, perPerson: null }, remaining: null })).toEqual([{ code: 'no_active_key', total: 5n, limit: null }])
     // Exactly the budget is fine.
     expect(runGuards({ lines: 1, total: 90n, caps, remaining: 90n })).toEqual([])
+  })
+
+  it("a policy with its own key is held against that key's budget, in its own words, whatever the bot key has", () => {
+    expect(runGuards({ lines: 1, total: 40n, caps, remaining: 30n, key: 'policy' })).toEqual([{ code: 'over_policy_budget', total: 40n, limit: 30n }])
+    expect(runGuards({ lines: 1, total: 5n, caps, remaining: null, key: 'policy' })).toEqual([{ code: 'policy_key_inactive', total: 5n, limit: null }])
+    expect(runGuards({ lines: 1, total: 30n, caps, remaining: 30n, key: 'policy' })).toEqual([])
+    expect(runGuards({ lines: 1, total: 40n, caps, remaining: 30n, key: 'bot' })).toEqual([{ code: 'over_budget', total: 40n, limit: 30n }])
+  })
+})
+
+describe('policyKeyHold: a pre-flight refusal at release, as the hold it becomes', () => {
+  it("the policy key's refusals get the policy key's codes; the bot key's keep theirs", () => {
+    expect(policyKeyHold({ code: 'insufficient_limit', remaining: 10n, needed: 40n, periodEnd: null, key: 'policy' }, 40n)).toEqual({ code: 'over_policy_budget', total: 40n, limit: 10n })
+    for (const code of ['key_revoked', 'key_not_authorized', 'key_expired', 'key_expires_too_soon'] as const) {
+      expect(policyKeyHold({ code, expiry: 1, key: 'policy' } as never, 40n)).toEqual({ code: 'policy_key_inactive', total: 40n, limit: null })
+    }
+    expect(policyKeyHold({ code: 'fee_budget_exhausted', key: 'policy' }, 40n)).toEqual({ code: 'fee_budget_exhausted', total: 40n, limit: null })
+    expect(policyKeyHold({ code: 'insufficient_limit', remaining: 10n, needed: 40n, periodEnd: null }, 40n)).toEqual({ code: 'insufficient_limit', total: 40n, limit: 10n })
+    expect(policyKeyHold({ code: 'no_active_key' }, 40n)).toEqual({ code: 'no_active_key', total: 40n, limit: null })
   })
 })

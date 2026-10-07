@@ -162,8 +162,12 @@ async function editReply(rest: DiscordRest, reply: ReplyHandle, message: Message
   }
 }
 
-/** A new message through the interaction; if that fails (the token is fresh, so rarely), posted in the channel as the bot. */
+/**
+ * A new message through the interaction; if that fails (the token is fresh, so rarely), posted in
+ * the channel as the bot. A private one (a treasury page link) is never posted in the channel.
+ */
 async function postFollowUp(rest: DiscordRest, ctx: InteractionContext, message: Message): Promise<void> {
   const posted = await rest.followUp(replyTo(ctx), message)
-  if (!posted.ok && ctx.channelId) await rest.postToChannel(ctx.channelId, message)
+  const ephemeral = ((message.flags ?? 0) & MessageFlags.Ephemeral) !== 0
+  if (!posted.ok && ctx.channelId && !ephemeral) await rest.postToChannel(ctx.channelId, message)
 }

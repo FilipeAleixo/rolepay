@@ -35,7 +35,7 @@ const BAR = { height: 32, y: 10, thickness: 12 }
  * limit as a solid line at the end, which is the trust model in one picture (the bot cannot spend
  * past it; the chain refuses it). Widths are percentages, so it fills any width without scaling.
  */
-export function budgetBar(b: { spent: bigint; limit: bigint; token: string }): string {
+export function budgetBar(b: { spent: bigint; limit: bigint; token: string; title?: string }): string {
   const symbol = tokenLabel(b.token)
   const spent = b.spent < 0n ? 0n : b.spent > b.limit ? b.limit : b.spent
   const left = b.limit - spent
@@ -43,7 +43,7 @@ export function budgetBar(b: { spent: bigint; limit: bigint; token: string }): s
   const exact = b.limit > 0n ? Number((spent * 10_000n) / b.limit) / 100 : 0
   const pct = spent > 0n && exact < 0.5 ? 0.5 : exact
   const { height, y, thickness } = BAR
-  const label = `Bot key budget: ${amount(spent)} of ${amount(b.limit)} ${symbol} spent, ${amount(left)} ${symbol} left. The chain refuses any payment past the limit.`
+  const label = `${b.title ?? BOT_KEY_WORDS.title}: ${amount(spent)} of ${amount(b.limit)} ${symbol} spent, ${amount(left)} ${symbol} left. The chain refuses any payment past the limit.`
   // The spent part: rounded at its end, square where it starts; a 2px gap before the track.
   const spentPart = spent > 0n ? `<svg width="${pct}%" height="${height}"><rect class="spent" y="${y}" width="100%" height="${thickness}" rx="3"/><rect class="spent" y="${y}" width="4" height="${thickness}"/></svg>` : ''
   const track =
@@ -56,16 +56,26 @@ export function budgetBar(b: { spent: bigint; limit: bigint; token: string }): s
   return `<svg class="viz viz-budget" role="img" aria-label="${esc(label)}" width="100%" height="${height}">${track}${spentPart}${limit}</svg>`
 }
 
-/** What the bot may still spend this period, drawn; or, when it may spend nothing, why, in words and with no bar. */
-export function keyBudget(read: ChainRead<KeyStatusView>): string {
-  const head = '<h3>Bot key budget</h3>'
-  if (read.kind === 'unavailable') return part(`${head}<p class="muted">Rolepay could not read the bot key from the chain just now, so its budget is not drawn. Reload in a moment.</p>`)
+/**
+ * Whose budget a key budget is, in words: the bot key's (the Overview), or a policy's own key's (the
+ * policy's page). `renew` is how it gets a key again, in lower case, after "until".
+ */
+export type BudgetWords = { title: string; key: string; spender: string; renew: string }
+export const BOT_KEY_WORDS: BudgetWords = { title: 'Bot key budget', key: 'The bot key', spender: 'the bot', renew: 'a treasurer authorises a new key on the setup page' }
+export const POLICY_KEY_WORDS: BudgetWords = { title: "This policy's own budget", key: "This policy's key", spender: 'this policy', renew: 'a treasurer gives it a new budget on the treasury page' }
+const upper = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`
+
+/** What the key may still spend this period, drawn; or, when it may spend nothing, why, in words and with no bar. */
+export function keyBudget(read: ChainRead<KeyStatusView>, words: BudgetWords = BOT_KEY_WORDS): string {
+  const w = words
+  const head = `<h3>${esc(w.title)}</h3>`
+  if (read.kind === 'unavailable') return part(`${head}<p class="muted">Rolepay could not read ${esc(w.key.toLowerCase())} from the chain just now, so its budget is not drawn. Reload in a moment.</p>`)
   if (read.kind === 'missing') return part(`${head}${notice('', 'No bot key yet, so the bot can spend nothing. A treasurer authorises one on the setup page: <code>/rolepay setup</code> in Discord.')}`)
   const { key, state } = read.value
   const expires = new Date((state.expiry || key.policy.expiresAt) * 1000)
-  if (state.status === 'revoked') return part(`${head}${notice('bad', 'The bot key is revoked: the bot can spend nothing. A treasurer authorises a new key on the setup page.')}`)
-  if (state.status === 'expired') return part(`${head}${notice('bad', `The bot key expired on ${when(expires)}: the bot can spend nothing until a treasurer authorises a new key on the setup page.`)}`)
-  if (state.status === 'not_authorized') return part(`${head}${notice('warn', "The bot key waits for the treasury's passkey to authorise it. Until then the bot can spend nothing.")}`)
+  if (state.status === 'revoked') return part(`${head}${notice('bad', `${esc(w.key)} is revoked: ${esc(w.spender)} can spend nothing. ${esc(upper(w.renew))}.`)}`)
+  if (state.status === 'expired') return part(`${head}${notice('bad', `${esc(w.key)} expired on ${when(expires)}: ${esc(w.spender)} can spend nothing until ${esc(w.renew)}.`)}`)
+  if (state.status === 'not_authorized') return part(`${head}${notice('warn', `${esc(w.key)} waits for the treasury's passkey to authorise it. Until then ${esc(w.spender)} can spend nothing.`)}`)
 
   const { limit, token, periodSeconds } = key.policy
   const left = state.remaining > limit ? limit : state.remaining
@@ -80,11 +90,11 @@ export function keyBudget(read: ChainRead<KeyStatusView>): string {
       ? `${clause(`Resets ${when(resets)}`)} · ${clause(`expires ${when(expires)}`)}`
       : `${clause(`Expires ${when(expires)}`)}, before the period resets`
   const empty =
-    left === 0n ? `<p class="quiet">${periodic ? 'Nothing left until the period resets: a run waits until then.' : 'Nothing left: a treasurer authorises a new key on the setup page.'}</p>` : ''
+    left === 0n ? `<p class="quiet">${periodic ? 'Nothing left until the period resets: a run waits until then.' : `Nothing left: ${esc(w.renew)}.`}</p>` : ''
   return part(
     `${head}<div class="figures">${figure(periodic ? 'Spent this period' : 'Spent', spent, token)}${figure('Left', left, token, true)}</div>` +
-      `${budgetBar({ spent, limit, token })}<p class="budget-limit"><span class="label">Limit</span> ${money(limit, token)}</p>` +
-      `<p class="quiet">${timing}</p>${empty}<p class="caption">The bot can never spend past that line: the chain enforces it, whatever Rolepay's own code does.</p>`,
+      `${budgetBar({ spent, limit, token, title: w.title })}<p class="budget-limit"><span class="label">Limit</span> ${money(limit, token)}</p>` +
+      `<p class="quiet">${timing}</p>${empty}<p class="caption">${esc(upper(w.spender))} can never spend past that line: the chain enforces it, whatever Rolepay's own code does.</p>`,
   )
 }
 

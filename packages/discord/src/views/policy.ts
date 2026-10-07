@@ -3,13 +3,15 @@ import {
   MAX_LINES_PER_RUN,
   type Micros,
   type Policy,
+  type PolicyKeyStatus,
   type PolicyPreview,
   type PolicyRun,
   type PolicySummary,
   describeRule,
   describeSchedule,
+  formatAmount,
 } from '@rolepay/core'
-import { type ActionRow, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
+import { type ActionRow, ButtonStyle, ComponentType, type Embed, type Message, MessageFlags } from '../api.js'
 import { encodePolicyButton } from '../components/customId.js'
 import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, roleMention } from './format.js'
 
@@ -17,6 +19,10 @@ export type PolicyViewContext = {
   /** The community's payout token, for amounts. */
   token: string
   approverRoleId: string | null
+  /** Whose budget pays the policy, with what the chain says (show reads it); absent: not shown. */
+  budget?: PolicyKeyStatus | null
+  /** The treasury page for this policy's own budget: only in an answer to an approver, never in a public message. */
+  budgetUrl?: string | null
 }
 
 const FIELD_MAX = 1024
@@ -60,6 +66,10 @@ export function explainHold(hold: Pick<Hold, 'code' | 'total' | 'limit'>, ctx: {
       return `More than ${MAX_LINES_PER_RUN} people matched, and one run pays at most ${MAX_LINES_PER_RUN}. Held: nothing was paid. Narrow the rule.`
     case 'no_active_key':
       return 'There is no active bot key, so nothing can be paid. Held: nothing was paid. Authorise a key on the setup page.'
+    case 'over_policy_budget':
+      return `The run would pay ${m(hold.total)}, more than this policy's own key has left (${m(hold.limit)}). Held whole: nothing was paid, and the chain would refuse it anyway. A treasurer raises this policy's budget on the treasury page (\`/rolepay policy show\`), or it waits for the key's next period.`
+    case 'policy_key_inactive':
+      return "This policy's own key cannot pay (revoked or expired), and a policy with its own key never falls back to the bot key. Held: nothing was paid. A treasurer gives it a new budget on the treasury page (`/rolepay policy show`)."
     case 'key_revoked':
     case 'key_expired':
     case 'key_expires_too_soon':
@@ -89,6 +99,8 @@ const PROBLEM_WORDS: Record<string, string> = {
   over_policy_cap: "Over this policy's cap per run: the run would be held whole.",
   no_active_key: 'No active bot key: the run would be held.',
   over_budget: 'More than the bot key has left: the run would be held whole, never paid in part.',
+  over_policy_budget: "More than this policy's own key has left: the run would be held whole, never paid in part (the chain would refuse it anyway).",
+  policy_key_inactive: "This policy's own key cannot pay (revoked or expired): the run would be held. It never falls back to the bot key.",
 }
 
 function statusLine(p: Policy, ctx: PolicyViewContext): string {
@@ -133,11 +145,18 @@ export function policyMessage(p: Policy, ctx: PolicyViewContext & { preview?: Po
       fields.push({ name: 'Matches, not registered', value: cut(`${unregistered.slice(0, 20).map((m) => mention(m.discordUserId)).join(' ')}${unregistered.length > 20 ? ` …and ${unregistered.length - 20} more` : ''}. They run \`/payee link\` to be paid.`) })
     }
     if (pv.nearMisses.length) fields.push({ name: 'Just below the line', value: listField(pv.nearMisses.map((n) => `${mention(n.userId)}  ${n.text}`), 0) })
-    const left = pv.remaining === null ? 'There is no active bot key.' : `The bot key has ${money(pv.remaining, ctx.token)} left.`
+    const own = pv.budgetKey === 'policy'
+    const left =
+      pv.remaining === null
+        ? own
+          ? "This policy's own key cannot pay."
+          : 'There is no active bot key.'
+        : `${own ? "This policy's own key" : 'The bot key'} has ${money(pv.remaining, ctx.token)} left.`
     fields.push({ name: 'The next run so far', value: `${money(pv.total, ctx.token)} for ${count(payable.length, 'person', 'people')} so far, counting since <t:${unix(pv.window.start)}:f>. ${left}` })
     if (pv.problems.length) fields.push({ name: 'Look first', value: cut(pv.problems.map((x) => `• ${PROBLEM_WORDS[x] ?? x}`).join('\n')) })
   } else if (ctx.previewProblem) fields.push({ name: 'Who it applies to right now', value: cut(ctx.previewProblem) })
   if (p.compiled.assumptions.length) fields.push({ name: 'The AI assumed', value: cut(p.compiled.assumptions.map((a) => `• ${escapeMarkdown(a)}`).join('\n')) })
+  if (ctx.budget) fields.push({ name: 'Budget', value: budgetLine(ctx.budget, ctx.token) })
   fields.push({ name: 'Status', value: statusLine(p, ctx) })
   const embed: Embed = {
     title: cut(`${TITLES[p.status]}: ${p.name}`, 256),
@@ -158,7 +177,47 @@ export function policyMessage(p: Policy, ctx: PolicyViewContext & { preview?: Po
           },
         ]
       : []
+  if (ctx.budgetUrl) {
+    const label = ctx.budget?.signs === 'own' ? 'Manage its budget' : 'Give this policy its own budget'
+    components.push({ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label, url: ctx.budgetUrl }] })
+  }
   return { embeds: [embed], components, allowed_mentions: NO_PINGS }
+}
+
+/**
+ * Whose budget pays the policy, as the chain says: "Own budget: 20 of 30 AlphaUSD left this period
+ * (chain-enforced)", or the bot key's budget, shared, or nothing (its own key revoked or expired).
+ */
+export function budgetLine(b: PolicyKeyStatus, token: string): string {
+  const k = b.key
+  const s = b.state
+  if (b.signs === 'retired') return 'Own budget: its key is revoked, so it pays nothing until a treasurer gives it a new one. It never falls back to the bot key.'
+  if (b.signs === 'bot' || !k || !s) {
+    const waiting = k?.status === 'pending_authorization' ? ' A key of its own waits for the treasury passkey.' : ''
+    return `Shared: it pays from the bot key's budget, with manual runs, AI-proposed runs and other policies.${waiting}`
+  }
+  if (s.status === 'expired') return 'Own budget: its key has expired, so it pays nothing until a treasurer gives it a new one. It never falls back to the bot key.'
+  if (s.status !== 'active') return 'Own budget: its key cannot pay right now, so it pays nothing until a treasurer gives it a new one.'
+  const limit = k.policy.limit
+  const left = s.remaining > limit ? limit : s.remaining
+  const periodic = k.policy.periodSeconds !== null
+  const timing = periodic && s.periodEnd ? ` Resets <t:${s.periodEnd}:R>, expires <t:${s.expiry}:R>.` : ` Expires <t:${s.expiry}:R>.`
+  return `Own budget: ${formatAmount(left)} of ${money(limit, token)} left ${periodic ? 'this period' : 'in total'} (chain-enforced).${timing}`
+}
+
+/**
+ * After an approval, to the approver alone: give the policy its own budget on the treasury page. The
+ * link is a setup link (30 minutes); the treasury passkey signs the key there and the chain enforces it.
+ */
+export function policyBudgetOffer(p: Policy, opts: { url: string; expiresAt: Date }): Message {
+  return {
+    content:
+      `Give **${escapeMarkdown(p.name)}** its own budget? A key of its own on the treasury, with a limit the chain enforces, so this policy can never spend more than that, whatever the bot key has left. ` +
+      `The treasury passkey signs it on the page; the link works until <t:${unix(opts.expiresAt)}:t>. Optional: without it, the policy pays from the bot key as before.`,
+    components: [{ type: ComponentType.ActionRow, components: [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Give this policy its own budget', url: opts.url }] }],
+    flags: MessageFlags.Ephemeral,
+    allowed_mentions: NO_PINGS,
+  }
 }
 
 /** A draft that was discarded (and, for an edit, which approved version is back). */

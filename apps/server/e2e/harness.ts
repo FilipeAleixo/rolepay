@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { type CDPSession, type Page } from '@playwright/test'
-import { NETWORKS, createRolepay } from '@rolepay/core'
+import { NETWORKS, type RolepayDeps, createRolepay } from '@rolepay/core'
 import { createTestnetTools, openRolepayAdapters } from '@rolepay/core/adapters'
 import { FakeDiscordRest } from '@rolepay/discord/testing'
 import { bundledAssets, createPasskeys } from '@rolepay/web'
@@ -16,8 +16,11 @@ import { parseServerConfig } from '../src/config.js'
 
 export const NET = NETWORKS.moderato
 
-/** `env` adds settings, for example `ROLEPAY_SPONSOR_URL: 'none'` to rehearse mainnet's unsponsored path on Moderato. */
-export async function startServer(port: number, env: Record<string, string> = {}) {
+/**
+ * `env` adds settings, for example `ROLEPAY_SPONSOR_URL: 'none'` to rehearse mainnet's unsponsored path on Moderato.
+ * `core` adds to core's dependencies, for example a scripted model and a fake Discord so a test can write a policy.
+ */
+export async function startServer(port: number, env: Record<string, string> = {}, core: Partial<Pick<RolepayDeps, 'proposer' | 'activity'>> = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'rolepay-e2e-'))
   const config = parseServerConfig({
     ROLEPAY_NETWORK: 'moderato',
@@ -32,7 +35,7 @@ export async function startServer(port: number, env: Record<string, string> = {}
   const testnet = createTestnetTools({ rpcUrl: config.core.rpcUrl })
   if ((await testnet.chainId()) !== 42431) throw new Error('e2e refuses any chain but Moderato')
   const { deps, kv, close } = await openRolepayAdapters(config.core)
-  const rolepay = createRolepay(deps)
+  const rolepay = createRolepay({ ...deps, ...core })
   const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
   const composed = composeServer({
     config,

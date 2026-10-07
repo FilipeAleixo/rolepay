@@ -1,10 +1,10 @@
 // Behavioural contracts for the policy repositories and the audit log. Run against the in-memory
 // fakes and against SQLite, so unit tests on fakes can be trusted.
 import { beforeEach, describe, expect, it } from 'vitest'
-import type { AuditLog, CommunityRepository, PolicyRepository, PolicyRunRepository } from '../../src/ports/repositories.js'
+import type { AuditLog, CommunityRepository, PolicyKeyRepository, PolicyRepository, PolicyRunRepository } from '../../src/ports/repositories.js'
 import * as f from './fixtures.js'
 
-export type PolicyRepoFactory = () => Promise<{ communities: CommunityRepository; policies: PolicyRepository; policyRuns: PolicyRunRepository; audit: AuditLog }>
+export type PolicyRepoFactory = () => Promise<{ communities: CommunityRepository; policies: PolicyRepository; policyRuns: PolicyRunRepository; policyKeys: PolicyKeyRepository; audit: AuditLog }>
 
 export function policyRepositoryContract(name: string, make: PolicyRepoFactory) {
   describe(`${name}: PolicyRepository`, () => {
@@ -145,6 +145,48 @@ export function policyRepositoryContract(name: string, make: PolicyRepoFactory) 
       expect(await q({ runId: 'run_1' })).toEqual([generated])
       expect(await q({ since: f.at(2), until: f.at(3) })).toEqual([generated, approved])
       expect(await q({ before: generated.seq, limit: 1 })).toEqual([approved])
+    })
+  })
+  describe(`${name}: PolicyKeyRepository`, () => {
+    let repo: PolicyKeyRepository
+    beforeEach(async () => {
+      const r = await make()
+      await r.communities.insert(f.community())
+      await r.communities.insert(f.community({ id: f.OTHER_GUILD }))
+      await r.policies.insert(f.policy(), f.policyVersion())
+      await r.policies.insert(f.policy({ id: 'pol_fixture02' }), f.policyVersion(f.policy({ id: 'pol_fixture02' })))
+      await r.policies.insert(f.policy({ id: 'pol_foreign01', communityId: f.OTHER_GUILD }), f.policyVersion(f.policy({ id: 'pol_foreign01', communityId: f.OTHER_GUILD })))
+      repo = r.policyKeys
+    })
+
+    it('round-trips a policy key exactly (limits as bigints, a fee budget, a destroyed secret)', async () => {
+      const k = f.policyKey({ policy: { ...f.policyKey().policy, feeToken: f.FEE_TOKEN, feeBudget: 1_000_000n, recipients: [f.ADDR.alice] } })
+      await repo.save(k)
+      expect(await repo.get(k.address)).toEqual(k)
+      const retired = { ...k, status: 'revoked' as const, sealedSecret: null, authorizedAt: f.at(10), revokedAt: f.at(20) }
+      await repo.save(retired)
+      expect(await repo.get(k.address)).toEqual(retired)
+      expect(await repo.get('0x6666666666666666666666666666666666666669')).toBeNull()
+    })
+
+    it("upserts by key address and lists one policy's keys, or one community's, newest first", async () => {
+      const older = f.policyKey({ address: '0x6666666666666666666666666666666666666661', createdAt: f.at(1) })
+      const newer = f.policyKey({ address: '0x6666666666666666666666666666666666666662', createdAt: f.at(2) })
+      const otherPolicy = f.policyKey({ address: '0x6666666666666666666666666666666666666663', policyId: 'pol_fixture02', createdAt: f.at(3) })
+      const foreign = f.policyKey({ address: '0x6666666666666666666666666666666666666664', policyId: 'pol_foreign01', communityId: f.OTHER_GUILD })
+      for (const k of [older, newer, otherPolicy, foreign]) await repo.save(k)
+      await repo.save({ ...older, status: 'superseded', sealedSecret: null })
+      expect(await repo.listByPolicy('pol_fixture01')).toEqual([newer, { ...older, status: 'superseded', sealedSecret: null }])
+      expect(await repo.listByCommunity(f.GUILD)).toEqual([otherPolicy, newer, { ...older, status: 'superseded', sealedSecret: null }])
+      expect(await repo.listByCommunity(f.OTHER_GUILD)).toEqual([foreign])
+      expect(await repo.listByPolicy('pol_unknown')).toEqual([])
+    })
+
+    it('hands out copies', async () => {
+      await repo.save(f.policyKey())
+      const got = await repo.get(f.policyKey().address)
+      if (got) got.status = 'revoked'
+      expect((await repo.get(f.policyKey().address))?.status).toBe('pending_authorization')
     })
   })
 }

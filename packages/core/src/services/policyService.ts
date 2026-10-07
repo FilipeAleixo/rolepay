@@ -34,6 +34,7 @@ import { type InvalidInput, invalidInput } from './common.js'
 import type { CommunityService } from './communityService.js'
 import type { PayRunService } from './payRunService.js'
 import { type PolicyMatch, evaluatePolicy } from './policyEvaluation.js'
+import type { PolicyKeyService } from './policyKeyService.js'
 import type { CouldNotPropose } from './proposalService.js'
 import { stopwatch } from './proposalTimings.js'
 
@@ -49,6 +50,8 @@ export type PolicyServiceDeps = {
   proposer: RunProposer | null
   activity: ActivityReader | null
   communityService: CommunityService
+  /** Whose budget a policy's next run is checked against: its own key's, or the bot key's. */
+  policyKeys: PolicyKeyService
   payRuns: PayRunService
   audit: AuditTrail
   /** One content-free row per model call (the AI spend): each compile. */
@@ -96,9 +99,14 @@ export type PolicyPreview = {
   matches: PolicyMatch[]
   nearMisses: { userId: string; condition: string; count: number; min: number; text: string }[]
   total: Micros
-  /** What the bot key has left now; null = no active key. */
+  /** What the key that pays this policy has left now; null = that key cannot pay (no active key). */
   remaining: Micros | null
-  /** amount_not_in_instruction, scan_truncated, too_many_lines, over_policy_cap, no_active_key, over_budget. */
+  /** Whose key `remaining` is: the policy's own (`policy`), or the bot key, shared with every other run (`bot`). */
+  budgetKey: 'bot' | 'policy'
+  /**
+   * amount_not_in_instruction, scan_truncated, too_many_lines, over_policy_cap, no_active_key,
+   * over_budget; with its own key, policy_key_inactive and over_policy_budget instead of the last two.
+   */
   problems: string[]
   rule: string[]
   scans: ChannelScan[]
@@ -469,7 +477,8 @@ export class PolicyService {
       { communityId: p.communityId, compiled: p.compiled, caps: p.caps, authorId: author, window, now },
     )
     if (!ev.ok) return ev
-    const remaining = await this.remaining(p.communityId)
+    const budget = await this.deps.policyKeys.budget({ guildId: p.communityId, policyId: p.id })
+    const remaining = budget.remaining
     const e = ev.value
     return ok({
       policyId: p.id,
@@ -480,10 +489,11 @@ export class PolicyService {
       nearMisses: e.nearMisses,
       total: e.total,
       remaining,
+      budgetKey: budget.key,
       problems: [
         ...(p.compiled.amountsInInstruction ? [] : ['amount_not_in_instruction']),
         ...e.problems,
-        ...runGuards({ lines: e.lines.length, total: e.total, caps: p.caps, remaining }).map((h) => h.code),
+        ...runGuards({ lines: e.lines.length, total: e.total, caps: p.caps, remaining, key: budget.key }).map((h) => h.code),
       ],
       rule: describeRule(p.compiled, { schedule: p.schedule, caps: p.caps, guildId: p.communityId }),
       scans: e.scans,

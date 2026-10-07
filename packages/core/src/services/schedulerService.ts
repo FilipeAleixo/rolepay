@@ -2,7 +2,7 @@ import { POLICY_LIMITS } from '../constants/limits.js'
 import { formatAmount } from '../domain/money.js'
 import type { Community } from '../domain/community.js'
 import { type Policy, canApprovePolicies, runWindow } from '../domain/policy/policy.js'
-import { type Hold, type PolicyRun, type PolicyRunEvent, type Snapshot, movePolicyRun, newPolicyRun, runGuards } from '../domain/policy/policyRun.js'
+import { type Hold, type PolicyRun, type PolicyRunEvent, type Snapshot, movePolicyRun, newPolicyRun, policyKeyHold, runGuards } from '../domain/policy/policyRun.js'
 import { nextOccurrence, occurrenceAtOrBefore, periodKey, scheduleAllowed } from '../domain/policy/schedule.js'
 import { type Result, err, ok } from '../domain/result.js'
 import type { Run } from '../domain/run.js'
@@ -14,6 +14,7 @@ import type { AuditTrail } from './auditTrail.js'
 import type { CommunityService } from './communityService.js'
 import type { ExecuteOutcome, PayRunService } from './payRunService.js'
 import { evaluatePolicy } from './policyEvaluation.js'
+import type { PolicyKeyService } from './policyKeyService.js'
 import type { PolicyActor } from './policyService.js'
 
 export type SchedulerServiceDeps = {
@@ -27,6 +28,8 @@ export type SchedulerServiceDeps = {
   /** Discord history and members: what the compiled rule counts, and whether autopilot's approver still holds the role. */
   activity: ActivityReader | null
   communityService: CommunityService
+  /** Whose budget a policy's run is held against: its own key's, or the bot key's. */
+  policyKeys: PolicyKeyService
   payRuns: PayRunService
   audit: AuditTrail
   /** How long an instance holds a run it is working on before another may take it over. */
@@ -63,8 +66,9 @@ const redact = (text: string) => text.replace(/https?:\/\/\S+/g, '<url>').slice(
  * exists (so a crash in between never makes a second run), work in progress holds a lease that
  * another instance takes over only once it has run out, and every move is a compare-and-set.
  * Autopilot runs pay only after their veto window, only if not vetoed, and through the normal
- * approve and execute (the bot key's on-chain limit caps them). A run that would exceed the key's
- * remaining budget, the policy's cap or one run's size is held whole and explained.
+ * approve and execute (the on-chain limit of the key that signs them caps them: the policy's own
+ * key when it has one, else the bot key). A run that would exceed that key's remaining budget, the
+ * policy's cap or one run's size is held whole and explained.
  */
 export class SchedulerService {
   constructor(private readonly deps: SchedulerServiceDeps) {}
@@ -186,7 +190,9 @@ export class SchedulerService {
       { communityId: policy.communityId, compiled: policy.compiled, caps: policy.caps, authorId: author, window: { start: pr.periodStart, end: pr.periodEnd }, now },
     )
     if (!ev.ok) return hold({ code: ev.error.code, total: null, limit: null })
-    const remaining = await this.remaining(policy.communityId)
+    // The budget that pays this policy: its own key's when the treasury gave it one, else the bot key's.
+    const budget = await this.deps.policyKeys.budget({ guildId: policy.communityId, policyId: policy.id })
+    const remaining = budget.remaining
     const snapshot: Snapshot = { lines: ev.value.lines.slice(0, 1000), unregistered: ev.value.unregistered, total: ev.value.total, remaining, problems: ev.value.problems }
     if (snapshot.lines.length === 0) {
       const empty = await this.move(pr, { type: 'empty', runId: null, ...snapshot })
@@ -194,7 +200,7 @@ export class SchedulerService {
       await this.event(empty, 'policy_run.empty', actor, { unregistered: snapshot.unregistered.length })
       return { kind: 'generated', policy, policyRun: empty, run: null }
     }
-    const guard = runGuards({ lines: ev.value.lines.length, total: ev.value.total, caps: policy.caps, remaining })[0]
+    const guard = runGuards({ lines: ev.value.lines.length, total: ev.value.total, caps: policy.caps, remaining, key: budget.key })[0]
     if (guard) return hold(guard, snapshot)
     const created = await this.deps.payRuns.create(
       { guildId: policy.communityId, createdBy: author, note: policy.compiled.note ?? policy.name, lines: ev.value.lines.map((l) => ({ discordUserId: l.discordUserId, amount: l.amount })) },
@@ -260,9 +266,8 @@ export class SchedulerService {
     if (run.status === 'approved' || run.status === 'executing') {
       const executed = await this.deps.payRuns.execute({ guildId: run.communityId, runId: run.id })
       if (!executed.ok && executed.error.code !== 'concurrent_update') {
-        const e = executed.error
-        const limit = e.code === 'insufficient_limit' ? e.remaining : null
-        return this.hold(policy, pr, { code: e.code, total: run.total, limit }, (await this.deps.runs.get(run.id)) ?? run, {}, null, 'held')
+        // A refusal of the policy's own key is held in its own words (over_policy_budget, policy_key_inactive).
+        return this.hold(policy, pr, policyKeyHold(executed.error, run.total), (await this.deps.runs.get(run.id)) ?? run, {}, null, 'held')
       }
       if (executed.ok) {
         run = executed.value.run
@@ -323,11 +328,6 @@ export class SchedulerService {
 
   private event(pr: PolicyRun, type: 'policy_run.generated' | 'policy_run.held' | 'policy_run.empty' | 'policy_run.released' | 'policy_run.cancelled', actor: string | null, details: Record<string, string | number | boolean | null>) {
     return this.deps.audit.record({ communityId: pr.communityId, type, actor, policyId: pr.policyId, policyVersion: pr.policyVersion, policyRunId: pr.id, runId: pr.runId, details })
-  }
-
-  private async remaining(guildId: string) {
-    const status = await this.deps.communityService.keyStatus({ guildId })
-    return status.ok && status.value.key.status === 'active' && status.value.state.status === 'active' ? status.value.state.remaining : null
   }
 }
 

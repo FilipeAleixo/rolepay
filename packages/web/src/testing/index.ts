@@ -10,6 +10,7 @@ import type { Assets, PasskeySession, PasskeySessions } from '../ports.js'
 export { InMemoryAiUsage } from './inMemoryAiUsage.js'
 export { InMemoryPayouts } from './inMemoryPayouts.js'
 export { InMemoryPolicies } from './inMemoryPolicies.js'
+export { InMemoryPolicyKeys } from './inMemoryPolicyKeys.js'
 
 const COOKIE = 'fake_passkey'
 

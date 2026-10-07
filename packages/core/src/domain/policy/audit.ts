@@ -19,6 +19,8 @@ export const AUDIT_EVENT_TYPES = [
   'policy.resumed',
   'policy.mode_changed',
   'policy.archived',
+  'policy_key.authorized',
+  'policy_key.revoked',
   'policy_run.generated',
   'policy_run.held',
   'policy_run.empty',

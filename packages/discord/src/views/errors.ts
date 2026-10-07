@@ -62,6 +62,7 @@ type CodedError = { code: string } & Record<string, unknown>
  */
 export function explainError(error: CodedError, ctx: { token?: string } = {}): string {
   const amount = (v: unknown) => (typeof v === 'bigint' ? (ctx.token ? money(v, ctx.token) : String(v)) : '?')
+  if (error.key === 'policy') return explainPolicyKeyCheck(error, amount)
   switch (error.code) {
     case 'community_not_found':
       return 'This server has not set up Rolepay yet. An admin runs /rolepay setup first.'
@@ -120,6 +121,31 @@ export function explainError(error: CodedError, ctx: { token?: string } = {}): s
       return 'This server is already registered.'
     default:
       return `Something went wrong (${error.code}). Try again in a moment.`
+  }
+}
+
+/**
+ * A pre-flight that failed on a policy's own key (`key: 'policy'`): this run was made by a policy
+ * with its own budget, so it is never paid from the bot key, and the fix is that policy's budget.
+ */
+function explainPolicyKeyCheck(error: CodedError, amount: (v: unknown) => string): string {
+  const fix = 'A treasurer gives it a new budget on the treasury page (`/rolepay policy show`), then presses Retry.'
+  switch (error.code) {
+    case 'insufficient_limit': {
+      const resets = typeof error.periodEnd === 'number' ? ` (it resets ${relativeTime(error.periodEnd)})` : ''
+      return `This run needs ${amount(error.needed)} but this policy's own key has ${amount(error.remaining)} left this period${resets}. Nothing was paid; the chain would refuse it anyway.`
+    }
+    case 'key_revoked':
+      return `This policy's own key was revoked, so its runs are not paid (never from the bot key). ${fix}`
+    case 'key_expired':
+    case 'key_expires_too_soon':
+      return `This policy's own key has expired or is about to, so its runs are not paid (never from the bot key). ${fix}`
+    case 'key_not_authorized':
+      return `This policy's own key is not authorised on chain, so its runs are not paid. ${fix}`
+    case 'fee_budget_exhausted':
+      return "This policy's own key has used up its fee budget. A treasurer gives it a new budget on the treasury page."
+    default:
+      return `Something went wrong with this policy's own key (${error.code}). Nothing was paid.`
   }
 }
 

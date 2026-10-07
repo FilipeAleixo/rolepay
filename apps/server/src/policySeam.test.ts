@@ -5,7 +5,7 @@ import { AUDIT_EVENT_TYPES, type AuditEvent, type AuditEventType, createRolepay,
 import { FakeActivityReader, FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories, emptyCriteria, unclearCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { scriptedProposer } from '../test/coreBackend.js'
-import { aiUsagePortFromCore, auditPortFromCore, auditSummary, payoutsPortFromCore, policyPortFromCore, toCoreSchedule, toPortSchedule } from './policySeam.js'
+import { aiUsagePortFromCore, auditPortFromCore, auditSummary, payoutsPortFromCore, policyKeysPortFromCore, policyPortFromCore, toCoreSchedule, toPortSchedule } from './policySeam.js'
 
 const GUILD = '1094309218049937418'
 const ROLE = '400000000000000001'
@@ -292,6 +292,19 @@ describe('auditSummary: every event in plain words, from codes, counts and amoun
     expect(say('policy_run.released', { outcome: 'odd' })).toBe('Released the run after its veto window: odd.')
   })
 
+  it("a policy's own key: authorised and revoked by the treasury passkey, and the holds against it", () => {
+    expect(say('policy_key.authorized', { key: '0x6666666666666666666666666666666666666666', limit: '30', periodSeconds: 604_800, expiresAt: '2026-11-05T12:00:00.000Z', replaced: 0 })).toBe(
+      'The treasury passkey gave the policy its own key on chain: up to 30 AlphaUSD every 7 days, until 2026-11-05 12:00 UTC.',
+    )
+    expect(say('policy_key.authorized', { limit: '1', periodSeconds: 86_400, expiresAt: '2026-11-05T12:00:00.000Z', replaced: 1 })).toBe(
+      'The treasury passkey gave the policy its own key on chain: up to 1 AlphaUSD every day, until 2026-11-05 12:00 UTC, replacing its previous key.',
+    )
+    expect(say('policy_key.authorized', { limit: '5', periodSeconds: null, expiresAt: null, replaced: 0 })).toBe('The treasury passkey gave the policy its own key on chain: up to 5 AlphaUSD in total.')
+    expect(say('policy_key.revoked', { key: '0x6666666666666666666666666666666666666666' })).toBe("The treasury passkey revoked the policy's own key on chain: the policy pays nothing until it gets a new one.")
+    expect(say('policy_run.held', { code: 'over_policy_budget', total: '40', limit: '30' })).toBe("Held the run whole: more than the policy's own key has left (40 AlphaUSD against 30 AlphaUSD).")
+    expect(say('policy_run.held', { code: 'policy_key_inactive', total: '5', limit: null })).toBe("Held the run whole: the policy's own key cannot pay (revoked or expired) (5 AlphaUSD).")
+  })
+
   it('pay run events', () => {
     expect(say('run.created', { total: '4', lines: 2 })).toBe('Created a run of 4 AlphaUSD for 2 people.')
     expect(say('run.executing', { attempt: 2 })).toBe('Started paying (attempt 2).')
@@ -372,5 +385,27 @@ describe('payoutsPortFromCore: what was paid each week, from the runs core paid'
     expect(view?.weeks[11]).toEqual({ start: new Date('2026-10-05T00:00:00Z'), policy: usd('3'), manual: usd('5'), runs: 2, partial: true })
     expect(view?.weeks[0]?.start).toEqual(new Date('2026-07-20T00:00:00Z'))
     expect(await port.paidByWeek({ guildId: '1094309218049937499' })).toBeNull()
+  })
+})
+
+describe("policyKeysPortFromCore: a policy's own budget, from core and the chain", () => {
+  it('shared until the passkey authorises its own key, then its own key with what the chain says, then retired once revoked; null for an unknown policy', async () => {
+    const w = await world()
+    const must = <T>(r: { ok: true; value: T } | { ok: false; error: { code: string } }): T => {
+      if (!r.ok) throw new Error(r.error.code)
+      return r.value
+    }
+    const policy = must(await w.rolepay.policies.create({ ...asTreasurer, name: 'Help desk', instruction: RULE, schedule: toCoreSchedule(MONDAY) }))
+    const port = policyKeysPortFromCore(w.rolepay)
+    const ref = { guildId: GUILD, policyId: policy.id }
+    expect(await port.budget(ref)).toEqual({ kind: 'shared' })
+    must(await w.rolepay.policyKeys.provision({ ...ref, limit: usd('30'), periodSeconds: 7 * 86_400, expiresAt: Math.floor(w.clock.now().getTime() / 1000) + 30 * 86_400 }))
+    // Waiting for the passkey: it still pays from the bot key.
+    expect(await port.budget(ref)).toEqual({ kind: 'shared' })
+    must(await w.rolepay.policyKeys.authorize({ ...ref, root: w.chain.rootSigner(TREASURY) }))
+    expect(await port.budget(ref)).toMatchObject({ kind: 'own', key: { key: { status: 'active', policy: { limit: usd('30') } }, state: { status: 'active', remaining: usd('30') } } })
+    must(await w.rolepay.policyKeys.revoke({ ...ref, root: w.chain.rootSigner(TREASURY), actor: TREASURER }))
+    expect(await port.budget(ref)).toEqual({ kind: 'retired' })
+    expect(await port.budget({ guildId: GUILD, policyId: 'pol_unknown' })).toBeNull()
   })
 })
