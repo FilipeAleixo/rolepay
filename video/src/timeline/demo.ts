@@ -1,9 +1,10 @@
 import type { Item } from './Assembly'
 
 /**
- * The demo (target 2:45, hard limit 3:00): screen recordings of the live product with a caption
- * each, and the explainer scenes where they explain what the recording shows. Captions are timed
- * in seconds from the start of their clip; SCRIPT.md says what to click so they line up.
+ * The demo (planned 2:56, hard limit 3:00): screen recordings of the live product with captions,
+ * and the explainer scenes where they explain what the recording shows. Captions are timed in
+ * seconds from the start of their clip; SCRIPT.md says what to click so they line up. The slots are
+ * tight: trim each recording to its planned length, or the studio's corner warning appears.
  */
 export const DEMO: Item[] = [
   { type: 'scene', scene: 'title' },
@@ -13,11 +14,11 @@ export const DEMO: Item[] = [
     kind: 'screen',
     label: 'Setup and the treasury passkey',
     note: '/rolepay setup, then the setup page: the treasury created with a passkey, funded, the bot key authorised.',
-    seconds: 18,
+    seconds: 12,
     captions: [
-      { at: 0.5, until: 5.5, text: '`/rolepay setup` names the approver role' },
-      { at: 6, until: 11.5, text: 'The treasurer creates the *treasury* with a passkey' },
-      { at: 12, until: 17.5, text: 'The bot gets an *access key*: an expiry, a limit, one call' },
+      { at: 0.5, until: 4, text: '`/rolepay setup` names the approver role' },
+      { at: 4.5, until: 8, text: 'The treasurer creates the *treasury* with a passkey' },
+      { at: 8.5, until: 11.5, text: 'The bot gets an *access key*: an expiry, a limit, one call' },
     ],
   },
   // What that access key can and cannot do.
@@ -27,82 +28,111 @@ export const DEMO: Item[] = [
     file: 'demo-2-payrun.mp4',
     kind: 'screen',
     label: 'A pay run, approved and paid',
-    note: '/rolepay new for a role, Approve, the run paid in one transaction, then the DM receipt.',
-    seconds: 21,
+    note: '/rolepay new for a role, Approve, the run paid in one transaction with a memo per line, then the DM receipt.',
+    seconds: 13,
     captions: [
-      { at: 0.5, until: 5.5, text: '`/rolepay new` builds a run for a *role*' },
-      { at: 6, until: 10.5, text: 'The treasurer *approves* with one button' },
-      { at: 11, until: 15.5, text: 'Paid in *one batched transaction*, one memo per line' },
-      { at: 16, until: 20.5, text: 'Every payee gets a *DM receipt*' },
+      { at: 0.5, until: 4, text: '`/rolepay new` builds a run for a *role*' },
+      { at: 4.5, until: 8.5, text: 'One tap to *approve*, one batched transaction' },
+      { at: 9, until: 12.5, text: 'One memo per line, and a *DM receipt* for each payee' },
     ],
   },
   // Why a double click, a retry or a crash cannot pay that run twice.
   { type: 'scene', scene: 'neverPayTwice' },
   {
     type: 'slot',
-    file: 'demo-3-pay-author.mp4',
+    file: 'demo-3-right-click.mp4',
     kind: 'screen',
-    label: 'Pay the author',
-    note: 'Right-click a message, Apps, Pay the author: the form, then the one-line run for review.',
-    seconds: 12,
+    label: 'Right-click a message',
+    note: 'Right-click a message: Apps, Pay the author (a one-line run); then Draft pay run with AI on a winners post, the held line and the cost.',
+    seconds: 15,
     captions: [
-      { at: 0.5, until: 5.5, text: 'Right-click a message, Apps, *Pay the author*' },
-      { at: 6, until: 11.5, text: 'A one-line run for its author, still *approved* by a human' },
+      { at: 0.5, until: 4, text: 'Right-click a message, Apps, *Pay the author*: a one-line run' },
+      { at: 4.5, until: 7.5, text: 'Or *Draft pay run with AI* from a winners post' },
+      { at: 8, until: 11, text: 'A line backed only by *their own message* is held' },
+      { at: 11.5, until: 14.5, text: 'The footer shows what it cost: *under half a cent*' },
+    ],
+  },
+  // How a payee gets the stablecoin they chose, before the recording shows one.
+  { type: 'scene', scene: 'preferredStablecoin' },
+  {
+    type: 'slot',
+    file: 'demo-4-preferred.mp4',
+    kind: 'screen',
+    label: 'The stablecoin they choose',
+    note: '/payee prefer BetaUSD from the second account, a run showing 5 AlphaUSD → 5 BetaUSD (swapped), Approve, the receipt.',
+    seconds: 11,
+    captions: [
+      { at: 0.5, until: 3.5, text: 'A payee picks a stablecoin: `/payee prefer`' },
+      { at: 4, until: 7, text: 'The run shows the *swap* and the most it may spend' },
+      { at: 7.5, until: 10.5, text: 'Paid in *BetaUSD*, in the same transaction' },
     ],
   },
   // What a standing policy is, before the recording shows one.
   { type: 'scene', scene: 'fourBeats' },
   {
     type: 'slot',
-    file: 'demo-4-policy.mp4',
+    file: 'demo-5-policy.mp4',
     kind: 'screen',
     label: 'A policy on autopilot',
     note: '/rolepay policy new, the preview of who it applies to, Approve, autopilot with the veto window, then paid.',
-    seconds: 21,
+    seconds: 13,
     captions: [
-      { at: 0.5, until: 5.5, text: 'A standing rule in plain words: `/rolepay policy new`' },
-      { at: 6, until: 10.5, text: 'It shows *who it applies to* before anyone approves' },
-      { at: 11, until: 15.5, text: 'On autopilot, each run is posted with a *veto window*' },
-      { at: 16, until: 20.5, text: "Then it pays itself, inside the key's *on-chain limit*" },
+      { at: 0.5, until: 4, text: 'A standing rule in plain words: `/rolepay policy new`' },
+      { at: 4.5, until: 8, text: 'It shows *who it applies to* before anyone approves' },
+      { at: 8.5, until: 12.5, text: 'On autopilot: a *veto window*, then it pays itself' },
     ],
   },
   {
     type: 'slot',
-    file: 'demo-5-ai-proposal.mp4',
+    file: 'demo-6-policy-budget.mp4',
     kind: 'screen',
-    label: 'An AI proposal',
-    note: 'Right-click the winners post, Draft pay run with AI: the proposal, the held line, the cost in the footer.',
-    seconds: 16,
+    label: "The policy's own budget",
+    note: "Give the Judges policy its own budget on the treasury page (one passkey prompt), then the policy's dashboard page with its budget bar.",
+    seconds: 10,
     captions: [
-      { at: 0.5, until: 5, text: 'Right-click the winners post: *Draft pay run with AI*' },
-      { at: 5.5, until: 10.5, text: 'A line backed only by *their own message* is held' },
-      { at: 11, until: 15.5, text: 'The footer shows what it cost: *under half a cent*' },
+      { at: 0.5, until: 4.5, text: 'Give the Judges policy *its own budget*: one passkey prompt' },
+      { at: 5, until: 9.5, text: 'Its page draws that budget *from the chain*' },
     ],
   },
+  // What a key per policy buys: the chain caps each one on its own.
+  { type: 'scene', scene: 'ownBudgets' },
   {
     type: 'slot',
-    file: 'demo-6-dashboard.mp4',
+    file: 'demo-7-dashboard.mp4',
     kind: 'screen',
     label: 'The dashboard',
     note: 'The web dashboard: the Overview with its At a glance panel, then the Audit log and its CSV.',
-    seconds: 17,
+    seconds: 9,
     captions: [
-      { at: 0.5, until: 5.5, text: "The dashboard: *At a glance*, the key's budget and its limit" },
-      { at: 6, until: 11, text: 'What was paid each week, by policy and by hand' },
-      { at: 11.5, until: 16.5, text: 'Every step in the *audit log*, exportable to CSV' },
+      { at: 0.5, until: 4.5, text: "The dashboard: *At a glance*, the key's budget and its limit" },
+      { at: 5, until: 8.5, text: 'Every step in the *audit log*, exportable to CSV' },
+    ],
+  },
+  // How money comes in with its source attached, before the recording shows a deposit.
+  { type: 'scene', scene: 'funding' },
+  {
+    type: 'slot',
+    file: 'demo-8-funding.mp4',
+    kind: 'screen',
+    label: 'Funding',
+    note: '/rolepay fund new for a source, its deposit address, then a deposit arriving on the dashboard\'s Funding page under that source.',
+    seconds: 10,
+    captions: [
+      { at: 0.5, until: 4.5, text: '`/rolepay fund new`: a *deposit address* for each source' },
+      { at: 5, until: 9.5, text: 'A deposit lands in the treasury, *attributed* to its source' },
     ],
   },
   {
     type: 'slot',
-    file: 'demo-7-judge.mp4',
+    file: 'demo-9-judge.mp4',
     kind: 'screen',
     label: 'The judge flow',
     note: 'As a judge: join the demo server, /payee link, create a passkey, react to the welcome post, get paid.',
-    seconds: 17,
+    seconds: 12,
     captions: [
-      { at: 0.5, until: 5.5, text: 'Judges join the demo server and run `/payee link`' },
-      { at: 6, until: 11, text: 'Create a passkey, react to the welcome post' },
-      { at: 11.5, until: 16.5, text: 'Paid at the next daily run, *with nobody online*' },
+      { at: 0.5, until: 4, text: 'Judges join the demo server and run `/payee link`' },
+      { at: 4.5, until: 7.5, text: 'Create a passkey, react to the welcome post' },
+      { at: 8, until: 11.5, text: 'Paid at the next daily run, *with nobody online*' },
     ],
   },
   { type: 'scene', scene: 'endCard' },

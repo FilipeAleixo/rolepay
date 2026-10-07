@@ -6,7 +6,7 @@ import { SANS, SERIF } from '../fonts'
 import { EASE_IN_OUT, enter, progress } from '../motion'
 import { C, gold, sec, white } from '../theme'
 
-export const FOUR_BEATS_FRAMES = sec(10)
+export const FOUR_BEATS_FRAMES = sec(9)
 
 const BEATS = [
   { Icon: SparkIcon, lines: ['AI writes', 'the rule once.'] },
@@ -16,7 +16,7 @@ const BEATS = [
 ] as const
 
 const START = 14
-const GAP = 40 // frames between beats
+const GAP = 34 // frames between beats
 const COL = 360
 const SPACE = 40
 const LEFT = (1920 - (BEATS.length * COL + (BEATS.length - 1) * SPACE)) / 2
@@ -83,7 +83,7 @@ export const FourBeats: React.FC = () => {
           }}
         >
           <span style={{ display: 'inline-block', padding: '14px 30px', borderRadius: 999, boxShadow: `inset 0 0 0 1px ${white(0.12)}`, font: `400 27px/1.2 ${SANS}`, color: C.soft }}>
-            No AI at runtime. Every run is capped by the bot key, on chain.
+            No AI at runtime. Every run is capped by an access key, on chain.
           </span>
         </div>
       </AbsoluteFill>

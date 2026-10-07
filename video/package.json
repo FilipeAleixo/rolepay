@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "render:pitch": "remotion render src/index.ts PitchVideo out/pitch.mp4",
     "render:demo": "remotion render src/index.ts DemoVideo out/demo.mp4",
-    "stills": "for c in Title:100 Problem:240 TrustModel:410 FourBeats:280 AiProposal:200 NeverPayTwice:190 Numbers:190 Architecture:220 WhyTempo:220 EndCard:120 Captions:60 LowerThird:90; do remotion still src/index.ts ${c%%:*} out/stills/${c%%:*}.png --frame=${c##*:} || exit 1; done"
+    "stills": "for c in Title:100 Problem:240 TrustModel:410 OwnBudgets:330 PreferredStablecoin:260 Funding:270 FourBeats:235 AiProposal:200 NeverPayTwice:165 Numbers:200 Architecture:220 WhyTempo:220 EndCard:120 Captions:60 LowerThird:90; do remotion still src/index.ts ${c%%:*} out/stills/${c%%:*}.png --frame=${c##*:} || exit 1; done"
   },
   "dependencies": {
     "@remotion/cli": "4.0.534",

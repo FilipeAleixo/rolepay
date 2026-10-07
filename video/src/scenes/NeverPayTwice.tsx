@@ -6,7 +6,7 @@ import { SANS, SERIF } from '../fonts'
 import { EASE_IN_OUT, enter, mix, progress } from '../motion'
 import { C, gold, panel, sec, white } from '../theme'
 
-export const NEVER_PAY_TWICE_FRAMES = sec(7)
+export const NEVER_PAY_TWICE_FRAMES = sec(6.5)
 
 /*
  * 6. Never pays twice. Two workers reach for the same approved run (as on the demo on 2026-10-07:
@@ -21,7 +21,7 @@ const LEFT_X = 520
 const RIGHT_X = 1400
 const RUN_X = 960
 
-const T = { workers: 8, reach: 22, win: 50, facts: [104, 118, 132] as const }
+const T = { workers: 8, reach: 22, win: 50, facts: [92, 104, 116] as const }
 
 const FACTS = [
   { Icon: ShieldIcon, text: 'Signed before broadcast' },
