@@ -11,7 +11,7 @@
     },
     {
       "type": "text",
-      "text": "{\"understood\": true, \"problem\": \"\", \"conditions\": {\"hasRole\": [\"R2\"], \"lacksRole\": [], \"joinedBefore\": \"\", \"joinedAfter\": \"\", \"activity\": [{\"metric\": \"replies\", \"channels\": [\"C2\"], \"since\": \"2026-10-01\", \"until\": \"\", \"min\": 10}], \"anchors\": [], \"paidInRun\": \"\"}, \"exclude\": [], \"excludeProposer\": false, \"amount\": {\"kind\": \"flat\", \"amount\": \"20\", \"per\": \"\", \"cap\": \"\", \"total\": \"\", \"splitBy\": \"\"}, \"overrides\": [], \"perPersonCap\": \"\", \"note\": \"\", \"assumptions\": [\"\\\"answered\\\" means replies to other people's messages\", \"\\\"this month\\\" means since 1 October\"]}",
+      "text": "{\"understood\": true, \"problem\": \"\", \"conditions\": {\"hasRole\": [\"R2\"], \"lacksRole\": [], \"joinedBefore\": \"\", \"joinedAfter\": \"\", \"activity\": [{\"metric\": \"replies\", \"channels\": [\"C2\"], \"since\": \"2026-10-01\", \"until\": \"\", \"min\": 10}], \"anchors\": [], \"paidInRun\": \"\", \"neverPaid\": false}, \"exclude\": [], \"excludeProposer\": false, \"amount\": {\"kind\": \"flat\", \"amount\": \"20\", \"per\": \"\", \"cap\": \"\", \"total\": \"\", \"splitBy\": \"\"}, \"overrides\": [], \"perPersonCap\": \"\", \"note\": \"\", \"assumptions\": [\"\\\"answered\\\" means replies to other people's messages\", \"\\\"this month\\\" means since 1 October\"]}",
       "citations": null
     }
   ],

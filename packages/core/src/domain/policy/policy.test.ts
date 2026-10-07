@@ -39,6 +39,7 @@ const criteria = (over: Partial<Criteria> = {}): Criteria => ({
   mentionedIn: null,
   postedIn: null,
   paidInRun: null,
+  neverPaid: false,
   exclude: [],
   excludeProposer: false,
   ...over,
@@ -138,6 +139,30 @@ describe('the rule in plain words', () => {
     )
     expect(words).toHaveLength(3)
   })
+
+  it('the judge demo: a flat amount to everyone who reacted to the welcome post and has never been paid, every day; each match says why', () => {
+    const GUILD = '1094309218049937418'
+    const welcome = { channelId: GENERAL, messageId: '810000000000000077', emoji: '✅' }
+    const judges: CompiledRule = {
+      criteria: criteria({ reactedTo: welcome, neverPaid: true }),
+      plan: { rule: { kind: 'flat', amount: usd(1) }, overrides: [], perPersonCap: null },
+      note: null,
+      assumptions: [],
+      amountsInInstruction: true,
+    }
+    expect(describeRule(judges, { schedule: { kind: 'daily', hour: 18, timezone: 'UTC' }, caps: { perRun: null, perPerson: null }, guildId: GUILD })).toEqual([
+      '1 each.',
+      `Who: reacted ✅ to https://discord.com/channels/${GUILD}/${GENERAL}/810000000000000077; has never been paid by this community.`,
+      'When: every day at 18:00 (UTC), counting activity since the previous run.',
+    ])
+    const ana = { userId: ANA, matched: true, metrics: { messages: null, activeDays: null, replies: null }, failed: null }
+    const reasons = matchReasons(judges.criteria, ana)
+    expect(reasons).toEqual([
+      { condition: 'reactedTo', count: null, min: null },
+      { condition: 'neverPaid', count: null, min: null },
+    ])
+    expect(describeMatch(judges.criteria, reasons)).toBe('reacted to the message; never paid by this community')
+  })
 })
 
 describe('why each person matches, and who is just below the line', () => {
@@ -150,6 +175,7 @@ describe('why each person matches, and who is just below the line', () => {
     mentioned: null,
     threadPosters: null,
     paidUserIds: null,
+    paidBefore: null,
     members: { [ANA]: { roleIds: [MODS], joinedAt: null }, [RUI]: { roleIds: [MODS], joinedAt: null }, [LI]: { roleIds: [], joinedAt: null }, [DAVE]: { roleIds: [MODS], joinedAt: null } },
   }
   const verdicts = evaluateCriteria(c, evidence, [ANA, RUI, LI, DAVE], APPROVER)

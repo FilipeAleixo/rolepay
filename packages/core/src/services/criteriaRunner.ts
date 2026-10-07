@@ -8,6 +8,7 @@ import {
   type ScannedMessage,
   evaluateCriteria,
   needsMembers,
+  paidPayees,
   scanPlan,
   seenUsers,
 } from '../domain/proposal/criteria.js'
@@ -40,7 +41,8 @@ const byId = (a: string, b: string) => (BigInt(a) < BigInt(b) ? -1 : BigInt(a) >
 /**
  * Runs checked criteria and an amount plan over a community, with code only: reads what the
  * criteria need through the ActivityReader (within 31 days, 10,000 messages, 5 channels), the
- * registered payees and Rolepay's own runs, then evaluates every candidate. Shared by criteria
+ * registered payees and Rolepay's own runs (the last paid one, or for `neverPaid` all of them),
+ * then evaluates every candidate. Shared by criteria
  * mode proposals and by standing policies (where it is all that runs on schedule: no AI).
  */
 export async function runCriteria(
@@ -67,7 +69,15 @@ export async function runCriteria(
     if (!r.ok) return fail(r.error)
     scanned.push(...r.value.map((m) => ({ channelId: m.channelId, authorId: m.authorId, at: m.at, replyToAuthorId: m.replyTo?.authorId ?? null })))
   }
-  const evidence: { -readonly [K in keyof CriteriaEvidence]: CriteriaEvidence[K] } = { messages: scanned, reactors: null, mentioned: null, threadPosters: null, paidUserIds: null, members: {} }
+  const evidence: { -readonly [K in keyof CriteriaEvidence]: CriteriaEvidence[K] } = {
+    messages: scanned,
+    reactors: null,
+    mentioned: null,
+    threadPosters: null,
+    paidUserIds: null,
+    paidBefore: null,
+    members: {},
+  }
   if (criteria.postedIn) {
     const r = await read(criteria.postedIn.threadId, new Date(now.getTime() - PROPOSAL_LIMITS.maxLookbackDays * DAY_MS), now)
     if (!r.ok) return fail(r.error)
@@ -90,6 +100,10 @@ export async function runCriteria(
     const paid = run && run.communityId === input.communityId && run.status === 'paid' ? run : null
     criteria.paidInRun = { ...criteria.paidInRun, runId: paid?.id ?? criteria.paidInRun.runId }
     evidence.paidUserIds = paid ? paid.lines.map((l) => l.payeeDiscordId) : []
+  }
+  if (criteria.neverPaid) {
+    // Every run of this community, whatever its age: who it paid, or is paying (`paidPayees` says which count).
+    evidence.paidBefore = paidPayees(await deps.runs.listByCommunity(input.communityId), input.communityId)
   }
 
   // Candidates: the registered payees, plus (to list them) people the evidence shows who are not.

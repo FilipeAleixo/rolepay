@@ -10,6 +10,7 @@ import {
   GUILD,
   HELP,
   INSTRUCTION,
+  JUDGES,
   LI,
   MODS,
   MONDAY,
@@ -17,14 +18,17 @@ import {
   OTHER_GUILD,
   POSTS,
   RUI,
+  START_HERE,
   T0,
   TODAY_18,
   TREASURER,
   TREASURER_TWO,
+  WELCOME,
   WRITER,
   asTreasurer,
   asWriter,
   helpDeskAnswer,
+  judgesAnswer,
   policyWorld,
   usd,
 } from '../../test/support/policyWorld.js'
@@ -127,6 +131,25 @@ describe('PolicyService.preview: who it applies to right now', () => {
     const p = await w.draft({ instruction: 'Every Monday: 1 per answered question in #help for Mods with at least 3 answers, max 50 a week each' })
     const r = await w.rolepay.policies.preview({ guildId: GUILD, policyId: p.id })
     expect(r.ok && r.value.nearMisses).toEqual([{ userId: RUI, condition: 'repliesIn', count: 2, min: 3, text: `2 replies to other people in <#${HELP}> (at least 3)` }])
+  })
+
+  it('never paid: the history is read from Rolepay\'s own runs, so someone this community paid does not match, and each match says why', async () => {
+    const w = await policyWorld({ demoControls: true })
+    w.proposer.onCriteria = () => judgesAnswer()
+    const p = await w.draft({ name: 'Judges', instruction: JUDGES, schedule: DAILY })
+    const paid = await w.rolepay.payRuns.create({ guildId: GUILD, createdBy: TREASURER, note: null, lines: [{ discordUserId: ANA, amount: usd(5) }] })
+    if (!paid.ok) throw new Error(paid.error.code)
+    await w.rolepay.payRuns.submit({ guildId: GUILD, runId: paid.value.id, actor: TREASURER })
+    await w.rolepay.payRuns.approve({ guildId: GUILD, runId: paid.value.id, actor: TREASURER, actorCanApprove: true })
+    await w.rolepay.payRuns.execute({ guildId: GUILD, runId: paid.value.id })
+    // A draft for Rui does not count: it never paid anyone.
+    await w.rolepay.payRuns.create({ guildId: GUILD, createdBy: TREASURER, note: null, lines: [{ discordUserId: RUI, amount: usd(5) }] })
+    w.activity.setReactions(START_HERE, WELCOME, '✅', [ANA, RUI])
+    const r = await w.rolepay.policies.preview({ guildId: GUILD, policyId: p.id })
+    if (!r.ok) throw new Error(JSON.stringify(r.error))
+    expect(r.value.matches.map((m) => [m.discordUserId, m.amount, m.reasonText])).toEqual([[RUI, usd(1), 'reacted to the message; never paid by this community']])
+    expect(r.value.rule[1]).toBe(`Who: reacted ✅ to https://discord.com/channels/${GUILD}/${START_HERE}/${WELCOME}; has never been paid by this community.`)
+    expect(r.value.window.start).toEqual(new Date('2026-10-06T18:00:00Z'))
   })
 
   it('says when the next run would be over the bot key budget or over the policy cap (it would be held whole)', async () => {

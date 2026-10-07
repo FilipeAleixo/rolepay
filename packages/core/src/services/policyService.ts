@@ -672,7 +672,9 @@ export class PolicyService {
 
   private compiledEvent(p: Policy, actor: string) {
     const c = p.compiled.criteria
-    const conditions = [c.hasRole.length, c.lacksRole.length, c.joinedBefore, c.joinedAfter, c.messagesIn, c.activeDaysIn, c.repliesIn, c.reactedTo, c.mentionedIn, c.postedIn, c.paidInRun, c.exclude.length, c.excludeProposer].filter(Boolean).length
+    const conditions = [c.hasRole.length, c.lacksRole.length, c.joinedBefore, c.joinedAfter, c.messagesIn, c.activeDaysIn, c.repliesIn, c.reactedTo, c.mentionedIn, c.postedIn, c.paidInRun, c.neverPaid, c.exclude.length, c.excludeProposer].filter(
+      Boolean,
+    ).length
     return this.event(p, 'policy.compiled', actor, { rule: p.compiled.plan.rule.kind, conditions, amountsInInstruction: p.compiled.amountsInInstruction })
   }
 }

@@ -39,6 +39,13 @@ export const MONDAYS = { kind: 'weekly' as const, weekday: 'monday' as const, ho
 export const DAILY = { kind: 'daily' as const, hour: 18, timezone: 'UTC' }
 /** Today's 18:00 UTC, the first daily occurrence after T0. */
 export const TODAY_18 = new Date('2026-10-07T18:00:00Z')
+/** The judge demo's welcome post in #start-here, and the instruction that pays whoever reacts ✅ to it once. */
+export const START_HERE = '700000000000000010'
+export const WELCOME = '810000000000000123'
+export const JUDGES = `Every day at 18:00 UTC: 1 AlphaUSD to every registered payee who reacted ✅ to https://discord.com/channels/${GUILD}/${START_HERE}/${WELCOME} and has never been paid`
+/** The judge rule as the model writes it: a flat 1, reacted ✅ to the linked message (M1), never paid. */
+export const judgesAnswer = (): RawCriteriaProposal =>
+  emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' }, note: 'Judges' }, { anchors: [{ kind: 'reactedTo', message: 'M1', thread: '', emoji: '✅' }], neverPaid: true })
 
 const ADDRESS: Record<string, string> = {
   [ANA]: '0x1111111111111111111111111111111111111111',

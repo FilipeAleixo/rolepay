@@ -7,17 +7,22 @@ import {
   DAILY,
   DAVE,
   GUILD,
+  JUDGES,
+  LI,
   MONDAY,
   MONDAYS,
   RUI,
+  START_HERE,
   T0,
   TODAY_18,
   TOKEN,
   TREASURER,
   TREASURY,
+  WELCOME,
   addressOf,
   asTreasurer,
   asWriter,
+  judgesAnswer,
   policyWorld,
   usd,
 } from '../../test/support/policyWorld.js'
@@ -391,6 +396,48 @@ describe('SchedulerService: a daily policy (the testnet demo controls)', () => {
     expect((await w.rolepay.scheduler.tick()).events.map((x) => x.policyRun.status)).toEqual(['empty'])
     expect(await typesSince(w, 'policy.mode_changed')).toEqual(['policy_run.empty', 'policy_run.empty'])
     expect(w.chain.landedTxCount).toBe(0)
+  })
+
+  it('the judge demo: whoever reacted ✅ to the welcome post is paid by the next daily run, once; someone already paid (or being paid) is never in a run again', async () => {
+    const w = await policyWorld({ demoControls: true, minVetoMinutes: 1 })
+    w.proposer.onCriteria = () => judgesAnswer()
+    const p = await w.active({ name: 'Judges', instruction: JUDGES, schedule: DAILY }, { vetoWindowMinutes: 1 })
+    expect(p.compiled.criteria).toMatchObject({ reactedTo: { channelId: START_HERE, messageId: WELCOME, emoji: '✅' }, neverPaid: true })
+    // Big was paid by hand last week; Rui is in a run approved by hand and not paid yet: neither may be paid by the policy.
+    const byHand = async (who: string, pay: boolean) => {
+      const r = await w.rolepay.payRuns.create({ guildId: GUILD, createdBy: TREASURER, note: null, lines: [{ discordUserId: who, amount: usd(5) }] })
+      if (!r.ok) throw new Error(r.error.code)
+      await w.rolepay.payRuns.submit({ guildId: GUILD, runId: r.value.id, actor: TREASURER })
+      await w.rolepay.payRuns.approve({ guildId: GUILD, runId: r.value.id, actor: TREASURER, actorCanApprove: true })
+      if (pay) await w.rolepay.payRuns.execute({ guildId: GUILD, runId: r.value.id })
+    }
+    await byHand(BIG, true)
+    await byHand(RUI, false)
+    w.activity.setReactions(START_HERE, WELCOME, '✅', [ANA, RUI, BIG, DAVE])
+
+    // Day 1: Ana only (Dave reacted but never registered: listed, not paid).
+    w.travelTo(TODAY_18)
+    const [day1] = (await w.rolepay.scheduler.tick()).events
+    expect(day1?.policyRun.lines.map((l) => l.discordUserId)).toEqual([ANA])
+    expect(day1?.policyRun.unregistered.map((u) => u.discordUserId)).toEqual([DAVE])
+    w.travel(60)
+    expect((await w.rolepay.scheduler.tick()).events[0]).toMatchObject({ kind: 'released', outcome: 'paid' })
+    expect(w.chain.balance(TOKEN, addressOf(ANA))).toBe(usd(1))
+
+    // Day 2: Li registered and reacted since; Ana is never paid again.
+    w.activity.setReactions(START_HERE, WELCOME, '✅', [ANA, RUI, BIG, DAVE, LI])
+    w.travelTo(new Date(TODAY_18.getTime() + DAY * 1000))
+    const [day2] = (await w.rolepay.scheduler.tick()).events
+    expect(day2?.policyRun.lines.map((l) => [l.discordUserId, l.amount])).toEqual([[LI, usd(1)]])
+    w.travel(60)
+    await w.rolepay.scheduler.tick()
+
+    // Day 3: nobody new. No run at all.
+    w.travelTo(new Date(TODAY_18.getTime() + 2 * DAY * 1000))
+    const [day3] = (await w.rolepay.scheduler.tick()).events
+    expect(day3).toMatchObject({ kind: 'generated', run: null, policyRun: { status: 'empty' } })
+    expect([ANA, LI, BIG].map((u) => w.chain.balance(TOKEN, addressOf(u)))).toEqual([usd(1), usd(1), usd(5)])
+    expect((await w.rolepay.policies.listRuns({ guildId: GUILD, policyId: p.id })).map((r) => r.status)).toEqual(['empty', 'released', 'released'])
   })
 
   it('a server without the demo controls never runs a daily policy (one approved while they were on), and run_now refuses it', async () => {

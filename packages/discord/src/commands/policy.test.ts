@@ -1,7 +1,7 @@
 import { emptyCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { SCOPE, appHarness, body, isEphemeral, text } from '../../test/app.js'
-import { ADMIN, ALICE, BOB, CHANNEL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
+import { ADMIN, ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
 import { autocomplete, buttonClick, slashCommand } from '../testing/interactions.js'
 import { wireMessage } from '../testing/messages.js'
 
@@ -96,6 +96,28 @@ describe('/rolepay policy new schedule:daily (a demo control: the judge demo)', 
     expect(shown).toContain('First run after approval')
     const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
     expect(p.ok && p.value.schedule).toEqual({ kind: 'daily', hour: 18, timezone: 'UTC' })
+  })
+
+  it('the judge rule: everyone who reacted ✅ to the welcome post and has never been paid; the preview says it for the rule and for each person', async () => {
+    const a = await ready()
+    const START = '700000000000000010'
+    const WELCOME = '810000000000000123'
+    a.rest.channels.set(GUILD, [
+      { id: HELP, name: 'help', type: 0 },
+      { id: START, name: 'start-here', type: 0 },
+    ])
+    a.rest.setReactions(START, WELCOME, '✅', [{ id: ALICE }, { id: BOB }, { id: CAROL }])
+    // Alice and Bob are in a run approved by hand (about to be paid): they are not first-timers any more.
+    await a.approvedRun()
+    a.proposer.onCriteria = () =>
+      emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' }, note: 'Judges' }, { anchors: [{ kind: 'reactedTo', message: 'M1', thread: '', emoji: '✅' }], neverPaid: true })
+    const instruction = `Every day at 18:00 UTC: 1 AlphaUSD to every registered payee who reacted ✅ to https://discord.com/channels/${GUILD}/${START}/${WELCOME} and has never been paid`
+    const { shown } = await newPolicy(a, { instruction, schedule: 'daily', weekday: undefined as unknown as string, name: 'Judges' })
+    expect(shown).toContain(`Who: reacted ✅ to https://discord.com/channels/${GUILD}/${START}/${WELCOME}; has never been paid by this community.`)
+    expect(shown).toContain(`<@${CAROL}>  1 AlphaUSD  ·  reacted to the message; never paid by this community`)
+    expect(shown).not.toContain(`<@${ALICE}>  1 AlphaUSD`)
+    expect(shown).not.toContain(`<@${BOB}>  1 AlphaUSD`)
+    expect(shown).toContain('every day at 18:00 (UTC)')
   })
 
   it('without them it is refused before the model is called, even with the dev shortcuts on; off Moderato too', async () => {

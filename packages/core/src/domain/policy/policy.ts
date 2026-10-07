@@ -193,6 +193,7 @@ function conditionWords(c: Criteria, w: ReturnType<typeof namer>): string[] {
   if (c.mentionedIn) out.push(`is mentioned in ${w.message(c.mentionedIn.channelId, c.mentionedIn.messageId)}`)
   if (c.postedIn) out.push(`posted in ${w.channel(c.postedIn.threadId)}`)
   if (c.paidInRun) out.push(c.paidInRun.last ? 'was paid in the last paid run' : `was paid in run ${c.paidInRun.runId}`)
+  if (c.neverPaid) out.push('has never been paid by this community')
   if (c.exclude.length) out.push(`never ${w.users(c.exclude)}`)
   if (c.excludeProposer) out.push("never the policy's author")
   return out
@@ -230,7 +231,7 @@ export function matchReasons(c: Criteria, verdict: CriteriaVerdict): MatchReason
     const w = c[key]
     if (w) out.push({ condition: key, count: verdict.metrics[COUNTS[key]] ?? 0, min: w.min })
   }
-  for (const key of ['reactedTo', 'mentionedIn', 'postedIn', 'paidInRun'] as const) if (c[key]) plain(key)
+  for (const key of ['reactedTo', 'mentionedIn', 'postedIn', 'paidInRun', 'neverPaid'] as const) if (c[key]) plain(key)
   return out
 }
 
@@ -262,6 +263,8 @@ export function describeMatch(c: Criteria, reasons: readonly MatchReason[], name
           return c.postedIn ? `posted in ${w.channel(c.postedIn.threadId)}` : 'posted in the thread'
         case 'paidInRun':
           return 'was paid in that run'
+        case 'neverPaid':
+          return 'never paid by this community'
         default:
           return r.condition
       }

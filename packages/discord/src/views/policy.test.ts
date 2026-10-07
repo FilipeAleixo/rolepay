@@ -26,6 +26,7 @@ const policy = (over: Partial<Policy> = {}): Policy => ({
       mentionedIn: null,
       postedIn: null,
       paidInRun: null,
+      neverPaid: false,
       exclude: [],
       excludeProposer: false,
     },

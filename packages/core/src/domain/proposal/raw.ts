@@ -84,6 +84,7 @@ export const RawCriteriaProposalSchema = z.object({
     activity: z.array(RawActivitySchema).max(3).describe('Counted activity in channels, at most one entry per metric. Empty if the instruction counts none.'),
     anchors: z.array(RawAnchorSchema).max(3).describe('Reacted to a message, mentioned in a message, posted in a thread: at most one entry per kind. Empty if none.'),
     paidInRun: z.string().describe(empty('Was paid in a pay run: "last" for the last paid run, or a run ID such as "run_abc"')),
+    neverPaid: z.boolean().describe('true if the instruction pays only people this community has never paid before ("who have never been paid", "first-time", "not paid yet"); false otherwise.'),
   }),
   exclude: z.array(token('A U token')).describe('People never to pay.'),
   excludeProposer: z.boolean().describe('true if the instruction says not to pay the person asking ("except me").'),
