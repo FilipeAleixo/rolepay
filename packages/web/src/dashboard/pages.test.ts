@@ -42,6 +42,48 @@ describe('Overview', () => {
     expect(t).toContain('12.5 AlphaUSD')
   })
 
+  it('leads with "At a glance", the same for a member and a treasurer: the bot key budget as a bar and what was paid each week', async () => {
+    const h = await seeded()
+    await h.activeKey(usd('100'))
+    await h.run([[ALICE.id, '10'], [BOB.id, '2.5']])
+    h.payouts.set(GUILD, h.payouts.weeks([null, [usd('50'), usd('12')], null, null, null, null, null, null, null, null, [0n, usd('3')], [0n, usd('12.5')]]))
+    for (const who of [MEMBER, TREASURER]) {
+      const { browser } = await h.signIn(identity(who))
+      const html = await (await browser.get(`/dashboard/${GUILD}`)).text()
+      const t = text(html)
+      expect(t, who.name).toMatch(/At a glance Bot key budget Spent this period 12.5 AlphaUSD Left 87.5 AlphaUSD/)
+      expect(html, who.name).toContain('aria-label="Bot key budget: 12.5 of 100 AlphaUSD spent, 87.5 AlphaUSD left.')
+      expect(t, who.name).toMatch(/Resets 2026-11-05 12:00 UTC · expires 2026-12-05 12:00 UTC/)
+      expect(t, who.name).toMatch(/Paid per week Last 12 weeks 77.5 AlphaUSD Made by a policy Made by hand/)
+      expect(html.match(/role="img"/g)?.length, who.name).toBe(3)
+      expect(html, who.name).toContain('<summary>Show the numbers</summary>')
+      // The panel comes before the cards.
+      expect(html.indexOf('At a glance'), who.name).toBeLessThan(html.indexOf('<h2>Treasury</h2>'))
+    }
+  })
+
+  it('with nothing paid yet, the weekly part is a calm line; with the key revoked, the budget says so and draws no bar', async () => {
+    const h = await seeded()
+    await h.activeKey()
+    await h.rolepay.communities.revokeBotKey({ guildId: GUILD, root: h.chain.rootSigner(TREASURY) })
+    const { browser } = await h.signIn(identity(MEMBER))
+    const html = await (await browser.get(`/dashboard/${GUILD}`)).text()
+    const t = text(html)
+    expect(t).toMatch(/The bot key is revoked: the bot can spend nothing/)
+    expect(t).toContain('Nothing paid in the last 12 weeks.')
+    expect(html).not.toContain('role="img"')
+  })
+
+  it('without the weekly payouts wired, the panel keeps the budget alone', async () => {
+    const h = dashboardHarness({ payouts: false })
+    await h.community()
+    await h.activeKey()
+    const { browser } = await h.signIn(identity(MEMBER))
+    const t = text(await (await browser.get(`/dashboard/${GUILD}`)).text())
+    expect(t).toContain('Bot key budget')
+    expect(t).not.toContain('Paid per week')
+  })
+
   it('still renders when the chain cannot be read, and says so', async () => {
     const h = await seeded()
     await h.activeKey()

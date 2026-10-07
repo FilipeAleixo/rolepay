@@ -122,8 +122,43 @@ pre.diff{white-space:pre-wrap}
 .center .button{margin-top:.5rem}
 .center .card{text-align:left}
 .center h1{font-size:30px}
+.glance-grid{display:grid;gap:1.6rem}
+.glance-part{min-width:0}
+.glance-part+.glance-part{padding-top:1.5rem;border-top:1px solid var(--line)}
+.glance-part>h3{margin:0 0 .85rem}
+.figures{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:.4rem 1.5rem;margin:0 0 .75rem}
+p.figure{display:flex;flex-direction:column;gap:.25rem;margin:0}
+p.figure.end{align-items:flex-end;text-align:right}
+.figure .label,.budget-limit .label{font:500 10px/1.4 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--meta)}
+.figure .value{font:400 26px/1.15 var(--serif);color:var(--head);letter-spacing:-.01em;font-variant-numeric:lining-nums proportional-nums}
+.figure .unit{font:500 12px/1 var(--sans);letter-spacing:.01em;color:var(--soft)}
+p.budget-limit{display:flex;justify-content:flex-end;align-items:baseline;gap:.5rem;margin:.35rem 0 0;font-size:12.5px;color:var(--soft)}
+p.quiet{margin:.9rem 0 0;font-size:12px;color:var(--muted)}
+p.quiet+p.quiet{margin-top:.3rem}
+p.caption{margin:.55rem 0 0;max-width:36rem;font-size:13px;line-height:1.55;color:var(--soft)}
+p.empty{margin:0;font:400 17px/1.45 var(--serif);color:var(--fg)}
+p.legend{display:flex;flex-wrap:wrap;gap:.35rem 1.15rem;margin:0 0 .5rem;font-size:12px;color:var(--soft)}
+.legend>span{display:inline-flex;align-items:center;gap:.45rem}
+.legend .key{width:10px;height:10px;border-radius:2px;flex:none;background:var(--gold)}
+.legend .key.manual{background:var(--muted)}
+.legend .key.partial{opacity:.5}
+svg.viz{display:block;width:100%;overflow:visible}
+.viz text{font:400 10.5px/1 var(--sans);fill:var(--muted)}
+.viz .axis{font-size:10px}
+.viz .track{fill:rgba(237,190,90,.14)}
+.viz .spent,.viz .policy{fill:var(--gold)}
+.viz .manual{fill:var(--muted)}
+.viz .limit{fill:var(--head)}
+.viz .grid{stroke:rgba(255,255,255,.06);stroke-width:1}
+.viz .base{stroke:rgba(255,255,255,.16);stroke-width:1}
+.viz .hit{fill:transparent}
+.viz .partial .seg{opacity:.5}
+.viz .wk:hover .seg{filter:brightness(1.2)}
+svg.viz-narrow{display:none}
+.glance details{margin-top:.5rem}
+@media (min-width:64rem){.glance-grid.two{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:0}.glance-grid.two>.glance-part:first-child{padding-right:2.25rem}.glance-grid.two>.glance-part+.glance-part{padding:0 0 0 2.25rem;border-top:0;border-left:1px solid var(--line)}}
 @media (min-width:48rem){header.top,main{padding-left:2rem;padding-right:2rem}header.top{padding-top:1.75rem}main{padding-top:3rem}.card{padding:1.5rem 1.6rem}ul.card{padding:.35rem 1.6rem}}
-@media (max-width:40rem){dl.facts{grid-template-columns:1fr}dl.facts dt{padding-bottom:0;border-top:1px solid var(--line)}dl.facts dd{border-top:0;padding-top:.1rem}dl.facts dt:first-of-type{padding-top:0}.big{font-size:30px}nav.sections ul{gap:0}.bar button.link{min-height:2.5rem}form.filters>div{flex:1 1 9rem}.pager a{min-height:2.75rem}}
+@media (max-width:40rem){svg.viz-wide{display:none}svg.viz-narrow{display:block}.figure .value{font-size:23px}dl.facts{grid-template-columns:1fr}dl.facts dt{padding-bottom:0;border-top:1px solid var(--line)}dl.facts dd{border-top:0;padding-top:.1rem}dl.facts dt:first-of-type{padding-top:0}.big{font-size:30px}nav.sections ul{gap:0}.bar button.link{min-height:2.5rem}form.filters>div{flex:1 1 9rem}.pager a{min-height:2.75rem}}
 `
 
 export type Section = 'overview' | 'runs' | 'payees' | 'policies' | 'audit'
