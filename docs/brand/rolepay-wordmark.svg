@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 449 112" width="449" height="112" role="img" aria-label="Rolepay wordmark, for light backgrounds">
+  <title>Rolepay wordmark, for light backgrounds</title>
+  <g transform="translate(0 6) scale(0.1953125)">
+    <rect width="512" height="512" rx="116" fill="#4A1B2A"/>
+    <path fill="#EDBE5A" d="M124 150Q190 110 256 136Q322 110 388 150C414 234 394 342 324 398Q256 446 188 398C118 342 98 234 124 150Z"/>
+    <path fill="#4A1B2A" d="M162 248Q200 186 238 248Q200 230 162 248ZM274 248Q312 186 350 248Q312 230 274 248ZM178 298Q256 394 334 298Q256 340 178 298Z"/>
+  </g>
+  <g transform="translate(128 24) scale(0.64)" fill="#4A1B2A">
+    <path fill="none" stroke="#4A1B2A" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" d="M7 93V7M7 7H30A24 24 0 0 1 30 55H7M29 55L58 93M109 33A30 30 0 1 1 109 93A30 30 0 1 1 109 33ZM164 7V93M189 63H249A30 30 0 1 0 241.98 82.28M304 33A30 30 0 1 1 304 93A30 30 0 1 1 304 33ZM386 33A30 30 0 1 1 386 93A30 30 0 1 1 386 33ZM435 33L463 93M491 33L449 123"/>
+    <path d="M266.5 26H280.5V123A7 7 0 0 1 266.5 123ZM409.5 26H423.5V93A7 7 0 0 1 409.5 93Z"/>
+  </g>
+</svg>

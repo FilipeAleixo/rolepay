@@ -20,7 +20,8 @@ export type WebAppDeps = {
   /** The WebAuthn ceremony endpoints (Accounts SDK `Handler.webAuthn`), mounted at /webauthn. */
   passkeys?: { fetch: (req: Request) => Response | Promise<Response> }
   /**
-   * Budgets for the public POST endpoints (/webauthn, /claim, /setup): each request takes one
+   * Budgets for the public POST endpoints (/webauthn, /claim, /setup, /dashboard) and every request
+   * under /auth/ (`rateLimitGroup` below): each request takes one
    * from its client's budget and one from that endpoint group's overall budget, so spoofing the
    * client key cannot get past the second, and one group cannot starve another. `clientKey` defaults to the last X-Forwarded-For hop (the one the tunnel
    * or proxy in front appended).
