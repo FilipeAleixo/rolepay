@@ -72,6 +72,7 @@ describe('proposalMessage', () => {
     const e = embedOf(proposalMessage(selfOnly, ctx))
     expect(e.description).toContain("Nobody to pay: each person named wrote the message behind their own line, and Rolepay never pays anyone on the strength of their own message.")
     expect(e.description).toContain('If this instruction pays people for writing in the channel, that is a rule about activity: run `/rolepay propose` without `source`, or press Count who wrote, and Rolepay counts who wrote, itself.')
+    expect(e.description).toContain('To pay the author of one message, right-click it and use Apps > Pay the author.')
     expect(e.description).not.toContain('Nobody to pay.')
     expect(JSON.stringify(e.fields)).not.toContain('Edit adds people')
     const buttons = proposalMessage(selfOnly, ctx).components?.[0]?.components ?? []

@@ -5,7 +5,8 @@
 import { MAX_LINES_PER_RUN, MAX_NOTE_LENGTH, type Run, newRun } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { createDispatcher } from '../src/app/router.js'
-import { buttonClick, slashCommand } from '../src/testing/interactions.js'
+import { buttonClick, messageCommand, modalSubmit, slashCommand } from '../src/testing/interactions.js'
+import { wireMessage } from '../src/testing/messages.js'
 import { explainError } from '../src/views/errors.js'
 import { editModal, instructionModal, proposalCreatedMessage, proposalDiscardedMessage, proposalMessage } from '../src/views/proposal.js'
 import { type RunViewContext, receiptDm, runMessage } from '../src/views/run.js'
@@ -173,6 +174,24 @@ describe('every answer to a run button, through the router (what Discord receive
     const d = await a.send(slashCommand(SCOPE, 'rolepay', 'new', { amount: '10', users: `<@${ALICE}> <@${BOB}>=40`, note: 'October mods' }, { userId: ADMIN, manageGuild: true }, 'tok-new'))
     expect(responseProblems(body(d))).toEqual([])
     expect(messageProblems(a.rest.lastEdit('tok-new') ?? {})).toEqual([])
+  })
+})
+
+describe('a direct payment (Apps > Pay the author): the form, the review it posts, a refusal', () => {
+  it('each answer fits, with the longest IDs in the form and its link', async () => {
+    const a = await appHarness()
+    await a.setupCommunity()
+    await a.registerAll()
+    const target = wireMessage({ channelId: '79999999999999999999', authorId: ALICE, at: T0, content: 'hi', id: '89999999999999999999' })
+    const opened = await a.send(messageCommand(SCOPE, 'Pay the author', target, treasurer))
+    expect(body(opened).type).toBe(9)
+    expect(responseProblems(body(opened))).toEqual([])
+    const formId = String(body(opened).data?.custom_id)
+    const sent = await a.send(modalSubmit(SCOPE, formId, { amount: '25', note: 'n'.repeat(200) }, treasurer))
+    expect(body(sent).type).toBe(4)
+    expect(responseProblems(body(sent))).toEqual([])
+    const refused = await a.send(modalSubmit(SCOPE, formId, { amount: 'lots', note: '' }, treasurer))
+    expect(responseProblems(body(refused))).toEqual([])
   })
 })
 

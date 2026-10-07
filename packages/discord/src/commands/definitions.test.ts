@@ -94,7 +94,8 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     for (const d of [...all, ...(commandDefinitions({ devShortcuts: true, demoControls: true }) as Def[])] as Sized[]) expect([d.name, size(d) <= 4000]).toEqual([d.name, true])
   })
 
-  it('the message command "Propose pay run" is registered and routed, hidden from members by default, server only', () => {
+  it('the message commands (Apps on a message) are registered and routed, hidden from members by default, server only', () => {
+    expect(messageCommands.map((c) => c.name)).toEqual(['Propose pay run', 'Pay the author'])
     expect(messageCommands.map((c) => c.name)).toEqual([...ROUTED_MESSAGE_COMMANDS])
     for (const c of messageCommands) {
       expect(c.name.length).toBeLessThanOrEqual(32)

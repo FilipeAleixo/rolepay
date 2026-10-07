@@ -80,6 +80,25 @@ export function decodePolicyButton(customId: string): { action: PolicyAction; po
   return parsed.success ? { action: parsed.data[1], policyId: parsed.data[2], version: parsed.data[3] } : null
 }
 
+/**
+ * The amount form of a direct payment: `pay-modal:author:<userId>:<channelId>:<messageId>` (Apps >
+ * Pay the author: the message's author, and where the message is). The second part names the form
+ * for the log, never an ID. Everything it carries is checked again when the form is sent.
+ */
+export type PayTarget = { kind: 'author'; userId: string; channelId: string; messageId: string }
+
+const SNOWFLAKE = /^\d{17,20}$/
+
+export const encodePayModalId = (t: PayTarget) => `pay-modal:author:${t.userId}:${t.channelId}:${t.messageId}`
+
+export function decodePayModalId(customId: string): PayTarget | null {
+  const [prefix, kind, userId = '', ...rest] = customId.split(':')
+  if (prefix !== 'pay-modal' || !SNOWFLAKE.test(userId)) return null
+  const [channelId = '', messageId = ''] = rest
+  if (kind === 'author' && rest.length === 2 && SNOWFLAKE.test(channelId) && SNOWFLAKE.test(messageId)) return { kind, userId, channelId, messageId }
+  return null
+}
+
 /** The Veto button on an autopilot run: `policy-run:veto:<policyRunId>`. */
 const PolicyRunButtonSchema = z
   .string()

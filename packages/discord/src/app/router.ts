@@ -1,6 +1,7 @@
 import { ResponseType } from '../api.js'
 import { exportCommand } from '../commands/export.js'
 import { newRunCommand } from '../commands/newRun.js'
+import { PAY_AUTHOR_COMMAND, payAuthorCommand, payModalSubmit } from '../commands/payDirect.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
 import {
   policyChoices,
@@ -23,6 +24,7 @@ import {
   type ProposalModal,
   type RunAction,
   decodeCustomId,
+  decodePayModalId,
   decodePolicyButton,
   decodeProposalId,
   decodeProposalModalId,
@@ -57,7 +59,10 @@ const COMMANDS: Record<string, CommandHandler> = {
 }
 
 /** Right-click commands on a message, by their registered name. Kept in step with COMMAND_DEFINITIONS by a test. */
-const MESSAGE_COMMANDS: Record<string, MessageCommandHandler> = { [PROPOSE_MESSAGE_COMMAND]: proposeFromMessageCommand }
+const MESSAGE_COMMANDS: Record<string, MessageCommandHandler> = {
+  [PROPOSE_MESSAGE_COMMAND]: proposeFromMessageCommand,
+  [PAY_AUTHOR_COMMAND]: payAuthorCommand,
+}
 
 const AUTOCOMPLETE: Record<string, AutocompleteHandler> = {
   'rolepay status': runChoices,
@@ -178,6 +183,7 @@ async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: Disc
       return handler ? handler({ target: i.target, ctx }, deps) : ephemeralReply('Sorry, I do not know that command.')
     }
     case 'modal': {
+      if (decodePayModalId(i.customId)) return payModalSubmit({ id: i.customId, fields: i.fields, messageId: i.messageId, ctx }, deps)
       const modal = decodeProposalModalId(i.customId)
       return modal ? MODALS[modal.modal]({ id: modal.id, fields: i.fields, messageId: i.messageId, ctx }, deps) : ephemeralReply('Sorry, I do not know that form. It may be from an older version.')
     }

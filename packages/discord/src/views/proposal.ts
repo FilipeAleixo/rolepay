@@ -218,6 +218,7 @@ export const onlySelfSourced = (p: Proposal) =>
 const SELF_SOURCED_ONLY = [
   'Nobody to pay: each person named wrote the message behind their own line, and Rolepay never pays anyone on the strength of their own message.',
   'If this instruction pays people for writing in the channel, that is a rule about activity: run `/rolepay propose` without `source`, or press Count who wrote, and Rolepay counts who wrote, itself.',
+  'To pay the author of one message, right-click it and use Apps > Pay the author.',
 ]
 
 /** Shown at once while a proposal is drafted (reading Discord and the model take a few seconds), then replaced by it. */
