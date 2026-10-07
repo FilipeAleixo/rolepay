@@ -202,6 +202,40 @@ export interface AiUsageTable {
   policy_version: number | null
 }
 
+export interface DepositMastersTable {
+  community_id: string
+  master_id: string
+  master_address: string
+  tx_hash: string | null
+  /** BIGINT: written as a bigint, read back as a number (block numbers stay far below 2^53). */
+  registered_block: bigint | number
+  registered_at: string
+  scanned_to: bigint | number
+}
+
+export interface FundingSourcesTable {
+  id: string
+  community_id: string
+  name: string
+  user_tag: string
+  deposit_address: string
+  created_by: string
+  created_at: string
+}
+
+export interface DepositsTable {
+  tx_hash: string
+  log_index: number
+  community_id: string
+  source_id: string
+  token: string
+  /** Exact decimal text, e.g. "5" or "0.5". */
+  amount: string
+  sender: string
+  block_number: bigint | number
+  block_time: string
+}
+
 export interface Database {
   kv: KvTable
   setup_links: SetupLinksTable
@@ -216,4 +250,7 @@ export interface Database {
   policy_runs: PolicyRunsTable
   audit_events: AuditEventsTable
   ai_usage: AiUsageTable
+  deposit_masters: DepositMastersTable
+  funding_sources: FundingSourcesTable
+  deposits: DepositsTable
 }

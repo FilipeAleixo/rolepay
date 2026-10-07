@@ -4,6 +4,7 @@ import type { Clock } from '../../ports/clock.js'
 import { SystemClock } from '../crypto/index.js'
 import { KvProposalRepository } from '../kv/proposals.js'
 import { SqliteAiUsageRepository } from './aiUsageRepository.js'
+import { SqliteFundingRepository } from './fundingRepository.js'
 import { SqliteKeyValueStore } from './keyValue.js'
 import { migrateToLatest } from './migrations.js'
 import { SqliteAuditLog, SqlitePolicyRepository, SqlitePolicyRunRepository } from './policyRepositories.js'
@@ -31,6 +32,7 @@ export async function openSqliteDatabase(path: string, options: { clock?: Clock 
       policyRuns: new SqlitePolicyRunRepository(db),
       audit: new SqliteAuditLog(db),
       aiUsage: new SqliteAiUsageRepository(db),
+      funding: new SqliteFundingRepository(db),
     },
     kv,
     close: () => db.destroy(),

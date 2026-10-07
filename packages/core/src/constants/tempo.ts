@@ -63,6 +63,13 @@ export const KNOWN_TOKENS: Readonly<Record<NetworkName, readonly string[]>> = {
 /** Account Keychain precompile. Lowercase: the docs' mixed-case form fails viem's checksum check. */
 export const KEYCHAIN_ADDRESS = '0xaaaaaaaa00000000000000000000000000000000'
 
+/**
+ * TIP-1022 virtual addresses (T3): the registry precompile, lowercase, and the 10-byte marker that
+ * fills bytes 4 to 14 of every virtual address (docs/tempo/tip-1022.md).
+ */
+export const ADDRESS_REGISTRY = '0xfdc0000000000000000000000000000000000000'
+export const VIRTUAL_MAGIC = 'fdfdfdfdfdfdfdfdfdfd'
+
 /** The only call the bot's access key may make. */
 export const TRANSFER_WITH_MEMO_SIGNATURE = 'transferWithMemo(address,uint256,bytes32)'
 

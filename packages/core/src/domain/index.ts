@@ -1,6 +1,7 @@
 export * from './aiUsage.js'
 export * from './community.js'
 export * from './csv.js'
+export * from './funding.js'
 export * from './hex.js'
 export * from './ids.js'
 export * from './memo.js'

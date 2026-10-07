@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import { Kysely, SqliteDialect } from 'kysely'
 import { afterAll, describe, expect, it } from 'vitest'
+import { fundingRepositoryContract } from '../../../test/support/fundingRepositoryContract.js'
 import { keyValueContract } from '../../../test/support/keyValueContract.js'
 import { policyRepositoryContract } from '../../../test/support/policyRepositoryContract.js'
 import { proposalRepositoryContract } from '../../../test/support/proposalRepositoryContract.js'
@@ -33,6 +34,7 @@ repositoryContracts('sqlite', async () => (await fresh()).repositories)
 keyValueContract('sqlite', async (clock) => (await fresh({ clock })).kv)
 proposalRepositoryContract('sqlite', async (clock) => (await fresh({ clock })).repositories.proposals)
 policyRepositoryContract('sqlite', async () => (await fresh()).repositories)
+fundingRepositoryContract('sqlite', async () => (await fresh()).repositories)
 
 describe('sqlite: migrations and persistence', () => {
   it('migrates idempotently and keeps data across reopen', async () => {

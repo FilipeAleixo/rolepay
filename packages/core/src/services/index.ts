@@ -1,6 +1,7 @@
 export * from './aiUsageService.js'
 export * from './common.js'
 export * from './communityService.js'
+export * from './fundingService.js'
 export * from './payeeService.js'
 export * from './payRunService.js'
 export * from './proposalService.js'

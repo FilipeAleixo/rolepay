@@ -299,6 +299,18 @@ describe('auditSummary: every event in plain words, from codes, counts and amoun
     expect(say('run.failed', { reason: 'partial_match', retryable: false })).toBe('The payment failed (partial_match).')
     expect(auditSummary(event('run.paid', { lines: 1 }), 'AlphaUSD')).toBe('Paid ? AlphaUSD to 1 person.')
   })
+
+  it('funding events: no source name (user text), the deposit in its own token', () => {
+    const address = '0x58e21090fdfdfdfdfdfdfdfdfdfd000000000002'
+    expect(say('funding_source.created', { sourceId: 'fsrc_1', depositAddress: address })).toBe(`Created a funding source with the deposit address ${address}.`)
+    const tx = `0x${'ab'.repeat(32)}`
+    expect(say('deposit.received', { sourceId: 'fsrc_1', amount: '2.5', token: '0x20c0000000000000000000000000000000000000', txHash: tx, logIndex: 0 })).toBe(
+      'Received 2.5 pathUSD at the deposit address of funding source fsrc_1.',
+    )
+    expect(say('deposit.received', { sourceId: 'fsrc_1', amount: '1', token: '0x20c0000000000000000000000000000000000009', txHash: tx, logIndex: 0 })).toBe(
+      'Received 1 0x20c0...0009 at the deposit address of funding source fsrc_1.',
+    )
+  })
 })
 
 describe('aiUsagePortFromCore: the AI spend, read from the rows core writes', () => {

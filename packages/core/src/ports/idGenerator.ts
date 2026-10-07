@@ -9,4 +9,6 @@ export interface IdGenerator {
   policyId(): string
   /** A new policy run ID: 1-40 chars of [A-Za-z0-9_] (it goes into button IDs). */
   policyRunId(): string
+  /** A new funding source ID: 1-40 chars of [A-Za-z0-9_]. */
+  fundingSourceId(): string
 }

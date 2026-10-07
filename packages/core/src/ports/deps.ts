@@ -1,11 +1,12 @@
 import type { NetworkName } from '../constants/tempo.js'
 import type { Clock } from './clock.js'
+import type { FundingChain } from './fundingChain.js'
 import type { IdGenerator } from './idGenerator.js'
 import type { KeyVault } from './keyVault.js'
 import type { PayoutChain } from './payoutChain.js'
 import type { ActivityReader } from './activityReader.js'
 import type { ProposalLog } from './proposalLog.js'
-import type { AiUsageRepository, AuditLog, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, ProposalRepository, RunRepository } from './repositories.js'
+import type { AiUsageRepository, AuditLog, CommunityRepository, FundingRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, ProposalRepository, RunRepository } from './repositories.js'
 import type { RunLeases } from './runLeases.js'
 import type { RunProposer } from './runProposer.js'
 
@@ -22,6 +23,8 @@ export type RolepayDeps = {
     audit: AuditLog
     /** One content-free row per model call: the AI spend. */
     aiUsage: AiUsageRepository
+    /** Funding with attribution: the master registration, funding sources and their deposits. */
+    funding: FundingRepository
   }
   vault: KeyVault
   ids: IdGenerator
@@ -46,4 +49,10 @@ export type RolepayDeps = {
   onAuditError?: (error: unknown) => void
   /** One worker per pay run at a time, across processes (`KvRunLeases` in production). */
   leases?: RunLeases
+  /**
+   * Funding with attribution: the registry and the deposit events on chain (`TempoFundingChain` in
+   * production). Without it, setting up deposit addresses answers `not_configured` and the watcher
+   * reads nothing.
+   */
+  fundingChain?: FundingChain | null
 }

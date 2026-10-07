@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { DailyCappedProposer, TempoPayoutChain, openRolepayAdapters } from '../src/adapters/index.js'
+import { DailyCappedProposer, TempoFundingChain, TempoPayoutChain, openRolepayAdapters } from '../src/adapters/index.js'
 import { createRolepay, parseConfig } from '../src/index.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'rolepay-wiring-'))
@@ -14,6 +14,7 @@ describe('openRolepayAdapters', () => {
     const config = parseConfig({ ROLEPAY_MASTER_KEY: 'c'.repeat(64), ROLEPAY_DB_PATH: join(dir, 'p.db') })
     const { deps, kv, close } = await openRolepayAdapters(config)
     expect(deps.chain).toBeInstanceOf(TempoPayoutChain)
+    expect(deps.fundingChain).toBeInstanceOf(TempoFundingChain)
     expect(deps.network).toBe('moderato')
     const rolepay = createRolepay(deps)
     const r = await rolepay.communities.register({
@@ -29,6 +30,9 @@ describe('openRolepayAdapters', () => {
     expect(await kv.get('k')).toEqual({ v: 1 })
     expect(deps.proposer).toBeNull()
     expect(rolepay.proposals.isConfigured()).toBe(false)
+    // Deposit addresses can be set up, and nothing is read until a community does.
+    expect(rolepay.funding.isConfigured()).toBe(true)
+    expect(await rolepay.funding.scan()).toEqual({ deposits: [], errors: [] })
     await close()
   })
 

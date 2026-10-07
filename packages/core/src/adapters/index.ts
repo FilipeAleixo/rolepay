@@ -6,6 +6,7 @@ export { AnthropicRunProposer, type AnthropicRunProposerOptions, DEFAULT_AI_MODE
 export { AesGcmKeyVault, RandomIds, SystemClock } from './crypto/index.js'
 export {
   FakeActivityReader,
+  FakeFundingChain,
   FakePayoutChain,
   FakeRunProposer,
   ManualClock,
@@ -22,6 +23,8 @@ export { DailyCappedProposer } from './kv/proposerDailyCap.js'
 export { KvRunLeases } from './kv/runLeases.js'
 export { openSqliteDatabase } from './sqlite/index.js'
 export {
+  TempoFundingChain,
+  type TempoFundingChainOptions,
   TempoPayoutChain,
   type TempoPayoutChainOptions,
   createTestnetTools,

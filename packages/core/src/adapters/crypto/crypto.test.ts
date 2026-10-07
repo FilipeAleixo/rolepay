@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FundingSourceIdSchema } from '../../domain/funding.js'
 import { isMemoSafeRunId } from '../../domain/memo.js'
 import { AesGcmKeyVault, RandomIds, SystemClock } from './index.js'
 
@@ -69,6 +70,13 @@ describe('RandomIds', () => {
     expect(ids.policyId()).toMatch(/^pol_[0-9a-z]{16}$/)
     expect(ids.policyRunId()).toMatch(/^prun_[0-9a-z]{16}$/)
     expect(ids.policyId()).not.toBe(ids.policyId())
+  })
+
+  it('makes distinct funding source IDs that the domain accepts', () => {
+    const a = ids.fundingSourceId()
+    expect(a).toMatch(/^fsrc_[0-9a-z]{16}$/)
+    expect(FundingSourceIdSchema.safeParse(a).success).toBe(true)
+    expect(ids.fundingSourceId()).not.toBe(a)
   })
 
   it('makes URL-safe link tokens with 256 bits of entropy', () => {

@@ -265,6 +265,51 @@ const migrations: Record<string, Migration> = {
       await db.schema.createIndex('ai_usage_policy').on('ai_usage').column('policy_id').execute()
     },
   },
+  '0008_funding': {
+    async up(db: Kysely<unknown>) {
+      // Funding with attribution (virtual addresses). New tables only, so it applies to a database
+      // with data as to an empty one. Block numbers are BIGINT (the watcher's cursor only moves
+      // forward, compared in SQL); amounts are exact decimal text (NUMERIC on Postgres).
+      await db.schema
+        .createTable('deposit_masters')
+        .addColumn('community_id', 'text', (c) => c.primaryKey().references('communities.id').onDelete('cascade'))
+        .addColumn('master_id', 'text', (c) => c.notNull())
+        .addColumn('master_address', 'text', (c) => c.notNull())
+        .addColumn('tx_hash', 'text')
+        .addColumn('registered_block', 'bigint', (c) => c.notNull())
+        .addColumn('registered_at', 'text', (c) => c.notNull())
+        .addColumn('scanned_to', 'bigint', (c) => c.notNull())
+        .execute()
+      await db.schema
+        .createTable('funding_sources')
+        .addColumn('id', 'text', (c) => c.primaryKey())
+        .addColumn('community_id', 'text', (c) => c.notNull().references('communities.id').onDelete('cascade'))
+        .addColumn('name', 'text', (c) => c.notNull())
+        .addColumn('user_tag', 'text', (c) => c.notNull())
+        .addColumn('deposit_address', 'text', (c) => c.notNull())
+        .addColumn('created_by', 'text', (c) => c.notNull())
+        .addColumn('created_at', 'text', (c) => c.notNull())
+        // One source per user tag: two creates racing for the same tag, one wins.
+        .addUniqueConstraint('funding_sources_tag', ['community_id', 'user_tag'])
+        .execute()
+      await db.schema
+        .createTable('deposits')
+        .addColumn('tx_hash', 'text', (c) => c.notNull())
+        .addColumn('log_index', 'integer', (c) => c.notNull())
+        .addColumn('community_id', 'text', (c) => c.notNull().references('communities.id').onDelete('cascade'))
+        .addColumn('source_id', 'text', (c) => c.notNull())
+        .addColumn('token', 'text', (c) => c.notNull())
+        .addColumn('amount', 'text', (c) => c.notNull())
+        .addColumn('sender', 'text', (c) => c.notNull())
+        .addColumn('block_number', 'bigint', (c) => c.notNull())
+        .addColumn('block_time', 'text', (c) => c.notNull())
+        // The watcher's idempotency: each deposit (its first Transfer event) is stored once, by any instance.
+        .addPrimaryKeyConstraint('deposits_pk', ['tx_hash', 'log_index'])
+        .execute()
+      await db.schema.createIndex('deposits_community').on('deposits').columns(['community_id', 'block_number']).execute()
+      await db.schema.createIndex('deposits_source').on('deposits').column('source_id').execute()
+    },
+  },
 }
 
 class InlineMigrations implements MigrationProvider {

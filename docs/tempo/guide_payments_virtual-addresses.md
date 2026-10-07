@@ -1,0 +1,103 @@
+# Use virtual addresses for deposits
+
+Virtual addresses let you issue a distinct deposit address for each customer without creating a separate onchain TIP-20 balance for each one. The deposit is attributed to the virtual address, but the balance is credited directly to the registered master wallet.
+
+This page is intentionally about the operator flow rather than the spec. In preview environments the demo may run against pre-release infrastructure, but the flow is the same one operators will use on public testnet.
+
+## How virtual address deposits work
+
+```mermaid
+sequenceDiagram
+  participant Sender
+  participant TIP20 as TIP-20
+  participant Registry as Virtual registry
+  participant Master as Registered wallet
+
+  Sender->>TIP20: transfer(virtualAddress, amount)
+  TIP20->>Registry: resolve(masterId)
+  Registry-->>TIP20: master wallet
+  TIP20->>Master: credit balance
+  Note over TIP20: emits Transfer(sender → virtual, amount)
+  Note over TIP20: emits Transfer(virtual → master, amount)
+```
+
+The important behavior is:
+
+* the sender pays the **virtual address**
+* TIP-20 resolves that address to the registered **master wallet**
+* the **master wallet** receives the balance
+* the virtual address still appears in events, so you can attribute the deposit correctly
+
+## Virtual address live demo
+
+This walkthrough shows the full flow:
+
+1. sign in with a passkey and get a Tempo address
+2. register a master id for that address
+3. send `OUSD` from a second address to a virtual address derived from that master id
+4. confirm that the balance lands in the registered wallet
+
+The Moderato demos use OUSD. Localnet and devnet demos use pathUSD.
+
+### Fast demo
+
+Use a docs-managed master with a pre-mined valid salt so you can skip the wait and jump straight to the forwarding flow.
+
+**Interactive demo: Virtual addresses**
+
+1. Virtual addresses fast demo
+
+### Real registration
+
+Use `VirtualMaster.mineSaltAsync` to register a master id for the passkey account you create in the demo.
+
+:::info
+Mining a virtual-address salt can take 30+ seconds depending on your browser, hardware, and available worker parallelism.
+:::
+
+**Interactive demo: Virtual addresses**
+
+1. Virtual addresses live demo
+
+## What to verify in virtual address deposits
+
+When the demo succeeds, you should see all of the following:
+
+* the passkey wallet is shown as the registered master wallet
+* the virtual address is distinct from the master wallet
+* the sender transfers `OUSD` to the virtual address
+* the master wallet balance increases
+* the virtual address TIP-20 balance remains `0`
+* the receipt shows the expected two-hop `Transfer` events
+
+## Derive deposit addresses offchain
+
+Once a master is registered, operators derive virtual addresses offchain from the `masterId` and their own customer tag.
+
+:::code-group
+```ts [virtualAddress.ts]
+import { VirtualAddress } from 'ox/tempo'
+
+const virtualAddress = VirtualAddress.from({
+  masterId,
+  userTag: '0x000000000001',
+})
+```
+:::
+
+In practice, the `userTag` is the operator's internal routing value for a customer, account, or payment reference.
+
+## Operational notes
+
+A few things matter in production:
+
+* virtual forwarding applies only to **TIP-20** transfer and mint paths
+* `balanceOf(virtualAddress)` stays `0`; use events and your own `userTag` mapping for attribution
+* policy checks apply to the **resolved master wallet**, not the literal virtual address
+* avoid using virtual addresses in reward protocols (lending pools, DEX rewards, etc) unless explicitly supported, as they can't track or hold funds
+
+## Learn more about TIP-20 virtual addresses
+
+* [Virtual addresses overview](https://tempo.xyz/developers/docs/protocol/tip20/virtual-addresses) — Start with the conceptual model for routing, attribution, and treasury operations.
+* [Virtual address specification](https://github.com/tempoxyz/tempo/blob/main/tips/tip-1022.md) — Read the full protocol definition, including derivation rules, transfer paths, and invariants.
+* [T3 network upgrade](https://tempo.xyz/developers/docs/protocol/upgrades/t3) — See when virtual addresses activate and what else ships with T3.

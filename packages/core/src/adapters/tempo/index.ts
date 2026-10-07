@@ -3,5 +3,6 @@ export { buildBatchCalls, classifyChainError, errorSummary, memoTransfersFromLog
 export { idempotentSend } from './idempotentSend.js'
 export { retryUnavailable } from './retryUnavailable.js'
 export { rootSignerFromPrivateKey } from './rootSigner.js'
+export { TempoFundingChain, type TempoFundingChainOptions } from './tempoFundingChain.js'
 export { TempoPayoutChain, type TempoPayoutChainOptions } from './tempoPayoutChain.js'
 export { createTestnetTools } from './testnet.js'

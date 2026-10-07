@@ -1,5 +1,6 @@
 import type { AiUsage, AiUsagePurpose, NewAiUsage } from '../domain/aiUsage.js'
 import type { BotKey, Community, SetupLink } from '../domain/community.js'
+import type { Deposit, DepositMaster, FundingSource } from '../domain/funding.js'
 import type { LinkToken, Payee } from '../domain/payee.js'
 import type { AuditEvent, AuditQuery, NewAuditEvent } from '../domain/policy/audit.js'
 import type { Policy, PolicyStatus, PolicyVersion } from '../domain/policy/policy.js'
@@ -117,4 +118,28 @@ export interface AiUsageRepository {
   linkRun(proposalId: string, runId: string): Promise<void>
   /** Newest first, filtered by purpose, policy and time. */
   list(communityId: string, opts?: { purposes?: readonly AiUsagePurpose[]; policyId?: string; since?: Date; limit?: number }): Promise<AiUsage[]>
+}
+
+/**
+ * Funding with attribution (virtual addresses): the treasury's master registration and the
+ * watcher's cursor, the named funding sources, and the deposits attributed to them. Written only
+ * by FundingService.
+ */
+export interface FundingRepository {
+  getMaster(communityId: string): Promise<DepositMaster | null>
+  /** Insert-if-absent by community: true only for the call that stored it. */
+  insertMaster(master: DepositMaster): Promise<boolean>
+  /** Every community's master (the deposit watcher's work). */
+  listMasters(): Promise<DepositMaster[]>
+  /** Moves the watcher's cursor forward, never back (two instances may race to the same block). */
+  advanceScan(communityId: string, scannedTo: bigint): Promise<void>
+  /** `tag_taken` when the community already has a source with this user tag (two creates racing). */
+  insertSource(source: FundingSource): Promise<'inserted' | 'tag_taken'>
+  getSource(id: string): Promise<FundingSource | null>
+  /** Oldest first. */
+  listSources(communityId: string): Promise<FundingSource[]>
+  /** Insert-if-absent on (txHash, logIndex): true only for the one call that stored the deposit. */
+  insertDeposit(deposit: Deposit): Promise<boolean>
+  /** Newest first (by block, then log index), filtered by source and time. */
+  listDeposits(communityId: string, opts?: { sourceId?: string; since?: Date; limit?: number }): Promise<Deposit[]>
 }

@@ -7,6 +7,7 @@ import type { RolepayDeps } from './ports/deps.js'
 import { AiUsageService } from './services/aiUsageService.js'
 import { AuditService, AuditTrail } from './services/auditTrail.js'
 import { CommunityService } from './services/communityService.js'
+import { FundingService } from './services/fundingService.js'
 import { PayeeService } from './services/payeeService.js'
 import { PayRunService } from './services/payRunService.js'
 import { PolicyService } from './services/policyService.js'
@@ -27,6 +28,8 @@ export type Rolepay = {
   audit: AuditService
   /** What the AI cost: one content-free row per model call, the month's spend. */
   aiUsage: AiUsageService
+  /** Funding with attribution: deposit addresses (virtual addresses) per funding source, and the deposits they received. */
+  funding: FundingService
 }
 
 export const DEFAULT_LINK_TTL_SECONDS = 1800
@@ -106,6 +109,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     }),
     audit: new AuditService({ log: r.audit }),
     aiUsage: new AiUsageService({ usage: r.aiUsage, clock }),
+    funding: new FundingService({ funding: r.funding, communities: r.communities, chain: deps.fundingChain ?? null, ids, clock, audit }),
   }
 }
 

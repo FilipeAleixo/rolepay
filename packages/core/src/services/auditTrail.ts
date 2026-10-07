@@ -22,6 +22,15 @@ export class AuditTrail {
     await this.deps.log.append(event)
   }
 
+  /** An event that must never fail the step that caused it (a deposit already stored): a failure is reported through `onError`. */
+  async bestEffort(e: Parameters<AuditTrail['record']>[0]): Promise<void> {
+    try {
+      await this.record(e)
+    } catch (error) {
+      this.deps.onError?.(error)
+    }
+  }
+
   /** A pay run moved (created, approved, paid...). Never throws. */
   async run(run: Run, type: Extract<AuditEventType, `run.${string}`>, actor: string | null, details: AuditDetails = {}): Promise<void> {
     try {
