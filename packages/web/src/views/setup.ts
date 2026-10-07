@@ -33,6 +33,14 @@ export function setupPage(c: SetupPageConfig): string {
     c.feeMode === 'fee_budget'
       ? `<div><label for="feeBudget">Fee budget per period (${esc(c.feeTokenLabel ?? 'fee token')})</label><input id="feeBudget" inputmode="decimal" value="${esc(c.defaults.feeBudget)}"></div>`
       : ''
+  // In fee budget mode network fees are paid in a second token (pathUSD on mainnet, where there is no
+  // sponsor): the bot's runs from its fee budget, and the passkey's own transactions on this page.
+  const feeLabel = esc(c.feeTokenLabel ?? 'the fee token')
+  const feeFunding =
+    c.feeMode === 'fee_budget'
+      ? `<p>Also send about 2 ${feeLabel} for network fees: the bot pays each run's fee from its fee budget in ${feeLabel}, and your passkey's own transactions on this page pay theirs in it too (a cent or two each).</p>
+  <p>Fee balance: <strong data-field="fee-balance">...</strong> ${feeLabel}</p>`
+      : ''
   return page({
     title: `Rolepay: treasury for ${c.guildName}`,
     testnet: c.testnet,
@@ -54,9 +62,10 @@ export function setupPage(c: SetupPageConfig): string {
 </section>
 <section data-step="fund" hidden>
   <h2>2. Fund it</h2>
-  <p>Send ${token} to this address, from an exchange or another account:</p>
+  <p>Send ${token} on Tempo to this address, from another Tempo account or through a bridge that delivers on Tempo. Never send from a network or exchange that does not support Tempo.</p>
   <p><code data-field="treasury"></code></p>
   <p>Balance: <strong data-field="balance">...</strong> ${token} <a data-field="explorer" href="#" target="_blank" rel="noreferrer">explorer</a></p>
+  ${feeFunding}
   ${c.testnet ? '<button id="faucet" type="button" class="secondary">Get testnet funds</button>' : ''}
 </section>
 <section data-step="key" hidden>

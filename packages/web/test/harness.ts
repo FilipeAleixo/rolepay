@@ -17,7 +17,17 @@ export const DEV_TREASURY = '0x9999999999999999999999999999999999999999'
 
 type Passkey = string | { address: string; proof: 'login' | 'registration'; issuedAt: number }
 
-export function webHarness() {
+/** The pages as the mainnet server serves them: no sponsor, no faucet, the mainnet RPC and explorer. */
+const MAINNET_WEB = {
+  origin: 'https://app.rolepay.app',
+  rpId: 'app.rolepay.app',
+  network: 'mainnet',
+  rpcUrl: 'https://rpc.tempo.xyz',
+  sponsorUrl: null,
+  explorerUrl: 'https://explore.tempo.xyz',
+} as const
+
+export function webHarness(opts: { mainnet?: boolean } = {}) {
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
   const rolepay = createRolepay({
@@ -26,7 +36,7 @@ export function webHarness() {
     vault: new PlainKeyVault(),
     ids: new SequentialIds(),
     clock,
-    network: 'moderato',
+    network: opts.mainnet ? 'mainnet' : 'moderato',
   })
   const sessions = new FakePasskeySessions()
   const app = createWebApp({
@@ -41,6 +51,7 @@ export function webHarness() {
       rpcUrl: 'https://rpc.moderato.tempo.xyz',
       sponsorUrl: 'https://sponsor.moderato.tempo.xyz',
       explorerUrl: 'https://explore.testnet.tempo.xyz',
+      ...(opts.mainnet ? MAINNET_WEB : {}),
       botKeyDefaults: { limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400, feeBudget: 1_000_000n },
     },
   })

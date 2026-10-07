@@ -1,3 +1,4 @@
+import { MAINNET_TOKENS } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { DEV_TREASURY, FEE_TOKEN, GUILD, OTHER_PASSKEY, PASSKEY, ROLE, TOKEN, pageConfig, registeredCommunity, setupLink, webHarness } from '../../test/harness.js'
 
@@ -34,6 +35,31 @@ describe('the treasurer setup page', () => {
       passkeyName: 'Rolepay treasury: Mods guild',
       defaults: { limit: '100', periodDays: 30, validityDays: 30, feeBudget: '1' },
     })
+  })
+
+  it('on mainnet: no faucet, no sponsor, and in fee budget mode the funding step asks for the fee token too, with its balance', async () => {
+    const h = webHarness({ mainnet: true })
+    const token = await setupLink(h, { payoutToken: MAINNET_TOKENS.usdc_e, feeMode: 'fee_budget', feeToken: MAINNET_TOKENS.path_usd })
+    const res = await h.send(`/setup/${token}`)
+    const html = await res.clone().text()
+    expect(await pageConfig(res)).toMatchObject({
+      testnet: false,
+      network: 'mainnet',
+      sponsorUrl: null,
+      explorerUrl: 'https://explore.tempo.xyz',
+      tokenLabel: 'USDC.e',
+      feeMode: 'fee_budget',
+      feeToken: MAINNET_TOKENS.path_usd,
+      feeTokenLabel: 'pathUSD',
+    })
+    expect(html).not.toContain('id="faucet"')
+    expect(html).not.toContain('class="testnet"') // no testnet badge
+    expect(html).toContain('Send USDC.e on Tempo to this address')
+    expect(html).toMatch(/Also send about 2 pathUSD[^<]*network fees/)
+    expect(html).toContain('data-field="fee-balance"')
+    // Sponsored (testnet): no fee token to fund, so no second balance.
+    const sponsored = await webHarness().send(`/setup/${await setupLink(webHarness())}`)
+    expect(await sponsored.text()).not.toContain('data-field="fee-balance"')
   })
 
   it('an unknown or expired link renders an error page', async () => {

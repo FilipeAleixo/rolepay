@@ -1,6 +1,7 @@
 // The treasurer setup page: the community account (passkey as root), funding, and the bot
 // key's authorisation and revocation, signed with the passkey.
 import { $, busy, explainPasskeyError, fill, formatMicros, get, post, shortAddress, show, status } from './dom.js'
+import { treasuryFeeToken } from './fees.js'
 import { type KeyForm, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
 import { passkeys } from './passkey.js'
 import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, faucet, revokeAccessKey } from './tempo.js'
@@ -106,6 +107,11 @@ export function startSetup(config: SetupConfig) {
     void balanceOf(chain, s.community.payoutToken, s.community.treasury)
       .then((b) => fill('balance', formatMicros(b.toString())))
       .catch(() => fill('balance', 'unknown'))
+    if (config.feeMode === 'fee_budget' && config.feeToken) {
+      void balanceOf(chain, config.feeToken, s.community.treasury)
+        .then((b) => fill('fee-balance', formatMicros(b.toString())))
+        .catch(() => fill('fee-balance', 'unknown'))
+    }
     fill('key-status', keyText(s.key))
     fill('key-prompts', holdsTreasury(s.community.treasury) ? PROMPTS_ONCE : PROMPTS_TWICE)
     const live = liveKeys(s)
@@ -160,6 +166,21 @@ export function startSetup(config: SetupConfig) {
     return account
   }
 
+  /**
+   * The chain settings for a transaction the treasury signs. Sponsored: as configured. Without a
+   * sponsor (mainnet) the treasury pays its own fee: in the fee token while it has enough, else in
+   * the payout token, so a revoke never fails for want of the fee token (fees.ts).
+   */
+  async function chainForTreasury(treasury: string): Promise<ChainConfig> {
+    if (config.sponsorUrl) return chain
+    const feeToken = config.feeMode === 'fee_budget' ? config.feeToken : null
+    const [fee, payout] = await Promise.all([
+      feeToken ? balanceOf(chain, feeToken, treasury).catch(() => null) : Promise.resolve(null),
+      balanceOf(chain, config.payoutToken, treasury).catch(() => 0n),
+    ])
+    return { ...chain, feeToken: treasuryFeeToken({ feeToken, payoutToken: config.payoutToken, balances: { fee, payout } }) }
+  }
+
   async function bind(connect: () => Promise<string>) {
     status('Waiting for your passkey...')
     await connect()
@@ -206,7 +227,7 @@ export function startSetup(config: SetupConfig) {
     if (mismatch) return status(`Nothing was signed: the server's copy of the authorisation has ${mismatch}, not what you chose. Do not sign until this is explained.`, 'bad')
     fill('key-signs', `You are signing: ${describeAuthorization(mine, labels)}`)
     status(revoke.length ? 'Confirm with your passkey to replace the bot key (one signature)...' : 'Confirm with your passkey to authorise the bot key...')
-    const tx = await authorizeAccessKey(chain, account, p.keyAddress, mine, revoke.filter((a) => a !== p.keyAddress))
+    const tx = await authorizeAccessKey(await chainForTreasury(account.address), account, p.keyAddress, mine, revoke.filter((a) => a !== p.keyAddress))
     status('Authorised on chain. Checking...')
     const c = await post<{ key: unknown }>(`${base}/key/confirm`, { keyAddress: p.keyAddress })
     if (!c.ok) return status(explain(c.error), 'bad')
@@ -220,7 +241,7 @@ export function startSetup(config: SetupConfig) {
     if (!window.confirm(question)) return
     const account = await treasuryAccount()
     status('Confirm with your passkey to revoke the bot key...')
-    await revokeAccessKey(chain, account, keyAddress)
+    await revokeAccessKey(await chainForTreasury(account.address), account, keyAddress)
     const r = await post<{ key: unknown }>(`${base}/key/revoked`, { keyAddress })
     if (!r.ok) return status(explain(r.error), 'bad')
     await refresh()
