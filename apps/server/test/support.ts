@@ -25,16 +25,25 @@ type SharedState = { rolepay: Rolepay; chain: FakePayoutChain; clock: ManualCloc
  * `from`: start a second server over the first one's database and chain, as a restarted
  * process would (a fresh Discord connection and queue). `sleep`: replace the job's waits.
  * `devShortcuts: false`: the production default (no `treasury:` or `new_key` in Discord).
+ * `demoControls: true`: `/rolepay policy run_now` and one-minute veto windows (off by default, as in production).
  * `env`: more settings, as the environment would give them.
  */
 export async function testServer(
-  opts: { from?: SharedState; sleep?: (ms: number) => Promise<void>; devShortcuts?: boolean; env?: Record<string, string>; dashboard?: ServerDeps['web']['dashboard'] } = {},
+  opts: {
+    from?: SharedState
+    sleep?: (ms: number) => Promise<void>
+    devShortcuts?: boolean
+    demoControls?: boolean
+    env?: Record<string, string>
+    dashboard?: ServerDeps['web']['dashboard']
+  } = {},
 ) {
   const signer = await createTestSigner()
   const config = parseServerConfig({
     ROLEPAY_MASTER_KEY: randomBytes(32).toString('hex'),
     // These tests run on testnet with the dev path on, unless a test asks for the production default.
     ROLEPAY_DEV_SHORTCUTS: String(opts.devShortcuts ?? true),
+    ROLEPAY_DEMO_CONTROLS: String(opts.demoControls ?? false),
     DISCORD_APP_ID: '500000000000000001',
     DISCORD_PUBLIC_KEY: signer.publicKeyHex,
     DISCORD_BOT_TOKEN: 'test-bot-token',

@@ -1,4 +1,4 @@
-import { type Result, devShortcutsEnabled, err, ok } from '@rolepay/core'
+import { type Result, demoControlsEnabled, devShortcutsEnabled, err, ok } from '@rolepay/core'
 import { FetchDiscordRest, commandDefinitions } from '@rolepay/discord'
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>
@@ -7,7 +7,8 @@ type Fetch = (input: string, init?: RequestInit) => Promise<Response>
  * Registers (overwrites) Rolepay's slash commands. With DISCORD_DEV_GUILD_ID they are
  * registered for that one server and show up at once; otherwise globally.
  * Needs only DISCORD_APP_ID and DISCORD_BOT_TOKEN, so it works before the rest is configured.
- * The dev shortcut options are registered only with ROLEPAY_DEV_SHORTCUTS=true on testnet.
+ * The dev shortcut options are registered only with ROLEPAY_DEV_SHORTCUTS=true on testnet, and the
+ * demo controls (`policy run_now`, `veto_minutes`) only with ROLEPAY_DEMO_CONTROLS=true on testnet.
  */
 export async function registerCommands(
   env: Record<string, string | undefined>,
@@ -15,13 +16,14 @@ export async function registerCommands(
 ): Promise<Result<{ count: number; scope: string }, { code: 'missing_env' | 'invalid_env' | 'discord_refused'; detail: string }>> {
   const missing = ['DISCORD_APP_ID', 'DISCORD_BOT_TOKEN'].filter((k) => !env[k])
   if (missing.length) return err({ code: 'missing_env', detail: missing.join(', ') })
-  let devShortcuts: boolean
+  let flags: { devShortcuts: boolean; demoControls: boolean }
   try {
-    devShortcuts = devShortcutsEnabled(Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v.trim() !== '')))
+    const set = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v.trim() !== ''))
+    flags = { devShortcuts: devShortcutsEnabled(set), demoControls: demoControlsEnabled(set) }
   } catch (e) {
     return err({ code: 'invalid_env', detail: e instanceof Error ? e.message : String(e) })
   }
-  const commands = commandDefinitions({ devShortcuts })
+  const commands = commandDefinitions(flags)
   const applicationId = env.DISCORD_APP_ID as string
   const guildId = env.DISCORD_DEV_GUILD_ID || undefined
   const rest = new FetchDiscordRest({ botToken: env.DISCORD_BOT_TOKEN as string, ...(fetch ? { fetch } : {}) })

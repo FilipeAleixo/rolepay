@@ -21,10 +21,19 @@ export type DiscordAppConfig = {
    * on Moderato: on any other network they do not exist, whatever this says.
    */
   devShortcuts: boolean
+  /**
+   * The demo controls for standing policies (`/rolepay policy run_now`, `veto_minutes`), still for
+   * the approver role only. Separate from the dev shortcuts, so a public demo can have them without
+   * the treasury and key shortcuts. Honoured only on Moderato.
+   */
+  demoControls: boolean
 }
 
 /** Whether the dev shortcuts exist here: the flag is on AND the network is the Moderato testnet. */
 export const devShortcutsOn = (c: Pick<DiscordAppConfig, 'devShortcuts' | 'network'>) => c.devShortcuts && c.network === 'moderato'
+
+/** Whether the demo controls exist here: the flag is on AND the network is the Moderato testnet. */
+export const demoControlsOn = (c: Pick<DiscordAppConfig, 'demoControls' | 'network'>) => c.demoControls && c.network === 'moderato'
 
 /** Everything the interaction handlers use. Core is reached only through its services. */
 export type DiscordAppDeps = {
@@ -36,7 +45,7 @@ export type DiscordAppDeps = {
   pendingSources: PendingSources
   clock: Clock
   config: DiscordAppConfig
-  /** Posts what the policy scheduler did (used by the dev shortcut that makes a run now). */
+  /** Posts what the policy scheduler did (used by the demo control that makes a run now). */
   announcer?: PolicyAnnouncer
   onError?: (error: unknown) => void
 }

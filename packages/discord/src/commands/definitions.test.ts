@@ -20,10 +20,10 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
       )
   const subcommands = subcommandsOf(defs)
 
-  it('every registered subcommand (dev shortcuts included) has a handler, and every handler is registered', () => {
-    expect([...subcommandsOf(commandDefinitions({ devShortcuts: true }) as Def[])].sort()).toEqual([...ROUTED_COMMANDS].sort())
+  it('every registered subcommand (dev shortcuts and demo controls included) has a handler, and every handler is registered', () => {
+    expect([...subcommandsOf(commandDefinitions({ devShortcuts: true, demoControls: true }) as Def[])].sort()).toEqual([...ROUTED_COMMANDS].sort())
     expect(ROUTED_COMMANDS).toEqual(expect.arrayContaining(subcommands))
-    // The only dev-only subcommand: making a policy's next run now ("time skips to Monday").
+    // The only demo-only subcommand: making a policy's next run now ("time skips to Monday").
     expect(ROUTED_COMMANDS.filter((c) => !subcommands.includes(c))).toEqual(['rolepay policy run_now'])
   })
 
@@ -54,8 +54,14 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
       ['mode', OptionType.String, true],
       ['veto_hours', OptionType.Integer, false],
     ])
-    const devMode = (commandDefinitions({ devShortcuts: true }) as Def[]).find((d) => d.name === 'rolepay')?.options?.find((o) => o.name === 'policy')?.options?.find((o) => o.name === 'mode')
-    expect(devMode?.options?.map((o) => o.name)).toContain('veto_minutes')
+    const policyGroup = (o: { devShortcuts: boolean; demoControls: boolean }) => (commandDefinitions(o) as Def[]).find((d) => d.name === 'rolepay')?.options?.find((x) => x.name === 'policy')
+    const demo = policyGroup({ devShortcuts: false, demoControls: true })
+    expect(demo?.options?.find((o) => o.name === 'mode')?.options?.map((o) => o.name)).toContain('veto_minutes')
+    expect(demo?.options?.map((o) => o.name)).toContain('run_now')
+    // The dev shortcuts alone do not bring the demo controls.
+    const dev = policyGroup({ devShortcuts: true, demoControls: false })
+    expect(dev?.options?.find((o) => o.name === 'mode')?.options?.map((o) => o.name)).not.toContain('veto_minutes')
+    expect(dev?.options?.map((o) => o.name)).not.toContain('run_now')
   })
 
   it('names and descriptions fit Discord limits; required options come first', () => {
@@ -68,14 +74,14 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
       if (firstOptional >= 0) expect(leaves.slice(firstOptional).some((o) => o.required)).toBe(false)
       for (const o of d.options ?? []) walk(o)
     }
-    for (const d of [...defs, ...(commandDefinitions({ devShortcuts: true }) as Def[]).filter((c) => c.type === 1)]) walk(d)
+    for (const d of [...defs, ...(commandDefinitions({ devShortcuts: true, demoControls: true }) as Def[]).filter((c) => c.type === 1)]) walk(d)
   })
 
   it('each command stays under the 4,000 characters Discord allows for names, descriptions and choices (dev shortcuts too)', () => {
     type Sized = { name: string; description?: string; options?: Sized[]; choices?: { name: string; value: string | number }[] }
     const size = (d: Sized): number =>
       d.name.length + (d.description?.length ?? 0) + (d.choices ?? []).reduce((n, c) => n + c.name.length + String(c.value).length, 0) + (d.options ?? []).reduce((n, o) => n + size(o), 0)
-    for (const d of [...all, ...(commandDefinitions({ devShortcuts: true }) as Def[])] as Sized[]) expect([d.name, size(d) <= 4000]).toEqual([d.name, true])
+    for (const d of [...all, ...(commandDefinitions({ devShortcuts: true, demoControls: true }) as Def[])] as Sized[]) expect([d.name, size(d) <= 4000]).toEqual([d.name, true])
   })
 
   it('the message command "Propose pay run" is registered and routed, hidden from members by default, server only', () => {
@@ -101,11 +107,11 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     const setupOptions = (d: Def[]) =>
       (d.find((c) => c.name === 'rolepay')?.options?.find((o) => o.name === 'setup')?.options ?? []).map((o) => o.name)
     const dev = ['treasury', 'key_limit', 'new_key']
-    for (const off of [COMMAND_DEFINITIONS, commandDefinitions({ devShortcuts: false })] as Def[][]) {
+    for (const off of [COMMAND_DEFINITIONS, commandDefinitions({ devShortcuts: false, demoControls: false }), commandDefinitions({ devShortcuts: false, demoControls: true })] as Def[][]) {
       expect(setupOptions(off)).not.toEqual(expect.arrayContaining([expect.stringMatching(/^(treasury|key_limit|new_key)$/)]))
       expect(setupOptions(off)).toContain('approver_role')
     }
-    expect(setupOptions(commandDefinitions({ devShortcuts: true }) as Def[])).toEqual(expect.arrayContaining(dev))
+    expect(setupOptions(commandDefinitions({ devShortcuts: true, demoControls: false }) as Def[])).toEqual(expect.arrayContaining(dev))
   })
 
   it('/rolepay is shown to Manage Server by default; /payee to everyone; both only inside servers', () => {

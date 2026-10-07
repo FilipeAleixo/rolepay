@@ -20,6 +20,7 @@ export const CONFIG: DiscordAppConfig = {
   botKey: { limit: usd('100'), periodSeconds: 2_592_000, validitySeconds: 2_592_000 },
   authorizeHint: 'Dev: run `pnpm dev:authorize-key {guildId}`.',
   devShortcuts: true,
+  demoControls: true,
 }
 
 export const SCOPE = { guildId: GUILD, channelId: CHANNEL }

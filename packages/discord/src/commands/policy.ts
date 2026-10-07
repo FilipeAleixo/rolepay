@@ -1,6 +1,6 @@
 import { type Community, POLICY_LIMITS, PROPOSAL_LIMITS, type Rolepay, WEEKDAYS, canPropose, isTimezone, parseAmount } from '@rolepay/core'
 import { z } from 'zod'
-import { devShortcutsOn } from '../app/deps.js'
+import { demoControlsOn } from '../app/deps.js'
 import { type AutocompleteHandler, type CommandHandler, type GuildContext, parseOptions, replyError } from '../app/handlers.js'
 import { type DeferredResult, type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canOperate, holdsApproverRole } from '../app/permissions.js'
@@ -36,7 +36,7 @@ const ModeOptions = PolicyOption.extend({
   veto_minutes: z.number().int().min(1).max(POLICY_LIMITS.maxVetoMinutes).optional(),
 })
 
-const DEV_ONLY = (what: string) => `${what} is a testnet dev shortcut (ROLEPAY_DEV_SHORTCUTS=true on Moderato); it is off on this server.`
+const DEMO_ONLY = (what: string) => `${what} is a demo control (ROLEPAY_DEMO_CONTROLS=true on Moderato); it is off on this server.`
 
 /** Who may read policies here: admins and treasurers (as for runs), and the proposer role (it writes them). */
 async function requireReader(ctx: GuildContext, rolepay: Rolepay): Promise<{ ok: true; community: Community } | { ok: false; reply: Outcome }> {
@@ -154,7 +154,7 @@ export const policyModeCommand: CommandHandler = async ({ options, ctx }, { role
   const parsed = parseOptions(ModeOptions, options)
   if (!parsed.ok) return parsed.reply
   const o = parsed.value
-  if (o.veto_minutes !== undefined && !devShortcutsOn(config)) return ephemeralReply(DEV_ONLY('`veto_minutes`'))
+  if (o.veto_minutes !== undefined && !demoControlsOn(config)) return ephemeralReply(DEMO_ONLY('`veto_minutes`'))
   const minutes = o.veto_minutes ?? (o.veto_hours === undefined ? undefined : o.veto_hours * 60)
   const r = await rolepay.policies.setMode({ ...actorOf(ctx), policyId: o.policy, mode: o.mode, ...(minutes === undefined ? {} : { vetoWindowMinutes: minutes }) })
   if (!r.ok) return ephemeralReply(explainPolicyError(r.error, { community: guard.community }))
@@ -162,11 +162,12 @@ export const policyModeCommand: CommandHandler = async ({ options, ctx }, { role
 }
 
 /**
- * Testnet dev shortcut: make the policy's next run now ("time skips to Monday"), and post it in
- * the policy's channel like the scheduler would. The scheduled tick later finds it made.
+ * Demo control (ROLEPAY_DEMO_CONTROLS on Moderato): make the policy's next run now ("time skips to
+ * Monday"), and post it in the policy's channel like the scheduler would. The approver role only;
+ * the scheduled tick later finds the period made.
  */
 export const policyRunNowCommand: CommandHandler = async ({ options, ctx }, { rolepay, config, announcer }) => {
-  if (!devShortcutsOn(config)) return ephemeralReply(DEV_ONLY('`/rolepay policy run_now`'))
+  if (!demoControlsOn(config)) return ephemeralReply(DEMO_ONLY('`/rolepay policy run_now`'))
   const guard = await requirePolicyApprover(ctx, rolepay)
   if (!guard.ok) return guard.reply
   const parsed = parseOptions(PolicyOption, options)

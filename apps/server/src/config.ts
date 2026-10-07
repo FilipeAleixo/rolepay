@@ -53,7 +53,7 @@ export type ServerConfig = {
   /** `clientIpHeader`: where the proxy in front puts the client's IP (lowercase), or null for the last X-Forwarded-For hop. */
   http: { host: string; port: number; clientIpHeader: string | null }
   recoveryIntervalMs: number
-  /** Standing policies: the scheduler's interval, and the shortest veto window (1 minute with the testnet dev shortcuts, for manual tests). */
+  /** Standing policies: the scheduler's interval, and the shortest veto window (1 minute with the testnet demo controls). */
   policies: { schedulerIntervalMs: number; minVetoMinutes: number }
   /** The claim and setup pages: origin, passkey relying party, chain endpoints for the browser. */
   web: WebConfig
@@ -98,10 +98,11 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       botKey,
       authorizeHint: core.devShortcuts ? DEV_AUTHORIZE_HINT : null,
       devShortcuts: core.devShortcuts,
+      demoControls: core.demoControls,
     },
     http: { host: e.HOST, port: e.PORT, clientIpHeader: e.ROLEPAY_CLIENT_IP_HEADER ?? null },
     recoveryIntervalMs: e.ROLEPAY_RECOVERY_INTERVAL_SECONDS * 1000,
-    policies: { schedulerIntervalMs: e.ROLEPAY_SCHEDULER_INTERVAL_SECONDS * 1000, minVetoMinutes: core.devShortcuts ? 1 : POLICY_LIMITS.minVetoMinutes },
+    policies: { schedulerIntervalMs: e.ROLEPAY_SCHEDULER_INTERVAL_SECONDS * 1000, minVetoMinutes: core.demoControls ? 1 : POLICY_LIMITS.minVetoMinutes },
     web: {
       origin,
       rpId,

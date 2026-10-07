@@ -24,7 +24,7 @@ async function main() {
     ...deps,
     activity: new RestActivityReader(rest),
     proposalLog: (entry) => log('proposal', entry),
-    // Standing policies: the shortest veto window (1 minute with the testnet dev shortcuts, for manual tests).
+    // Standing policies: the shortest veto window (1 minute with the testnet demo controls, ROLEPAY_DEMO_CONTROLS).
     minVetoMinutes: config.policies.minVetoMinutes,
     onAuditError: (error) => log('audit_error', { message: error instanceof Error ? error.message.slice(0, 200) : 'unknown' }),
   })

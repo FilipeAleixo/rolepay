@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deprecatedEnvNames, devShortcutsEnabled, parseConfig, withDeprecatedEnvNames } from './env.js'
+import { demoControlsEnabled, deprecatedEnvNames, devShortcutsEnabled, parseConfig, withDeprecatedEnvNames } from './env.js'
 
 const MASTER = 'a'.repeat(64)
 
@@ -79,6 +79,26 @@ describe('parseConfig (operational settings from env)', () => {
     expect(devShortcutsEnabled({ ROLEPAY_DEV_SHORTCUTS: 'true' })).toBe(true)
     expect(devShortcutsEnabled({ ROLEPAY_DEV_SHORTCUTS: 'true', ROLEPAY_NETWORK: 'moderato' })).toBe(true)
     expect(() => devShortcutsEnabled({ ROLEPAY_DEV_SHORTCUTS: 'true', ROLEPAY_NETWORK: 'mainnet' })).toThrow(/testnet/)
+  })
+
+  it('demo controls are off unless ROLEPAY_DEMO_CONTROLS=true, only exist on the Moderato testnet, and are separate from the dev shortcuts', () => {
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER }).demoControls).toBe(false)
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_DEMO_CONTROLS: 'false' }).demoControls).toBe(false)
+    const demo = parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_DEMO_CONTROLS: 'true' })
+    expect([demo.demoControls, demo.devShortcuts]).toEqual([true, false])
+    const dev = parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_DEV_SHORTCUTS: 'true' })
+    expect([dev.demoControls, dev.devShortcuts]).toEqual([false, true])
+    const mainnet = { ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_NETWORK: 'mainnet', ROLEPAY_ALLOW_MAINNET: 'true' }
+    expect(parseConfig(mainnet).demoControls).toBe(false)
+    expect(() => parseConfig({ ...mainnet, ROLEPAY_DEMO_CONTROLS: 'true' })).toThrow(/ROLEPAY_DEMO_CONTROLS.*testnet/)
+    expect(() => parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_DEMO_CONTROLS: 'yes' })).toThrow(/ROLEPAY_DEMO_CONTROLS/)
+  })
+
+  it('demoControlsEnabled reads only the network and the flag (for registering commands before the rest is configured)', () => {
+    expect(demoControlsEnabled({})).toBe(false)
+    expect(demoControlsEnabled({ ROLEPAY_DEMO_CONTROLS: 'true' })).toBe(true)
+    expect(demoControlsEnabled({ ROLEPAY_DEV_SHORTCUTS: 'true' })).toBe(false)
+    expect(() => demoControlsEnabled({ ROLEPAY_DEMO_CONTROLS: 'true', ROLEPAY_NETWORK: 'mainnet' })).toThrow(/testnet/)
   })
 
   it('rejects unknown networks', () => {

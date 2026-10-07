@@ -51,7 +51,7 @@ const COMMANDS: Record<string, CommandHandler> = {
   'rolepay policy pause': policyPauseCommand,
   'rolepay policy resume': policyResumeCommand,
   'rolepay policy mode': policyModeCommand,
-  /** Testnet dev shortcut; registered only with ROLEPAY_DEV_SHORTCUTS, refused otherwise. */
+  /** Demo control; registered only with ROLEPAY_DEMO_CONTROLS on Moderato, refused otherwise. */
   'rolepay policy run_now': policyRunNowCommand,
   'payee link': payeeLinkCommand,
 }

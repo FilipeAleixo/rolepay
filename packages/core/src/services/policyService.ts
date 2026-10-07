@@ -51,7 +51,7 @@ export type PolicyServiceDeps = {
   payRuns: PayRunService
   audit: AuditTrail
   log?: ProposalLog
-  /** The shortest veto window allowed, in minutes. 60 by default; the testnet dev setting lowers it for manual tests. */
+  /** The shortest veto window allowed, in minutes. 60 by default; the testnet demo controls lower it to 1. */
   minVetoMinutes?: number
 }
 

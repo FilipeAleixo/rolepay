@@ -20,9 +20,10 @@ const capitalised = (w: string) => `${w[0]?.toUpperCase()}${w.slice(1)}`
 /**
  * /rolepay policy: standing policies. The AI compiles the instruction once; the approver role
  * approves, pauses, resumes and switches modes; code runs it on its schedule. `run_now` and
- * `veto_minutes` are testnet dev shortcuts (a demo can skip to Monday and use a short veto window).
+ * `veto_minutes` are demo controls (ROLEPAY_DEMO_CONTROLS on Moderato: a demo can skip to Monday
+ * and use a short veto window), separate from the dev shortcuts.
  */
-const policyGroup = (opts: { devShortcuts: boolean }) => ({
+const policyGroup = (opts: { demoControls: boolean }) => ({
   type: OptionType.SubCommandGroup,
   name: 'policy',
   description: 'Standing policies: a rule the AI writes once, a treasurer approves, and code runs on a schedule',
@@ -79,11 +80,11 @@ const policyGroup = (opts: { devShortcuts: boolean }) => ({
           ],
         },
         { type: OptionType.Integer, name: 'veto_hours', description: 'Autopilot: hours to veto a run before it pays (default 24, at least 1)', min_value: 1, max_value: POLICY_LIMITS.maxVetoMinutes / 60 },
-        ...(opts.devShortcuts ? [{ type: OptionType.Integer, name: 'veto_minutes', description: 'Dev shortcut: a veto window in minutes, for testing', min_value: 1, max_value: POLICY_LIMITS.maxVetoMinutes }] : []),
+        ...(opts.demoControls ? [{ type: OptionType.Integer, name: 'veto_minutes', description: 'Demo control: a veto window in minutes', min_value: 1, max_value: POLICY_LIMITS.maxVetoMinutes }] : []),
       ],
     },
-    ...(opts.devShortcuts
-      ? [{ type: OptionType.SubCommand, name: 'run_now', description: "Dev shortcut: make the policy's next run now", options: [policyOption('The policy')] }]
+    ...(opts.demoControls
+      ? [{ type: OptionType.SubCommand, name: 'run_now', description: "Demo control: make the policy's next run now", options: [policyOption('The policy')] }]
       : []),
   ],
 })
@@ -92,9 +93,10 @@ const policyGroup = (opts: { devShortcuts: boolean }) => ({
  * The slash commands, as JSON for `PUT /applications/{id}/commands`. /rolepay is visible
  * to Manage Server by default (admins can grant it to the Treasurer role in Server
  * Settings > Integrations); the handlers re-check permissions regardless. The dev shortcut
- * options exist only when `devShortcuts` is on (the handler refuses them otherwise anyway).
+ * options exist only when `devShortcuts` is on, and `run_now` and `veto_minutes` only when
+ * `demoControls` is on (the handlers refuse them otherwise anyway).
  */
-export const commandDefinitions = (opts: { devShortcuts: boolean }) => [
+export const commandDefinitions = (opts: { devShortcuts: boolean; demoControls: boolean }) => [
   {
     name: 'rolepay',
     description: 'Pay the people who run this server, in one stablecoin transaction',
@@ -188,5 +190,5 @@ export const commandDefinitions = (opts: { devShortcuts: boolean }) => [
   },
 ]
 
-/** The production commands: no dev shortcuts. */
-export const COMMAND_DEFINITIONS = commandDefinitions({ devShortcuts: false })
+/** The production commands: no dev shortcuts, no demo controls. */
+export const COMMAND_DEFINITIONS = commandDefinitions({ devShortcuts: false, demoControls: false })

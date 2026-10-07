@@ -33,14 +33,27 @@ describe('parseServerConfig', () => {
     expect(c.app.defaultPayoutToken).toBe(TESTNET_TOKENS.alpha_usd)
     expect(c.app.botKey).toEqual({ limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400 })
     expect(c.app.devShortcuts).toBe(false)
+    expect(c.app.demoControls).toBe(false)
     expect(c.app.authorizeHint).toBeNull()
     expect(c.recoveryIntervalMs).toBe(30_000)
     expect(c.policies).toEqual({ schedulerIntervalMs: 30_000, minVetoMinutes: 60 })
   })
 
-  it('policies: the scheduler interval is configurable; the dev shortcuts allow a one-minute veto window for testing', () => {
+  it('policies: the scheduler interval is configurable; the demo controls (not the dev shortcuts) allow a one-minute veto window', () => {
     expect(parseServerConfig(env({ ROLEPAY_SCHEDULER_INTERVAL_SECONDS: '10' })).policies.schedulerIntervalMs).toBe(10_000)
-    expect(parseServerConfig(env({ ROLEPAY_DEV_SHORTCUTS: 'true' })).policies.minVetoMinutes).toBe(1)
+    expect(parseServerConfig(env({ ROLEPAY_DEMO_CONTROLS: 'true' })).policies.minVetoMinutes).toBe(1)
+    expect(parseServerConfig(env({ ROLEPAY_DEV_SHORTCUTS: 'true' })).policies.minVetoMinutes).toBe(60)
+  })
+
+  it('the demo controls (run_now, short veto windows) exist only with ROLEPAY_DEMO_CONTROLS=true on testnet, and never turn on the dev shortcuts', () => {
+    const demo = parseServerConfig(env({ ROLEPAY_DEMO_CONTROLS: 'true' }))
+    expect([demo.app.demoControls, demo.app.devShortcuts, demo.app.authorizeHint]).toEqual([true, false, null])
+    const dev = parseServerConfig(env({ ROLEPAY_DEV_SHORTCUTS: 'true' }))
+    expect([dev.app.demoControls, dev.app.devShortcuts]).toEqual([false, true])
+    expect(parseServerConfig(env()).app.demoControls).toBe(false)
+    const mainnet = { ROLEPAY_NETWORK: 'mainnet', ROLEPAY_ALLOW_MAINNET: 'true', ROLEPAY_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001' }
+    expect(() => parseServerConfig(env({ ...mainnet, ROLEPAY_DEMO_CONTROLS: 'true' }))).toThrow(/ROLEPAY_DEMO_CONTROLS/)
+    expect(parseServerConfig(env(mainnet)).app.demoControls).toBe(false)
   })
 
   it('the dev shortcuts (and their hint) exist only with ROLEPAY_DEV_SHORTCUTS=true on testnet', () => {

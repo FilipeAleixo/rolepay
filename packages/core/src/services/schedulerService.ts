@@ -92,7 +92,7 @@ export class SchedulerService {
   }
 
   /**
-   * Makes the NEXT period's run now (an approver; the testnet dev shortcut that lets a demo skip
+   * Makes the NEXT period's run now (an approver; the testnet demo control that lets a demo skip
    * to Monday). The period is the same one the schedule would run, so the scheduled tick later
    * finds it made and does nothing.
    */

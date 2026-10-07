@@ -170,20 +170,45 @@ describe('/rolepay policy list, show, pause, resume, mode', () => {
     expect(p.ok && p.value).toMatchObject({ mode: 'autopilot', vetoWindowMinutes: 120, autopilot: { enabledBy: TREASURER } })
   })
 
-  it('veto_minutes and run_now are testnet dev shortcuts: refused without them', async () => {
-    const a = await ready({ config: { devShortcuts: false } })
+  it('veto_minutes and run_now are demo controls: refused without ROLEPAY_DEMO_CONTROLS, even with the dev shortcuts on', async () => {
+    const a = await ready({ config: { devShortcuts: true, demoControls: false } })
     const { policyId } = await newPolicy(a)
     await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
     const minutes = await a.send(slashCommand(SCOPE, 'rolepay', 'policy mode', { policy: policyId, mode: 'autopilot', veto_minutes: 2 }, treasurer))
     expect(isEphemeral(minutes)).toBe(true)
-    expect(body(minutes).data?.content).toContain('dev shortcut')
+    expect(body(minutes).data?.content).toContain('demo control')
+    expect(body(minutes).data?.content).toContain('ROLEPAY_DEMO_CONTROLS')
     const now = await a.send(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: policyId }, treasurer))
-    expect(body(now).data?.content).toContain('dev shortcut')
+    expect(body(now).data?.content).toContain('demo control')
+    expect((await a.rolepay.policies.listRuns({ guildId: GUILD, policyId })).length).toBe(0)
+    // Off the Moderato testnet they do not exist, whatever the flag says.
+    const m = await ready({ config: { network: 'mainnet', demoControls: true } })
+    const mainnet = await newPolicy(m)
+    expect(body(await m.send(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: mainnet.policyId }, treasurer))).data?.content).toContain('demo control')
+  })
+
+  it('with only the demo controls on: run_now and veto_minutes work for the approver role, never for anyone else, and the dev shortcuts stay off', async () => {
+    const a = await ready({ config: { devShortcuts: false, demoControls: true } })
+    const { policyId } = await newPolicy(a)
+    await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
+    const notApprover = await a.send(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: policyId }, writer))
+    expect(isEphemeral(notApprover)).toBe(true)
+    expect(body(notApprover).data?.content).toMatch(/Only members with/)
+    expect(text(await a.send(slashCommand(SCOPE, 'rolepay', 'policy mode', { policy: policyId, mode: 'autopilot', veto_minutes: 1 }, writer)))).toMatch(/Only members with/)
+    const minutes = await a.send(slashCommand(SCOPE, 'rolepay', 'policy mode', { policy: policyId, mode: 'autopilot', veto_minutes: 1 }, treasurer))
+    expect(isEphemeral(minutes)).toBe(false)
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && p.value.vetoWindowMinutes).toBe(1)
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: policyId }, treasurer, 'tok-demo-now'))
+    expect(text(a.rest.lastEdit('tok-demo-now'))).toContain('posted')
+    expect((await a.rolepay.policies.listRuns({ guildId: GUILD, policyId })).map((r) => r.status)).toEqual(['scheduled'])
+    const treasury = await a.send(slashCommand(SCOPE, 'rolepay', 'setup', { treasury: '0x9999999999999999999999999999999999999999' }, { ...treasurer, manageGuild: true }))
+    expect(body(treasury).data?.content).toMatch(/dev shortcut/i)
   })
 })
 
 describe('autopilot runs in Discord', () => {
-  it('run_now (dev) posts the run with its veto window and a Veto button; Veto is for the approver role and cancels it', async () => {
+  it('run_now (a demo control) posts the run with its veto window and a Veto button; Veto is for the approver role and cancels it', async () => {
     const a = await ready()
     const { policyId } = await newPolicy(a)
     await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
