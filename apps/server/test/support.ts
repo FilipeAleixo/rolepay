@@ -25,8 +25,9 @@ type SharedState = { rolepay: Rolepay; chain: FakePayoutChain; clock: ManualCloc
  * `from`: start a second server over the first one's database and chain, as a restarted
  * process would (a fresh Discord connection and queue). `sleep`: replace the job's waits.
  * `devShortcuts: false`: the production default (no `treasury:` or `new_key` in Discord).
+ * `env`: more settings, as the environment would give them.
  */
-export async function testServer(opts: { from?: SharedState; sleep?: (ms: number) => Promise<void>; devShortcuts?: boolean } = {}) {
+export async function testServer(opts: { from?: SharedState; sleep?: (ms: number) => Promise<void>; devShortcuts?: boolean; env?: Record<string, string> } = {}) {
   const signer = await createTestSigner()
   const config = parseServerConfig({
     ROLEPAY_MASTER_KEY: randomBytes(32).toString('hex'),
@@ -36,6 +37,7 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
     DISCORD_PUBLIC_KEY: signer.publicKeyHex,
     DISCORD_BOT_TOKEN: 'test-bot-token',
     PUBLIC_URL: 'https://rolepay.test',
+    ...opts.env,
   })
   const clock = opts.from?.clock ?? new ManualClock(new Date())
   const chain = opts.from?.chain ?? new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })

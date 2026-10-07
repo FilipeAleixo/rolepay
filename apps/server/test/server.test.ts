@@ -40,6 +40,21 @@ describe('server routes', () => {
     expect((await post('203.0.113.8')).status).not.toBe(429)
   })
 
+  it('behind Fly, the client is Fly-Client-IP (ROLEPAY_CLIENT_IP_HEADER): a forged X-Forwarded-For buys no fresh budget', async () => {
+    const s = await testServer({ env: { ROLEPAY_CLIENT_IP_HEADER: 'Fly-Client-IP' } })
+    const post = (client: string, forwarded: string) =>
+      s.app.request('/claim/not-a-token', {
+        method: 'POST',
+        body: '{}',
+        headers: { 'content-type': 'application/json', origin: 'https://rolepay.test', 'fly-client-ip': client, 'x-forwarded-for': forwarded },
+      })
+    const statuses = []
+    for (let i = 0; i < 31; i++) statuses.push((await post('203.0.113.7', `198.51.100.${i}`)).status)
+    expect(statuses.slice(0, 30).every((st) => st !== 429)).toBe(true)
+    expect(statuses[30]).toBe(429)
+    expect((await post('203.0.113.8', '198.51.100.0')).status).not.toBe(429)
+  })
+
   it('a replayed signed interaction (inside the 5-minute window) never mints a second claim link', async () => {
     const s = await withLink()
     const link = slashCommand({ guildId: GUILD, channelId: '700000000000000001' }, 'payee', 'link', {}, { userId: ALICE })

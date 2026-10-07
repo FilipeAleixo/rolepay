@@ -109,7 +109,12 @@ export function composeServer(deps: ServerDeps) {
   const app = new Hono()
   app.get('/health', (c) => c.json({ ok: true, network: config.core.network, jobsInFlight: queue.size }))
   app.post('/discord/interactions', (c) => interactions(c.req.raw))
-  app.route('/', createWebApp({ rolepay, clock: deps.clock, config: config.web, ...deps.web, rateLimits: deps.web.rateLimits ?? defaultRateLimits() }))
+  // Behind Fly the client is Fly-Client-IP, which Fly's proxy sets (ROLEPAY_CLIENT_IP_HEADER);
+  // otherwise the web layer takes the last X-Forwarded-For hop (the one the tunnel appended).
+  const header = config.http.clientIpHeader
+  const clientKey = header ? { clientKey: (req: Request) => req.headers.get(header)?.trim() || 'direct' } : {}
+  const rateLimits = { ...(deps.web.rateLimits ?? defaultRateLimits()), ...clientKey }
+  app.route('/', createWebApp({ rolepay, clock: deps.clock, config: config.web, ...deps.web, rateLimits }))
 
   return {
     app,

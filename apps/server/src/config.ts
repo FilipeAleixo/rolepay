@@ -17,6 +17,15 @@ const ServerEnvSchema = z.object({
   ROLEPAY_RP_ID: z.string().min(1).optional(),
   HOST: z.string().min(1).default('127.0.0.1'),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8787),
+  /**
+   * The header the proxy in front sets to the client's IP, overwriting any the client sent
+   * (Fly-Client-IP on Fly). The per-client rate limits key on it. Unset: the last X-Forwarded-For hop.
+   */
+  ROLEPAY_CLIENT_IP_HEADER: z
+    .string()
+    .regex(/^[A-Za-z0-9-]+$/, 'must be a header name such as Fly-Client-IP')
+    .transform((s) => s.toLowerCase())
+    .optional(),
   ROLEPAY_PAYOUT_TOKEN: AddressSchema.optional(),
   /** The fee token for `/rolepay setup fees:fee_budget` without `fee_token` (default pathUSD on testnet). */
   ROLEPAY_FEE_TOKEN: AddressSchema.optional(),
@@ -37,7 +46,8 @@ export type ServerConfig = {
   core: RolepayConfig
   discord: { applicationId: string; publicKey: string; botToken: string; devGuildId: string | null }
   app: DiscordAppConfig
-  http: { host: string; port: number }
+  /** `clientIpHeader`: where the proxy in front puts the client's IP (lowercase), or null for the last X-Forwarded-For hop. */
+  http: { host: string; port: number; clientIpHeader: string | null }
   recoveryIntervalMs: number
   /** The claim and setup pages: origin, passkey relying party, chain endpoints for the browser. */
   web: WebConfig
@@ -81,7 +91,7 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       authorizeHint: core.devShortcuts ? DEV_AUTHORIZE_HINT : null,
       devShortcuts: core.devShortcuts,
     },
-    http: { host: e.HOST, port: e.PORT },
+    http: { host: e.HOST, port: e.PORT, clientIpHeader: e.ROLEPAY_CLIENT_IP_HEADER ?? null },
     recoveryIntervalMs: e.ROLEPAY_RECOVERY_INTERVAL_SECONDS * 1000,
     web: {
       origin,

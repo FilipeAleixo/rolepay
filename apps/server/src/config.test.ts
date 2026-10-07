@@ -17,7 +17,7 @@ describe('parseServerConfig', () => {
     const c = parseServerConfig(env())
     expect(c.core.network).toBe('moderato')
     expect(c.discord).toEqual({ applicationId: '500000000000000001', publicKey: 'cd'.repeat(32), botToken: SECRET_TOKEN, devGuildId: null })
-    expect(c.http).toEqual({ host: '127.0.0.1', port: 8787 })
+    expect(c.http).toEqual({ host: '127.0.0.1', port: 8787, clientIpHeader: null })
     expect(c.app.claimBaseUrl).toBe('https://pay.example.org/claim')
     expect(c.app.setupBaseUrl).toBe('https://pay.example.org/setup')
     expect(c.app.defaultFeeToken).toBe(TESTNET_TOKENS.path_usd)
@@ -50,11 +50,17 @@ describe('parseServerConfig', () => {
     const c = parseServerConfig(
       env({ PORT: '9000', HOST: '0.0.0.0', ROLEPAY_BOT_KEY_LIMIT: '250.5', ROLEPAY_BOT_KEY_PERIOD_DAYS: '7', ROLEPAY_BOT_KEY_FEE_BUDGET: '2', DISCORD_DEV_GUILD_ID: '1094309218049937418' }),
     )
-    expect(c.http).toEqual({ host: '0.0.0.0', port: 9000 })
+    expect(c.http).toEqual({ host: '0.0.0.0', port: 9000, clientIpHeader: null })
     expect(c.app.botKey.limit).toBe(250_500_000n)
     expect(c.app.botKey.periodSeconds).toBe(7 * 86_400)
     expect(c.web.botKeyDefaults).toMatchObject({ limit: 250_500_000n, periodSeconds: 7 * 86_400, feeBudget: 2_000_000n })
     expect(c.discord.devGuildId).toBe('1094309218049937418')
+  })
+
+  it('the rate limits key on the last X-Forwarded-For hop unless ROLEPAY_CLIENT_IP_HEADER names the header the proxy in front sets', () => {
+    expect(parseServerConfig(env()).http.clientIpHeader).toBeNull()
+    expect(parseServerConfig(env({ ROLEPAY_CLIENT_IP_HEADER: 'Fly-Client-IP' })).http.clientIpHeader).toBe('fly-client-ip')
+    expect(() => parseServerConfig(env({ ROLEPAY_CLIENT_IP_HEADER: 'not a header' }))).toThrow(/ROLEPAY_CLIENT_IP_HEADER/)
   })
 
   it('AI proposals: off without ANTHROPIC_API_KEY (blank is unset), Opus 5.5 by default, ROLEPAY_AI_MODEL overrides', () => {
