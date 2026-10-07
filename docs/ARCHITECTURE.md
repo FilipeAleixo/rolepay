@@ -1,12 +1,12 @@
-# payrun architecture
+# Rolepay architecture
 
-payrun runs pay runs for the people who run a Discord community (mods, staff, bounty winners) on Tempo. An admin builds a run, a treasurer approves it with one button, and everyone is paid in one batched stablecoin transaction. Each payout line carries a memo, recipients pay no gas, and the run exports to CSV.
+Rolepay runs pay runs for the people who run a Discord community (mods, staff, bounty winners) on Tempo. An admin builds a run, a treasurer approves it with one button, and everyone is paid in one batched stablecoin transaction. Each payout line carries a memo, recipients pay no gas, and the run exports to CSV.
 
 This document covers the whole system. `packages/core`, `packages/discord`, `packages/web` and `apps/server` exist and are tested end to end: in process, on Moderato, and in a real browser with a virtual passkey authenticator (recipients claim with a passkey; the treasurer's passkey creates the treasury and signs the bot key's authorisation and its revocation).
 
 ## Trust model
 
-- **The community's own Tempo account (the treasury) holds the funds.** Its root key is the treasurer's passkey (or a multisig later), created on the setup page. payrun never holds it in production: the browser signs with it, the server only reads the result from the chain.
+- **The community's own Tempo account (the treasury) holds the funds.** Its root key is the treasurer's passkey (or a multisig later), created on the setup page. Rolepay never holds it in production: the browser signs with it, the server only reads the result from the chain.
 - **The bot holds only an access key**, authorised by the root through the Account Keychain precompile with three restrictions:
   - an expiry,
   - a per-token spend limit (one-time or per period),
@@ -57,19 +57,19 @@ adapters/      tempo/ (viem), sqlite/ (Kysely), crypto/ (node:crypto), anthropic
 
 These rules are enforced by `packages/core/test/architecture.test.ts`, not by memory. The same file checks that the package root exports no adapter and that nothing outside core reaches into core internals.
 
-**Public surface.** `@rolepay/core` exports `createPayrun(deps)` (returns the four services), the services' types and input schemas, domain types and schemas, port types, config and constants. `@rolepay/core/adapters` exports the implementations, for composition roots only. `openPayrunAdapters(parseConfig(process.env))` opens the production set (SQLite file, AES vault, Tempo chain, random IDs, system clock) and returns `{ deps, kv, close }`: `kv` is the KeyValueStore in the same database file.
+**Public surface.** `@rolepay/core` exports `createRolepay(deps)` (returns the four services), the services' types and input schemas, domain types and schemas, port types, config and constants. `@rolepay/core/adapters` exports the implementations, for composition roots only. `openRolepayAdapters(parseConfig(process.env))` opens the production set (SQLite file, AES vault, Tempo chain, random IDs, system clock) and returns `{ deps, kv, close }`: `kv` is the KeyValueStore in the same database file.
 
 **Results, not throws.** Every expected failure is a value: `{ ok: false, error: { code: 'snake_case', ... } }`. Services throw only for the unexpected (a database or RPC outage), which the caller treats as "try again".
 
-**No orchestrator layer.** soulform-app puts multi-service flows in orchestrators. payrun has four services and two real flows, so services read the repositories they need directly (a pay run reads communities, keys and payees) but each entity is written only by its owning service. `ProposalService` is the one service that calls others: it reads the key's remaining budget through `CommunityService` and turns a proposal into a run through `PayRunService.create` and `submit`, so runs are still written only by their own service. Add an orchestrator layer the day a flow genuinely spans more services than that.
+**No orchestrator layer.** soulform-app puts multi-service flows in orchestrators. Rolepay has four services and two real flows, so services read the repositories they need directly (a pay run reads communities, keys and payees) but each entity is written only by its owning service. `ProposalService` is the one service that calls others: it reads the key's remaining budget through `CommunityService` and turns a proposal into a run through `PayRunService.create` and `submit`, so runs are still written only by their own service. Add an orchestrator layer the day a flow genuinely spans more services than that.
 
 ## Domain model
 
 Everything is keyed by the Discord guild ID: a guild is a community.
 
-- **Community**: guild ID, name (read from Discord by `/payrun setup`), network, treasury address, payout token, fee mode (`sponsor` or `fee_budget`, with a fee token), approver role ID (the Treasurer role the Discord layer checks), `requireSeparateApprover` (four eyes: a run's creator may not approve it; off by default), `aiProposals` (off by default) and an optional `proposerRoleId` (who may propose with AI besides the approver role). Changing the last two follows the same rule as the approver role. Changing the approver role, the fee mode or `requireSeparateApprover` needs a member who holds the CURRENT approver role (with none set yet, one who holds the new role): `canChangeApprovalRules` in the domain, enforced by `CommunityService` from the roles the caller passes, so Manage Server alone cannot make itself the approver.
-- **SetupLink**: a short-lived (30 minute) link to the treasurer's setup page for one guild, issued by `/payrun setup` to a member with Manage Server and the approver role. Only a fingerprint is stored. It carries the settings that first setup chose (name, payout token, fee mode, approver role), because the community cannot be registered until its treasury exists. It is not consumed on use (the page takes several steps); instead `bindTreasury` registers the treasury once and refuses any other address afterwards, and every later change also needs the treasury's own passkey session (checked by the web layer) or its signature on chain.
-- **BotKey**: the bot's access key for one community. Address, sealed secret (encrypted by the KeyVault, bound to the community and key; `null` once the key is revoked or replaced, because payrun destroys a secret it will never use again), status (`pending_authorization`, `active`, `revoked`, `superseded`), and the policy the root signed: limit, period, expiry, optional recipient allowlist (`null` = none, the v1 default), optional fee budget.
+- **Community**: guild ID, name (read from Discord by `/rolepay setup`), network, treasury address, payout token, fee mode (`sponsor` or `fee_budget`, with a fee token), approver role ID (the Treasurer role the Discord layer checks), `requireSeparateApprover` (four eyes: a run's creator may not approve it; off by default), `aiProposals` (off by default) and an optional `proposerRoleId` (who may propose with AI besides the approver role). Changing the last two follows the same rule as the approver role. Changing the approver role, the fee mode or `requireSeparateApprover` needs a member who holds the CURRENT approver role (with none set yet, one who holds the new role): `canChangeApprovalRules` in the domain, enforced by `CommunityService` from the roles the caller passes, so Manage Server alone cannot make itself the approver.
+- **SetupLink**: a short-lived (30 minute) link to the treasurer's setup page for one guild, issued by `/rolepay setup` to a member with Manage Server and the approver role. Only a fingerprint is stored. It carries the settings that first setup chose (name, payout token, fee mode, approver role), because the community cannot be registered until its treasury exists. It is not consumed on use (the page takes several steps); instead `bindTreasury` registers the treasury once and refuses any other address afterwards, and every later change also needs the treasury's own passkey session (checked by the web layer) or its signature on chain.
+- **BotKey**: the bot's access key for one community. Address, sealed secret (encrypted by the KeyVault, bound to the community and key; `null` once the key is revoked or replaced, because Rolepay destroys a secret it will never use again), status (`pending_authorization`, `active`, `revoked`, `superseded`), and the policy the root signed: limit, period, expiry, optional recipient allowlist (`null` = none, the v1 default), optional fee budget.
 - **Payee**: (guild, Discord user) to the address of their passkey account.
 - **LinkToken**: a one-time registration link. Only an HMAC fingerprint of the token is stored, so a database reader cannot hijack a link and redirect someone's pay.
 - **Run**: lines (1-based, each with payee, address, amount in bigint micro-units, and its bytes32 memo), total, status, actors and timestamps, attempts, the paying tx, a failure if any, and a version for compare-and-set.
@@ -139,7 +139,7 @@ A recurring limit's period is anchored at authorisation time, not at calendar mo
 
 - **`sponsor`**: the tx carries `feePayer: true` and is filled through a relay (`withRelay`). Testnet: the public sponsor `https://sponsor.moderato.tempo.xyz`. Mainnet: Tempo's hosted relay (API key) or a self-hosted relay; neither is configured yet, so mainnet defaults to no sponsor.
 - **`fee_budget`**: the bot pays fees in a separate token (for example pathUSD) under its own small limit, authorised alongside the payout limit. The budget must cover gas limit times price up front (the keychain pre-charges, then nets back).
-- `/payrun setup fees:fee_budget` (or `fees:sponsor`) switches the mode; `setFeeMode` says when the active key has no fee budget for it, and the card asks the treasurer to authorise a new key with one on the setup page. A key with a fee budget keeps working after switching back to sponsored. Proven on Moderato by `packages/core/test/feeBudget.chain.test.ts` (fee paid in pathUSD, payout limit exact).
+- `/rolepay setup fees:fee_budget` (or `fees:sponsor`) switches the mode; `setFeeMode` says when the active key has no fee budget for it, and the card asks the treasurer to authorise a new key with one on the setup page. A key with a fee budget keeps working after switching back to sponsored. Proven on Moderato by `packages/core/test/feeBudget.chain.test.ts` (fee paid in pathUSD, payout limit exact).
 - "Sponsor down" is not automatic yet: a run fails as `rejected` (retryable), and switching the community to `fee_budget` is the fallback.
 
 ## Persistence
@@ -165,7 +165,7 @@ Two modes, both `ProposalService` methods:
 | `messagesIn`, `activeDaysIn` (distinct days), `repliesIn` (replies to other people's messages) `{ channels, since, until, min }` | channel history, author IDs only (no Message Content intent; View Channel and Read Message History) |
 | `reactedTo { message, emoji? }`, `mentionedIn { message }` (a message linked in the instruction) | the message and its reactions |
 | `postedIn { thread }` | the thread's history |
-| `paidInRun { run }`, `paidInLastRun` | payrun's own runs |
+| `paidInRun { run }`, `paidInLastRun` | Rolepay's own runs |
 | `exclude { users }`, `excludeProposer` | |
 
 Bounds, applied in code: at most 31 days back (a longer window is cut and the proposal says so), 10,000 messages per proposal across every channel it reads (a scan the bound stops is flagged), 5 channels, 100 unregistered people listed. The REST adapter pages history 100 at a time and waits when a rate-limit bucket empties. Not in v1: voice activity, reactions received, deep forum scans, OR between groups.
@@ -184,32 +184,32 @@ Then registration, the 50-line limit and the total against the key's remaining b
 
 **Who may propose.** The approver role, or the community's optional proposer role (`canPropose`), checked by core on every propose, edit, discard and create from the roles Discord signed into the interaction; the Discord layer checks first for a clear message, and the commands are hidden from members by default (`default_member_permissions`). The instruction is therefore trusted; the source messages are written by anyone in the channel and stay untrusted data. Proposing from a channel's history also needs the caller's own View Channel and Read Message History there (Discord sends their permissions in the picked channel), so the bot never reads a channel for someone who could not read it. AI proposals are off per community until a member with the approver role turns them on.
 
-**The model** (`adapters/anthropic/`, behind the `RunProposer` port, a deterministic fake in `adapters/memory/fakeProposer.ts`): `claude-opus-5-5` (`PAYRUN_AI_MODEL`) through the official SDK, one request per proposal, structured output in a JSON schema derived from the domain's Zod schemas (`outputSchema`), then validated with those same schemas. No `temperature` (Opus 5.5 rejects it); thinking cannot be disabled, so effort is `low` and `max_tokens` is 16,000 to leave room after thinking; Anthropic's server-side fallback (`fallbacks: "default"`) covers safety-classifier declines. Message text goes inside `<messages>` as JSON with `<` and `>` escaped, so no message can close its tag, and the system prompt says instructions inside it are never followed. A refusal, a cut-off or malformed answer, or an API error is a `could_not_propose` result, never a crash. Without `ANTHROPIC_API_KEY` there is no proposer and every AI command answers that AI is not configured.
+**The model** (`adapters/anthropic/`, behind the `RunProposer` port, a deterministic fake in `adapters/memory/fakeProposer.ts`): `claude-opus-5-5` (`ROLEPAY_AI_MODEL`) through the official SDK, one request per proposal, structured output in a JSON schema derived from the domain's Zod schemas (`outputSchema`), then validated with those same schemas. No `temperature` (Opus 5.5 rejects it); thinking cannot be disabled, so effort is `low` and `max_tokens` is 16,000 to leave room after thinking; Anthropic's server-side fallback (`fallbacks: "default"`) covers safety-classifier declines. Message text goes inside `<messages>` as JSON with `<` and `>` escaped, so no message can close its tag, and the system prompt says instructions inside it are never followed. A refusal, a cut-off or malformed answer, or an API error is a `could_not_propose` result, never a crash. Without `ANTHROPIC_API_KEY` there is no proposer and every AI command answers that AI is not configured.
 
 **Storage and logs.** Proposals are KeyValueStore records (`adapters/kv/proposals.ts`) that expire after a day: no migration, and they move to Postgres with the store. The target of a message command is kept the same way for at most 15 minutes, until its modal is submitted. The server sweeps expired records off the disk on its recovery interval (`KeyValueStore.sweep`), so an abandoned form's message text does not stay. One `proposal` log line per attempt: mode, outcome, counts (messages sent or scanned, lines, held, unregistered), model, tokens, an estimated cost and latency; never message text, instructions, reasons or names.
 
 ## apps/server (Hono on Node)
 
-The composition root (`src/main.ts`). It parses config (`src/config.ts`: the server's own `DISCORD_*`, `PUBLIC_URL` and `PAYRUN_RP_ID`, `HOST`/`PORT` and bot-key defaults, plus core's `PAYRUN_*` through `parseConfig`), opens the production adapters, creates the services and serves:
+The composition root (`src/main.ts`). It parses config (`src/config.ts`: the server's own `DISCORD_*`, `PUBLIC_URL` and `ROLEPAY_RP_ID`, `HOST`/`PORT` and bot-key defaults, plus core's `ROLEPAY_*` through `parseConfig`), opens the production adapters, creates the services and serves:
 
 - `POST /discord/interactions`: the Discord interactions endpoint (HTTP interactions, no gateway bot).
 - `GET /health`: `{ ok, network, jobsInFlight }`.
-- `/claim/:token`, `/setup/:token`, `/webauthn/*`, `/assets/payrun.js`: the web pages (`@rolepay/web`, below).
+- `/claim/:token`, `/setup/:token`, `/webauthn/*`, `/assets/rolepay.js`: the web pages (`@rolepay/web`, below).
 - The recovery sweep: `payRuns.recoverInFlight()` on start and every 30 seconds (`src/recovery.ts`), never two at once. Runs it settles are reported in Discord as part of the sweep (`createRecoveryNotifier`).
 
-**The passkey domain is config only.** `PUBLIC_URL` is the public origin (the tunnel URL while developing); the WebAuthn rpId defaults to its host, or `PAYRUN_RP_ID` names a parent domain. Config refuses what browsers refuse for passkeys: plain http off localhost, an IP address, a path, an rpId that is not the host or a parent of it. Moving to the production domain means changing these two values, and passkeys made on the old host do not carry over.
+**The passkey domain is config only.** `PUBLIC_URL` is the public origin (the tunnel URL while developing); the WebAuthn rpId defaults to its host, or `ROLEPAY_RP_ID` names a parent domain. Config refuses what browsers refuse for passkeys: plain http off localhost, an IP address, a path, an rpId that is not the host or a parent of it. Moving to the production domain means changing these two values, and passkeys made on the old host do not carry over. The planned hosts are `https://demo.rolepay.app` (the testnet demo) and `https://app.rolepay.app` (mainnet), two servers with their own config and database.
 
 ```ts
 const config = parseServerConfig(loadEnvironment())        // root .env, DB path anchored at the repo root
-const { deps, kv, close } = await openPayrunAdapters(config.core)   // Anthropic too, when ANTHROPIC_API_KEY is set
+const { deps, kv, close } = await openRolepayAdapters(config.core)   // Anthropic too, when ANTHROPIC_API_KEY is set
 const rest = new FetchDiscordRest({ botToken })
-const payrun = createPayrun({ ...deps, activity: new RestActivityReader(rest), proposalLog })
+const rolepay = createRolepay({ ...deps, activity: new RestActivityReader(rest), proposalLog })
 const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
 const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() }
-const server = composeServer({ config, payrun, rest, clock: deps.clock, kv, web })
+const server = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web })
 ```
 
-`composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters, a fake Discord and fake passkey sessions and drive the real Hono app over HTTP; the Playwright e2e passes the production set with real passkeys. Scripts: `pnpm register-commands`, and on testnet with `PAYRUN_DEV_SHORTCUTS=true` the dev shortcut `pnpm dev:treasury` (print and fund a dev treasury whose key is in `.env`) and `pnpm dev:authorize-key <guildId>` (that in-process root signs the pending bot key). How to run it: `apps/server/README.md`.
+`composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters, a fake Discord and fake passkey sessions and drive the real Hono app over HTTP; the Playwright e2e passes the production set with real passkeys. Scripts: `pnpm register-commands`, and on testnet with `ROLEPAY_DEV_SHORTCUTS=true` the dev shortcut `pnpm dev:treasury` (print and fund a dev treasury whose key is in `.env`) and `pnpm dev:authorize-key <guildId>` (that in-process root signs the pending bot key). How to run it: `apps/server/README.md`.
 
 ## packages/web
 
@@ -262,25 +262,25 @@ A handler is a thin route: parse options with Zod, check permissions, call a ser
 
 | Command / component | Who | Service calls |
 | --- | --- | --- |
-| `/payrun setup` | Manage Server (the treasury page link only with the approver role too) | first time: `issueSetupLink` with the chosen settings (nothing is registered until the passkey creates the treasury); after that `setName`, `setApproverRole`, `setFeeMode` (`fees`), `setRequireSeparateApprover` (`separate_approver`), `keyStatus`, and a fresh `issueSetupLink` for a treasurer. The three settings need the current approver role as well as Manage Server. Dev path (Moderato with `PAYRUN_DEV_SHORTCUTS=true` only, and only for a member who holds the approver role; elsewhere the options are not registered and the handler refuses them): `treasury` registers an existing account and `new_key` provisions a key for `pnpm dev:authorize-key` |
+| `/rolepay setup` | Manage Server (the treasury page link only with the approver role too) | first time: `issueSetupLink` with the chosen settings (nothing is registered until the passkey creates the treasury); after that `setName`, `setApproverRole`, `setFeeMode` (`fees`), `setRequireSeparateApprover` (`separate_approver`), `keyStatus`, and a fresh `issueSetupLink` for a treasurer. The three settings need the current approver role as well as Manage Server. Dev path (Moderato with `ROLEPAY_DEV_SHORTCUTS=true` only, and only for a member who holds the approver role; elsewhere the options are not registered and the handler refuses them): `treasury` registers an existing account and `new_key` provisions a key for `pnpm dev:authorize-key` |
 | `/payee link` | anyone | `payees.issueLink`, replied ephemerally with `${PUBLIC_URL}/claim/${token}` |
-| `/payrun new` | Manage Server or approver | `payees.list` + member lookup for `role`, `payRuns.create`, `payRuns.submit`; the review embed is posted publicly |
+| `/rolepay new` | Manage Server or approver | `payees.list` + member lookup for `role`, `payRuns.create`, `payRuns.submit`; the review embed is posted publicly |
 | Approve | approver role only | `payRuns.approve({ actorCanApprove: true })`, then enqueue execution |
 | Cancel | creator, Manage Server or approver | `payRuns.cancel` |
 | Retry | approver role only | enqueue execution for an approved-but-unpaid or retryable failed run |
-| `/payrun status` | Manage Server or approver | `payRuns.get`, or `payRuns.list` + `communities.keyStatus` (deferred: reads the chain) |
-| `/payrun export` | Manage Server or approver | `payRuns.exportCsv` (default: the latest run), sent as a CSV attachment |
+| `/rolepay status` | Manage Server or approver | `payRuns.get`, or `payRuns.list` + `communities.keyStatus` (deferred: reads the chain) |
+| `/rolepay export` | Manage Server or approver | `payRuns.exportCsv` (default: the latest run), sent as a CSV attachment |
 | Apps > Propose pay run (message command) | approver or proposer role, AI on | keeps the target message (`PendingSources`), answers with the instruction modal; the modal submit (deferred, ephemeral) calls `proposals.proposeFromMessages` |
-| `/payrun propose instruction: [source:] [since:]` | approver or proposer role, AI on | deferred, ephemeral: `proposals.proposeFromMessages` with `source` (a channel or thread, default 7 days), else `proposals.proposeFromCriteria` |
+| `/rolepay propose instruction: [source:] [since:]` | approver or proposer role, AI on | deferred, ephemeral: `proposals.proposeFromMessages` with `source` (a channel or thread, default 7 days), else `proposals.proposeFromCriteria` |
 | Create pay run / Edit / Discard (on a proposal) | approver or proposer role | `proposals.createRun` (the review is then posted with a follow-up, Approve unchanged), the edit modal then `proposals.edit`, `proposals.discard` |
-| `/payrun setup ai_proposals: proposer_role:` | the current approver role | `communities.setAiProposals`; the setup card shows the AI state and the privacy line |
+| `/rolepay setup ai_proposals: proposer_role:` | the current approver role | `communities.setAiProposals`; the setup card shows the AI state and the privacy line |
 
 Decisions worth knowing:
 
-- **Recipients.** `/payrun new amount:<per person>` takes `role:` (every registered payee holding it), `users:` (mentions or IDs, `@bob=40` overrides the amount for one person), or both. Only registered payees can hold a line, so role filtering checks each registered payee with Get Guild Member, which needs **no privileged intent**. A List Guild Members implementation (which needs the GUILD_MEMBERS intent) can replace it behind the `MemberDirectory` port if a server ever has more payees than that is comfortable for.
-- **Submit at create.** `/payrun new` creates and submits in one go, so a run shown for review is `pending_approval`. Approve is one transition.
+- **Recipients.** `/rolepay new amount:<per person>` takes `role:` (every registered payee holding it), `users:` (mentions or IDs, `@bob=40` overrides the amount for one person), or both. Only registered payees can hold a line, so role filtering checks each registered payee with Get Guild Member, which needs **no privileged intent**. A List Guild Members implementation (which needs the GUILD_MEMBERS intent) can replace it behind the `MemberDirectory` port if a server ever has more payees than that is comfortable for.
+- **Submit at create.** `/rolepay new` creates and submits in one go, so a run shown for review is `pending_approval`. Approve is one transition.
 - **Approve answers with UPDATE_MESSAGE.** The review turns into "Approved, paying..." with no buttons inside the 3-second window (so nobody can click twice), the job is queued, and the job edits that same message with the result. A deferred update would leave the buttons live until the job finishes.
-- **Permissions** are checked from the signed interaction (`member.roles`, `member.permissions`), never trusted from `default_member_permissions` alone, which only hides `/payrun` from non-admins by default (admins can grant it to the Treasurer role in Server Settings > Integrations). Manage Server alone cannot approve, and cannot change who approves: that takes the current approver role.
+- **Permissions** are checked from the signed interaction (`member.roles`, `member.permissions`), never trusted from `default_member_permissions` alone, which only hides `/rolepay` from non-admins by default (admins can grant it to the Treasurer role in Server Settings > Integrations). Manage Server alone cannot approve, and cannot change who approves: that takes the current approver role.
 
 ### Execution
 
@@ -305,30 +305,41 @@ interface ExecutionQueue { enqueue(job: ExecutionJob): Promise<void> }
 | Web: claim and setup routes (fake passkey sessions), Handler.webAuthn over KeyValueStore, the keychain authorizeKey call the browser sends, the real client bundle builds, architecture guards | `packages/web/**/*.test.ts` | `pnpm test` |
 | Server: config, routes, web pages, recovery loop and its Discord report, in-process end to end over signed HTTP | `apps/server/**/*.test.ts` | `pnpm test` |
 | AI proposals: domain checks and the injection suite, ProposalService on fakes, the Anthropic adapter on recorded-style fixtures (valid, fallback, malformed, schema-invalid, refusal, cut off, HTTP errors), the activity reader on a fake Discord, handlers, views, signed message command and modal, and the in-process end to end (`apps/server/test/proposals.test.ts`) | `packages/*/src/**/proposal*`, `domain/proposal/`, `adapters/anthropic/` | `pnpm test` |
-| AI, live, opt-in (three real calls: the demo with an injection beside it, the criteria demo, an instruction the filters cannot express) | `packages/core/test/anthropic.live.test.ts` | `PAYRUN_AI_LIVE=true pnpm test:ai-live` |
+| AI, live, opt-in (three real calls: the demo with an injection beside it, the criteria demo, an instruction the filters cannot express) | `packages/core/test/anthropic.live.test.ts` | `ROLEPAY_AI_LIVE=true pnpm test:ai-live` |
 | Chain, Moderato testnet, opt-in | `packages/core/test/*.chain.test.ts` (incl. fee budget), `apps/server/test/server.chain.test.ts` | `pnpm test:chain` |
 | Browser, Moderato testnet, opt-in | `apps/server/e2e/passkeys.spec.ts` (Playwright, Chromium's virtual WebAuthn authenticator, the real server on `localhost`) | `pnpm test:e2e` |
 
 CI (`.github/workflows/ci.yml`) runs `pnpm typecheck` and `pnpm test:coverage` on every push and pull request: the default suite with v8 coverage over every source file, a per-package threshold a little below the current numbers, and a coverage table in the job summary. The opt-in suites (chain, browser, live AI) and secrets never run there.
 
-The core chain test generates throwaway keys into the gitignored `.env`, funds the treasury from the faucet, and runs a full service-level pay run: register, key authorised with a limit, three payees via links, a 3-line sponsored batch, reconcile from memo events, idempotent re-execute, crash recovery from a restarted process, an over-limit run refused before signing, revoke, CSV export. The server chain test reuses those keys and drives the whole Discord flow through the signed HTTP endpoint with production adapters and a fake Discord REST: setup, links claimed on the dev page, `/payrun new`, Approve, one sponsored batch, receipts. Both refuse any chain but Moderato.
+The core chain test generates throwaway keys into the gitignored `.env`, funds the treasury from the faucet, and runs a full service-level pay run: register, key authorised with a limit, three payees via links, a 3-line sponsored batch, reconcile from memo events, idempotent re-execute, crash recovery from a restarted process, an over-limit run refused before signing, revoke, CSV export. The server chain test reuses those keys and drives the whole Discord flow through the signed HTTP endpoint with production adapters and a fake Discord REST: setup, links claimed on the dev page, `/rolepay new`, Approve, one sponsored batch, receipts. Both refuse any chain but Moderato.
 
 The in-process end to end (`apps/server/test/e2e.test.ts`) does the same over HTTP with in-memory adapters, and also covers a crash between approval and execution (status offers Retry; still one payment), a process that dies while a payment is in flight (the next process's sweep finishes it, updates the message and sends the receipts once), and the production setup through Discord and the setup endpoints.
 
 The browser e2e proves the passkey paths for real: a recipient creates a passkey on the claim page and a returning one signs in with it; a treasurer creates the treasury with a passkey, funds it from the faucet, authorises the bot key with the passkey (a WebAuthn-signed keychain transaction on Moderato), the bot pays a run from that account, the passkey replaces the key in one prompt (the old key reads revoked on chain), and the passkey revokes the new key.
 
+## Renamed from payrun
+
+The product was called payrun while it was built. What was already stored or posted under that name keeps working, and these stay as they are on purpose:
+
+- **On chain.** The memo layout and its `"PR"` prefix bytes are unchanged, so earlier runs still reconcile.
+- **The vault.** The HKDF labels `payrun:seal` and `payrun:fingerprint` derive the keys that open sealed bot keys and match link tokens. They never change; a known-answer test in `adapters/crypto/crypto.test.ts` holds them.
+- **The database file.** The default is `rolepay.db`, but the server keeps using the repo-root `payrun.db` when it exists and `ROLEPAY_DB_PATH` is unset (`apps/server/src/env.ts`).
+- **Settings.** Every `PAYRUN_X` is still read as `ROLEPAY_X` when that is unset or blank (`withDeprecatedEnvNames` in `config/env.ts`), and the server logs the deprecated names in use.
+- **Discord.** Run buttons are now `rolepay:<action>:<runId>`; buttons already posted carry `payrun:` and still decode. The slash command changed from `/payrun` to `/rolepay`, so the commands are registered again.
+- **Sessions.** The passkey-login record keeps its `payrun:passkey-login:` key in the KeyValueStore.
+
 ## Known limits and open decisions
 
 - At most 50 lines per run (Tempo's 30M gas cap per tx at about 300k gas per first transfer to a fresh address, with a 2x margin). Raise only after a chain test at the new size.
 - One active bot key per community; replacing it revokes the old one on chain. Payees are per community (the same person in two guilds registers twice).
-- The run creator may also approve it (if they hold the approver role), by default: many small communities have one treasurer who also builds the runs, and refusing them would block the product. A community that wants four eyes runs `/payrun setup separate_approver:true` (a treasurer only), and then `approve` refuses the creator with `creator_cannot_approve`.
+- The run creator may also approve it (if they hold the approver role), by default: many small communities have one treasurer who also builds the runs, and refusing them would block the product. A community that wants four eyes runs `/rolepay setup separate_approver:true` (a treasurer only), and then `approve` refuses the creator with `creator_cannot_approve`.
 - A change of approver role is answered ephemerally to the treasurer who made it; nothing is posted publicly yet. Moving it behind the treasury passkey on the setup page would make it as strong as a key change.
 - No recipient allowlist by default; adding a payee to an allowlist needs a root-signed `setAllowedCalls` (a passkey prompt), which is why it is off in v1.
-- Mainnet: guarded by `PAYRUN_ALLOW_MAINNET=true`; no sponsor configured, so communities there use `fee_budget` (`/payrun setup fees:fee_budget fee_token:<address>`, or `PAYRUN_FEE_TOKEN`), and the treasurer's own transactions on the setup page pay their fee in the fee token. A self-hosted relay (`Handler.relay`) would sponsor them.
-- One amount per person in `/payrun new` (with per-user overrides). A CSV or modal for many different amounts is later.
+- Mainnet: guarded by `ROLEPAY_ALLOW_MAINNET=true`; no sponsor configured, so communities there use `fee_budget` (`/rolepay setup fees:fee_budget fee_token:<address>`, or `ROLEPAY_FEE_TOKEN`), and the treasurer's own transactions on the setup page pay their fee in the fee token. A self-hosted relay (`Handler.relay`) would sponsor them.
+- One amount per person in `/rolepay new` (with per-user overrides). A CSV or modal for many different amounts is later.
 - Receipts are best effort: one that fails (closed DMs) is counted, not retried, and never sent twice.
 - The treasury and payout token cannot be changed after registration (no service method for it yet).
-- **The passkey domain (rpId) is the open decision.** Passkeys bind to it for good; a quick tunnel host is fine for testing only.
+- **The passkey domains.** Planned: `demo.rolepay.app` (the testnet demo for judges) and `app.rolepay.app` (mainnet), each with its own rpId (the host by default, `ROLEPAY_RP_ID` to override). Passkeys bind to the rpId for good, so the demo's passkeys never work on mainnet; a quick tunnel host is fine for testing only.
 - A setup link is short-lived rather than single-use (see SetupLink). A recipient's claim link is single-use.
 - The setup page's code is served by the bot server itself (see "The page signs what the treasurer typed"): a separate static origin for it is a mainnet prerequisite.
 - The setup page signs with whatever passkey account the Accounts SDK has signed in on that browser; if it is not the treasury, the page asks for the treasury passkey and the server refuses the others anyway.

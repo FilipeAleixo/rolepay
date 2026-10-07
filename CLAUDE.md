@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-payrun: Discord-native pay runs on Tempo. A community's own Tempo account holds the funds; the bot holds only a limited access key. Read `docs/ARCHITECTURE.md` before changing anything; `docs/tempo/` has the Tempo and viem docs snapshot.
+Rolepay: Discord-native pay runs on Tempo. A community's own Tempo account holds the funds; the bot holds only a limited access key. Read `docs/ARCHITECTURE.md` before changing anything; `docs/tempo/` has the Tempo and viem docs snapshot.
 
 ## Commands
 
@@ -10,10 +10,10 @@ pnpm test          # unit + SQLite integration + architecture guards + discord +
 pnpm test:coverage # the same with v8 coverage and per-package thresholds (what CI runs, .github/workflows/ci.yml)
 pnpm test:chain    # opt-in: full pay runs on the Moderato TESTNET (chain 42431), service level and over HTTP
 pnpm test:e2e      # opt-in: Playwright, real passkeys (virtual authenticator) on localhost, Moderato
-pnpm test:ai-live  # opt-in: three real Anthropic API calls (PAYRUN_AI_LIVE=true and ANTHROPIC_API_KEY)
+pnpm test:ai-live  # opt-in: three real Anthropic API calls (ROLEPAY_AI_LIVE=true and ANTHROPIC_API_KEY)
 pnpm dev           # the server (apps/server/README.md: Discord setup and the manual test)
 pnpm register-commands                 # PUT the slash commands to Discord (needs DISCORD_APP_ID, DISCORD_BOT_TOKEN)
-pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut (PAYRUN_DEV_SHORTCUTS=true): fund a dev treasury, authorise its pending bot key (production: the setup page)
+pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut (ROLEPAY_DEV_SHORTCUTS=true): fund a dev treasury, authorise its pending bot key (production: the setup page)
 ```
 
 ## Rules
@@ -29,11 +29,12 @@ pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut (PAYRUN_DEV_SHORTC
 9. **Migrations are append-only** once shipped (`adapters/sqlite/migrations.ts`). Keep the schema portable to Postgres.
 10. **Discord layer (enforced by `packages/discord/test/architecture.test.ts`).** `packages/discord` imports only `@rolepay/core` and `zod`. A handler parses options with Zod, checks permissions from the signed interaction, calls a service and returns an outcome; it never calls Discord itself. Views are pure builders. Everything external (Discord REST, the execution queue, member lookup) is a port with a fake in `@rolepay/discord/testing`. Only `apps/server` imports `@rolepay/core/adapters`.
 11. **Web layer (enforced by `packages/web/test/architecture.test.ts`).** `packages/web` server code imports only `@rolepay/core`, hono, zod, `accounts/server`, `viem/tempo`, esbuild and node; `src/client/` (the browser bundle) imports only `accounts` and `viem`. An address is always derived from the verified passkey session, never taken from the page. POSTs must be same-origin.
+12. **Renamed from payrun.** Leave alone what keeps data and messages from before the rename working: the memo layout and its `"PR"` bytes, the vault's HKDF labels, `payrun.db`, the `PAYRUN_*` fallback, `payrun:` button IDs and the passkey-login key. The list is "Renamed from payrun" in the architecture doc.
 
 ## Secrets and networks
 
 - **No secrets in git.** Keys live in `.env` (gitignored); `.env.example` lists the names. Never print key values, in logs, tests or commit messages.
-- **Tests are testnet-only by default.** `pnpm test` makes no network calls. `pnpm test:chain` refuses any chain but Moderato. Mainnet needs `PAYRUN_NETWORK=mainnet` plus `PAYRUN_ALLOW_MAINNET=true`, and never runs in tests. The dev shortcuts (`/payrun setup treasury:`, `new_key`, `key_limit`, the dev scripts) need `PAYRUN_DEV_SHORTCUTS=true`, which config refuses off Moderato.
+- **Tests are testnet-only by default.** `pnpm test` makes no network calls. `pnpm test:chain` refuses any chain but Moderato. Mainnet needs `ROLEPAY_NETWORK=mainnet` plus `ROLEPAY_ALLOW_MAINNET=true`, and never runs in tests. The dev shortcuts (`/rolepay setup treasury:`, `new_key`, `key_limit`, the dev scripts) need `ROLEPAY_DEV_SHORTCUTS=true`, which config refuses off Moderato.
 - Allowed network calls: Tempo testnet RPC, sponsor and faucet; npm installs; Anthropic's API only from `pnpm test:ai-live` (opt-in) and the running server.
 - **AI proposals never pay.** The model only proposes; code checks every line (`domain/proposal/`), the run goes through `PayRunService.create` and the normal approval, and the bot key's limit caps it on chain. Message text is untrusted data; never log it (counts and cost only). Opus 5.5: no `temperature`, thinking cannot be disabled (low effort instead), no forced `tool_choice`.
 
