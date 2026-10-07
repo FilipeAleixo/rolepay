@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { createRolepay } from '@rolepay/core'
-import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { webHarness } from '../test/harness.js'
 import { createWebApp } from './app.js'
 import { TokenBucketLimiter } from './rateLimit.js'
-import { FakePasskeySessions, staticAssets } from './testing/index.js'
+import { FakeDiscordOAuth, FakeGuildMembers, FakePasskeySessions, staticAssets } from './testing/index.js'
 
 describe('the web app', () => {
   it('serves the client bundle compressed when the browser accepts it, and 404 for anything else under /assets', async () => {
@@ -95,5 +95,27 @@ describe('the web app', () => {
     // The overall budget for the passkey endpoints is spent (claim has its own), whatever the client claims to be.
     expect((await from('5.5.5.5')).status).toBe(429)
     expect((await app.request('https://pay.example.org/claim/nope')).status).toBe(404)
+  })
+
+  it('rate limits the Discord sign-in (GETs too: each one writes a record or calls Discord) and dashboard actions, never dashboard pages', async () => {
+    const clock = new ManualClock()
+    const config = { origin: 'https://pay.example.org', rpId: 'pay.example.org', network: 'moderato' as const, rpcUrl: 'x', sponsorUrl: null, explorerUrl: 'x', botKeyDefaults: { limit: 1n, periodSeconds: 1, validitySeconds: 1, feeBudget: 1n } }
+    const app = createWebApp({
+      rolepay: createRolepay({ chain: new FakePayoutChain(), repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' }),
+      clock,
+      sessions: new FakePasskeySessions(),
+      assets: staticAssets({}),
+      config,
+      rateLimits: { perClient: new TokenBucketLimiter({ capacity: 2, refillPerSecond: 0 }), overall: new TokenBucketLimiter({ capacity: 100, refillPerSecond: 0 }) },
+      dashboard: { kv: new MemoryKeyValueStore(clock), oauth: new FakeDiscordOAuth(), members: new FakeGuildMembers() },
+    })
+    const from = (path: string, method = 'GET') =>
+      app.request(`https://pay.example.org${path}`, { method, headers: { origin: 'https://pay.example.org', 'x-forwarded-for': '1.1.1.1' } })
+    expect((await from('/auth/discord')).status).toBe(302)
+    expect((await from('/auth/discord/callback?state=x')).status).toBe(400)
+    expect((await from('/auth/discord')).status).toBe(429)
+    expect((await from('/dashboard/1094309218049937418/policies/p/pause', 'POST')).status).not.toBe(429)
+    expect((await from('/auth/logout', 'POST')).status).toBe(429)
+    for (let i = 0; i < 5; i++) expect((await from('/dashboard')).status).toBe(200)
   })
 })
