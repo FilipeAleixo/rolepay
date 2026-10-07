@@ -265,6 +265,19 @@ const migrations: Record<string, Migration> = {
       await db.schema.createIndex('ai_usage_policy').on('ai_usage').column('policy_id').execute()
     },
   },
+  '0008_preferred_tokens': {
+    async up(db: Kysely<unknown>) {
+      // Paying each person in the stablecoin they prefer. Columns only, nullable or with a default, so
+      // it applies to a database with data: existing communities keep it off (0), existing payees have
+      // no preference (null, the payout token), and existing run lines are paid in the run's token
+      // (null swap). The maximum input is exact decimal text, like every amount.
+      await db.schema.alterTable('communities').addColumn('preferred_tokens', 'integer', (c) => c.notNull().defaultTo(0)).execute()
+      await db.schema.alterTable('payees').addColumn('preferred_token', 'text').execute()
+      await db.schema.createIndex('payees_address').on('payees').column('address').execute()
+      await db.schema.alterTable('run_lines').addColumn('swap_token', 'text').execute()
+      await db.schema.alterTable('run_lines').addColumn('swap_max_in', 'text').execute()
+    },
+  },
 }
 
 class InlineMigrations implements MigrationProvider {

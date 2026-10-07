@@ -111,6 +111,7 @@ function communityRow(c: Community) {
     require_separate_approver: c.requireSeparateApprover ? 1 : 0,
     ai_proposals: c.aiProposals ? 1 : 0,
     proposer_role_id: c.proposerRoleId,
+    preferred_tokens: c.preferredTokens ? 1 : 0,
     created_at: iso(c.createdAt),
     updated_at: iso(c.updatedAt),
   }
@@ -129,6 +130,7 @@ function toCommunity(r: Selectable<Database['communities']>): Community {
     requireSeparateApprover: r.require_separate_approver === 1,
     aiProposals: r.ai_proposals === 1,
     proposerRoleId: r.proposer_role_id,
+    preferredTokens: r.preferred_tokens === 1,
     createdAt: date(r.created_at),
     updatedAt: date(r.updated_at),
   })
@@ -168,19 +170,25 @@ export class SqlitePayeeRepository implements PayeeRepository {
         community_id: p.communityId,
         discord_user_id: p.discordUserId,
         address: p.address,
+        preferred_token: p.preferredToken,
         registered_at: iso(p.registeredAt),
         updated_at: iso(p.updatedAt),
       })
       .onConflict((oc) =>
         oc
           .columns(['community_id', 'discord_user_id'])
-          .doUpdateSet({ address: p.address, registered_at: iso(p.registeredAt), updated_at: iso(p.updatedAt) }),
+          .doUpdateSet({ address: p.address, preferred_token: p.preferredToken, registered_at: iso(p.registeredAt), updated_at: iso(p.updatedAt) }),
       )
       .execute()
   }
 
   async list(communityId: string) {
     const rows = await this.db.selectFrom('payees').selectAll().where('community_id', '=', communityId).orderBy('discord_user_id').execute()
+    return rows.map(toPayee)
+  }
+
+  async listByAddress(address: string) {
+    const rows = await this.db.selectFrom('payees').selectAll().where('address', '=', address.toLowerCase()).orderBy('community_id').orderBy('discord_user_id').execute()
     return rows.map(toPayee)
   }
 
@@ -227,6 +235,7 @@ function toPayee(r: Selectable<Database['payees']>): Payee {
     communityId: r.community_id,
     discordUserId: r.discord_user_id,
     address: r.address,
+    preferredToken: r.preferred_token,
     registeredAt: date(r.registered_at),
     updatedAt: date(r.updated_at),
   })
@@ -249,6 +258,8 @@ export class SqliteRunRepository implements RunRepository {
             address: l.address,
             amount: l.amount.toString(),
             memo: l.memo,
+            swap_token: l.swap?.token ?? null,
+            swap_max_in: l.swap ? l.swap.maxIn.toString() : null,
           })),
         )
         .execute()
@@ -358,6 +369,7 @@ function toRun(r: Selectable<RunsTable>, lines: Selectable<RunLinesTable>[]): Ru
       address: l.address,
       amount: BigInt(l.amount),
       memo: l.memo,
+      ...(l.swap_token !== null && l.swap_max_in !== null ? { swap: { token: l.swap_token, maxIn: BigInt(l.swap_max_in) } } : {}),
     })),
     total: BigInt(r.total),
     createdBy: r.created_by,
