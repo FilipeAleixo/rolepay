@@ -151,6 +151,54 @@ describe('pay run end to end through the HTTP endpoint', () => {
     expect(after.rest.dms).toHaveLength(1)
   })
 
+  it('a recovery sweep while the job waits between checks leaves the run to the job: one report, receipts once, one broadcast', async () => {
+    // The sweep runs inside the job's wait, as the 30-second interval would hit it on the demo.
+    let duringWait: (() => Promise<void>) | null = null
+    let s!: Awaited<ReturnType<typeof testServer>>
+    s = await testServer({
+      sleep: async (ms) => {
+        s.clock.advance(ms / 1000)
+        s.chain.advance(Math.ceil(ms / 1000))
+        const sweep = duringWait
+        duringWait = null
+        await sweep?.()
+      },
+    })
+    await s.rolepay.communities.register({ guildId: GUILD, name: 'Test guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE })
+    await s.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 86_400, expiresAt: s.chain.time + 86_400 })
+    await s.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })
+    const link = await s.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
+    if (!link.ok) throw new Error(link.error.code)
+    await s.rolepay.payees.register({ token: link.value.token, address: ADDR.alice })
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'new', { amount: '5', users: `<@${ALICE}>` }, ADMIN, 'tok-new'))
+    await s.drain()
+    const runId = /rolepay:approve:([^"]+)"/.exec(text(s.rest.lastEdit('tok-new')))?.[1] as string
+
+    // The payment lands but its answer is lost: the job waits, then checks again. The sweep fires in that wait.
+    s.chain.faults.nextBroadcast = 'land_then_lose_response'
+    duringWait = async () => {
+      const sweep = s.startRecovery()
+      await new Promise((r) => setTimeout(r, 20))
+      await sweep.stop()
+    }
+    await s.interact(buttonClick(SCOPE, `rolepay:approve:${runId}`, TREASURER, 'tok-approve'))
+    await s.drain()
+
+    expect(duringWait).toBeNull() // the sweep did run inside the wait
+    expect(text(s.rest.lastEdit('tok-approve'))).toMatch(/"title":"Paid"/)
+    expect(s.logs.filter((l) => l.event === 'recovery')).toEqual([]) // nothing raced, nothing reported twice
+    expect(s.rest.channelEdits).toEqual([])
+    expect(s.rest.dms.map((d) => d.userId)).toEqual([ALICE])
+    expect(s.chain.broadcastCount).toBe(1)
+    expect(s.chain.landedTxCount).toBe(1)
+
+    // The timing lines: the job (how it ended and where the time went) and the deferred review (its phases).
+    expect(s.logs.find((l) => l.event === 'job')?.fields).toMatchObject({ runId, status: 'paid', checks: 1, contended: 0 })
+    const review = s.logs.find((l) => l.event === 'deferred' && l.fields?.name === 'rolepay new')?.fields
+    expect(review).toMatchObject({ kind: 'command', ok: true })
+    expect(Object.keys((review?.phases ?? {}) as Record<string, number>).sort()).toEqual(['db', 'reply', 'work'])
+  })
+
   it('with the production default (no ROLEPAY_DEV_SHORTCUTS), Discord cannot register a treasury or issue a key', async () => {
     const s = await testServer({ devShortcuts: false })
     const res = await s.interact(slashCommand(SCOPE, 'rolepay', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE }, TREASURER_ADMIN, 'tok-setup'))
