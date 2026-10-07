@@ -3,13 +3,15 @@ import type { RolepayDeps } from '../ports/deps.js'
 import type { KeyValueStore } from '../ports/keyValueStore.js'
 import { AnthropicRunProposer } from './anthropic/index.js'
 import { AesGcmKeyVault, RandomIds, SystemClock } from './crypto/index.js'
+import { DailyCappedProposer } from './kv/proposerDailyCap.js'
 import { openSqliteDatabase } from './sqlite/index.js'
 import { TempoPayoutChain } from './tempo/index.js'
 
 /**
  * The production adapters, opened from config: SQLite file, AES-256-GCM vault,
  * Tempo chain, random IDs, system clock, and Anthropic's API when ANTHROPIC_API_KEY is set
- * (AI proposals; the Discord activity reader is added by the server). For composition roots:
+ * (AI proposals, at most ROLEPAY_AI_DAILY_CAP model calls per UTC day, counted in the same
+ * database file; the Discord activity reader is added by the server). For composition roots:
  *
  *   const { deps, close } = await openRolepayAdapters(parseConfig(process.env))
  *   const rolepay = createRolepay(deps)
@@ -28,7 +30,9 @@ export async function openRolepayAdapters(
       clock,
       network: config.network,
       linkTtlSeconds: config.linkTtlSeconds,
-      proposer: config.ai.apiKey ? new AnthropicRunProposer({ apiKey: config.ai.apiKey, model: config.ai.model }) : null,
+      proposer: config.ai.apiKey
+        ? new DailyCappedProposer(new AnthropicRunProposer({ apiKey: config.ai.apiKey, model: config.ai.model }), { cap: config.ai.dailyCap, kv: db.kv, clock })
+        : null,
     },
     /** Same database: passkey credentials and sessions, delivery markers. */
     kv: db.kv,

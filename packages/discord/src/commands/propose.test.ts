@@ -100,6 +100,15 @@ describe('Apps > Propose pay run (the message command)', () => {
     expect(text(a.rest.lastEdit('tok-x'))).toMatch(/not reachable right now/)
     expect(a.errors).toEqual([])
   })
+
+  it('the server\'s daily cap on AI proposals says so, and points to /rolepay new', async () => {
+    const a = await ready()
+    a.proposer.onMessages = () => ({ code: 'could_not_propose', reason: 'daily_cap', detail: 'daily cap of 50 model calls reached', usage: null })
+    await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each' }, treasurer, { token: 'tok-x' }))
+    expect(text(a.rest.lastEdit('tok-x'))).toMatch(/AI proposals for today.*midnight UTC.*\/rolepay new/s)
+    expect(a.errors).toEqual([])
+  })
 })
 
 describe('/rolepay propose', () => {

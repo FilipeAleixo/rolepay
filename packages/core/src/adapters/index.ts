@@ -18,6 +18,7 @@ export {
   unclearCriteria,
 } from './memory/index.js'
 export { KvProposalRepository } from './kv/proposals.js'
+export { DailyCappedProposer } from './kv/proposerDailyCap.js'
 export { openSqliteDatabase } from './sqlite/index.js'
 export {
   TempoPayoutChain,

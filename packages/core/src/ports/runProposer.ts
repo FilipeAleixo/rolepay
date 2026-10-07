@@ -14,11 +14,12 @@ export type ProposerUsage = {
 
 /**
  * The model could not produce a usable proposal. `detail` is for operators' logs only and never
- * carries message text (an HTTP status, a schema path, a stop reason).
+ * carries message text (an HTTP status, a schema path, a stop reason). `daily_cap`: the server's
+ * cap on model calls per UTC day was reached and the model was not called (ROLEPAY_AI_DAILY_CAP).
  */
 export type ProposerFailure = {
   code: 'could_not_propose'
-  reason: 'refused' | 'malformed' | 'unavailable' | 'rejected' | 'auth'
+  reason: 'refused' | 'malformed' | 'unavailable' | 'rejected' | 'auth' | 'daily_cap'
   detail: string
   usage: ProposerUsage | null
 }

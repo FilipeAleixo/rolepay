@@ -17,6 +17,8 @@ const EnvSchema = z.object({
     .optional()
     .transform((v) => v?.trim() || undefined),
   ROLEPAY_AI_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,63}$/, 'must be a model ID such as claude-opus-5-5').default('claude-opus-5-5'),
+  /** At most this many model calls per UTC day, across every community on this server, so a public server cannot run up the bill. */
+  ROLEPAY_AI_DAILY_CAP: z.coerce.number().int().positive().default(50),
 })
 
 const DevShortcutsSchema = EnvSchema.pick({ ROLEPAY_NETWORK: true, ROLEPAY_DEV_SHORTCUTS: true })
@@ -37,8 +39,8 @@ export type RolepayConfig = {
    * on any other network they do not exist.
    */
   devShortcuts: boolean
-  /** AI-proposed pay runs: the Anthropic API key (null = AI off on this server) and the model. */
-  ai: { apiKey: string | null; model: string }
+  /** AI-proposed pay runs: the Anthropic API key (null = AI off on this server), the model and the cap on model calls per UTC day. */
+  ai: { apiKey: string | null; model: string; dailyCap: number }
 }
 
 export class ConfigError extends Error {
@@ -108,6 +110,6 @@ export function parseConfig(raw: Record<string, string | undefined>): RolepayCon
     dbPath: e.ROLEPAY_DB_PATH,
     linkTtlSeconds: e.ROLEPAY_LINK_TTL_SECONDS,
     devShortcuts: devShortcutsEnabled(env),
-    ai: { apiKey: e.ANTHROPIC_API_KEY ?? null, model: e.ROLEPAY_AI_MODEL },
+    ai: { apiKey: e.ANTHROPIC_API_KEY ?? null, model: e.ROLEPAY_AI_MODEL, dailyCap: e.ROLEPAY_AI_DAILY_CAP },
   }
 }

@@ -5,9 +5,18 @@ const MASTER = 'a'.repeat(64)
 
 describe('parseConfig (operational settings from env)', () => {
   it('AI proposals: no model without ANTHROPIC_API_KEY (blank counts as unset); Opus 5.5 by default', () => {
-    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER }).ai).toEqual({ apiKey: null, model: 'claude-opus-5-5' })
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER }).ai).toEqual({ apiKey: null, model: 'claude-opus-5-5', dailyCap: 50 })
     expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: '  ' }).ai.apiKey).toBeNull()
-    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: 'sk-ant-SECRET', ROLEPAY_AI_MODEL: 'claude-sonnet-5-5' }).ai).toEqual({ apiKey: 'sk-ant-SECRET', model: 'claude-sonnet-5-5' })
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: 'sk-ant-SECRET', ROLEPAY_AI_MODEL: 'claude-sonnet-5-5' }).ai).toEqual({
+      apiKey: 'sk-ant-SECRET',
+      model: 'claude-sonnet-5-5',
+      dailyCap: 50,
+    })
+  })
+
+  it('AI proposals: at most ROLEPAY_AI_DAILY_CAP model calls per UTC day on this server (default 50, a positive whole number)', () => {
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_AI_DAILY_CAP: '10' }).ai.dailyCap).toBe(10)
+    for (const bad of ['0', '-1', '2.5', 'many']) expect(() => parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_AI_DAILY_CAP: bad })).toThrow(/ROLEPAY_AI_DAILY_CAP/)
   })
 
   it('refuses a malformed model name without echoing the key', () => {

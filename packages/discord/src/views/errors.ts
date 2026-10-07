@@ -15,6 +15,7 @@ const COULD_NOT_PROPOSE = {
   unavailable: 'The AI service is not reachable right now. Try again in a minute; nothing was created.',
   rejected: 'The AI service refused the request. The person running Rolepay can see why in the server log. Nothing was created.',
   auth: 'The AI service refused the API key. The person running Rolepay checks ANTHROPIC_API_KEY. Nothing was created.',
+  daily_cap: 'This Rolepay server has used its AI proposals for today; more are possible after midnight UTC. Create the run with `/rolepay new` instead. Nothing was created.',
 } as const
 
 /** Proposal errors in plain English, then everything else as `explainError`. */

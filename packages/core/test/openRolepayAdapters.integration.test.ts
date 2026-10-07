@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
-import { AnthropicRunProposer, TempoPayoutChain, openRolepayAdapters } from '../src/adapters/index.js'
+import { DailyCappedProposer, TempoPayoutChain, openRolepayAdapters } from '../src/adapters/index.js'
 import { createRolepay, parseConfig } from '../src/index.js'
 
 const dir = mkdtempSync(join(tmpdir(), 'rolepay-wiring-'))
@@ -32,12 +32,16 @@ describe('openRolepayAdapters', () => {
     await close()
   })
 
-  it('with ANTHROPIC_API_KEY, proposals use Anthropic with the configured model (no request is made here)', async () => {
-    const config = parseConfig({ ROLEPAY_MASTER_KEY: 'c'.repeat(64), ROLEPAY_DB_PATH: join(dir, 'ai.db'), ANTHROPIC_API_KEY: 'sk-ant-test', ROLEPAY_AI_MODEL: 'claude-opus-5-5' })
-    const { deps, close } = await openRolepayAdapters(config)
-    expect(deps.proposer).toBeInstanceOf(AnthropicRunProposer)
+  it('with ANTHROPIC_API_KEY, proposals use Anthropic with the configured model, under the daily cap (no request is made here)', async () => {
+    const config = parseConfig({ ROLEPAY_MASTER_KEY: 'c'.repeat(64), ROLEPAY_DB_PATH: join(dir, 'ai.db'), ANTHROPIC_API_KEY: 'sk-ant-test', ROLEPAY_AI_MODEL: 'claude-opus-5-5', ROLEPAY_AI_DAILY_CAP: '1' })
+    const { deps, kv, close } = await openRolepayAdapters(config)
+    expect(deps.proposer).toBeInstanceOf(DailyCappedProposer)
     expect(deps.proposer?.model).toBe('claude-opus-5-5')
     expect(createRolepay(deps).proposals.isConfigured()).toBe(true)
+    // Today's one slot is already taken (in the same SQLite file): the next call never reaches Anthropic.
+    await kv.create(`ai-daily-cap:${new Date().toISOString().slice(0, 10)}:0`, true)
+    const answer = await deps.proposer?.fromMessages({ instruction: '50 each', messages: [], token: 'AlphaUSD', remaining: null, maxLines: 50 })
+    expect(answer).toMatchObject({ ok: false, error: { code: 'could_not_propose', reason: 'daily_cap' } })
     await close()
   })
 })
