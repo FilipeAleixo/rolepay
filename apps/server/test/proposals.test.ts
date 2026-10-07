@@ -146,8 +146,8 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     )
     s.proposer.onCriteria = (r) =>
       emptyCriteria(
-        { amount: { kind: 'flat', amount: '20', per: null, cap: null, total: null, splitBy: null } },
-        { hasRole: ['R1'], repliesIn: { channels: ['C1'], since: `${r.today.slice(0, 8)}01`, until: null, min: 10 } },
+        { amount: { kind: 'flat', amount: '20', per: '', cap: '', total: '', splitBy: '' } },
+        { hasRole: ['R1'], activity: [{ metric: 'replies', channels: ['C1'], since: `${r.today.slice(0, 8)}01`, until: '', min: 10 }] },
       )
     await s.interact(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'pay 20 to every Mod who answered at least 10 messages in #help this month' }, TREASURER, 'tok-criteria'))
     await s.drain()

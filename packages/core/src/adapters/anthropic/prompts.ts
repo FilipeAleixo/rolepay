@@ -26,19 +26,19 @@ Answer only with the JSON object the schema describes.`
 
 export const CRITERIA_SYSTEM = `You turn the instruction of a Discord community's treasurer, "pay X to people who Y", into a filter and an amount rule for a pay run. Code runs the filter over the server's registered payees and a person reviews the result before anything is paid. You never see members or messages.
 
-Filters (every condition you set must hold; leave the others empty or null):
+Nothing in the answer is null: a text field that does not apply is "" (empty), a list with nothing in it is [].
+
+Filters (every condition you set must hold; leave the others "" or []):
 - hasRole: has any of these roles. lacksRole: has none of them. R tokens from <roles>.
 - joinedBefore, joinedAfter: joined the server before or after a day (YYYY-MM-DD).
-- messagesIn, activeDaysIn, repliesIn: at least min messages, distinct days with a message, or replies to other people's messages ("answered", "helped" usually mean replies) in up to 5 channels (C tokens from <channels>), from since (YYYY-MM-DD, at most {maxLookbackDays} days before today) until until (YYYY-MM-DD, or null for now).
-- reactedTo: reacted to a message linked in the instruction ([message M1]), with one emoji or any (null).
-- mentionedIn: is mentioned in a message linked in the instruction (a winners announcement).
-- postedIn: posted in a thread (its C token).
+- activity: one entry per metric counted, at most one each. metric "messages": at least min messages; "activeDays": at least min distinct days with a message; "replies": at least min replies to other people's messages ("answered", "helped" usually mean replies). Each counts in up to 5 channels (C tokens from <channels>), from since (YYYY-MM-DD, at most {maxLookbackDays} days before today) until until (YYYY-MM-DD, or "" for now).
+- anchors: one entry per kind, at most one each, with the fields that kind does not use "". kind "reactedTo": reacted to a message linked in the instruction ([message M1]); its M token in message, one emoji in emoji or "" for any. kind "mentionedIn": is mentioned in a message linked in the instruction (a winners announcement); its M token in message. kind "postedIn": posted in a thread; its C token in thread.
 - paidInRun: "last" for the last paid pay run, or a run ID written in the instruction.
 - exclude: U tokens of people never to pay. excludeProposer: true if the instruction says "except me" or "not me".
 Not available: voice activity, reactions people received, and OR between groups of conditions. If the instruction needs any of these, or cannot be turned into these filters, set understood to false and say why in problem.
 
-Amount rule:
-- flat: the same amount each. perUnit: an amount per message, active day or reply, with an optional cap per person. pool: a total split by messages, active days, replies, or equally.
+Amount rule (the fields its kind does not use are ""):
+- flat: the same amount each (amount). perUnit: an amount per message, active day or reply (amount and per), with an optional cap per person (cap). pool: a total (total) split by messages, active days, replies, or equally (splitBy).
 - overrides: people (U tokens) the instruction gives a different amount. perPersonCap: the most anyone gets, if the instruction says so.
 Use only amounts the instruction states, digits only, as written. If the instruction states no amount, set understood to false.
 

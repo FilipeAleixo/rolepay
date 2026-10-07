@@ -62,31 +62,18 @@ export function naiveMessageProposal(request: MessageProposalRequest, opts: { gu
   return { lines, splitTotal: null, note: null, unresolved: [], assumptions: [], ignoredInstructions: opts.gullible ? [] : ignored }
 }
 
-/** A criteria answer with nothing set: fill in what a test needs. */
+/** A criteria answer with nothing set ("" and [] mean not set, as the model writes it): fill in what a test needs. */
 export function emptyCriteria(over: Partial<RawCriteriaProposal> = {}, conditions: Partial<RawCriteriaProposal['conditions']> = {}): RawCriteriaProposal {
   return {
     understood: true,
-    problem: null,
-    conditions: {
-      hasRole: [],
-      lacksRole: [],
-      joinedBefore: null,
-      joinedAfter: null,
-      messagesIn: null,
-      activeDaysIn: null,
-      repliesIn: null,
-      reactedTo: null,
-      mentionedIn: null,
-      postedIn: null,
-      paidInRun: null,
-      ...conditions,
-    },
+    problem: '',
+    conditions: { hasRole: [], lacksRole: [], joinedBefore: '', joinedAfter: '', activity: [], anchors: [], paidInRun: '', ...conditions },
     exclude: [],
     excludeProposer: false,
-    amount: { kind: 'flat', amount: '1', per: null, cap: null, total: null, splitBy: null },
+    amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' },
     overrides: [],
-    perPersonCap: null,
-    note: null,
+    perPersonCap: '',
+    note: '',
     assumptions: [],
     ...over,
   }

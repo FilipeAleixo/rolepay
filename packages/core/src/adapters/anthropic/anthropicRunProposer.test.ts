@@ -64,6 +64,27 @@ const walk = (node: unknown, visit: (o: Record<string, unknown>) => void): void 
   }
 }
 
+/** Every schema node (the root, each property, array items, union branches), never a properties map itself. */
+const schemaNodes = (node: unknown): Record<string, unknown>[] => {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return []
+  const o = node as Record<string, unknown>
+  const children = [
+    ...Object.values((o.properties as Record<string, unknown> | undefined) ?? {}),
+    ...Object.values((o.$defs as Record<string, unknown> | undefined) ?? {}),
+    ...(o.items ? [o.items] : []),
+    ...['anyOf', 'oneOf', 'allOf'].flatMap((k) => (Array.isArray(o[k]) ? (o[k] as unknown[]) : [])),
+  ]
+  return [o, ...children.flatMap(schemaNodes)]
+}
+/** What the API counts against its limit of 16: parameters whose schema is a type array, anyOf or oneOf. */
+const unionParameters = (schema: unknown) => schemaNodes(schema).filter((o) => Array.isArray(o.type) || 'anyOf' in o || 'oneOf' in o).length
+/** JSON schema keywords and string formats structured outputs accept (platform docs, "JSON Schema Limitations"). */
+const SUPPORTED_KEYWORDS = ['type', 'properties', 'required', 'additionalProperties', 'items', 'enum', 'const', 'anyOf', 'allOf', '$ref', '$defs', 'description', 'format']
+const SUPPORTED_TYPES = ['object', 'array', 'string', 'integer', 'number', 'boolean', 'null']
+const SUPPORTED_FORMATS = ['date-time', 'time', 'date', 'duration', 'email', 'hostname', 'uri', 'ipv4', 'ipv6', 'uuid']
+/** Headroom under the API's 16, so one more nullable field does not break a mode in production. */
+const MAX_UNION_PARAMETERS = 12
+
 describe('AnthropicRunProposer: the request', () => {
   it('Opus 5.5, low effort, no temperature, no thinking switch, room after thinking, the fallback beta', async () => {
     const { proposer, sent } = proposerWith(() => json(fixture('message-valid.json')))
@@ -93,6 +114,39 @@ describe('AnthropicRunProposer: the request', () => {
       }
     })
     expect(objects).toBeGreaterThan(5)
+  })
+
+  // A schema over the API's union limit is a 400 on every request in that mode (criteria mode had
+  // 21 and the real API refused each request). Each mode's schema stays well under it, and uses
+  // only what structured outputs compile.
+  it.each([
+    ['message', 'message-valid.json', (p: AnthropicRunProposer) => p.fromMessages(MESSAGES)],
+    ['criteria', 'criteria-valid.json', (p: AnthropicRunProposer) => p.fromCriteria(CRITERIA)],
+  ] as const)('%s mode: at most 12 union-typed parameters, only supported keywords, types and formats', async (_mode, response, call) => {
+    const { proposer, sent } = proposerWith(() => json(fixture(response)))
+    await call(proposer)
+    const schema = (sent[0]?.body.output_config as { format: { schema: unknown } }).format.schema
+    const nodes = schemaNodes(schema)
+    expect(nodes.length).toBeGreaterThan(5)
+    expect(unionParameters(schema)).toBeLessThanOrEqual(MAX_UNION_PARAMETERS)
+    for (const node of nodes) {
+      for (const keyword of Object.keys(node)) expect(SUPPORTED_KEYWORDS, `keyword ${keyword}`).toContain(keyword)
+      for (const t of [node.type].flat().filter((t) => t !== undefined)) expect(SUPPORTED_TYPES, `type ${String(t)}`).toContain(t)
+      if ('format' in node) expect(SUPPORTED_FORMATS, `format ${String(node.format)}`).toContain(node.format)
+      if (node.type === 'object') {
+        expect(node.additionalProperties).toBe(false)
+        expect([...(node.required as string[])].sort()).toEqual(Object.keys(node.properties as object).sort())
+      }
+    }
+  })
+
+  it('the union counter counts what the API counts (type arrays, anyOf, oneOf, nested)', () => {
+    const nullable = { anyOf: [{ type: 'string' }, { type: 'null' }] }
+    const schema = {
+      type: 'object',
+      properties: { a: nullable, b: { type: ['string', 'null'] }, c: { oneOf: [{ type: 'string' }, { type: 'integer' }] }, d: { type: 'array', items: { type: 'object', properties: { e: nullable } } }, f: { type: 'string' } },
+    }
+    expect(unionParameters(schema)).toBe(4)
   })
 
   it('message text is delimited data: a message cannot close its tag, and the instruction stays apart', async () => {
@@ -136,7 +190,7 @@ describe('AnthropicRunProposer: the answer', () => {
   it('a valid criteria answer is parsed', async () => {
     const { proposer } = proposerWith(() => json(fixture('criteria-valid.json')))
     const r = await proposer.fromCriteria(CRITERIA)
-    expect(r.ok && r.value.raw.conditions.repliesIn).toEqual({ channels: ['C2'], since: '2026-10-01', until: null, min: 10 })
+    expect(r.ok && r.value.raw.conditions.activity).toEqual([{ metric: 'replies', channels: ['C2'], since: '2026-10-01', until: '', min: 10 }])
   })
 
   it('an answer served by the fallback model is used, and priced as that model', async () => {

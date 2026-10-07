@@ -135,7 +135,7 @@ describe('/rolepay propose', () => {
     const q = wireMessage({ channelId: HELP, authorId: CAROL, at: ago(600) })
     a.rest.addChannelMessages(q, ...Array.from({ length: 12 }, (_, i) => wireMessage({ channelId: HELP, authorId: ALICE, at: ago(500 - i), replyTo: { id: q.id, authorId: CAROL } })))
     a.proposer.onCriteria = () =>
-      emptyCriteria({ amount: { kind: 'flat', amount: '20', per: null, cap: null, total: null, splitBy: null } }, { hasRole: ['R1'], repliesIn: { channels: ['C1'], since: '2026-10-01', until: null, min: 10 } })
+      emptyCriteria({ amount: { kind: 'flat', amount: '20', per: '', cap: '', total: '', splitBy: '' } }, { hasRole: ['R1'], activity: [{ metric: 'replies', channels: ['C1'], since: '2026-10-01', until: '', min: 10 }] })
     await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'pay 20 to every Mod who answered at least 10 messages in #help this month' }, treasurer, 'tok-c'))
     const shown = text(a.rest.lastEdit('tok-c'))
     expect(shown).toContain(`**Who:** Registered payees who have <@&${MODS_ROLE}> and who replied to other people at least 10 times in <#${HELP}> since <t:1790812800:D>.`)

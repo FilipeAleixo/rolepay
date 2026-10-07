@@ -5,7 +5,7 @@ import type { Micros } from '../money.js'
 import { type Result, err, ok } from '../result.js'
 import { type AmountPlan, type Metric, type Metrics } from './amounts.js'
 import { parseLooseAmount } from './numbers.js'
-import type { RawCriteriaProposal } from './raw.js'
+import type { RawActivity, RawAnchor, RawCriteriaProposal } from './raw.js'
 import { type InstructionRefs, own } from './sources.js'
 
 /**
@@ -82,17 +82,22 @@ function day(text: string): Date | null {
   return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== m[0] ? null : d
 }
 
+/** The raw answer has no nulls (see raw.ts): an empty or blank string means "not set". */
+const given = (text: string): string | null => text.trim() || null
+const ANCHOR_WORDS: Record<RawAnchor['kind'], string> = { reactedTo: 'reacted to', mentionedIn: 'mentioned in', postedIn: 'posted in' }
+
 /**
  * Checks the model's criteria and maps its tokens back to Discord IDs. Bounds are applied here, in
  * code: the lookback is cut to 31 days (and said so), windows end no later than now, at most 5
  * channels. Amounts are parsed, and each must appear in the instruction (the instruction is the
- * only text the model saw in this mode, so an amount it did not state is a model error).
+ * only text the model saw in this mode, so an amount it did not state is a model error). The raw
+ * activity and anchor lists map to the domain's one window per metric and one condition per kind.
  */
 export function resolveCriteria(
   raw: RawCriteriaProposal,
   ctx: { refs: InstructionRefs; now: Date; instructionAmounts: readonly Micros[] },
 ): Result<ResolvedCriteria, CriteriaError> {
-  if (!raw.understood) return err({ code: 'criteria_unclear', problem: (raw.problem ?? 'The instruction could not be expressed with the filters Rolepay has.').slice(0, 300) })
+  if (!raw.understood) return err({ code: 'criteria_unclear', problem: (given(raw.problem) ?? 'The instruction could not be expressed with the filters Rolepay has.').slice(0, 300) })
   const issues: string[] = []
   const { refs, now } = ctx
   const earliest = new Date(now.getTime() - PROPOSAL_LIMITS.maxLookbackDays * DAY_MS)
@@ -112,48 +117,77 @@ export function resolveCriteria(
     return m ?? null
   }
 
-  const window = (w: NonNullable<RawCriteriaProposal['conditions']['messagesIn']>, what: string): ActivityWindow | null => {
+  const window = (w: RawActivity | undefined, what: string): ActivityWindow | null => {
+    if (!w) return null
     const channelIds = w.channels.map(channel).filter((x): x is string => x !== null)
     if (w.channels.length === 0) issues.push(`${what}: say which channel to count in`)
     let since = day(w.since)
     if (!since) issues.push(`${what}: "${w.since}" is not a date`)
-    const end = w.until === null ? now : day(w.until)
-    if (w.until !== null && !end) issues.push(`${what}: "${w.until}" is not a date`)
+    const last = given(w.until)
+    const end = last === null ? now : day(last)
+    if (last !== null && !end) issues.push(`${what}: "${last}" is not a date`)
     if (!since || !end || channelIds.length !== w.channels.length || channelIds.length === 0) return null
     if (since < earliest) {
       since = earliest
       lookbackClamped = true
     }
-    const until = w.until === null ? now : new Date(Math.min(end.getTime() + DAY_MS - 1, now.getTime()))
+    const until = last === null ? now : new Date(Math.min(end.getTime() + DAY_MS - 1, now.getTime()))
     if (since >= until) issues.push(`${what}: the period ends before it starts`)
     return { channelIds: [...new Set(channelIds)], since, until, min: Math.max(1, w.min) }
   }
+  // The domain holds one window per metric and one condition per anchor kind: a second is refused, not guessed between.
+  const only = <T, K extends string>(items: readonly T[], keyOf: (t: T) => K, words: (k: K) => string) => {
+    const seen = new Map<K, T>()
+    for (const item of items) {
+      const key = keyOf(item)
+      if (seen.has(key)) issues.push(`${words(key)}: given twice, say it once`)
+      else seen.set(key, item)
+    }
+    return (key: K) => seen.get(key)
+  }
 
   // A custom emoji the model saw as ":name:" maps back to Discord's form; any emoji is cut to fit.
-  const emoji = (e: string | null) => {
-    const t = e?.trim()
+  const emoji = (e: string) => {
+    const t = given(e)
     return t ? (own(refs.emojis, t) ?? t).slice(0, 100) : null
   }
   const k = raw.conditions
-  const reactedMessage = k.reactedTo ? message(k.reactedTo.message) : null
-  const mentionedMessage = k.mentionedIn ? message(k.mentionedIn.message) : null
-  const thread = k.postedIn ? channel(k.postedIn.thread) : null
-  const paid = k.paidInRun?.trim() ?? null
+  const activity = only(k.activity, (a) => a.metric, (m) => (m === 'activeDays' ? 'active days' : m))
+  const anchor = only(k.anchors, (a) => a.kind, (kind) => ANCHOR_WORDS[kind])
+  // The token an anchor needs (its message, or its thread); the other fields of the entry are ignored.
+  const anchorToken = (kind: RawAnchor['kind'], field: 'message' | 'thread', what: string) => {
+    const a = anchor(kind)
+    const t = a ? given(a[field]) : null
+    if (a && t === null) issues.push(`${ANCHOR_WORDS[kind]}: say which ${what}`)
+    return t
+  }
+  const reactedToken = anchorToken('reactedTo', 'message', 'message (paste the message link)')
+  const mentionedToken = anchorToken('mentionedIn', 'message', 'message (paste the message link)')
+  const threadToken = anchorToken('postedIn', 'thread', 'thread')
+  const reactedMessage = reactedToken === null ? null : message(reactedToken)
+  const mentionedMessage = mentionedToken === null ? null : message(mentionedToken)
+  const thread = threadToken === null ? null : channel(threadToken)
+  const paid = given(k.paidInRun)
   if (paid !== null && paid !== 'last' && !RunIdSchema.safeParse(paid).success) issues.push(`"${paid}" is not a pay run ID`)
-  const joinedBefore = k.joinedBefore === null ? null : day(k.joinedBefore)
-  const joinedAfter = k.joinedAfter === null ? null : day(k.joinedAfter)
-  if (k.joinedBefore !== null && !joinedBefore) issues.push(`"${k.joinedBefore}" is not a date`)
-  if (k.joinedAfter !== null && !joinedAfter) issues.push(`"${k.joinedAfter}" is not a date`)
+  const date = (text: string) => {
+    const t = given(text)
+    if (t === null) return null
+    const d = day(t)
+    if (!d) issues.push(`"${t}" is not a date`)
+    return d
+  }
+  const joinedBefore = date(k.joinedBefore)
+  const joinedAfter = date(k.joinedAfter)
 
   const criteria: Criteria = {
     hasRole: [...new Set(k.hasRole.map(role).filter((x): x is string => x !== null))],
     lacksRole: [...new Set(k.lacksRole.map(role).filter((x): x is string => x !== null))],
     joinedBefore,
     joinedAfter,
-    messagesIn: k.messagesIn ? window(k.messagesIn, 'messages') : null,
-    activeDaysIn: k.activeDaysIn ? window(k.activeDaysIn, 'active days') : null,
-    repliesIn: k.repliesIn ? window(k.repliesIn, 'replies') : null,
-    reactedTo: k.reactedTo && reactedMessage ? { ...reactedMessage, emoji: emoji(k.reactedTo.emoji) } : null,
+    messagesIn: window(activity('messages'), 'messages'),
+    activeDaysIn: window(activity('activeDays'), 'active days'),
+    repliesIn: window(activity('replies'), 'replies'),
+    reactedTo: reactedMessage ? { ...reactedMessage, emoji: emoji(anchor('reactedTo')?.emoji ?? '') } : null,
     mentionedIn: mentionedMessage,
     postedIn: thread ? { threadId: thread } : null,
     paidInRun: paid === null ? null : paid === 'last' ? { last: true, runId: null } : { last: false, runId: paid },
@@ -165,7 +199,8 @@ export function resolveCriteria(
 
   // The amount plan.
   const used: Micros[] = []
-  const money = (text: string | null, what: string, required: boolean): Micros | null => {
+  const money = (written: string, what: string, required: boolean): Micros | null => {
+    const text = given(written)
     if (text === null) {
       if (required) issues.push(`the amount rule needs ${what}`)
       return null
@@ -209,7 +244,7 @@ export function resolveCriteria(
   return ok({
     criteria,
     plan: { ...plan, overrides, perPersonCap },
-    note: raw.note?.trim().slice(0, 200) || null,
+    note: raw.note.trim().slice(0, 200) || null,
     assumptions: raw.assumptions.map((s) => s.trim().slice(0, 300)).filter(Boolean).slice(0, 10),
     lookbackClamped,
     amountsInInstruction: used.every((x) => stated.has(x)),
