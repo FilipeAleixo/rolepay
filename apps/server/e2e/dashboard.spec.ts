@@ -48,6 +48,9 @@ test('a treasurer signs in with Discord and walks Overview, Runs, Policies (paus
   await expect(page.getByText('Tess · Treasurer')).toBeVisible()
   await expect(page.getByText('938 AlphaUSD')).toBeVisible() // 1000 funded, 62 paid
   await expect(page.getByText('138 AlphaUSD left')).toBeVisible() // a key of 200
+  // At a glance: the budget as a bar, and this week's policy run in the weekly chart (one drawing shown at this width).
+  await expect(page.getByRole('img', { name: /^Bot key budget: 62 of 200 AlphaUSD spent, 138 AlphaUSD left\./ })).toBeVisible()
+  await expect(page.getByRole('img', { name: /^Paid per week for the last 12 weeks: 62 AlphaUSD in all, 62 by a policy and 0 by hand\./ })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Weekly helpers' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Autopilot helpers' })).toBeVisible()
 

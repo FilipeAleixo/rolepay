@@ -136,7 +136,8 @@ describe('weeksChart: paid per week, a policy run apart from a run made by hand'
     expect(count(svg, 'class="seg policy')).toBe(12)
     expect(count(svg, 'class="seg manual')).toBe(4)
     expect(count(svg, 'class="wk partial"')).toBe(1)
-    expect(svg).toMatch(/class="wk partial"[\s\S]*This week/)
+    expect(svg).toMatch(/class="wk partial"[\s\S]*>so far<\/text>[\s\S]*This week/)
+    expect(count(svg, '>so far</text>')).toBe(1)
     // The highest week is 60: the scale tops at 100, a gridline at 50, and 0 at the base.
     expect(svg).toMatch(/>100<\/text>/)
     expect(svg).toMatch(/>50<\/text>/)
@@ -180,12 +181,12 @@ describe('paidWeeks: the chart, its legend, the 12-week total and the numbers', 
     expect(t).toMatch(/Last 12 weeks 127 AlphaUSD/)
     expect(t).toContain('Made by a policy')
     expect(t).toContain('Made by hand')
-    expect(t).toContain('This week so far')
     expect(count(html, 'role="img"')).toBe(2)
     expect(html).toContain('<summary>Show the numbers</summary>')
     expect(count(html, '<tr>')).toBe(1 + 12 + 1) // the head, a row per week, the total
     expect(t).toContain('2026-07-27 50 AlphaUSD 12 AlphaUSD 62 AlphaUSD 2')
-    expect(t).toContain('2026-10-05 this week, so far 62 AlphaUSD 0 AlphaUSD 62 AlphaUSD 1')
+    expect(t).toContain('2026-10-05 so far 62 AlphaUSD 0 AlphaUSD 62 AlphaUSD 1')
+    expect(html).toContain('<span class="muted">0 AlphaUSD</span>')
     expect(t).toContain('12 weeks 112 AlphaUSD 15 AlphaUSD 127 AlphaUSD 4')
   })
 

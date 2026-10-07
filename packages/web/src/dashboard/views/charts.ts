@@ -71,11 +71,13 @@ export function keyBudget(read: ChainRead<KeyStatusView>): string {
   const spent = limit - left
   const periodic = periodSeconds !== null
   const resets = state.periodEnd ? new Date(state.periodEnd * 1000) : null
+  // Each clause stays on one line on a phone.
+  const clause = (words: string) => `<span class="nowrap">${words}</span>`
   const timing = !periodic
-    ? `One limit for the key's whole life · expires ${when(expires)}`
+    ? `One limit for the key's whole life · ${clause(`expires ${when(expires)}`)}`
     : resets && resets < expires
-      ? `Resets ${when(resets)} · expires ${when(expires)}`
-      : `Expires ${when(expires)}, before the period resets`
+      ? `${clause(`Resets ${when(resets)}`)} · ${clause(`expires ${when(expires)}`)}`
+      : `${clause(`Expires ${when(expires)}`)}, before the period resets`
   const empty =
     left === 0n ? `<p class="quiet">${periodic ? 'Nothing left until the period resets: a run waits until then.' : 'Nothing left: a treasurer authorises a new key on the setup page.'}</p>` : ''
   return part(
@@ -135,6 +137,14 @@ function segmentPath(half: number, top: number, bottom: number, r: number): stri
   return `M${-half} ${b}V${px(top + r)}A${r} ${r} 0 0 1 ${px(-half + r)} ${t}H${px(half - r)}A${r} ${r} 0 0 1 ${half} ${px(top + r)}V${b}Z`
 }
 
+/** Where a week's bar ends at the top (its whole height), for the label above it. */
+function barTop(w: PaidWeekView, height: (v: bigint) => number, base: number): number {
+  const hp = w.policy > 0n ? Math.max(2, height(w.policy)) : 0
+  const hm = w.manual > 0n ? Math.max(2, height(w.manual)) : 0
+  if (!hm) return base - hp
+  return Math.min(base - hp - hm, (hp ? base - hp - GAP : base) - 2)
+}
+
 /** A policy's runs at the base, runs made by hand above them, a 2px gap between (carved from the upper part, so the total height stays true). */
 function segments(w: PaidWeekView, height: (v: bigint) => number, base: number, half: number): string {
   const parts: { cls: 'policy' | 'manual'; top: number; bottom: number }[] = []
@@ -184,9 +194,11 @@ export function weeksChart(view: PaidByWeekView, layout: keyof typeof LAYOUTS): 
     .map((w, i) => {
       const labelled = (n - 1 - i) % L.every === 0
       const bars = segments(w, height, base, L.bar / 2)
+      // The week in progress says so on the bar itself (and under it, "This week").
+      const soFar = w.partial && w.runs > 0 ? `<text class="sofar" x="50%" y="${px(barTop(w, height, base) - 6)}" text-anchor="middle">so far</text>` : ''
       return (
         `<svg class="wk${w.partial ? ' partial' : ''}" x="${px(i * slot)}%" width="${px(slot)}%" height="${svgHeight}" overflow="visible"><title>${esc(weekWords(w, symbol))}</title>` +
-        `<rect class="hit" width="100%" height="${base}"/>${bars ? `<svg x="50%" overflow="visible">${bars}</svg>` : ''}` +
+        `<rect class="hit" width="100%" height="${base}"/>${bars ? `<svg x="50%" overflow="visible">${bars}</svg>` : ''}${soFar}` +
         `${labelled ? `<text class="tick" x="50%" y="${base + 17}" text-anchor="middle">${w.partial ? 'This week' : weekLabel(w.start)}</text>` : ''}</svg>`
       )
     })
@@ -201,8 +213,10 @@ export function weeksChart(view: PaidByWeekView, layout: keyof typeof LAYOUTS): 
 function numbers(view: PaidByWeekView): string {
   const t = view.token
   const numeric = [1, 2, 3, 4]
+  // A zero is quieter than an amount, so the weeks with payouts stand out.
+  const cell = (m: bigint) => (m === 0n ? `<span class="muted">${money(m, t)}</span>` : money(m, t))
   const rows = view.weeks.map((w) =>
-    row([`${day(w.start)}${w.partial ? ' <span class="muted small">this week, so far</span>' : ''}`, money(w.policy, t), money(w.manual, t), money(w.policy + w.manual, t), String(w.runs)], { numeric }),
+    row([`${day(w.start)}${w.partial ? ' <span class="muted small">so far</span>' : ''}`, cell(w.policy), cell(w.manual), cell(w.policy + w.manual), w.runs ? String(w.runs) : '<span class="muted">0</span>'], { numeric }),
   )
   rows.push(row([`<strong>${view.weeks.length} weeks</strong>`, ...[view.policy, view.manual, view.total].map((m) => `<strong>${money(m, t)}</strong>`), `<strong>${view.runs}</strong>`], { numeric }))
   return table('Paid per week, the numbers', ['Week of', 'By a policy', 'By hand', 'Total', 'Runs'], rows, { numeric })
@@ -216,7 +230,7 @@ export function paidWeeks(view: PaidByWeekView): string {
     return part(`${head}<p class="empty">Nothing paid in the last ${n} weeks.</p><p class="quiet">Each paid run shows here in the week it was paid, the runs a policy made apart from the runs made by hand.</p>`)
   }
   const legend =
-    '<p class="legend"><span><span class="key policy"></span>Made by a policy</span><span><span class="key manual"></span>Made by hand</span><span><span class="key partial"></span>This week so far</span></p>'
+    '<p class="legend"><span><span class="key policy"></span>Made by a policy</span><span><span class="key manual"></span>Made by hand</span></p>'
   return part(
     `${head}<div class="figures">${figure(`Last ${n} weeks`, view.total, view.token)}</div>${legend}${weeksChart(view, 'wide')}${weeksChart(view, 'narrow')}` +
       `<details><summary>Show the numbers</summary>${numbers(view)}</details>`,

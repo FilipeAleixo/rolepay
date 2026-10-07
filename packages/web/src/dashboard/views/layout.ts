@@ -129,30 +129,30 @@ pre.diff{white-space:pre-wrap}
 .figures{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:.4rem 1.5rem;margin:0 0 .75rem}
 p.figure{display:flex;flex-direction:column;gap:.25rem;margin:0}
 p.figure.end{align-items:flex-end;text-align:right}
-.figure .label,.budget-limit .label{font:500 10px/1.4 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--meta)}
+.figure .label,.budget-limit .label{font:400 12px/1.4 var(--sans);color:var(--muted)}
 .figure .value{font:400 26px/1.15 var(--serif);color:var(--head);letter-spacing:-.01em;font-variant-numeric:lining-nums proportional-nums}
 .figure .unit{font:500 12px/1 var(--sans);letter-spacing:.01em;color:var(--soft)}
 p.budget-limit{display:flex;justify-content:flex-end;align-items:baseline;gap:.5rem;margin:.35rem 0 0;font-size:12.5px;color:var(--soft)}
 p.quiet{margin:.9rem 0 0;font-size:12px;color:var(--muted)}
 p.quiet+p.quiet{margin-top:.3rem}
+.nowrap{white-space:nowrap}
 p.caption{margin:.55rem 0 0;max-width:36rem;font-size:13px;line-height:1.55;color:var(--soft)}
 p.empty{margin:0;font:400 17px/1.45 var(--serif);color:var(--fg)}
 p.legend{display:flex;flex-wrap:wrap;gap:.35rem 1.15rem;margin:0 0 .5rem;font-size:12px;color:var(--soft)}
 .legend>span{display:inline-flex;align-items:center;gap:.45rem}
 .legend .key{width:10px;height:10px;border-radius:2px;flex:none;background:var(--gold)}
 .legend .key.manual{background:var(--muted)}
-.legend .key.partial{opacity:.5}
 svg.viz{display:block;width:100%;overflow:visible}
 .viz text{font:400 10.5px/1 var(--sans);fill:var(--muted)}
 .viz .axis{font-size:10px}
-.viz .track{fill:rgba(237,190,90,.14)}
+.viz .track{fill:rgba(255,255,255,.08)}
 .viz .spent,.viz .policy{fill:var(--gold)}
 .viz .manual{fill:var(--muted)}
 .viz .limit{fill:var(--head)}
 .viz .grid{stroke:rgba(255,255,255,.06);stroke-width:1}
 .viz .base{stroke:rgba(255,255,255,.16);stroke-width:1}
 .viz .hit{fill:transparent}
-.viz .partial .seg{opacity:.5}
+.viz .sofar{font-size:10px;fill:var(--soft)}
 .viz .wk:hover .seg{filter:brightness(1.2)}
 svg.viz-narrow{display:none}
 .glance details{margin-top:.5rem}
