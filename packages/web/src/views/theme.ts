@@ -44,10 +44,11 @@ const fontFaces = FONTS.map(
 ).join('\n')
 
 /**
- * Head tags every page carries: the favicon, and a preload for the two faces every page shows
- * first (the serif heading and the body text), so they arrive with the stylesheet.
+ * Head tags every page carries: the favicon, the iPhone home-screen icon (a PNG of the mark,
+ * `appleTouchIcon.ts`), and a preload for the two faces every page shows first (the serif heading
+ * and the body text), so they arrive with the stylesheet.
  */
-export const HEAD_LINKS = `<link rel="icon" href="/favicon.svg" type="image/svg+xml"><meta name="theme-color" content="#0B0C0F">${[FONTS[0], FONTS[1]]
+export const HEAD_LINKS = `<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><meta name="theme-color" content="#0B0C0F">${[FONTS[0], FONTS[1]]
   .map((f) => `<link rel="preload" href="${FONT_PATH}${f.file}" as="font" type="font/woff2" crossorigin>`)
   .join('')}`
 

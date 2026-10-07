@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { type Clock, NETWORKS, type Rolepay } from '@rolepay/core'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
+import { APPLE_TOUCH_ICON_PNG } from './appleTouchIcon.js'
 import type { WebConfig } from './config.js'
 import { type DashboardDeps, dashboardRoutes } from './dashboard/index.js'
 import { DASHBOARD_STYLE } from './dashboard/views/layout.js'
@@ -73,7 +74,8 @@ const rateLimitGroup = (method: string, path: string) =>
 
 /**
  * The web pages: the home page, the recipient claim page and the treasurer setup page, their
- * JSON endpoints, the WebAuthn ceremony endpoints, the client bundle, the fonts and the favicon.
+ * JSON endpoints, the WebAuthn ceremony endpoints, the client bundle, the fonts, the favicon and
+ * the iPhone home-screen icon.
  * One origin for all of it, because passkeys are bound to it.
  */
 export function createWebApp(deps: WebAppDeps): Hono {
@@ -142,6 +144,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
     return c.body(file.body, 200, { 'content-type': file.type, 'cache-control': 'public, max-age=31536000, immutable' })
   })
   app.get('/favicon.svg', (c) => c.body(MARK_SVG, 200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' }))
+  app.get('/apple-touch-icon.png', (c) => c.body(APPLE_TOUCH_ICON_PNG, 200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' }))
 
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
   app.route('/', landingRoutes({ testnet, discordAppId: config.discordAppId }))

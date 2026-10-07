@@ -56,7 +56,7 @@ describe('the home page (/)', () => {
     expect(html).toContain('client_id=1%22%3E%3Cscript%3Ealert%281%29%3C%2Fscript%3E')
   })
 
-  it('is served with the same strict CSP, which allows the fonts and the favicon from this origin and nothing new besides', async () => {
+  it('is served with the same strict CSP, which allows the fonts, the favicon and the home-screen icon from this origin and nothing new besides', async () => {
     const h = webHarness({ discordAppId: APP_ID })
     const res = await h.send('/')
     const csp = res.headers.get('content-security-policy') ?? ''
@@ -69,10 +69,12 @@ describe('the home page (/)', () => {
     expect(directives['img-src']).toEqual(["'self'", 'data:'])
     expect(directives['font-src']).toEqual(["'self'"])
     expect(directives['connect-src']).toEqual(["'self'", 'https://rpc.moderato.tempo.xyz', 'https://sponsor.moderato.tempo.xyz'])
-    // Every font and the favicon the page refers to are on this origin, and are served.
+    // Every font, the favicon and the home-screen icon the page refers to are on this origin (img-src
+    // 'self' covers the icons, unchanged), and are served.
     const html = await res.text()
-    const refs = [...html.matchAll(/(?:href|src)="([^"]+)"|url\(([^)"]+)\)/g)].map((m) => (m[1] ?? m[2]) as string).filter((u) => /\.(woff2|svg)$/.test(u))
+    const refs = [...html.matchAll(/(?:href|src)="([^"]+)"|url\(([^)"]+)\)/g)].map((m) => (m[1] ?? m[2]) as string).filter((u) => /\.(woff2|svg|png)$/.test(u))
     expect(refs).toContain('/favicon.svg')
+    expect(refs).toContain('/apple-touch-icon.png')
     expect(refs.filter((u) => u.endsWith('.woff2')).length).toBeGreaterThanOrEqual(4)
     for (const u of new Set(refs)) {
       expect(u.startsWith('/')).toBe(true)

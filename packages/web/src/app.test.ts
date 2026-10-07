@@ -48,6 +48,23 @@ describe('the web app', () => {
     }
   })
 
+  it('serves the mark as the iPhone home-screen icon: a 180 by 180 PNG with no alpha channel (iOS shows transparency as black), linked from every page', async () => {
+    const h = webHarness()
+    const icon = await h.send('/apple-touch-icon.png')
+    expect(icon.status).toBe(200)
+    expect(icon.headers.get('content-type')).toBe('image/png')
+    expect(icon.headers.get('cache-control')).toBe('public, max-age=86400')
+    const png = new Uint8Array(await icon.arrayBuffer())
+    expect([...png.slice(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) // the PNG signature
+    const ihdr = new DataView(png.buffer, png.byteOffset + 8)
+    expect(new TextDecoder().decode(png.slice(12, 16))).toBe('IHDR')
+    expect([ihdr.getUint32(8), ihdr.getUint32(12)]).toEqual([180, 180]) // width, height
+    expect([png[24], png[25]]).toEqual([8, 2]) // 8 bits per channel, truecolour without alpha
+    for (const path of ['/', '/account', '/claim/nope', '/setup/nope']) {
+      expect(await (await h.send(path)).text(), path).toContain('<link rel="apple-touch-icon" href="/apple-touch-icon.png">')
+    }
+  })
+
   it('sends security headers on every page', async () => {
     const h = webHarness()
     const res = await h.send('/claim/nope')
