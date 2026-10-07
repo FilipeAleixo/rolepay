@@ -17,6 +17,8 @@ export class AesGcmKeyVault implements KeyVault {
   constructor(masterKeyHex: string) {
     if (!/^[0-9a-fA-F]{64}$/.test(masterKeyHex)) throw new Error('master key must be 32 bytes of hex (64 chars)')
     const master = Buffer.from(masterKeyHex, 'hex')
+    // These labels predate the rename to Rolepay. Never change them: bot keys already sealed in
+    // the database would no longer open, and link tokens already issued would no longer match.
     this.encKey = Buffer.from(hkdfSync('sha256', master, Buffer.alloc(0), 'payrun:seal', 32))
     this.macKey = Buffer.from(hkdfSync('sha256', master, Buffer.alloc(0), 'payrun:fingerprint', 32))
   }

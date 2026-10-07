@@ -15,7 +15,7 @@ const FEE_TOKEN = TESTNET_TOKENS.path_usd
 const snowflake = () => `1${Date.now()}${String(Math.floor(Math.random() * 1e4)).padStart(4, '0')}`.slice(0, 19)
 
 describe('fee_budget mode on Moderato: the bot pays its fee from a separate budget', () => {
-  const dbDir = mkdtempSync(join(tmpdir(), 'payrun-feebudget-'))
+  const dbDir = mkdtempSync(join(tmpdir(), 'rolepay-feebudget-'))
   const guildId = snowflake()
   const payeeId = '200000000000000201'
   const payeeAddress = privateKeyToAddress(generatePrivateKey()).toLowerCase()
@@ -27,7 +27,7 @@ describe('fee_budget mode on Moderato: the bot pays its fee from a separate budg
   beforeAll(async () => {
     expect(await testnet.chainId()).toBe(42431) // testnet only, never mainnet
     await testnet.ensureFunded(root.address, TOKEN, 1_000_000n) // the faucet funds every testnet stablecoin
-    db = await openSqliteDatabase(join(dbDir, 'payrun.db'))
+    db = await openSqliteDatabase(join(dbDir, 'rolepay.db'))
     const chain = new TempoPayoutChain({ network: 'moderato', rpcUrl: NET.rpcUrl, sponsorUrl: NET.sponsorUrl })
     rolepay = createRolepay({ chain, repositories: db.repositories, vault: new PlainKeyVault(), ids: new RandomIds(), clock: new SystemClock(), network: 'moderato' })
   })

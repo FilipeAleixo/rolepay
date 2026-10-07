@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { AnthropicRunProposer, TempoPayoutChain, openRolepayAdapters } from '../src/adapters/index.js'
 import { createRolepay, parseConfig } from '../src/index.js'
 
-const dir = mkdtempSync(join(tmpdir(), 'payrun-wiring-'))
+const dir = mkdtempSync(join(tmpdir(), 'rolepay-wiring-'))
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('openRolepayAdapters', () => {

@@ -36,7 +36,7 @@ export const CommunitySchema = z
 export type Community = z.infer<typeof CommunitySchema>
 
 /**
- * The settings a /payrun setup chose. For a community that is not registered yet (its
+ * The settings a /rolepay setup chose. For a community that is not registered yet (its
  * treasury does not exist until the treasurer creates it on the setup page), they travel
  * with the setup link and are applied when the treasury is bound.
  */
@@ -85,7 +85,7 @@ export function canPropose(community: Pick<Community, 'approverRoleId' | 'propos
 export const SetupLinkSchema = z.object({
   tokenHash: z.string().min(1),
   communityId: DiscordIdSchema,
-  /** Who ran /payrun setup (Manage Server and the approver role). */
+  /** Who ran /rolepay setup (Manage Server and the approver role). */
   discordUserId: DiscordIdSchema,
   settings: SetupSettingsSchema,
   createdAt: z.date(),
@@ -116,7 +116,7 @@ export type BotKeyStatus = z.infer<typeof BotKeyStatusSchema>
 export const BotKeySchema = z.object({
   address: AddressSchema,
   communityId: DiscordIdSchema,
-  /** null once the key is revoked or replaced: payrun destroys a secret it will never use again. */
+  /** null once the key is revoked or replaced: Rolepay destroys a secret it will never use again. */
   sealedSecret: z.string().min(1).nullable(),
   status: BotKeyStatusSchema,
   policy: KeyPolicySchema,

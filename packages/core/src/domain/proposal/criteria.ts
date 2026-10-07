@@ -92,7 +92,7 @@ export function resolveCriteria(
   raw: RawCriteriaProposal,
   ctx: { refs: InstructionRefs; now: Date; instructionAmounts: readonly Micros[] },
 ): Result<ResolvedCriteria, CriteriaError> {
-  if (!raw.understood) return err({ code: 'criteria_unclear', problem: (raw.problem ?? 'The instruction could not be expressed with the filters payrun has.').slice(0, 300) })
+  if (!raw.understood) return err({ code: 'criteria_unclear', problem: (raw.problem ?? 'The instruction could not be expressed with the filters Rolepay has.').slice(0, 300) })
   const issues: string[] = []
   const { refs, now } = ctx
   const earliest = new Date(now.getTime() - PROPOSAL_LIMITS.maxLookbackDays * DAY_MS)
@@ -222,7 +222,7 @@ export function resolveCriteria(
 export type ScannedMessage = { channelId: string; authorId: string; at: Date; replyToAuthorId: string | null }
 export type MemberFacts = { roleIds: string[]; joinedAt: Date | null }
 
-/** What code read from Discord and payrun's own history to run the criteria. */
+/** What code read from Discord and Rolepay's own history to run the criteria. */
 export type CriteriaEvidence = {
   messages: readonly ScannedMessage[]
   reactors: readonly string[] | null

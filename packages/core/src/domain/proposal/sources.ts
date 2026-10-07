@@ -3,7 +3,7 @@ import { PROPOSAL_LIMITS } from '../../constants/limits.js'
 import { DiscordIdSchema } from '../ids.js'
 
 /**
- * A Discord message as payrun reads it. `content` is empty for other people's messages when the
+ * A Discord message as Rolepay reads it. `content` is empty for other people's messages when the
  * bot lacks the Message Content intent; author, mentions, time and reply target are always there.
  */
 export const SourceMessageSchema = z.object({

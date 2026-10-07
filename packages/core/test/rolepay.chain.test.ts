@@ -73,7 +73,7 @@ const record = (entry: Record<string, unknown>) => {
 }
 
 describe('pay run end to end on Moderato (service level)', () => {
-  const dbDir = mkdtempSync(join(tmpdir(), 'payrun-chain-'))
+  const dbDir = mkdtempSync(join(tmpdir(), 'rolepay-chain-'))
   const guildId = snowflake()
   const mods = ['200000000000000101', '200000000000000102', '200000000000000103']
   const addresses = mods.map(() => fresh())
@@ -91,7 +91,7 @@ describe('pay run end to end on Moderato (service level)', () => {
   beforeAll(async () => {
     expect(await testnet.chainId()).toBe(42431) // testnet only, never mainnet
     await testnet.ensureFunded(root.address, TOKEN, usd('100'))
-    db = await openSqliteDatabase(join(dbDir, 'payrun.db'))
+    db = await openSqliteDatabase(join(dbDir, 'rolepay.db'))
     crashingRuns = new CrashingRuns(db.repositories.runs)
     rolepay = createRolepay({
       chain,
@@ -109,7 +109,7 @@ describe('pay run end to end on Moderato (service level)', () => {
   })
 
   it('registers the community (guild) with its own treasury account', async () => {
-    const r = await rolepay.communities.register({ guildId, name: 'payrun chain test', treasuryAddress: root.address, payoutToken: TOKEN, feeMode: 'sponsor' })
+    const r = await rolepay.communities.register({ guildId, name: 'Rolepay chain test', treasuryAddress: root.address, payoutToken: TOKEN, feeMode: 'sponsor' })
     expect(r.ok).toBe(true)
   })
 

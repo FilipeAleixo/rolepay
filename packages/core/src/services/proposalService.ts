@@ -349,7 +349,7 @@ export class ProposalService {
 
   /**
    * "Create pay run": the existing create and submit, so the run waits for the treasurer's
-   * approval exactly like one from /payrun new. A claim makes it once per proposal, however many
+   * approval exactly like one from /rolepay new. A claim makes it once per proposal, however many
    * clicks arrive.
    */
   async createRun(
@@ -378,7 +378,7 @@ export class ProposalService {
       created = made.value
       const proposal: Proposal = { ...p, status: 'run_created', runId: created.id, closedBy: input.actor, updatedAt: this.deps.clock.now() }
       await this.deps.proposals.save(proposal)
-      // If the submit fails the run stays a draft (it shows in /payrun status and can be cancelled), never a second run.
+      // If the submit fails the run stays a draft (it shows in /rolepay status and can be cancelled), never a second run.
       const submitted = await this.deps.payRuns.submit({ guildId: p.communityId, runId: created.id, actor: input.actor })
       if (!submitted.ok) return submitted
       return ok({ proposal, run: submitted.value })

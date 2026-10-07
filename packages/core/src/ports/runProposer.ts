@@ -8,7 +8,7 @@ export type ProposerUsage = {
   inputTokens: number
   outputTokens: number
   latencyMs: number
-  /** Estimated from the model's list price, in micro-dollars. null for a model payrun has no price for. */
+  /** Estimated from the model's list price, in micro-dollars. null for a model Rolepay has no price for. */
   costMicroUsd: number | null
 }
 

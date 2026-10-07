@@ -9,7 +9,7 @@ import * as f from '../../../test/support/fixtures.js'
 import { openSqliteDatabase } from './index.js'
 
 // Real SQLite on a temp file (not :memory:), so file-level behaviour is exercised too.
-const dir = mkdtempSync(join(tmpdir(), 'payrun-sqlite-'))
+const dir = mkdtempSync(join(tmpdir(), 'rolepay-sqlite-'))
 let n = 0
 const opened: { close(): Promise<void> }[] = []
 afterAll(async () => {

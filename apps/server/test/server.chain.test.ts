@@ -31,7 +31,7 @@ const text = (v: unknown) => JSON.stringify(v ?? null)
 describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)', () => {
   const env = loadEnvironment()
   const rootKey = env.ROLEPAY_TEST_ROOT_PRIVATE_KEY
-  const dbDir = mkdtempSync(join(tmpdir(), 'payrun-server-chain-'))
+  const dbDir = mkdtempSync(join(tmpdir(), 'rolepay-server-chain-'))
   const guildId = snowflake()
   const scope = { guildId, channelId: '700000000000000001' }
   const admin = { userId: '300000000000000202', manageGuild: true }
@@ -58,7 +58,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
     const config = parseServerConfig({
       ...env,
       ROLEPAY_NETWORK: 'moderato',
-      ROLEPAY_DB_PATH: join(dbDir, 'payrun.db'),
+      ROLEPAY_DB_PATH: join(dbDir, 'rolepay.db'),
       DISCORD_APP_ID: '500000000000000001',
       DISCORD_PUBLIC_KEY: signer.publicKeyHex,
       DISCORD_BOT_TOKEN: 'fake-bot-token',

@@ -42,6 +42,13 @@ describe('AesGcmKeyVault', () => {
     expect(await vault.fingerprint('tok')).toMatch(/^[0-9a-f]{64}$/)
   })
 
+  it('still opens secrets sealed before the rename (the key derivation labels never change)', async () => {
+    const old = new AesGcmKeyVault('11'.repeat(32))
+    const sealed = 'v1.SvmzrTo_J4vHYPD3.QSGoCoHm5yffCOB4hcMXjwKKIiFRLr_I.oXIRale-JExwRKw1Nkd1iw'
+    expect(await old.open(sealed, 'guild:1:key:1')).toEqual({ ok: true, value: 'sealed-before-the-rename' })
+    expect(await old.fingerprint('tok')).toBe('027987e570a554b85038440d7b058f8fd328b6acdfc92e18dd6e95ede8174e71')
+  })
+
   it('rejects a master key that is not 32 bytes of hex', () => {
     expect(() => new AesGcmKeyVault('abc')).toThrow()
     expect(() => new AesGcmKeyVault('z'.repeat(64))).toThrow()

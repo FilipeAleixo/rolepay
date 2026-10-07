@@ -14,7 +14,7 @@ const TOKEN = '0x20c0000000000000000000000000000000000001'
 const USERS = ['200000000000000001', '200000000000000002'] as const
 const ADDRS = ['0x1111111111111111111111111111111111111111', '0x2222222222222222222222222222222222222222'] as const
 
-const dir = mkdtempSync(join(tmpdir(), 'payrun-svc-sqlite-'))
+const dir = mkdtempSync(join(tmpdir(), 'rolepay-svc-sqlite-'))
 const toClose: { close(): Promise<void> }[] = []
 afterAll(async () => {
   for (const d of toClose) await d.close()

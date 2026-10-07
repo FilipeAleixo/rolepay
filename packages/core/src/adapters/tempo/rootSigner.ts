@@ -3,7 +3,7 @@ import { Account } from 'viem/tempo'
 import type { Address } from '../../domain/ids.js'
 import type { RootSigner } from '../../ports/payoutChain.js'
 
-const VIEM_ACCOUNT = Symbol('payrun.tempoRootAccount')
+const VIEM_ACCOUNT = Symbol('rolepay.tempoRootAccount')
 
 type TempoRootSigner = RootSigner & { [VIEM_ACCOUNT]: ViemAccount }
 

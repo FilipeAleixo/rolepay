@@ -49,7 +49,7 @@ export interface RootSigner {
 }
 
 /**
- * Everything payrun needs from a payments chain. Signing and broadcasting are separate
+ * Everything Rolepay needs from a payments chain. Signing and broadcasting are separate
  * so the service can persist the signed tx (and its hash) before it is broadcast.
  */
 export interface PayoutChain {

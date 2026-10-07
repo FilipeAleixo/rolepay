@@ -4,7 +4,7 @@ import { FetchDiscordRest, commandDefinitions } from '@rolepay/discord'
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 
 /**
- * Registers (overwrites) payrun's slash commands. With DISCORD_DEV_GUILD_ID they are
+ * Registers (overwrites) Rolepay's slash commands. With DISCORD_DEV_GUILD_ID they are
  * registered for that one server and show up at once; otherwise globally.
  * Needs only DISCORD_APP_ID and DISCORD_BOT_TOKEN, so it works before the rest is configured.
  * The dev shortcut options are registered only with ROLEPAY_DEV_SHORTCUTS=true on testnet.

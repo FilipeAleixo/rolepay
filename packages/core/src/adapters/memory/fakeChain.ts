@@ -32,7 +32,7 @@ const hex32 = (prefix: number, n: number) => `0x${prefix.toString(16).padStart(2
 const FAKE_ROOT = Symbol('fakeRoot')
 
 /**
- * A deterministic stand-in for Tempo that enforces the rules payrun depends on:
+ * A deterministic stand-in for Tempo that enforces the rules Rolepay depends on:
  * atomic batches, cumulative spend limits, call scopes, revocation, expiry, expiring
  * nonces (validBefore) and idempotent re-broadcast. Faults are injected explicitly.
  */

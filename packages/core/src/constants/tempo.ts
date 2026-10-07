@@ -31,7 +31,7 @@ export const TESTNET_TOKENS = {
   beta_usd: '0x20c0000000000000000000000000000000000002',
 } as const
 
-/** Display names of the tokens payrun knows, by lowercase address. */
+/** Display names of the tokens Rolepay knows, by lowercase address. */
 export const TOKEN_SYMBOLS: Readonly<Record<string, string>> = {
   [TESTNET_TOKENS.path_usd]: 'pathUSD',
   [TESTNET_TOKENS.alpha_usd]: 'AlphaUSD',

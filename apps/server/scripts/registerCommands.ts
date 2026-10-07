@@ -1,4 +1,4 @@
-// pnpm register-commands: PUTs payrun's slash commands to Discord.
+// pnpm register-commands: PUTs Rolepay's slash commands to Discord.
 // With DISCORD_DEV_GUILD_ID set they appear in that server at once; without it, globally.
 import { loadEnvironment } from '../src/env.js'
 import { registerCommands } from '../src/registerCommands.js'
