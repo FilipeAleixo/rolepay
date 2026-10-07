@@ -106,6 +106,15 @@ describe('createPolicyNotifier: telling the channel what the scheduler did', () 
     expect(shown).toContain('rolepay:approve:')
   })
 
+  it('a period where nobody matched is one line, with no run', async () => {
+    const w = await world()
+    await w.travelTo(new Date(MONDAY.getTime() + 7 * 86_400_000))
+    const report = await w.rolepay.scheduler.tick()
+    expect(report.events.map((e) => e.policyRun.status)).toEqual(['empty'])
+    await w.notifier.announce(report.events)
+    expect(text(w.rest.channelPosts.at(-1)?.message)).toContain('nobody matched')
+  })
+
   it('a policy with no channel posts nothing (the dashboard shows its runs)', async () => {
     const w = await world({ channel: null })
     await w.travelTo(MONDAY)

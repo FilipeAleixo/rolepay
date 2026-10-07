@@ -105,6 +105,17 @@ describe('the preview buttons', () => {
     expect(p.ok && p.value.status).toBe('active')
   })
 
+  it('an Approve from an outdated preview (the rule was edited since) is refused: nobody approves a version they did not see', async () => {
+    const a = await ready()
+    const { policyId } = await newPolicy(a)
+    await a.rolepay.policies.edit({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], policyId, name: 'Help desk, renamed' })
+    const stale = await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
+    expect(isEphemeral(stale)).toBe(true)
+    expect(body(stale).data?.content).toContain('version 2')
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && p.value.status).toBe('draft')
+  })
+
   it('Discard: the author or an approver', async () => {
     const a = await ready()
     const { policyId } = await newPolicy(a)
