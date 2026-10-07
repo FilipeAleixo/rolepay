@@ -45,7 +45,20 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     setupLinkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
   })
   const audit = new AuditTrail({ log: r.audit, policyRuns: r.policyRuns, clock, ...(deps.onAuditError ? { onError: deps.onAuditError } : {}) })
-  const payRuns = new PayRunService({ runs: r.runs, payees: r.payees, communities: r.communities, policyRuns: r.policyRuns, chain, vault, ids, clock, network, audit, leases: deps.leases ?? null })
+  const payRuns = new PayRunService({
+    runs: r.runs,
+    payees: r.payees,
+    communities: r.communities,
+    policyRuns: r.policyRuns,
+    chain,
+    vault,
+    ids,
+    clock,
+    network,
+    audit,
+    leases: deps.leases ?? null,
+    ...(deps.swapMaxSlippageBps !== undefined ? { swapMaxSlippageBps: deps.swapMaxSlippageBps } : {}),
+  })
   const policies = new PolicyService({
     communities: r.communities,
     payees: r.payees,

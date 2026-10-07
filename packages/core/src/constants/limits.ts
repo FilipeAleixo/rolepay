@@ -49,3 +49,10 @@ export const POLICY_LIMITS = {
   /** Matched people who are not registered payees, kept with a run. */
   maxUnregistered: 100,
 } as const
+
+/**
+ * Paying people in their preferred stablecoin: the most a swapped line may spend of the payout token
+ * over its amount, in basis points (100 = 1%). The default of ROLEPAY_SWAP_MAX_SLIPPAGE_BPS, which
+ * config refuses above the maximum.
+ */
+export const SWAP_SLIPPAGE = { defaultBps: 100, maxBps: 500 } as const

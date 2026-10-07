@@ -1,5 +1,7 @@
 import { z } from 'zod'
-import { AddressSchema, DiscordIdSchema } from '../domain/ids.js'
+import type { Community } from '../domain/community.js'
+import { preferenceChoices } from '../domain/delivery.js'
+import { type Address, AddressSchema, DiscordIdSchema } from '../domain/ids.js'
 import { type Payee, checkLinkToken } from '../domain/payee.js'
 import { type Result, err, ok } from '../domain/result.js'
 import type { Clock } from '../ports/clock.js'
@@ -20,7 +22,26 @@ export type PayeeServiceDeps = {
 const IssueLinkInputSchema = z.object({ guildId: DiscordIdSchema, discordUserId: DiscordIdSchema })
 const RegisterInputSchema = z.object({ token: z.string().min(1), address: AddressSchema })
 
+const SetPreferredTokenInputSchema = z.object({ guildId: DiscordIdSchema, discordUserId: DiscordIdSchema, token: AddressSchema.nullable() })
+const SetPreferredTokenByAddressInputSchema = z.object({ guildId: DiscordIdSchema, address: AddressSchema, token: AddressSchema.nullable() })
+
 type LinkError = { code: 'link_not_found' } | { code: 'link_expired' } | { code: 'link_already_used' }
+export type PreferenceError = InvalidInput | { code: 'community_not_found' } | { code: 'payee_not_found' } | { code: 'token_not_allowed'; choices: Address[] }
+
+/**
+ * Where one address is paid, for the payee's own account page: per community, its payout token, the
+ * stablecoins they may choose from (the payout token first), whether the community has preferred
+ * stablecoins on, and their current choice (null = the payout token).
+ */
+export type PayeeRegistration = {
+  guildId: string
+  communityName: string | null
+  discordUserId: string
+  payoutToken: Address
+  preferredToken: Address | null
+  choices: Address[]
+  enabled: boolean
+}
 
 /**
  * Recipients register BEFORE they are paid: `/payee link` issues a one-time token,
@@ -97,4 +118,75 @@ export class PayeeService {
   async list(input: { guildId: string }): Promise<Payee[]> {
     return this.deps.payees.list(input.guildId)
   }
+
+  /**
+   * The USD stablecoin a payee wants to receive (`/payee prefer` in Discord, as the caller). The
+   * payout token, or null, means no preference. Only a stablecoin the community can deliver
+   * (`preferenceChoices`). Stored even while the community has preferred stablecoins off: it then
+   * applies once a treasurer turns them on. It never changes where they are paid, only in what.
+   */
+  async setPreferredToken(input: { guildId: string; discordUserId: string; token: string | null }): Promise<Result<Payee, PreferenceError>> {
+    const parsed = SetPreferredTokenInputSchema.safeParse(input)
+    if (!parsed.success) return invalidInput(parsed.error)
+    const { guildId, discordUserId, token } = parsed.data
+    const community = await this.deps.communities.get(guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const payee = await this.deps.payees.get(guildId, discordUserId)
+    if (!payee) return err({ code: 'payee_not_found' })
+    const chosen = choose(community, token)
+    if (!chosen.ok) return chosen
+    return ok(await this.savePreference(payee, chosen.value))
+  }
+
+  /**
+   * The same from a page signed in with the payee's passkey (the claim and account pages): `address`
+   * comes from the passkey session the server verified, never from the page, and only that address's
+   * registrations in this community change.
+   */
+  async setPreferredTokenByAddress(input: { guildId: string; address: string; token: string | null }): Promise<Result<Payee[], PreferenceError>> {
+    const parsed = SetPreferredTokenByAddressInputSchema.safeParse(input)
+    if (!parsed.success) return invalidInput(parsed.error)
+    const { guildId, address, token } = parsed.data
+    const community = await this.deps.communities.get(guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const mine = (await this.deps.payees.listByAddress(address)).filter((p) => p.communityId === guildId)
+    if (mine.length === 0) return err({ code: 'payee_not_found' })
+    const chosen = choose(community, token)
+    if (!chosen.ok) return chosen
+    return ok(await Promise.all(mine.map((p) => this.savePreference(p, chosen.value))))
+  }
+
+  /** Every community that pays this address (from a verified passkey session), with its choices: see PayeeRegistration. */
+  async registrations(input: { address: string }): Promise<PayeeRegistration[]> {
+    const address = AddressSchema.safeParse(input.address)
+    if (!address.success) return []
+    const out: PayeeRegistration[] = []
+    for (const p of await this.deps.payees.listByAddress(address.data)) {
+      const c = await this.deps.communities.get(p.communityId)
+      if (!c) continue
+      out.push({
+        guildId: c.id,
+        communityName: c.name,
+        discordUserId: p.discordUserId,
+        payoutToken: c.payoutToken,
+        preferredToken: p.preferredToken,
+        choices: preferenceChoices(c),
+        enabled: c.preferredTokens,
+      })
+    }
+    return out
+  }
+
+  private async savePreference(payee: Payee, token: Address | null): Promise<Payee> {
+    const updated: Payee = { ...payee, preferredToken: token, updatedAt: this.deps.clock.now() }
+    await this.deps.payees.upsert(updated)
+    return updated
+  }
+}
+
+/** A choice the community can honour, stored as null when it is the payout token (no preference). */
+function choose(community: Community, token: Address | null): Result<Address | null, { code: 'token_not_allowed'; choices: Address[] }> {
+  if (token === null || token === community.payoutToken) return ok(null)
+  const choices = preferenceChoices(community)
+  return choices.includes(token) ? ok(token) : err({ code: 'token_not_allowed', choices })
 }
