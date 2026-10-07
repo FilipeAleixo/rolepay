@@ -5,11 +5,13 @@ import { compress } from 'hono/compress'
 import type { WebConfig } from './config.js'
 import { type DashboardDeps, dashboardRoutes } from './dashboard/index.js'
 import { DASHBOARD_STYLE } from './dashboard/views/layout.js'
+import { fontFile } from './fonts.js'
 import type { Assets, PasskeySessions, RateLimiter } from './ports.js'
 import { accountRoutes } from './routes/account.js'
 import { claimRoutes } from './routes/claim.js'
 import { setupRoutes } from './routes/setup.js'
 import { STYLE } from './views/page.js'
+import { MARK_SVG } from './views/theme.js'
 
 export type WebAppDeps = {
   rolepay: Rolepay
@@ -34,9 +36,10 @@ export type WebAppDeps = {
 const lastForwardedHop = (req: Request) => req.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || 'direct'
 /**
  * Content-Security-Policy for every response: scripts only from this origin (the one bundle),
- * the inline stylesheet by its hash, connections only to this origin, the RPC and the sponsor
- * (the page signs and sends the treasurer's transactions itself), and no framing, plugins or
- * base-URL tricks. The JSON page config is a data block, never executed.
+ * the inline stylesheet by its hash, fonts and images only from this origin (images also as data:
+ * URIs, for the grain and the select's chevron), connections only to this origin, the RPC and the
+ * sponsor (the page signs and sends the treasurer's transactions itself), and no framing, plugins
+ * or base-URL tricks. The JSON page config is a data block, never executed.
  */
 function contentSecurityPolicy(config: WebConfig): string {
   const origin = (u: string | null) => (u && URL.canParse(u) ? [new URL(u).origin] : [])
@@ -48,6 +51,7 @@ function contentSecurityPolicy(config: WebConfig): string {
     `style-src ${styles.join(' ')}`,
     `connect-src ${connect.join(' ')}`,
     "img-src 'self' data:",
+    "font-src 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",
@@ -66,9 +70,9 @@ const rateLimitGroup = (method: string, path: string) =>
   path.startsWith('/auth/') ? 'auth' : method === 'POST' ? RATE_LIMITED_PREFIXES.exec(path)?.[1] : undefined
 
 /**
- * The web pages: the recipient claim page and the treasurer setup page, their JSON
- * endpoints, the WebAuthn ceremony endpoints and the client bundle. One origin for all
- * of it, because passkeys are bound to it.
+ * The web pages: the recipient claim page and the treasurer setup page, their JSON endpoints,
+ * the WebAuthn ceremony endpoints, the client bundle, the fonts and the favicon. One origin for
+ * all of it, because passkeys are bound to it.
  */
 export function createWebApp(deps: WebAppDeps): Hono {
   const { config } = deps
@@ -128,6 +132,14 @@ export function createWebApp(deps: WebAppDeps): Hono {
     if (body === null) return c.notFound()
     return c.body(body, 200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' })
   })
+
+  // The fonts (woff2, never compressed again) and their licences: fixed files, cached for good.
+  app.get('/assets/fonts/:file', async (c) => {
+    const file = await fontFile(c.req.param('file'))
+    if (!file) return c.notFound()
+    return c.body(file.body, 200, { 'content-type': file.type, 'cache-control': 'public, max-age=31536000, immutable' })
+  })
+  app.get('/favicon.svg', (c) => c.body(MARK_SVG, 200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' }))
 
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
   app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))

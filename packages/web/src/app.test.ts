@@ -16,6 +16,38 @@ describe('the web app', () => {
     expect((await h.send('/assets/other.js')).status).toBe(404)
   })
 
+  it('serves the fonts (woff2, cached for good) and their SIL Open Font License texts from this origin, and nothing else under /assets/fonts', async () => {
+    const h = webHarness()
+    for (const name of ['lora-latin-400-normal.woff2', 'montserrat-latin-400-normal.woff2', 'montserrat-latin-500-normal.woff2', 'montserrat-latin-600-normal.woff2']) {
+      const res = await h.send(`/assets/fonts/${name}`, { headers: { 'accept-encoding': 'gzip' } })
+      expect(res.status, name).toBe(200)
+      expect(res.headers.get('content-type')).toBe('font/woff2')
+      expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+      expect(res.headers.get('content-encoding')).toBeNull() // woff2 is compressed already
+      expect(new TextDecoder().decode((await res.arrayBuffer()).slice(0, 4))).toBe('wOF2')
+    }
+    for (const name of ['Lora-OFL.txt', 'Montserrat-OFL.txt']) {
+      const res = await h.send(`/assets/fonts/${name}`)
+      expect(res.status, name).toBe(200)
+      expect(await res.text()).toMatch(/SIL Open Font License, Version 1\.1/)
+    }
+    expect((await h.send('/assets/fonts/other.woff2')).status).toBe(404)
+    expect((await h.send('/assets/fonts/..%2Fpackage.json')).status).toBe(404)
+  })
+
+  it('serves the mark as the favicon, and every page links it and shows the mark', async () => {
+    const h = webHarness()
+    const icon = await h.send('/favicon.svg')
+    expect(icon.status).toBe(200)
+    expect(icon.headers.get('content-type')).toBe('image/svg+xml')
+    expect(await icon.text()).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 512 512"><rect [^>]*fill="#4A1B2A"\/>/)
+    for (const path of ['/account', '/claim/nope', '/setup/nope']) {
+      const html = await (await h.send(path)).text()
+      expect(html, path).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">')
+      expect(html, path).toMatch(/<svg class="mark" width="\d+" height="\d+" aria-hidden="true"/)
+    }
+  })
+
   it('sends security headers on every page', async () => {
     const h = webHarness()
     const res = await h.send('/claim/nope')
@@ -32,6 +64,8 @@ describe('the web app', () => {
     expect(directives['script-src']).toEqual(["'self'"])
     expect(directives['style-src']?.[0]).toMatch(/^'sha256-[A-Za-z0-9+/]+=*'$/)
     expect(directives['connect-src']).toEqual(["'self'", 'https://rpc.moderato.tempo.xyz', 'https://sponsor.moderato.tempo.xyz'])
+    expect(directives['img-src']).toEqual(["'self'", 'data:'])
+    expect(directives['font-src']).toEqual(["'self'"])
     expect(directives['frame-ancestors']).toEqual(["'none'"])
     expect(directives['base-uri']).toEqual(["'none'"])
     expect(directives['object-src']).toEqual(["'none'"])

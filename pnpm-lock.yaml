@@ -13,6 +13,12 @@ importers:
       '@anthropic-ai/sdk':
         specifier: 0.131.0
         version: 0.131.0(zod@4.6.5)
+      '@fontsource/lora':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/montserrat':
+        specifier: 5.3.0
+        version: 5.3.0
       '@hono/node-server':
         specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
@@ -133,6 +139,12 @@ importers:
 
   packages/web:
     dependencies:
+      '@fontsource/lora':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/montserrat':
+        specifier: 5.3.0
+        version: 5.3.0
       '@rolepay/core':
         specifier: workspace:*
         version: link:../core
@@ -359,6 +371,12 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource/lora@5.3.0':
+    resolution: {integrity: sha512-OK1g1z01rHVPqO5aw/FOIoDqc46KKYZdgL3NOLkxLWDk6QhDHhdr/h2BV1cke6gTvR1tzpDfdKyUkGsC+sQLeQ==}
+
+  '@fontsource/montserrat@5.3.0':
+    resolution: {integrity: sha512-iQPDtZOnmM5ih4JBGaMSXisRap0ixb9bAUw2hDtY7EjVfaqiiNlKtVuJl9XclxUwtwMMHNcWXfQR6zI9x05+Tg==}
 
   '@hono/node-server@1.19.17':
     resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
@@ -1288,6 +1306,10 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
+
+  '@fontsource/lora@5.3.0': {}
+
+  '@fontsource/montserrat@5.3.0': {}
 
   '@hono/node-server@1.19.17(hono@4.13.13)':
     dependencies:
