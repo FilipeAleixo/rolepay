@@ -394,6 +394,14 @@ export class CommunityService {
     return ok({ key: toBotKeyView(key), state: await this.readState(community, key) })
   }
 
+  /** What the treasury holds in the payout token right now (reads the chain; throws on an RPC failure). */
+  async treasuryBalance(input: { guildId: string }): Promise<Result<{ address: Address; token: Address; balance: bigint }, NotFound>> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const balance = await this.deps.chain.balanceOf({ token: community.payoutToken, account: community.treasuryAddress })
+    return ok({ address: community.treasuryAddress, token: community.payoutToken, balance })
+  }
+
   /**
    * Every key not yet known to be revoked, newest first, each with what the chain says now. The
    * setup page lists the ones live on chain (active, or superseded but not revoked) for revoking.

@@ -8,7 +8,7 @@ import { RestActivityReader } from '@rolepay/discord'
 import { FakeDiscordRest, createTestSigner } from '@rolepay/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
 import { parseServerConfig } from '../src/config.js'
-import { composeServer } from '../src/compose.js'
+import { type ServerDeps, composeServer } from '../src/compose.js'
 
 export const GUILD = '1094309218049937418'
 export const TREASURY = '0x9999999999999999999999999999999999999999'
@@ -27,7 +27,9 @@ type SharedState = { rolepay: Rolepay; chain: FakePayoutChain; clock: ManualCloc
  * `devShortcuts: false`: the production default (no `treasury:` or `new_key` in Discord).
  * `env`: more settings, as the environment would give them.
  */
-export async function testServer(opts: { from?: SharedState; sleep?: (ms: number) => Promise<void>; devShortcuts?: boolean; env?: Record<string, string> } = {}) {
+export async function testServer(
+  opts: { from?: SharedState; sleep?: (ms: number) => Promise<void>; devShortcuts?: boolean; env?: Record<string, string>; dashboard?: ServerDeps['web']['dashboard'] } = {},
+) {
   const signer = await createTestSigner()
   const config = parseServerConfig({
     ROLEPAY_MASTER_KEY: randomBytes(32).toString('hex'),
@@ -63,7 +65,7 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
   const server = composeServer({
-    web: { sessions, assets: staticAssets({ 'rolepay.js': '' }) },
+    web: { sessions, assets: staticAssets({ 'rolepay.js': '' }), ...(opts.dashboard ? { dashboard: opts.dashboard } : {}) },
     config,
     rolepay,
     rest,

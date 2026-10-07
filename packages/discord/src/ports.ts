@@ -35,8 +35,11 @@ export interface DiscordRest {
   getGuild(guildId: string): Promise<{ name: string } | null>
   /** Opens a DM with the user and posts. `dm_closed` when they do not accept DMs from the server. */
   sendDm(userId: string, message: Message): Promise<RestResult>
-  /** One guild member's roles and join date, or null if they are not a member. Needs no privileged intent. */
-  getMember(guildId: string, userId: string): Promise<{ roles: string[]; joinedAt: Date | null } | null>
+  /**
+   * One guild member's roles, join date and display name (server nickname, else global name, else
+   * username), or null if they are not a member. Needs no privileged intent.
+   */
+  getMember(guildId: string, userId: string): Promise<{ roles: string[]; joinedAt: Date | null; name: string | null } | null>
 
   // ---- reads for AI proposals (the activity reader validates every shape) --------------------
   /**

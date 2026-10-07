@@ -1,6 +1,6 @@
 # @rolepay/server
 
-The Rolepay server: Hono on Node, the composition root over `@rolepay/core`, `@rolepay/discord` and `@rolepay/web`. It serves the Discord interactions endpoint (`POST /discord/interactions`), `GET /health`, the recipient claim page (`/claim/:token`), the treasurer setup page (`/setup/:token`), the passkey ceremonies (`/webauthn/*`) and the client bundle (`/assets/rolepay.js`), and runs the crash-recovery sweep and the policy scheduler every 30 seconds.
+The Rolepay server: Hono on Node, the composition root over `@rolepay/core`, `@rolepay/discord` and `@rolepay/web`. It serves the Discord interactions endpoint (`POST /discord/interactions`), `GET /health`, the recipient claim page (`/claim/:token`), the treasurer setup page (`/setup/:token`), the passkey ceremonies (`/webauthn/*`), the client bundle (`/assets/rolepay.js`) and the web dashboard (`/dashboard`, with "Sign in with Discord" at `/auth/discord`), and runs the crash-recovery sweep and the policy scheduler every 30 seconds.
 
 Everything below is testnet (Moderato). Secrets go only in the repo-root `.env`, which is gitignored.
 
@@ -51,6 +51,19 @@ You need: the Discord desktop app, a private test server where you are the owner
 8. **Point Discord at it.** Developer Portal, General Information, **Interactions Endpoint URL**: `https://<name>.ngrok-free.app/discord/interactions`, then Save Changes. Discord sends a signed PING and a badly signed request before it accepts the URL, so the server must be running. A red error here usually means a wrong `DISCORD_PUBLIC_KEY` or a stopped tunnel.
 
 9. **Roles in the test server.** Server Settings, Roles: create `Treasurer` and give it to yourself. Create `Mods` and give it to yourself and the second account. Leave the second account without `Treasurer`.
+
+10. **The web dashboard's sign-in (optional; everything in Discord works without it).** Developer Portal, your app, **OAuth2**:
+    - **Redirects**: add `${PUBLIC_URL}/auth/discord/callback` for every origin you sign in from, for example `http://localhost:8787/auth/discord/callback` (local), `https://<name>.ngrok-free.app/auth/discord/callback` (the tunnel) and `https://demo.rolepay.app/auth/discord/callback` (the hosted demo). Discord refuses any redirect not listed here, character for character.
+    - **Client Secret**: press Reset Secret, copy it into `.env` as `ROLEPAY_DISCORD_CLIENT_SECRET=<secret>` and restart the server. The client ID is the Application ID (`DISCORD_APP_ID`); nothing else to set. On Fly: `fly secrets set ROLEPAY_DISCORD_CLIENT_SECRET=... -a <app>`.
+    - The startup log line shows `"dashboard":"<PUBLIC_URL>/dashboard"` when sign-in is on, or `sign-in off` without the secret; then `/dashboard` says sign-in is not configured.
+
+## Using the dashboard
+
+Open `${PUBLIC_URL}/dashboard` and press **Sign in with Discord**. Discord asks to share your username and your server list (scopes `identify guilds`); Rolepay reads them once, revokes the token straight away and keeps only its own session (eight hours, an HttpOnly cookie). The home page lists your servers that use Rolepay.
+
+- **Who sees what.** Any member of the server (as the bot sees them, not as the browser says) reads every page: Overview (treasury, balance, the bot key and its remaining budget, the next scheduled runs, recent runs), Runs (filters, each run's lines, memos, transaction, who made and approved it, its timeline, its CSV), Payees (totals this month, last month, all time), Policies and the Audit log (filters, CSV export). Holders of the approver (Treasurer) role also get the policy actions: create, approve, edit and recompile, pause, resume, switch mode, archive. Every action re-reads the person's roles from Discord at that moment, so removing the role takes effect on the next click; pages catch up within a minute.
+- **Policies and the Audit log** need the policy services; on a server without them the pages say they are not available yet.
+- To check by hand: sign in as yourself (Treasurer) and as the second account (read only, no action buttons, and a crafted POST answers 403). Remove `Treasurer` from yourself in Discord and press an action: refused at once.
 
 ## Manual test (about 15 minutes)
 
@@ -111,11 +124,11 @@ Optional: stop the server with Ctrl-C right after clicking Approve on a new run,
 | `pnpm dev:authorize-key <guildId>` | Testnet dev shortcut (`ROLEPAY_DEV_SHORTCUTS=true`): the dev treasury authorises the pending bot key |
 | `pnpm --filter @rolepay/server test` | Server tests (no network) |
 | `pnpm --filter @rolepay/server test:chain` | Opt-in: the Discord flow over HTTP on Moderato, fake Discord REST |
-| `pnpm test:e2e` | Opt-in: Playwright in Chromium with a virtual passkey authenticator, the real server on `http://localhost:8799`, Moderato |
+| `pnpm test:e2e` | Opt-in: Playwright in Chromium. The passkey flows with a virtual authenticator on `http://localhost:8799` and Moderato; the dashboard walk (fake Discord OAuth, in-memory adapters, no network) on `http://localhost:8797` |
 | `ROLEPAY_AI_LIVE=true pnpm test:ai-live` | Opt-in: three real Anthropic API calls (a few cents) with `ANTHROPIC_API_KEY` from `.env` |
 | `pnpm --filter @rolepay/core test:chain` | Opt-in: service-level runs on Moderato, including one autopilot policy payout after a one-minute veto window |
 
-Settings are listed in the repo-root `.env.example`. The SQLite file defaults to `rolepay.db` at the repo root, shared by the server and the dev scripts; it also holds the passkey credentials and sessions (so returning users can sign in after a restart). An install from before the rename keeps its `payrun.db`: when that file exists at the repo root and `ROLEPAY_DB_PATH` is unset, it is the one used. If something looks stuck, the server logs one JSON line per event (`interaction_error`, `job_error`, `recovery`, `recovery_notify_error`, `proposal`, `policies`, `policies_error`, `policy_notify_error`, `audit_error`); they never include tokens, keys or message text. `ROLEPAY_SCHEDULER_INTERVAL_SECONDS` sets how often the policy scheduler ticks (30 by default).
+Settings are listed in the repo-root `.env.example`. The SQLite file defaults to `rolepay.db` at the repo root, shared by the server and the dev scripts; it also holds the passkey credentials and sessions (so returning users can sign in after a restart). An install from before the rename keeps its `payrun.db`: when that file exists at the repo root and `ROLEPAY_DB_PATH` is unset, it is the one used. If something looks stuck, the server logs one JSON line per event (`interaction_error`, `job_error`, `recovery`, `recovery_notify_error`, `proposal`, `policies`, `policies_error`, `policy_notify_error`, `audit_error`, `dashboard_error`); they never include tokens, keys or message text. `ROLEPAY_SCHEDULER_INTERVAL_SECONDS` sets how often the policy scheduler ticks (30 by default).
 
 ## Deploying
 

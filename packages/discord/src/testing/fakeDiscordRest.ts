@@ -41,12 +41,12 @@ export class FakeDiscordRest implements DiscordRest {
   readonly roles = new Map<string, { id: string; name: string; managed?: boolean }[]>()
   readonly channels = new Map<string, { id: string; name: string; type: number }[]>()
   readonly threads = new Map<string, { id: string; name: string; type: number; parent_id?: string }[]>()
-  private members = new Map<string, { roles: string[]; joinedAt: Date | null }>()
+  private members = new Map<string, { roles: string[]; joinedAt: Date | null; name: string | null }>()
   private history = new Map<string, WireMessage[]>()
   private reacted = new Map<string, Map<string, { id: string; bot?: boolean }[]>>()
 
-  setMember(guildId: string, userId: string, roles: string[], joinedAt: Date | null = null) {
-    this.members.set(`${guildId}:${userId}`, { roles, joinedAt })
+  setMember(guildId: string, userId: string, roles: string[], joinedAt: Date | null = null, name: string | null = null) {
+    this.members.set(`${guildId}:${userId}`, { roles, joinedAt, name })
   }
 
   /** Messages in a channel or thread, as Discord would send them. */
@@ -116,7 +116,12 @@ export class FakeDiscordRest implements DiscordRest {
 
   async getMember(guildId: string, userId: string) {
     const m = this.members.get(`${guildId}:${userId}`)
-    return m ? { roles: [...m.roles], joinedAt: m.joinedAt } : null
+    return m ? { roles: [...m.roles], joinedAt: m.joinedAt, name: m.name } : null
+  }
+
+  /** Removes someone from a guild (they left, or were kicked). */
+  removeMember(guildId: string, userId: string) {
+    this.members.delete(`${guildId}:${userId}`)
   }
 
   async getChannelMessages(channelId: string, query: { before?: string; limit: number }) {

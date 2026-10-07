@@ -74,6 +74,10 @@ export class TempoPayoutChain implements PayoutChain {
     return { address: lc(privateKeyToAddress(secret)) as Address, secret }
   }
 
+  async balanceOf(input: { token: Address; account: Address }) {
+    return (await this.reader.readContract({ address: input.token, abi: Abis.tip20, functionName: 'balanceOf', args: [input.account] })) as bigint
+  }
+
   async keyState(input: { account: Address; accessKey: Address; token: Address; feeToken: Address | null }): Promise<KeyState> {
     const [meta, block] = await Promise.all([
       this.reader.accessKey.getMetadata({ account: input.account, accessKey: input.accessKey }),
