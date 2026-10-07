@@ -70,27 +70,27 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 ```bash
 pnpm install
 pnpm typecheck
-pnpm test            # 1,380 tests in 121 files, no network, no secrets
+pnpm test            # 1,629 tests in 135 files, no network, no secrets
 pnpm test:coverage   # what CI runs, with a threshold per package
 ```
 
-`pnpm test` runs 1,380 tests: core 699, discord 356, web 197, server 128. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
+`pnpm test` runs 1,629 tests: core 824, discord 405, web 262, server 138. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
 
 Coverage from `pnpm test:coverage`:
 
 | Package | Lines | Statements | Functions | Branches |
 | --- | --- | --- | --- | --- |
-| `packages/core` | 94.97% | 91.68% | 94.91% | 82.65% |
-| `packages/discord` | 96.59% | 93.3% | 96.82% | 83.37% |
-| `packages/web` | 85.12% | 82.3% | 81.62% | 77.33% |
-| `apps/server` | 85.6% | 85.15% | 84.43% | 84.85% |
+| `packages/core` | 95.41% | 92.2% | 95.2% | 83.72% |
+| `packages/discord` | 96.82% | 93.49% | 96.61% | 84.23% |
+| `packages/web` | 87% | 83.45% | 83.55% | 75.98% |
+| `apps/server` | 85.95% | 85.63% | 84.79% | 84.88% |
 
-`packages/web` is lower because its browser code (`src/client/`, 44% of lines here) runs in the Playwright e2e, which these numbers do not count. Its server code is at 99% of lines.
+`packages/web` is lower because its browser code (`src/client/`, 33% of lines here) runs in the Playwright e2e, which these numbers do not count. Its server code is at 99% of lines.
 
 Opt-in suites, on Tempo's Moderato testnet:
 
-- `pnpm test:chain`: full pay runs at service level and over HTTP, the fee budget, an autopilot policy payout after a one-minute veto window, a policy with its own key next to the bot key, and the protocol tests above. It generates throwaway keys into the gitignored `.env`, funds them from the public faucet, and refuses any chain but Moderato. About two minutes.
-- `pnpm test:e2e`: Playwright in Chromium with a virtual passkey authenticator. The claim and treasurer flows on Moderato, a policy given its own budget with the passkey on Moderato, the mainnet path rehearsed on Moderato with no sponsor, and the dashboard walk (no network). The first time, install the browser with `pnpm --filter @rolepay/server exec playwright install chromium`.
+- `pnpm test:chain`: full pay runs at service level and over HTTP, the fee budget, an autopilot policy payout after a one-minute veto window, a policy with its own key next to the bot key, preferred stablecoins bought on the DEX in the same batch, and the protocol tests above. It generates throwaway keys into the gitignored `.env`, funds them from the public faucet, and refuses any chain but Moderato. About two minutes.
+- `pnpm test:e2e`: Playwright in Chromium with a virtual passkey authenticator. The claim and treasurer flows on Moderato (the preferred stablecoin switch and a BetaUSD payout from a passkey treasury among them), a policy given its own budget with the passkey on Moderato, the mainnet path rehearsed on Moderato with no sponsor, and the dashboard walk (no network). The first time, install the browser with `pnpm --filter @rolepay/server exec playwright install chromium`.
 
 Where the limit refusal is tested:
 
