@@ -11,7 +11,7 @@ import { proposalRepositoryContract } from '../../../test/support/proposalReposi
 import { repositoryContracts } from '../../../test/support/repositoryContracts.js'
 import * as f from '../../../test/support/fixtures.js'
 import { type Database, openSqliteDatabase } from './index.js'
-import { migrateTo } from './migrations.js'
+import { MIGRATION_NAMES, migrateTo } from './migrations.js'
 import { SqliteAuditLog, SqlitePolicyRepository } from './policyRepositories.js'
 import { SqliteCommunityRepository, SqliteRunRepository } from './repositories.js'
 
@@ -75,6 +75,34 @@ describe('sqlite: migrations and persistence', () => {
     const again = await openSqliteDatabase(path)
     opened.push(again)
     expect(await again.repositories.aiUsage.list(f.GUILD)).toEqual([row])
+  })
+
+  it('0010 adds the funding tables to a database every earlier migration made, with rows in it, and keeps them', async () => {
+    // Whatever migration comes right before it (0007 on this branch; another on main once 0008 and 0009 land).
+    const previous = MIGRATION_NAMES[MIGRATION_NAMES.indexOf('0010_funding') - 1]
+    if (!previous) throw new Error('0010_funding is not in the list, or has nothing before it')
+    const path = join(dir, 'before-0010.db')
+    const sqlite = new BetterSqlite3(path)
+    const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+    await migrateTo(before as unknown as Kysely<unknown>, previous)
+    await new SqliteCommunityRepository(before).insert(f.community())
+    await new SqliteRunRepository(before).insert(f.run())
+    const tables = () => (sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((t) => t.name)
+    expect(tables()).not.toContain('funding_sources')
+    await before.destroy()
+
+    const after = await openSqliteDatabase(path)
+    expect(await after.repositories.communities.get(f.GUILD)).toEqual(f.community())
+    expect(await after.repositories.runs.get('run_fixture01')).toEqual(f.run())
+    expect(await after.repositories.funding.insertMaster(f.depositMaster())).toBe(true)
+    expect(await after.repositories.funding.insertSource(f.fundingSource())).toBe('inserted')
+    expect(await after.repositories.funding.insertDeposit(f.deposit())).toBe(true)
+    await after.close()
+    // Opening again runs nothing twice and keeps the rows.
+    const again = await openSqliteDatabase(path)
+    opened.push(again)
+    expect(await again.repositories.funding.getMaster(f.GUILD)).toEqual(f.depositMaster())
+    expect(await again.repositories.funding.listDeposits(f.GUILD)).toEqual([f.deposit()])
   })
 
   it('keeps key-value records across reopen', async () => {

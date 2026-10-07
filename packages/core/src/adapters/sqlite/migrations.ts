@@ -265,7 +265,7 @@ const migrations: Record<string, Migration> = {
       await db.schema.createIndex('ai_usage_policy').on('ai_usage').column('policy_id').execute()
     },
   },
-  '0008_funding': {
+  '0010_funding': {
     async up(db: Kysely<unknown>) {
       // Funding with attribution (virtual addresses). New tables only, so it applies to a database
       // with data as to an empty one. Block numbers are BIGINT (the watcher's cursor only moves
@@ -311,6 +311,9 @@ const migrations: Record<string, Migration> = {
     },
   },
 }
+
+/** Every migration's name, in the order they run (tests build a database as an earlier release left it). */
+export const MIGRATION_NAMES: readonly string[] = Object.keys(migrations).sort()
 
 class InlineMigrations implements MigrationProvider {
   async getMigrations() {
