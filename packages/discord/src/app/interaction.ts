@@ -131,12 +131,14 @@ export function parseInteraction(body: unknown): Result<ParsedInteraction, { cod
     return ok({ kind: 'message_command', command: i.data.name, target: toSourceMessage(target.data), ctx })
   }
 
+  // A subcommand ("new"), or a subcommand inside a group ("policy new"), then its options.
   const top = i.data.options ?? []
-  const sub = top.find((o) => o.type === OptionType.SubCommand)
+  const group = top.find((o) => o.type === OptionType.SubCommandGroup)
+  const sub = (group ? (group.options ?? []) : top).find((o) => o.type === OptionType.SubCommand)
   const leaves = sub ? (sub.options ?? []) : top
   const options: Record<string, OptionValue> = {}
   for (const o of leaves) if (o.value !== undefined) options[o.name] = o.value
-  const base = { command: i.data.name, sub: sub?.name ?? null, options, ctx }
+  const base = { command: i.data.name, sub: sub ? (group ? `${group.name} ${sub.name}` : sub.name) : null, options, ctx }
   if (i.type === InteractionType.Autocomplete) return ok({ kind: 'autocomplete', ...base, focused: leaves.find((o) => o.focused)?.name ?? null })
   const resolved = 'resolved' in i.data ? (i.data.resolved as { channels?: Record<string, { permissions?: string }> } | undefined) : undefined
   const channels = Object.fromEntries(Object.entries(resolved?.channels ?? {}).map(([id, c]) => [id, { permissions: c.permissions === undefined ? null : BigInt(c.permissions) }]))

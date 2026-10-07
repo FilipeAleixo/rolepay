@@ -4,20 +4,9 @@ import { TOKEN_SYMBOLS } from '../constants/tempo.js'
 import { type Community, canPropose } from '../domain/community.js'
 import { DiscordIdSchema } from '../domain/ids.js'
 import { type Micros, formatAmount } from '../domain/money.js'
-import { applyAmountPlan } from '../domain/proposal/amounts.js'
-import {
-  type CriteriaError,
-  type CriteriaEvidence,
-  type ScannedMessage,
-  evaluateCriteria,
-  needsMembers,
-  resolveCriteria,
-  scanPlan,
-  seenUsers,
-} from '../domain/proposal/criteria.js'
+import { type CriteriaError, resolveCriteria } from '../domain/proposal/criteria.js'
 import { amountsIn } from '../domain/proposal/numbers.js'
 import {
-  type ChannelScan,
   type EditError,
   type Problem,
   type Proposal,
@@ -39,6 +28,7 @@ import type { CommunityRepository, PayeeRepository, ProposalRepository, RunRepos
 import type { ProposerFailure, ProposerUsage, RunProposer } from '../ports/runProposer.js'
 import { type InvalidInput, invalidInput } from './common.js'
 import type { CommunityService } from './communityService.js'
+import { runCriteria } from './criteriaRunner.js'
 import type { PayRunService } from './payRunService.js'
 import { type Stopwatch, stopwatch, timedActivity } from './proposalTimings.js'
 
@@ -227,66 +217,11 @@ export class ProposalService {
     if (!resolved.ok) return this.fail('criteria', resolved.error, { usage, timer })
     const { criteria, plan } = resolved.value
 
-    // Read what the criteria need, within the bounds.
-    const scans: ChannelScan[] = []
-    const scanned: ScannedMessage[] = []
-    let budget = PROPOSAL_LIMITS.maxScannedMessages
-    const read = async (channelId: string, since: Date, until: Date) => {
-      const r = await activity.history({ channelId, since, until, limit: budget })
-      if (!r.ok) return r
-      budget -= r.value.messages.length
-      scans.push({ channelId, since, until, messages: r.value.messages.length, truncated: r.value.truncated })
-      return ok(r.value.messages.filter((m) => !m.authorIsBot))
-    }
-    const span = scanPlan(criteria)
-    for (const channelId of span?.channelIds ?? []) {
-      const r = await read(channelId, span?.since as Date, span?.until as Date)
-      if (!r.ok) return this.fail('criteria', r.error, { usage, scannedMessages: scanned.length })
-      scanned.push(...r.value.map((m) => ({ channelId: m.channelId, authorId: m.authorId, at: m.at, replyToAuthorId: m.replyTo?.authorId ?? null })))
-    }
-    const evidence: { -readonly [K in keyof CriteriaEvidence]: CriteriaEvidence[K] } = { messages: scanned, reactors: null, mentioned: null, threadPosters: null, paidUserIds: null, members: {} }
-    if (criteria.postedIn) {
-      const r = await read(criteria.postedIn.threadId, new Date(now.getTime() - PROPOSAL_LIMITS.maxLookbackDays * DAY_MS), now)
-      if (!r.ok) return this.fail('criteria', r.error, { usage, scannedMessages: scanned.length })
-      evidence.threadPosters = [...new Set(r.value.map((m) => m.authorId))]
-    }
-    if (criteria.reactedTo) {
-      const r = await activity.reactions({ ...criteria.reactedTo, limit: 1000 })
-      if (!r.ok) return this.fail('criteria', r.error, { usage, scannedMessages: scanned.length })
-      evidence.reactors = r.value.userIds
-    }
-    if (criteria.mentionedIn) {
-      const r = await activity.message(criteria.mentionedIn)
-      if (!r.ok) return this.fail('criteria', r.error, { usage, scannedMessages: scanned.length })
-      evidence.mentioned = r.value.mentionIds
-    }
-    if (criteria.paidInRun) {
-      const run = criteria.paidInRun.last
-        ? (await this.deps.runs.listByCommunity(community.id, { limit: 50 })).find((r) => r.status === 'paid')
-        : await this.deps.runs.get(criteria.paidInRun.runId as string)
-      const paid = run && run.communityId === community.id && run.status === 'paid' ? run : null
-      criteria.paidInRun = { ...criteria.paidInRun, runId: paid?.id ?? criteria.paidInRun.runId }
-      evidence.paidUserIds = paid ? paid.lines.map((l) => l.payeeDiscordId) : []
-    }
-
-    // Candidates: the registered payees, plus (to list them) people the evidence shows who are not.
-    const registered = await this.registered(community.id)
-    const others = seenUsers(criteria, evidence)
-      .filter((u) => !registered.has(u))
-      .slice(0, PROPOSAL_LIMITS.maxUnregisteredCandidates)
-    const candidates = [...[...registered].sort(byId), ...others]
-    if (needsMembers(criteria)) evidence.members = await activity.members(community.id, candidates)
-    const matched = evaluateCriteria(criteria, evidence, candidates, input.actor).filter((v) => v.matched)
-
-    const amounts = applyAmountPlan(
-      plan,
-      matched.filter((v) => registered.has(v.userId)),
-    )
-    if (!amounts.ok) {
-      const issue = amounts.error.code === 'overrides_exceed_pool' ? 'the overrides add up to more than the pool' : 'the amount depends on a count the criteria do not make'
-      return this.fail('criteria', { code: 'criteria_invalid', issues: [issue] }, { usage, scannedMessages: scanned.length })
-    }
-    const amountOf = new Map(amounts.value.map((a) => [a.userId, a]))
+    // Read what the criteria need (within the bounds) and run them over the payees: code only.
+    const ran = await runCriteria({ activity, payees: this.deps.payees, runs: this.deps.runs }, { communityId: community.id, criteria, plan, authorId: input.actor, now })
+    if (!ran.ok) return this.fail('criteria', ran.error, { usage, scannedMessages: ran.scannedMessages, timer })
+    const { matched, registered, scans } = ran.value
+    const amountOf = new Map(ran.value.amounts.map((a) => [a.userId, a]))
     const sources = [criteria.reactedTo, criteria.mentionedIn].filter((s) => s !== null).map(({ channelId, messageId }) => ({ channelId, messageId }))
     const lines: ProposalLine[] = []
     const unregistered: UnregisteredLine[] = []
@@ -309,7 +244,7 @@ export class ProposalService {
       instruction: instruction.data,
       note: resolved.value.note,
       source: null,
-      criteria,
+      criteria: ran.value.criteria,
       amountPlan: plan,
       scans,
       unresolved: [],
@@ -322,7 +257,7 @@ export class ProposalService {
       ...assembled,
     })
     await this.deps.proposals.save(proposal)
-    this.record(proposal, { sourceMessages: 0, scannedMessages: scanned.length, usage, timer })
+    this.record(proposal, { sourceMessages: 0, scannedMessages: ran.value.scannedMessages, usage, timer })
     return ok(proposal)
   }
 

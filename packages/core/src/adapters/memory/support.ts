@@ -29,6 +29,12 @@ export class SequentialIds implements IdGenerator {
   proposalId() {
     return `prop_${String(++this.n).padStart(6, '0')}`
   }
+  policyId() {
+    return `pol_${String(++this.n).padStart(6, '0')}`
+  }
+  policyRunId() {
+    return `prun_${String(++this.n).padStart(6, '0')}`
+  }
 }
 
 /** A transparent vault for unit tests: it binds context like the real one, without crypto. */

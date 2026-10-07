@@ -97,6 +97,10 @@ export class FakePayoutChain implements PayoutChain {
     return { address, secret }
   }
 
+  async balanceOf(input: { token: Address; account: Address }) {
+    return this.balance(input.token, input.account)
+  }
+
   async keyState(input: { account: Address; accessKey: Address; token: Address; feeToken: Address | null }): Promise<KeyState> {
     const k = this.keys.get(lc(input.accessKey))
     const base = { chainTime: this.time, feeBudgetRemaining: null }

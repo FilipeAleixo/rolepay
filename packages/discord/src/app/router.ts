@@ -2,18 +2,39 @@ import { ResponseType } from '../api.js'
 import { exportCommand } from '../commands/export.js'
 import { newRunCommand } from '../commands/newRun.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
+import {
+  policyChoices,
+  policyListCommand,
+  policyModeCommand,
+  policyNewCommand,
+  policyPauseCommand,
+  policyResumeCommand,
+  policyRunNowCommand,
+  policyShowCommand,
+} from '../commands/policy.js'
 import { proposeCommand } from '../commands/propose.js'
 import { PROPOSE_MESSAGE_COMMAND, proposeFromMessageCommand } from '../commands/proposeFromMessage.js'
 import { runChoices } from '../commands/runChoices.js'
 import { setupCommand } from '../commands/setup.js'
 import { statusCommand } from '../commands/status.js'
-import { type ProposalAction, type ProposalModal, type RunAction, decodeCustomId, decodeProposalId, decodeProposalModalId } from '../components/customId.js'
+import {
+  type PolicyAction,
+  type ProposalAction,
+  type ProposalModal,
+  type RunAction,
+  decodeCustomId,
+  decodePolicyButton,
+  decodeProposalId,
+  decodeProposalModalId,
+  decodeVetoButton,
+} from '../components/customId.js'
+import { approvePolicyButton, discardPolicyButton, vetoButton } from '../components/policyButtons.js'
 import { createProposalRunButton, discardProposalButton, editProposalButton } from '../components/proposalButtons.js'
 import { editModalSubmit, instructionModalSubmit } from '../components/proposalModals.js'
 import { approveButton, cancelButton, retryButton } from '../components/runButtons.js'
 import type { Dispatch, InteractionLabel } from '../http/handler.js'
 import type { DiscordAppDeps } from './deps.js'
-import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext, MessageCommandHandler, ModalHandler, ProposalButtonHandler } from './handlers.js'
+import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext, MessageCommandHandler, ModalHandler, PolicyButtonHandler, ProposalButtonHandler } from './handlers.js'
 import { type ParsedInteraction, parseInteraction } from './interaction.js'
 import { type Outcome, ephemeralReply, renderLate, renderOutcome } from './outcome.js'
 
@@ -24,17 +45,34 @@ const COMMANDS: Record<string, CommandHandler> = {
   'rolepay status': statusCommand,
   'rolepay export': exportCommand,
   'rolepay propose': proposeCommand,
+  'rolepay policy new': policyNewCommand,
+  'rolepay policy list': policyListCommand,
+  'rolepay policy show': policyShowCommand,
+  'rolepay policy pause': policyPauseCommand,
+  'rolepay policy resume': policyResumeCommand,
+  'rolepay policy mode': policyModeCommand,
+  /** Demo control; registered only with ROLEPAY_DEMO_CONTROLS on Moderato, refused otherwise. */
+  'rolepay policy run_now': policyRunNowCommand,
   'payee link': payeeLinkCommand,
 }
 
 /** Right-click commands on a message, by their registered name. Kept in step with COMMAND_DEFINITIONS by a test. */
 const MESSAGE_COMMANDS: Record<string, MessageCommandHandler> = { [PROPOSE_MESSAGE_COMMAND]: proposeFromMessageCommand }
 
-const AUTOCOMPLETE: Record<string, AutocompleteHandler> = { 'rolepay status': runChoices, 'rolepay export': runChoices }
+const AUTOCOMPLETE: Record<string, AutocompleteHandler> = {
+  'rolepay status': runChoices,
+  'rolepay export': runChoices,
+  'rolepay policy show': policyChoices,
+  'rolepay policy pause': policyChoices,
+  'rolepay policy resume': policyChoices,
+  'rolepay policy mode': policyChoices,
+  'rolepay policy run_now': policyChoices,
+}
 
 const BUTTONS: Record<RunAction, ButtonHandler> = { approve: approveButton, cancel: cancelButton, retry: retryButton }
 const PROPOSAL_BUTTONS: Record<ProposalAction, ProposalButtonHandler> = { create: createProposalRunButton, edit: editProposalButton, discard: discardProposalButton }
 const MODALS: Record<ProposalModal, ModalHandler> = { instruct: instructionModalSubmit, edit: editModalSubmit }
+const POLICY_BUTTONS: Record<PolicyAction, PolicyButtonHandler> = { approve: approvePolicyButton, discard: discardPolicyButton }
 
 export const ROUTED_COMMANDS = Object.keys(COMMANDS)
 export const ROUTED_MESSAGE_COMMANDS = Object.keys(MESSAGE_COMMANDS)
@@ -124,6 +162,10 @@ async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: Disc
       if (id && handler) return handler({ runId: id.runId, messageId: i.messageId, ctx }, deps)
       const proposal = decodeProposalId(i.customId)
       if (proposal) return PROPOSAL_BUTTONS[proposal.action]({ proposalId: proposal.proposalId, messageId: i.messageId, ctx }, deps)
+      const policy = decodePolicyButton(i.customId)
+      if (policy) return POLICY_BUTTONS[policy.action]({ policyId: policy.policyId, version: policy.version, messageId: i.messageId, ctx }, deps)
+      const veto = decodeVetoButton(i.customId)
+      if (veto) return vetoButton({ policyRunId: veto.policyRunId, messageId: i.messageId, ctx }, deps)
       return ephemeralReply('Sorry, I do not know that button. It may be from an older version.')
     }
     case 'message_command': {

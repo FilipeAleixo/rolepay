@@ -11,6 +11,7 @@ import { prebuiltAssets } from './assets.js'
 import { composeServer } from './compose.js'
 import { parseServerConfig } from './config.js'
 import { loadEnvironment } from './env.js'
+import { auditPortFromCore, policyPortFromCore } from './policySeam.js'
 
 const log = (event: string, fields: Record<string, unknown> = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ...fields }))
 
@@ -22,13 +23,24 @@ async function main() {
   const config = parseServerConfig(env)
   const { deps, kv, close } = await openRolepayAdapters(config.core)
   const rest = new FetchDiscordRest({ botToken: config.discord.botToken })
-  // AI proposals read Discord through the bot's REST client; one log line per proposal (counts and cost, never text).
-  const rolepay = createRolepay({ ...deps, activity: new RestActivityReader(rest), proposalLog: (entry) => log('proposal', entry) })
+  // AI proposals and policies read Discord through the bot's REST client; one log line per proposal (counts and cost, never text).
+  const activity = new RestActivityReader(rest)
+  const rolepay = createRolepay({
+    ...deps,
+    activity,
+    proposalLog: (entry) => log('proposal', entry),
+    // Standing policies: the shortest veto window (1 minute with the testnet demo controls, ROLEPAY_DEMO_CONTROLS).
+    minVetoMinutes: config.policies.minVetoMinutes,
+    onAuditError: (error) => log('audit_error', { message: error instanceof Error ? error.message.slice(0, 200) : 'unknown' }),
+  })
   const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
   const assets = prebuiltAssets(join(import.meta.dirname, 'rolepay.js')) ?? bundledAssets()
-  const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets }
+  // The dashboard's policy seam: its Policies and Audit pages over core's policy services and audit stream.
+  const dashboard = { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay) }
+  const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets, dashboard }
   const composed = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web, log })
   const recovery = composed.startRecovery()
+  const scheduler = composed.startScheduler()
 
   const server = serve({ fetch: composed.app.fetch, hostname: config.http.host, port: config.http.port }, (info) => {
     log('listening', {
@@ -39,6 +51,7 @@ async function main() {
       publicUrl: config.web.origin,
       passkeyRpId: config.web.rpId,
       ai: config.core.ai.apiKey ? config.core.ai.model : 'off (no ANTHROPIC_API_KEY)',
+      dashboard: config.dashboard.clientSecret ? `${config.web.origin}/dashboard` : 'sign-in off (no ROLEPAY_DISCORD_CLIENT_SECRET)',
     })
   })
 
@@ -49,6 +62,7 @@ async function main() {
     log('stopping', { signal })
     server.close()
     await recovery.stop()
+    await scheduler.stop()
     // Give payments in flight a moment; anything cut short is reconciled on the next start.
     await Promise.race([composed.drain(), new Promise((r) => setTimeout(r, 10_000))])
     await close()

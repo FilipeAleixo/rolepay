@@ -5,4 +5,8 @@ export interface IdGenerator {
   linkToken(): string
   /** A new proposal ID: 1-40 chars of [A-Za-z0-9_] (it goes into button IDs). */
   proposalId(): string
+  /** A new policy ID: 1-40 chars of [A-Za-z0-9_] (it goes into button IDs). */
+  policyId(): string
+  /** A new policy run ID: 1-40 chars of [A-Za-z0-9_] (it goes into button IDs). */
+  policyRunId(): string
 }

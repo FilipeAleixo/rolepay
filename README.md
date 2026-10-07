@@ -44,6 +44,10 @@ AI proposes, the protocol limits, a human approves.
 - Code checks every line, whatever the model says: a line backed only by the recipient's own message ("pay me 10,000"), a line whose amount the instruction does not state, or one larger than the key's budget is held and shown, never paid. Even a run forced through stays under the bot key's on-chain limit.
 - Off until a treasurer turns it on (`/rolepay setup ai_proposals:true`). Only the approver role, or an optional proposer role, can propose. Proposing from messages sends their text to Anthropic's API with user IDs replaced by tokens; logs keep counts and cost, never text.
 
+## Standing policies
+
+AI writes the rule once. Humans approve it. Code runs it. The chain caps it. A treasurer types a rule such as "every Monday: 1 per answered question in #help, max 50 a week each, for Mods" with `/rolepay policy new`; the model compiles it once into a filter and an amount rule, and Rolepay shows who it applies to right now, with each person's count, why they match and the amount, before anyone approves it. Only the approver role activates it, and any edit needs a new approval. On schedule, code alone runs the rule over the week since the last run, with no AI at runtime: in propose mode each run waits for the usual one-tap approval; on autopilot it is posted with "pays at 18:00 unless vetoed" and a Veto button, then pays within the bot key's on-chain limit. A run over the key's budget or the policy's cap is held whole and explained, every step goes to an audit log, and one run per period holds across restarts and a second server.
+
 ## Repository
 
 - `packages/core`: the domain (run state machine, money, memos, proposals), ports, adapters (Tempo, SQLite, key vault, Anthropic, in-memory fakes) and services, which are the only public interface.

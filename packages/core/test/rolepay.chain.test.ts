@@ -167,6 +167,9 @@ describe('pay run end to end on Moderato (service level)', () => {
     expect(events.map((e) => e.txHash)).toEqual([txHash, txHash, txHash])
     const s = await rolepay.communities.keyStatus({ guildId })
     expect(s.ok && s.value.state.remaining).toBe(usd('10') - firstRun.total)
+    // The dashboard's treasury balance is the same number the token contract reports.
+    const balance = await rolepay.communities.treasuryBalance({ guildId })
+    expect(balance.ok && balance.value.balance).toBe(await testnet.balance(TOKEN, root.address))
   })
 
   it('executing and reconciling the paid run again never pays twice', async () => {

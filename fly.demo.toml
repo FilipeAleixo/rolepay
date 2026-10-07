@@ -18,6 +18,9 @@ swap_size_mb = 512
 [env]
   ROLEPAY_NETWORK = "moderato"
   ROLEPAY_DEV_SHORTCUTS = "false"
+  # run_now and one-minute veto windows for the approver role, so judges can see autopilot without
+  # waiting a week. Not the dev shortcuts (no treasury or key shortcuts).
+  ROLEPAY_DEMO_CONTROLS = "true"
   PUBLIC_URL = "https://demo.rolepay.app"
   # Passkeys made here bind to the demo host only, never to the mainnet app.
   ROLEPAY_RP_ID = "demo.rolepay.app"

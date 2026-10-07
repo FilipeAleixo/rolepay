@@ -3,6 +3,8 @@ import { type Clock, NETWORKS, type Rolepay } from '@rolepay/core'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
 import type { WebConfig } from './config.js'
+import { type DashboardDeps, dashboardRoutes } from './dashboard/index.js'
+import { DASHBOARD_STYLE } from './dashboard/views/layout.js'
 import type { Assets, PasskeySessions, RateLimiter } from './ports.js'
 import { claimRoutes } from './routes/claim.js'
 import { setupRoutes } from './routes/setup.js'
@@ -23,6 +25,8 @@ export type WebAppDeps = {
    * or proxy in front appended).
    */
   rateLimits?: { perClient: RateLimiter; overall: RateLimiter; clientKey?: (req: Request) => string }
+  /** The web dashboard (Discord sign-in, /dashboard). Absent: not served. */
+  dashboard?: DashboardDeps
 }
 
 /** The client as the proxy in front saw it: the last X-Forwarded-For hop, which it appended. */
@@ -36,11 +40,11 @@ const lastForwardedHop = (req: Request) => req.headers.get('x-forwarded-for')?.s
 function contentSecurityPolicy(config: WebConfig): string {
   const origin = (u: string | null) => (u && URL.canParse(u) ? [new URL(u).origin] : [])
   const connect = ["'self'", ...new Set([...origin(config.rpcUrl), ...origin(config.sponsorUrl)])]
-  const style = `'sha256-${createHash('sha256').update(STYLE).digest('base64')}'`
+  const styles = [STYLE, DASHBOARD_STYLE].map((s) => `'sha256-${createHash('sha256').update(s).digest('base64')}'`)
   return [
     "default-src 'none'",
     "script-src 'self'",
-    `style-src ${style}`,
+    `style-src ${styles.join(' ')}`,
     `connect-src ${connect.join(' ')}`,
     "img-src 'self' data:",
     "form-action 'self'",
@@ -50,7 +54,15 @@ function contentSecurityPolicy(config: WebConfig): string {
   ].join('; ')
 }
 
-const RATE_LIMITED_PREFIXES = /^\/(webauthn|claim|setup)\//
+const RATE_LIMITED_PREFIXES = /^\/(webauthn|claim|setup|dashboard)\//
+
+/**
+ * Which budget a request takes from: the public POSTs (passkeys, claim, setup, dashboard actions),
+ * and every request of the Discord sign-in (each one writes a record or calls Discord), never
+ * the dashboard's pages.
+ */
+const rateLimitGroup = (method: string, path: string) =>
+  path.startsWith('/auth/') ? 'auth' : method === 'POST' ? RATE_LIMITED_PREFIXES.exec(path)?.[1] : undefined
 
 /**
  * The web pages: the recipient claim page and the treasurer setup page, their JSON
@@ -76,7 +88,8 @@ export function createWebApp(deps: WebAppDeps): Hono {
     }
     await next()
     c.header('cache-control', c.res.headers.get('cache-control') ?? 'no-store')
-    c.header('referrer-policy', 'no-referrer')
+    // no-referrer, except where a route asks for same-origin (the dashboard's forms need it: see dashboard/kit.ts).
+    c.header('referrer-policy', c.res.headers.get('referrer-policy') === 'same-origin' ? 'same-origin' : 'no-referrer')
     c.header('x-content-type-options', 'nosniff')
     c.header('x-frame-options', 'DENY')
     c.header('content-security-policy', csp)
@@ -88,7 +101,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
     const { perClient, overall } = deps.rateLimits
     const clientKey = deps.rateLimits.clientKey ?? lastForwardedHop
     app.use(async (c, next) => {
-      const group = c.req.method === 'POST' ? RATE_LIMITED_PREFIXES.exec(c.req.path)?.[1] : undefined
+      const group = rateLimitGroup(c.req.method, c.req.path)
       if (group && (!(await perClient.take(`${group}:${clientKey(c.req.raw)}`)) || !(await overall.take(group)))) {
         return c.json({ ok: false, error: { code: 'rate_limited' } }, 429, { 'retry-after': '30' })
       }
@@ -118,5 +131,6 @@ export function createWebApp(deps: WebAppDeps): Hono {
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
   app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))
   app.route('/', setupRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))
+  if (deps.dashboard) app.route('/', dashboardRoutes({ ...deps.dashboard, rolepay: deps.rolepay, clock: deps.clock, config, testnet }))
   return app
 }

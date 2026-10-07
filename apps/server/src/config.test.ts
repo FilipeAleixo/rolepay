@@ -33,8 +33,27 @@ describe('parseServerConfig', () => {
     expect(c.app.defaultPayoutToken).toBe(TESTNET_TOKENS.alpha_usd)
     expect(c.app.botKey).toEqual({ limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400 })
     expect(c.app.devShortcuts).toBe(false)
+    expect(c.app.demoControls).toBe(false)
     expect(c.app.authorizeHint).toBeNull()
     expect(c.recoveryIntervalMs).toBe(30_000)
+    expect(c.policies).toEqual({ schedulerIntervalMs: 30_000, minVetoMinutes: 60 })
+  })
+
+  it('policies: the scheduler interval is configurable; the demo controls (not the dev shortcuts) allow a one-minute veto window', () => {
+    expect(parseServerConfig(env({ ROLEPAY_SCHEDULER_INTERVAL_SECONDS: '10' })).policies.schedulerIntervalMs).toBe(10_000)
+    expect(parseServerConfig(env({ ROLEPAY_DEMO_CONTROLS: 'true' })).policies.minVetoMinutes).toBe(1)
+    expect(parseServerConfig(env({ ROLEPAY_DEV_SHORTCUTS: 'true' })).policies.minVetoMinutes).toBe(60)
+  })
+
+  it('the demo controls (run_now, short veto windows) exist only with ROLEPAY_DEMO_CONTROLS=true on testnet, and never turn on the dev shortcuts', () => {
+    const demo = parseServerConfig(env({ ROLEPAY_DEMO_CONTROLS: 'true' }))
+    expect([demo.app.demoControls, demo.app.devShortcuts, demo.app.authorizeHint]).toEqual([true, false, null])
+    const dev = parseServerConfig(env({ ROLEPAY_DEV_SHORTCUTS: 'true' }))
+    expect([dev.app.demoControls, dev.app.devShortcuts]).toEqual([false, true])
+    expect(parseServerConfig(env()).app.demoControls).toBe(false)
+    const mainnet = { ROLEPAY_NETWORK: 'mainnet', ROLEPAY_ALLOW_MAINNET: 'true', ROLEPAY_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001' }
+    expect(() => parseServerConfig(env({ ...mainnet, ROLEPAY_DEMO_CONTROLS: 'true' }))).toThrow(/ROLEPAY_DEMO_CONTROLS/)
+    expect(parseServerConfig(env(mainnet)).app.demoControls).toBe(false)
   })
 
   it('the dev shortcuts (and their hint) exist only with ROLEPAY_DEV_SHORTCUTS=true on testnet', () => {
@@ -55,6 +74,20 @@ describe('parseServerConfig', () => {
     expect(c.app.botKey.periodSeconds).toBe(7 * 86_400)
     expect(c.web.botKeyDefaults).toMatchObject({ limit: 250_500_000n, periodSeconds: 7 * 86_400, feeBudget: 2_000_000n })
     expect(c.discord.devGuildId).toBe('1094309218049937418')
+  })
+
+  it("the dashboard's Discord sign-in: client ID = the app ID, the secret from ROLEPAY_DISCORD_CLIENT_SECRET (unset or blank: not configured)", () => {
+    expect(parseServerConfig(env()).dashboard).toEqual({ clientId: '500000000000000001', clientSecret: null })
+    expect(parseServerConfig(env({ ROLEPAY_DISCORD_CLIENT_SECRET: '' })).dashboard.clientSecret).toBeNull()
+    expect(parseServerConfig(env({ ROLEPAY_DISCORD_CLIENT_SECRET: 'oauth-client-secret' })).dashboard).toEqual({ clientId: '500000000000000001', clientSecret: 'oauth-client-secret' })
+    let message = ''
+    try {
+      parseServerConfig(env({ ROLEPAY_DISCORD_CLIENT_SECRET: 'has a space', DISCORD_APP_ID: 'nope' }))
+    } catch (e) {
+      message = (e as Error).message
+    }
+    expect(message).toMatch(/ROLEPAY_DISCORD_CLIENT_SECRET/)
+    expect(message).not.toContain('has a space')
   })
 
   it('the rate limits key on the last X-Forwarded-For hop unless ROLEPAY_CLIENT_IP_HEADER names the header the proxy in front sets', () => {

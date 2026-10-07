@@ -436,4 +436,18 @@ describe('CommunityService', () => {
       expect(await svc.confirmRevocation({ guildId: '1094309218049937419', keyAddress })).toEqual({ ok: false, error: { code: 'community_not_found' } })
     })
   })
+
+  describe('treasury balance (the web dashboard)', () => {
+    it('reads what the treasury holds in the payout token from the chain', async () => {
+      await register()
+      expect(await svc.treasuryBalance({ guildId: GUILD })).toEqual({ ok: true, value: { address: TREASURY, token: TOKEN, balance: 0n } })
+      chain.fund(TOKEN, TREASURY, 250_500_000n)
+      chain.fund(FEE_TOKEN, TREASURY, 9_000_000n)
+      expect(await svc.treasuryBalance({ guildId: GUILD })).toEqual({ ok: true, value: { address: TREASURY, token: TOKEN, balance: 250_500_000n } })
+    })
+
+    it('says community_not_found for an unknown guild', async () => {
+      expect(await svc.treasuryBalance({ guildId: GUILD })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+    })
+  })
 })

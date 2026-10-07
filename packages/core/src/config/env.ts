@@ -11,6 +11,7 @@ const EnvSchema = z.object({
   ROLEPAY_SPONSOR_URL: z.url().optional(),
   ROLEPAY_LINK_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   ROLEPAY_DEV_SHORTCUTS: z.enum(['true', 'false']).default('false'),
+  ROLEPAY_DEMO_CONTROLS: z.enum(['true', 'false']).default('false'),
   /** AI proposals. Optional: without it the AI commands answer that AI is not configured. */
   ANTHROPIC_API_KEY: z
     .string()
@@ -21,7 +22,7 @@ const EnvSchema = z.object({
   ROLEPAY_AI_DAILY_CAP: z.coerce.number().int().positive().default(50),
 })
 
-const DevShortcutsSchema = EnvSchema.pick({ ROLEPAY_NETWORK: true, ROLEPAY_DEV_SHORTCUTS: true })
+const TestnetFlagsSchema = EnvSchema.pick({ ROLEPAY_NETWORK: true, ROLEPAY_DEV_SHORTCUTS: true, ROLEPAY_DEMO_CONTROLS: true })
 
 export type RolepayConfig = {
   network: NetworkName
@@ -39,6 +40,13 @@ export type RolepayConfig = {
    * on any other network they do not exist.
    */
   devShortcuts: boolean
+  /**
+   * The demo controls for standing policies: `/rolepay policy run_now` (make the next period's
+   * run now) and veto windows down to one minute (`veto_minutes`), both still for the approver
+   * role only. Only with ROLEPAY_DEMO_CONTROLS=true, and only on Moderato. Separate from the dev
+   * shortcuts, so a public demo can have them without the treasury and key shortcuts.
+   */
+  demoControls: boolean
   /** AI-proposed pay runs: the Anthropic API key (null = AI off on this server), the model and the cap on model calls per UTC day. */
   ai: { apiKey: string | null; model: string; dailyCap: number }
 }
@@ -72,19 +80,31 @@ export function deprecatedEnvNames(env: Record<string, string | undefined>): str
   return Object.keys(env).filter((name) => name.startsWith(DEPRECATED_PREFIX) && !blank(env[name]))
 }
 
+/** A testnet-only flag: true or false, and never true off Moderato (a ConfigError then). */
+function testnetFlag(raw: Record<string, string | undefined>, name: 'ROLEPAY_DEV_SHORTCUTS' | 'ROLEPAY_DEMO_CONTROLS'): boolean {
+  const parsed = TestnetFlagsSchema.safeParse(withDeprecatedEnvNames(raw))
+  if (!parsed.success) throw new ConfigError(`invalid Rolepay config: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}: invalid value`)
+  if (parsed.data[name] !== 'true') return false
+  if (parsed.data.ROLEPAY_NETWORK !== 'moderato') throw new ConfigError(`invalid Rolepay config: ${name}=true is allowed only on the Moderato testnet`)
+  return true
+}
+
 /**
  * Whether the testnet dev shortcuts are on. Reads only ROLEPAY_NETWORK and ROLEPAY_DEV_SHORTCUTS,
  * so scripts that run before the rest is configured (registering commands) can ask too.
  * Throws a ConfigError when the flag is set off testnet: the shortcuts never exist there.
  */
 export function devShortcutsEnabled(raw: Record<string, string | undefined>): boolean {
-  const parsed = DevShortcutsSchema.safeParse(withDeprecatedEnvNames(raw))
-  if (!parsed.success) throw new ConfigError(`invalid Rolepay config: ${parsed.error.issues.map((i) => i.path.join('.')).join(', ')}: invalid value`)
-  if (parsed.data.ROLEPAY_DEV_SHORTCUTS !== 'true') return false
-  if (parsed.data.ROLEPAY_NETWORK !== 'moderato') {
-    throw new ConfigError('invalid Rolepay config: ROLEPAY_DEV_SHORTCUTS=true is allowed only on the Moderato testnet')
-  }
-  return true
+  return testnetFlag(raw, 'ROLEPAY_DEV_SHORTCUTS')
+}
+
+/**
+ * Whether the demo controls are on (`run_now` and short veto windows). Reads only
+ * ROLEPAY_NETWORK and ROLEPAY_DEMO_CONTROLS, like `devShortcutsEnabled`. Throws a ConfigError
+ * when the flag is set off testnet.
+ */
+export function demoControlsEnabled(raw: Record<string, string | undefined>): boolean {
+  return testnetFlag(raw, 'ROLEPAY_DEMO_CONTROLS')
 }
 
 /** Throws a ConfigError naming the bad variables. Never includes their values. */
@@ -110,6 +130,7 @@ export function parseConfig(raw: Record<string, string | undefined>): RolepayCon
     dbPath: e.ROLEPAY_DB_PATH,
     linkTtlSeconds: e.ROLEPAY_LINK_TTL_SECONDS,
     devShortcuts: devShortcutsEnabled(env),
+    demoControls: demoControlsEnabled(env),
     ai: { apiKey: e.ANTHROPIC_API_KEY ?? null, model: e.ROLEPAY_AI_MODEL, dailyCap: e.ROLEPAY_AI_DAILY_CAP },
   }
 }

@@ -49,9 +49,19 @@ describe('@rolepay/web layering', () => {
     expect(violations(files(join(SRC, 'views')), (t) => t.startsWith('src/views'))).toEqual([])
   })
 
+  it('dashboard views are pure builders too: other views, the port types and @rolepay/core (types, formatting), no IO', () => {
+    const pure = /^(views\/|dashboard\/views\/|dashboard\/policyPort\.js$|dashboard\/ports\.js$)/
+    const bad = files(join(SRC, 'dashboard', 'views')).flatMap((f) =>
+      importsOf(f)
+        .filter((spec) => (spec.startsWith('.') ? !pure.test(relative(SRC, resolve(dirname(f), spec)).split('\\').join('/')) : spec !== '@rolepay/core'))
+        .map((spec) => `${relative(PKG, f)} imports ${spec}`),
+    )
+    expect(bad).toEqual([])
+  })
+
   it('production code never imports the testing fakes, and the root exports none', () => {
     const prod = files(SRC).filter((f) => !f.includes(join('src', 'testing')))
     expect(violations(prod, (t) => t !== 'src/testing')).toEqual([])
-    expect(Object.keys(root).filter((k) => /Fake|static/.test(k))).toEqual([])
+    expect(Object.keys(root).filter((k) => /Fake|static|InMemory/.test(k))).toEqual([])
   })
 })

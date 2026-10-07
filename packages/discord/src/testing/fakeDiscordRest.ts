@@ -27,7 +27,7 @@ export class FakeDiscordRest implements DiscordRest {
   readonly edits: { reply: ReplyHandle; message: Message }[] = []
   readonly deletes: ReplyHandle[] = []
   readonly followUps: { reply: ReplyHandle; message: Message }[] = []
-  readonly channelPosts: { channelId: string; message: Message }[] = []
+  readonly channelPosts: { channelId: string; message: Message; messageId?: string }[] = []
   readonly channelEdits: { channelId: string; messageId: string; message: Message }[] = []
   readonly goneMessages = new Set<string>()
   readonly guilds = new Map<string, string>()
@@ -41,12 +41,12 @@ export class FakeDiscordRest implements DiscordRest {
   readonly roles = new Map<string, { id: string; name: string; managed?: boolean }[]>()
   readonly channels = new Map<string, { id: string; name: string; type: number }[]>()
   readonly threads = new Map<string, { id: string; name: string; type: number; parent_id?: string }[]>()
-  private members = new Map<string, { roles: string[]; joinedAt: Date | null }>()
+  private members = new Map<string, { roles: string[]; joinedAt: Date | null; name: string | null }>()
   private history = new Map<string, WireMessage[]>()
   private reacted = new Map<string, Map<string, { id: string; bot?: boolean }[]>>()
 
-  setMember(guildId: string, userId: string, roles: string[], joinedAt: Date | null = null) {
-    this.members.set(`${guildId}:${userId}`, { roles, joinedAt })
+  setMember(guildId: string, userId: string, roles: string[], joinedAt: Date | null = null, name: string | null = null) {
+    this.members.set(`${guildId}:${userId}`, { roles, joinedAt, name })
   }
 
   /** Messages in a channel or thread, as Discord would send them. */
@@ -90,6 +90,13 @@ export class FakeDiscordRest implements DiscordRest {
     return OK
   }
 
+  private posted = 0
+  async postMessage(channelId: string, message: Message) {
+    const messageId = `9${String(++this.posted).padStart(17, '0')}`
+    this.channelPosts.push({ channelId, message, messageId })
+    return { ok: true as const, value: { messageId } }
+  }
+
   async editChannelMessage(channelId: string, messageId: string, message: Message): Promise<RestResult> {
     if (this.goneMessages.has(messageId)) return { ok: false, error: { code: 'not_found' } }
     this.channelEdits.push({ channelId, messageId, message })
@@ -109,7 +116,12 @@ export class FakeDiscordRest implements DiscordRest {
 
   async getMember(guildId: string, userId: string) {
     const m = this.members.get(`${guildId}:${userId}`)
-    return m ? { roles: [...m.roles], joinedAt: m.joinedAt } : null
+    return m ? { roles: [...m.roles], joinedAt: m.joinedAt, name: m.name } : null
+  }
+
+  /** Removes someone from a guild (they left, or were kicked). */
+  removeMember(guildId: string, userId: string) {
+    this.members.delete(`${guildId}:${userId}`)
   }
 
   async getChannelMessages(channelId: string, query: { before?: string; limit: number }) {

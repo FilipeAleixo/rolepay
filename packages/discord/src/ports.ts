@@ -1,4 +1,4 @@
-import type { Result, SourceMessage } from '@rolepay/core'
+import type { Result, SchedulerEvent, SourceMessage } from '@rolepay/core'
 import type { Message } from './api.js'
 
 /**
@@ -27,14 +27,19 @@ export interface DiscordRest {
   followUp(reply: ReplyHandle, message: Message): Promise<RestResult>
   /** Posts as the bot (bot token). The fallback once an interaction token has expired. */
   postToChannel(channelId: string, message: Message): Promise<RestResult>
+  /** Posts as the bot and says the new message's ID, so it can be edited later (a policy's run message). */
+  postMessage(channelId: string, message: Message): Promise<Result<{ messageId: string }, RestError>>
   /** Edits a message in a channel as the bot (a pay run's review once its interaction token has expired). */
   editChannelMessage(channelId: string, messageId: string, message: Message): Promise<RestResult>
   /** The guild's name, or null if the bot is not in it. Needs no privileged intent. */
   getGuild(guildId: string): Promise<{ name: string } | null>
   /** Opens a DM with the user and posts. `dm_closed` when they do not accept DMs from the server. */
   sendDm(userId: string, message: Message): Promise<RestResult>
-  /** One guild member's roles and join date, or null if they are not a member. Needs no privileged intent. */
-  getMember(guildId: string, userId: string): Promise<{ roles: string[]; joinedAt: Date | null } | null>
+  /**
+   * One guild member's roles, join date and display name (server nickname, else global name, else
+   * username), or null if they are not a member. Needs no privileged intent.
+   */
+  getMember(guildId: string, userId: string): Promise<{ roles: string[]; joinedAt: Date | null; name: string | null } | null>
 
   // ---- reads for AI proposals (the activity reader validates every shape) --------------------
   /**
@@ -110,4 +115,13 @@ export interface MemberDirectory {
 export interface PendingSources {
   put(key: { userId: string; messageId: string }, message: SourceMessage): Promise<void>
   take(key: { userId: string; messageId: string }): Promise<SourceMessage | null>
+}
+
+/**
+ * Tells a community what the policy scheduler did: posts each new policy run in the policy's
+ * channel (the review embed in propose mode, the veto message in autopilot, held and empty
+ * notices) and updates those messages when autopilot releases, holds or pays them.
+ */
+export interface PolicyAnnouncer {
+  announce(events: readonly SchedulerEvent[]): Promise<void>
 }

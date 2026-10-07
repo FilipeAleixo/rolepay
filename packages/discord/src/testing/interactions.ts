@@ -30,6 +30,12 @@ function options(values: Record<string, OptionValue | undefined>, focused?: stri
 
 export type InteractionScope = { guildId: string | null; channelId?: string; applicationId?: string }
 
+/** `sub` is a subcommand ("new") or a group and a subcommand ("policy new"), as Discord nests them. */
+function nest(sub: string, leaves: unknown[]) {
+  const [first, second] = sub.split(' ')
+  return second ? [{ type: 2, name: first, options: [{ type: 1, name: second, options: leaves }] }] : [{ type: 1, name: first, options: leaves }]
+}
+
 export function slashCommand(
   scope: InteractionScope,
   command: string,
@@ -49,7 +55,7 @@ export function slashCommand(
       id: '900000000000000001',
       name: command,
       type: 1,
-      options: [{ type: 1, name: sub, options: options(values) }],
+      options: nest(sub, options(values)),
       ...(who.channels ? { resolved: { channels: Object.fromEntries(Object.entries(who.channels).map(([id, p]) => [id, { id, type: 0, permissions: String(p) }])) } } : {}),
     },
   }
@@ -62,7 +68,7 @@ export function autocomplete(scope: InteractionScope, command: string, sub: stri
   return {
     ...slashCommand(scope, command, sub, {}, who),
     type: 4,
-    data: { id: '900000000000000001', name: command, type: 1, options: [{ type: 1, name: sub, options: options(values, focused) }] },
+    data: { id: '900000000000000001', name: command, type: 1, options: nest(sub, options(values, focused)) },
   }
 }
 

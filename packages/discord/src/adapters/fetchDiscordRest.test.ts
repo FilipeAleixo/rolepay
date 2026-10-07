@@ -33,6 +33,16 @@ describe('FetchDiscordRest', () => {
     expect(JSON.parse(calls[0]?.body as string)).toEqual({ content: 'paid' })
   })
 
+  it('posts a message as the bot and returns its ID (so a policy run message can be edited later)', async () => {
+    const { fetch, calls } = fakeFetch({ status: 200, json: { id: '910000000000000001', channel_id: '700000000000000001' } }, { status: 403, json: { code: 50013 } })
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
+    expect(await rest.postMessage('700000000000000001', { content: 'run' })).toEqual({ ok: true, value: { messageId: '910000000000000001' } })
+    expect(calls[0]?.method).toBe('POST')
+    expect(calls[0]?.url).toBe(`${API}/channels/700000000000000001/messages`)
+    expect(calls[0]?.headers.get('authorization')).toBe(`Bot ${BOT_TOKEN}`)
+    expect(await rest.postMessage('700000000000000001', { content: 'run' })).toEqual({ ok: false, error: { code: 'forbidden' } })
+  })
+
   it('sends files as multipart on an edit', async () => {
     const { fetch, calls } = fakeFetch({ status: 200, json: {} })
     const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
@@ -89,9 +99,22 @@ describe('FetchDiscordRest', () => {
   it('reads one guild member with their join date, null when they are not a member', async () => {
     const { fetch, calls } = fakeFetch({ status: 200, json: { roles: ['400000000000000001'], joined_at: '2026-01-02T03:04:05.000000+00:00' } }, { status: 404, json: { code: 10007 } })
     const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
-    expect(await rest.getMember('1094309218049937418', '200000000000000001')).toEqual({ roles: ['400000000000000001'], joinedAt: new Date('2026-01-02T03:04:05.000Z') })
+    expect(await rest.getMember('1094309218049937418', '200000000000000001')).toEqual({ roles: ['400000000000000001'], joinedAt: new Date('2026-01-02T03:04:05.000Z'), name: null })
     expect(await rest.getMember('1094309218049937418', '200000000000000002')).toBeNull()
     expect(calls[0]?.url).toBe(`${API}/guilds/1094309218049937418/members/200000000000000001`)
+  })
+
+  it("reads a member's display name: the server nickname, else the global name, else the username", async () => {
+    const user = { id: '200000000000000001', username: 'felix_k', global_name: 'Felix' }
+    const { fetch } = fakeFetch(
+      { status: 200, json: { roles: [], nick: 'Treasurer Felix', user } },
+      { status: 200, json: { roles: [], nick: null, user } },
+      { status: 200, json: { roles: [], user: { ...user, global_name: null } } },
+    )
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
+    const names = []
+    for (let i = 0; i < 3; i++) names.push((await rest.getMember('1094309218049937418', user.id))?.name)
+    expect(names).toEqual(['Treasurer Felix', 'Felix', 'felix_k'])
   })
 
   it('reads channel history a page at a time (limit 1-100, before a cursor), as the bot', async () => {

@@ -41,6 +41,25 @@ describe('parseInteraction', () => {
     })
   })
 
+  it('reads a subcommand inside a group (/rolepay policy new) as "policy new", with its options', () => {
+    const r = parseInteraction({
+      ...base,
+      type: 2,
+      guild_id: '1094309218049937418',
+      member,
+      data: { name: 'rolepay', options: [{ type: 2, name: 'policy', options: [{ type: 1, name: 'new', options: [{ type: 3, name: 'instruction', value: '1 per answer' }, { type: 4, name: 'hour', value: 18 }] }] }] },
+    })
+    expect(r.ok && r.value.kind === 'command' && [r.value.command, r.value.sub, r.value.options]).toEqual(['rolepay', 'policy new', { instruction: '1 per answer', hour: 18 }])
+    const auto = parseInteraction({
+      ...base,
+      type: 4,
+      guild_id: '1094309218049937418',
+      member,
+      data: { name: 'rolepay', options: [{ type: 2, name: 'policy', options: [{ type: 1, name: 'show', options: [{ type: 3, name: 'policy', value: 'hel', focused: true }] }] }] },
+    })
+    expect(auto.ok && auto.value.kind === 'autocomplete' && [auto.value.sub, auto.value.focused]).toEqual(['policy show', 'policy'])
+  })
+
   it('reads a button click', () => {
     const r = parseInteraction({ ...base, type: 3, guild_id: '1094309218049937418', member, data: { custom_id: 'rolepay:approve:run_1', component_type: 2 } })
     expect(r.ok && r.value.kind === 'component' && r.value.customId).toBe('rolepay:approve:run_1')

@@ -1,4 +1,4 @@
-import { AddressSchema, ConfigError, DiscordIdSchema, type RolepayConfig, TESTNET_TOKENS, parseAmount, parseConfig, withDeprecatedEnvNames } from '@rolepay/core'
+import { AddressSchema, ConfigError, DiscordIdSchema, POLICY_LIMITS, type RolepayConfig, TESTNET_TOKENS, parseAmount, parseConfig, withDeprecatedEnvNames } from '@rolepay/core'
 import type { DiscordAppConfig } from '@rolepay/discord'
 import type { WebConfig } from '@rolepay/web'
 import { z } from 'zod'
@@ -11,6 +11,8 @@ const ServerEnvSchema = z.object({
   DISCORD_PUBLIC_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'must be the 64-character hex public key'),
   DISCORD_BOT_TOKEN: z.string().regex(/^\S+$/, 'must be the bot token, with no spaces'),
   DISCORD_DEV_GUILD_ID: DiscordIdSchema.optional(),
+  /** The OAuth2 client secret (Developer Portal > OAuth2) for the dashboard's "Sign in with Discord". Unset: sign-in is not configured. */
+  ROLEPAY_DISCORD_CLIENT_SECRET: z.string().regex(/^\S+$/, 'must be the OAuth2 client secret, with no spaces').optional(),
   /** The public origin of this server (claim and setup pages, WebAuthn). The tunnel URL while developing. */
   PUBLIC_URL: z.url(),
   /** Passkeys are bound to this host for good. Default: PUBLIC_URL's host. */
@@ -40,6 +42,8 @@ const ServerEnvSchema = z.object({
     .default('1')
     .refine((s) => parseAmount(s).ok, 'must be a positive amount such as 1 or 0.5'),
   ROLEPAY_RECOVERY_INTERVAL_SECONDS: z.coerce.number().int().positive().default(30),
+  /** How often the policy scheduler ticks (makes due runs, releases autopilot runs whose veto window passed). */
+  ROLEPAY_SCHEDULER_INTERVAL_SECONDS: z.coerce.number().int().positive().default(30),
 })
 
 export type ServerConfig = {
@@ -49,8 +53,12 @@ export type ServerConfig = {
   /** `clientIpHeader`: where the proxy in front puts the client's IP (lowercase), or null for the last X-Forwarded-For hop. */
   http: { host: string; port: number; clientIpHeader: string | null }
   recoveryIntervalMs: number
+  /** Standing policies: the scheduler's interval, and the shortest veto window (1 minute with the testnet demo controls). */
+  policies: { schedulerIntervalMs: number; minVetoMinutes: number }
   /** The claim and setup pages: origin, passkey relying party, chain endpoints for the browser. */
   web: WebConfig
+  /** The dashboard's Discord OAuth2 client: the app itself. `clientSecret` null = sign-in not configured. */
+  dashboard: { clientId: string; clientSecret: string | null }
 }
 
 /** Shown only with the testnet dev shortcuts on (ROLEPAY_DEV_SHORTCUTS=true). */
@@ -90,9 +98,11 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       botKey,
       authorizeHint: core.devShortcuts ? DEV_AUTHORIZE_HINT : null,
       devShortcuts: core.devShortcuts,
+      demoControls: core.demoControls,
     },
     http: { host: e.HOST, port: e.PORT, clientIpHeader: e.ROLEPAY_CLIENT_IP_HEADER ?? null },
     recoveryIntervalMs: e.ROLEPAY_RECOVERY_INTERVAL_SECONDS * 1000,
+    policies: { schedulerIntervalMs: e.ROLEPAY_SCHEDULER_INTERVAL_SECONDS * 1000, minVetoMinutes: core.demoControls ? 1 : POLICY_LIMITS.minVetoMinutes },
     web: {
       origin,
       rpId,
@@ -102,6 +112,7 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       explorerUrl: core.explorerUrl,
       botKeyDefaults: { ...botKey, feeBudget: feeBudget.value },
     },
+    dashboard: { clientId: e.DISCORD_APP_ID, clientSecret: e.ROLEPAY_DISCORD_CLIENT_SECRET ?? null },
   }
 }
 

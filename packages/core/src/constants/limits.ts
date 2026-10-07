@@ -31,3 +31,21 @@ export const PROPOSAL_LIMITS = {
   /** A proposal stays open for a day, then it is gone (nothing was created from it). */
   ttlSeconds: 86_400,
 } as const
+
+/**
+ * Standing policies: the AI writes the rule once, a treasurer approves it, code runs it on a
+ * schedule, the bot key's limit caps it on chain.
+ */
+export const POLICY_LIMITS = {
+  maxNameLength: 80,
+  /** Autopilot: how long a run waits for a veto before it pays. Default 24 h, at least 1 h. */
+  defaultVetoMinutes: 24 * 60,
+  minVetoMinutes: 60,
+  maxVetoMinutes: 7 * 24 * 60,
+  /** A scheduler instance that claimed a run (or its release) holds it this long; then another may take over. */
+  leaseSeconds: 300,
+  /** People just below the line, shown with a preview. */
+  maxNearMisses: 10,
+  /** Matched people who are not registered payees, kept with a run. */
+  maxUnregistered: 100,
+} as const
