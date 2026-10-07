@@ -71,6 +71,13 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     for (const d of [...defs, ...(commandDefinitions({ devShortcuts: true }) as Def[]).filter((c) => c.type === 1)]) walk(d)
   })
 
+  it('each command stays under the 4,000 characters Discord allows for names, descriptions and choices (dev shortcuts too)', () => {
+    type Sized = { name: string; description?: string; options?: Sized[]; choices?: { name: string; value: string | number }[] }
+    const size = (d: Sized): number =>
+      d.name.length + (d.description?.length ?? 0) + (d.choices ?? []).reduce((n, c) => n + c.name.length + String(c.value).length, 0) + (d.options ?? []).reduce((n, o) => n + size(o), 0)
+    for (const d of [...all, ...(commandDefinitions({ devShortcuts: true }) as Def[])] as Sized[]) expect([d.name, size(d) <= 4000]).toEqual([d.name, true])
+  })
+
   it('the message command "Propose pay run" is registered and routed, hidden from members by default, server only', () => {
     expect(messageCommands.map((c) => c.name)).toEqual([...ROUTED_MESSAGE_COMMANDS])
     for (const c of messageCommands) {
