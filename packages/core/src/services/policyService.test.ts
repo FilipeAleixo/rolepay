@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { emptyCriteria } from '../adapters/memory/fakeProposer.js'
+import { createRolepay } from '../index.js'
 import {
   ANA,
   APPROVER,
   BIG,
+  DAILY,
   DAVE,
   GUILD,
   HELP,
@@ -16,6 +18,7 @@ import {
   POSTS,
   RUI,
   T0,
+  TODAY_18,
   TREASURER,
   TREASURER_TWO,
   WRITER,
@@ -289,6 +292,60 @@ describe('PolicyService: reading', () => {
       [b.id, new Date('2026-11-01T09:00:00Z')],
     ])
     expect(await w.rolepay.policies.get({ guildId: OTHER_GUILD, policyId: a.id })).toEqual({ ok: false, error: { code: 'policy_not_found' } })
+  })
+})
+
+describe('PolicyService: a daily schedule exists only with the testnet demo controls', () => {
+  it('without them, creating a daily policy is refused before the model is called, and nothing is stored or billed', async () => {
+    const w = await policyWorld()
+    expect(w.rolepay.policies.dailySchedules).toBe(false)
+    expect(await w.rolepay.policies.create({ ...asTreasurer, instruction: INSTRUCTION, schedule: DAILY })).toEqual({ ok: false, error: { code: 'schedule_not_allowed', kind: 'daily' } })
+    expect(w.proposer.requests).toHaveLength(0)
+    expect(await w.repos.aiUsage.list(GUILD)).toEqual([])
+    expect(await w.rolepay.policies.list({ guildId: GUILD })).toEqual([])
+  })
+
+  it('without them, an edit that would leave a policy daily is refused, a recompile included', async () => {
+    const w = await policyWorld()
+    const p = await w.active()
+    expect(await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, schedule: DAILY })).toEqual({ ok: false, error: { code: 'schedule_not_allowed', kind: 'daily' } })
+    expect(await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, instruction: `${INSTRUCTION}, every day`, schedule: DAILY })).toEqual({ ok: false, error: { code: 'schedule_not_allowed', kind: 'daily' } })
+    expect(w.proposer.requests).toHaveLength(1)
+    const stored = await w.rolepay.policies.get({ guildId: GUILD, policyId: p.id })
+    expect(stored.ok && [stored.value.version, stored.value.status]).toEqual([1, 'active'])
+  })
+
+  it('off Moderato they never exist, whatever the caller passes (config refuses the flag there too)', async () => {
+    const w = await policyWorld({ demoControls: true })
+    const mainnet = createRolepay({ ...w.deps, network: 'mainnet', demoControls: true })
+    expect(mainnet.policies.dailySchedules).toBe(false)
+    expect(await mainnet.policies.create({ ...asTreasurer, instruction: INSTRUCTION, schedule: DAILY })).toMatchObject({ ok: false, error: { code: 'schedule_not_allowed' } })
+  })
+
+  it('with them, a daily policy is written, approved and runs every day at its hour; its rule says so in plain words', async () => {
+    const w = await policyWorld({ demoControls: true })
+    expect(w.rolepay.policies.dailySchedules).toBe(true)
+    const p = await w.active({ schedule: DAILY })
+    expect(p).toMatchObject({ status: 'active', schedule: DAILY })
+    const d = await w.rolepay.policies.detail({ guildId: GUILD, policyId: p.id })
+    expect(d.ok && d.value.nextRunAt).toEqual(TODAY_18)
+    expect(d.ok && d.value.rule[2]).toBe('When: every day at 18:00 (UTC), counting activity since the previous run.')
+    expect((await w.rolepay.policies.nextRuns({ guildId: GUILD })).map((r) => r.at)).toEqual([TODAY_18])
+    const edited = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, schedule: { ...DAILY, hour: 9 } })
+    expect(edited.ok && edited.value.schedule).toEqual({ ...DAILY, hour: 9 })
+  })
+
+  it('a daily policy left over from a server that had them is not approved, resumed or listed with a next run by one that does not', async () => {
+    const w = await policyWorld({ demoControls: true })
+    const draft = await w.draft({ schedule: DAILY })
+    const active = await w.active({ name: 'Judges', schedule: DAILY })
+    await w.rolepay.policies.pause({ ...asTreasurer, policyId: active.id })
+    const without = createRolepay({ ...w.deps, demoControls: false }).policies
+    expect(await without.approve({ ...asTreasurer, policyId: draft.id, version: 1 })).toEqual({ ok: false, error: { code: 'schedule_not_allowed', kind: 'daily' } })
+    expect(await without.resume({ ...asTreasurer, policyId: active.id })).toEqual({ ok: false, error: { code: 'schedule_not_allowed', kind: 'daily' } })
+    expect((await w.rolepay.policies.resume({ ...asTreasurer, policyId: active.id })).ok).toBe(true)
+    expect((await without.list({ guildId: GUILD })).map((x) => x.nextRunAt)).toEqual([null, null])
+    expect(await without.nextRuns({ guildId: GUILD })).toEqual([])
   })
 })
 

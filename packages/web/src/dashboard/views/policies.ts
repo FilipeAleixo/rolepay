@@ -7,11 +7,15 @@ import { csrfField } from './layout.js'
 export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** "Every Monday at 18:00 (UTC)", "Monthly on day 1 at 09:00 (Europe/Lisbon)". */
+/** "Every day at 18:00 (UTC)", "Every Monday at 18:00 (UTC)", "Monthly on day 1 at 09:00 (Europe/Lisbon)". */
 export function scheduleWords(s: PolicySchedule): string {
   const at = `${pad(s.hour)}:00 (${esc(s.timezone)})`
+  if (s.kind === 'daily') return `Every day at ${at}`
   return s.kind === 'weekly' ? `Every ${WEEKDAYS[s.weekday] ?? '?'} at ${at}` : `Monthly on day ${s.day} at ${at}`
 }
+
+/** Why a daily schedule is refused on a server without the testnet demo controls. */
+export const DAILY_REFUSED = 'A daily schedule is a testnet demo control, off on this server: choose weekly or monthly.'
 
 const STATUS: Record<PolicySummary['status'], [string, string]> = { draft: ['Draft', 'warn'], active: ['Active', 'ok'], paused: ['Paused', ''], archived: ['Archived', ''] }
 export const statusPill = (s: PolicySummary['status']) => pill(...STATUS[s])
@@ -49,6 +53,7 @@ const ERRORS: Record<string, string> = {
   policy_not_approved: 'Approve the policy before switching on autopilot.',
   community_not_found: 'This community is not registered with Rolepay.',
   too_late: 'Too late to veto: the run has already been released for payment.',
+  schedule_not_allowed: 'A daily schedule is a testnet demo control, off on this server. Edit the policy to run weekly or monthly.',
 }
 
 /** "1 minute", "90 minutes", "1 hour", "24 hours". */
@@ -215,7 +220,17 @@ ${versionsSection(d.versions, d.names, d.compiles ?? null)}`
 
 export type PolicyFormValues = { name: string; instruction: string; kind: string; weekday: string; day: string; hour: string; timezone: string }
 
-export function policyFormBody(d: { guildId: string; action: string; heading: string; values: PolicyFormValues; csrf: string; error: string | null; submit: string }): string {
+export function policyFormBody(d: {
+  guildId: string
+  action: string
+  heading: string
+  values: PolicyFormValues
+  csrf: string
+  error: string | null
+  submit: string
+  /** Offer a daily schedule (the testnet demo controls). It is also shown when the policy already has one. */
+  daily?: boolean
+}): string {
   const v = d.values
   const opt = (value: string, label: string, current: string) => `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`
   return `<p class="small"><a href="/dashboard/${esc(d.guildId)}/policies">All policies</a></p><h1>${esc(d.heading)}</h1>
@@ -225,7 +240,7 @@ ${d.error ? `<p class="notice bad" role="alert">${esc(d.error)}</p>` : ''}
 <div class="field"><label for="name">Name</label><input id="name" name="name" maxlength="${POLICY_LIMITS.maxNameLength}" required value="${esc(v.name)}"></div>
 <div class="field"><label for="instruction">Instruction</label><textarea id="instruction" name="instruction" maxlength="${PROPOSAL_LIMITS.maxInstructionLength}" required>${esc(v.instruction)}</textarea>
 <p class="muted small">For example: every Monday, 1 per answered question in #help, at most 50 a week each.</p></div>
-<div class="row"><div class="field"><label for="kind">Runs</label><select id="kind" name="kind">${opt('weekly', 'Weekly', v.kind)}${opt('monthly', 'Monthly', v.kind)}</select></div>
+<div class="row"><div class="field"><label for="kind">Runs</label><select id="kind" name="kind">${d.daily || v.kind === 'daily' ? opt('daily', 'Daily (testnet demo)', v.kind) : ''}${opt('weekly', 'Weekly', v.kind)}${opt('monthly', 'Monthly', v.kind)}</select></div>
 <div class="field"><label for="weekday">Day of the week (weekly)</label><select id="weekday" name="weekday">${WEEKDAYS.map((w, i) => opt(String(i), w, v.weekday)).join('')}</select></div>
 <div class="field"><label for="day">Day of the month (monthly, 1-28)</label><input id="day" name="day" type="number" min="1" max="28" value="${esc(v.day)}"></div>
 <div class="field"><label for="hour">Hour (0-23)</label><input id="hour" name="hour" type="number" min="0" max="23" value="${esc(v.hour)}"></div>

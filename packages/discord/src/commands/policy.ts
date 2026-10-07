@@ -1,4 +1,4 @@
-import { type Community, POLICY_LIMITS, PROPOSAL_LIMITS, type Rolepay, WEEKDAYS, canPropose, isTimezone, parseAmount } from '@rolepay/core'
+import { type Community, POLICY_LIMITS, PROPOSAL_LIMITS, type Rolepay, type Schedule, WEEKDAYS, canPropose, isTimezone, parseAmount } from '@rolepay/core'
 import { z } from 'zod'
 import { demoControlsOn } from '../app/deps.js'
 import { type AutocompleteHandler, type CommandHandler, type GuildContext, parseOptions, replyError } from '../app/handlers.js'
@@ -20,7 +20,7 @@ const amount = z
 
 const NewOptions = z.object({
   instruction: z.string().trim().min(1).max(PROPOSAL_LIMITS.maxInstructionLength),
-  schedule: z.enum(['weekly', 'monthly']),
+  schedule: z.enum(['daily', 'weekly', 'monthly']),
   hour: z.number().int().min(0).max(23),
   weekday: z.enum(WEEKDAYS).optional(),
   day: z.number().int().min(1).max(31).optional(),
@@ -66,17 +66,24 @@ const view = (c: Community) => ({ token: c.payoutToken, approverRoleId: c.approv
  * posted publicly in the channel (where the policy's runs will be posted too), so a treasurer can
  * approve it: the rule in plain words, who it applies to right now, the next run against the budget.
  */
-export const policyNewCommand: CommandHandler = async ({ options, ctx }, { rolepay }) => {
+export const policyNewCommand: CommandHandler = async ({ options, ctx }, { rolepay, config }) => {
   const guard = await requireProposer(ctx, rolepay, { ai: true })
   if (!guard.ok) return guard.reply
   const parsed = parseOptions(NewOptions, options)
   if (!parsed.ok) return parsed.reply
   const o = parsed.value
+  // Daily runs are a demo control (the judge demo); core refuses them without the controls too.
+  if (o.schedule === 'daily' && !demoControlsOn(config)) return ephemeralReply(DEMO_ONLY('A daily `schedule`'))
   if (o.schedule === 'weekly' && !o.weekday) return ephemeralReply('A weekly policy needs a `weekday`.')
   if (o.schedule === 'monthly' && !o.day) return ephemeralReply('A monthly policy needs a `day` of the month (1 to 31).')
   const timezone = o.timezone || 'UTC'
   if (!isTimezone(timezone)) return ephemeralReply('That `timezone` is not one Rolepay knows: use an IANA name such as Europe/Lisbon, or UTC.')
-  const schedule = o.schedule === 'weekly' ? { kind: 'weekly' as const, weekday: o.weekday as (typeof WEEKDAYS)[number], hour: o.hour, timezone } : { kind: 'monthly' as const, day: o.day as number, hour: o.hour, timezone }
+  const schedule: Schedule =
+    o.schedule === 'daily'
+      ? { kind: 'daily', hour: o.hour, timezone }
+      : o.schedule === 'weekly'
+        ? { kind: 'weekly', weekday: o.weekday as (typeof WEEKDAYS)[number], hour: o.hour, timezone }
+        : { kind: 'monthly', day: o.day as number, hour: o.hour, timezone }
   const community = guard.community
   return {
     kind: 'defer',

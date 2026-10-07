@@ -22,6 +22,8 @@ type Ref = { guildId: string; policyId: string }
 const ok = <T>(value: T): Result<T, PolicyError> => ({ ok: true, value })
 const fail = (code: string, message?: string): Result<never, PolicyError> => ({ ok: false, error: message ? { code, message } : { code } })
 
+const DAILY_REFUSED = 'A daily schedule is a testnet demo control, off on this server: choose weekly or monthly.'
+
 /** The shortest veto window core allows without the demo controls, in minutes. */
 const MIN_VETO_MINUTES = 60
 const MAX_VETO_MINUTES = 7 * 24 * 60
@@ -38,6 +40,8 @@ const MAX_VETO_MINUTES = 7 * 24 * 60
  */
 export class InMemoryPolicies implements PolicyPort, AuditPort {
   readonly eventTypes: readonly string[] = AUDIT_EVENT_TYPES
+  /** Like core with the testnet demo controls on: daily schedules allowed. Off by default, as in production. */
+  dailySchedules = false
   readonly calls: { method: string; guildId: string; policyId?: string; actor: PolicyActor }[] = []
   private readonly policies = new Map<string, Stored>()
   private readonly stream: (AuditEventView & { guildId: string })[] = []
@@ -150,6 +154,7 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
   async create(input: { guildId: string; actor: PolicyActor; draft: PolicyDraft }) {
     this.calls.push({ method: 'create', guildId: input.guildId, actor: input.actor })
     if (!this.permitted(input.guildId, input.actor)) return fail('not_permitted')
+    if (!this.scheduleAllowed(input.draft.schedule)) return fail('schedule_not_allowed', DAILY_REFUSED)
     if (/unclear/i.test(input.draft.instruction)) return fail('could_not_compile', 'The rule could not be compiled from that instruction.')
     const id = this.seed(input.guildId, {
       name: input.draft.name,
@@ -169,6 +174,7 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
     if (!p.ok) return p
     const d = p.value.detail
     if (d.status === 'archived') return fail('illegal_state')
+    if (!this.scheduleAllowed(input.draft.schedule)) return fail('schedule_not_allowed', DAILY_REFUSED)
     if (/unclear/i.test(input.draft.instruction)) return fail('could_not_compile', 'The rule could not be compiled from that instruction.')
     const version = Math.max(...p.value.versions.map((v) => v.version)) + 1
     for (const v of p.value.versions) if (v.status === 'pending') v.status = 'discarded'
@@ -200,6 +206,7 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
     const d = p.value.detail
     if (d.status !== 'draft') return fail('illegal_state')
     if (input.version !== d.version) return fail('version_mismatch')
+    if (!this.scheduleAllowed(d.schedule)) return fail('schedule_not_allowed')
     const v = p.value.versions.find((x) => x.version === input.version)
     if (!v) return fail('illegal_state')
     for (const x of p.value.versions) if (x.status === 'approved') x.status = 'superseded'
@@ -296,6 +303,11 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
 
   // ---- internals ---------------------------------------------------------------------------
 
+  /** Like core: daily only with the demo controls. */
+  private scheduleAllowed(s: PolicyDetail['schedule']) {
+    return s.kind !== 'daily' || this.dailySchedules
+  }
+
   private find(ref: Ref) {
     return this.policies.get(`${ref.guildId}:${ref.policyId}`)
   }
@@ -316,6 +328,7 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
     const p = this.action(method, input)
     if (!p.ok) return p
     if (p.value.detail.status !== from) return fail('illegal_state')
+    if (to === 'active' && !this.scheduleAllowed(p.value.detail.schedule)) return fail('schedule_not_allowed')
     p.value.detail.status = to
     this.audit(input.guildId, type, input.actor.id, input.policyId, `${verb} "${p.value.detail.name}".`)
     return ok(undefined)

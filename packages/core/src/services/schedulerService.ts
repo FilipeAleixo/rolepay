@@ -3,7 +3,7 @@ import { formatAmount } from '../domain/money.js'
 import type { Community } from '../domain/community.js'
 import { type Policy, canApprovePolicies, runWindow } from '../domain/policy/policy.js'
 import { type Hold, type PolicyRun, type PolicyRunEvent, type Snapshot, movePolicyRun, newPolicyRun, runGuards } from '../domain/policy/policyRun.js'
-import { nextOccurrence, occurrenceAtOrBefore, periodKey } from '../domain/policy/schedule.js'
+import { nextOccurrence, occurrenceAtOrBefore, periodKey, scheduleAllowed } from '../domain/policy/schedule.js'
 import { type Result, err, ok } from '../domain/result.js'
 import type { Run } from '../domain/run.js'
 import type { ActivityReader } from '../ports/activityReader.js'
@@ -31,6 +31,8 @@ export type SchedulerServiceDeps = {
   audit: AuditTrail
   /** How long an instance holds a run it is working on before another may take it over. */
   leaseSeconds?: number
+  /** The testnet demo controls (Moderato only, `createRolepay` checks): daily policies run. Without them a daily policy never does. */
+  demoControls?: boolean
 }
 
 /**
@@ -101,7 +103,12 @@ export class SchedulerService {
   ): Promise<
     Result<
       SchedulerEvent,
-      { code: 'community_not_found' } | { code: 'not_permitted' } | { code: 'policy_not_found' } | { code: 'policy_not_active' } | { code: 'already_run'; policyRunId: string }
+      | { code: 'community_not_found' }
+      | { code: 'not_permitted' }
+      | { code: 'policy_not_found' }
+      | { code: 'policy_not_active' }
+      | { code: 'already_run'; policyRunId: string }
+      | { code: 'schedule_not_allowed'; kind: Policy['schedule']['kind'] }
     >
   > {
     const community = await this.deps.communities.get(input.guildId)
@@ -110,6 +117,7 @@ export class SchedulerService {
     const policy = await this.deps.policies.get(input.policyId)
     if (!policy || policy.communityId !== input.guildId) return err({ code: 'policy_not_found' })
     if (policy.status !== 'active') return err({ code: 'policy_not_active' })
+    if (!this.allowed(policy)) return err({ code: 'schedule_not_allowed', kind: policy.schedule.kind })
     const occurrence = nextOccurrence(policy.schedule, this.deps.clock.now())
     const existing = await this.deps.policyRuns.getByPeriod(policy.id, periodKey(occurrence))
     if (existing) return err({ code: 'already_run', policyRunId: existing.id })
@@ -125,6 +133,8 @@ export class SchedulerService {
 
   /** The latest occurrence of an active policy's schedule, if it is after activation and not made yet. */
   private async due(policy: Policy): Promise<SchedulerEvent | null> {
+    // A daily policy left from a server with the testnet demo controls never runs on one without them.
+    if (!this.allowed(policy)) return null
     const occurrence = occurrenceAtOrBefore(policy.schedule, this.deps.clock.now())
     if (!policy.activeSince || occurrence < policy.activeSince) return null
     if (await this.deps.policyRuns.getByPeriod(policy.id, periodKey(occurrence))) return null
@@ -284,6 +294,10 @@ export class SchedulerService {
   }
 
   // ---- internals -------------------------------------------------------------------------
+
+  private allowed(policy: Policy): boolean {
+    return scheduleAllowed(policy.schedule, { demoControls: this.deps.demoControls === true })
+  }
 
   private async hold(
     policy: Policy,

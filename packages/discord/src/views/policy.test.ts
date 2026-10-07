@@ -116,6 +116,12 @@ describe('policyMessage', () => {
     expect(m).toContain('First run after approval')
   })
 
+  it('a daily policy (the testnet demo) says its schedule in plain words', () => {
+    const m = text(policyMessage(policy({ schedule: { kind: 'daily', hour: 18, timezone: 'UTC' } }), { ...ctx, preview: preview({ nextRunAt: new Date('2026-10-07T18:00:00Z') }) }))
+    expect(m).toContain('every day at 18:00 (UTC).')
+    expect(text(policyListMessage([{ policy: policy({ schedule: { kind: 'daily', hour: 9, timezone: 'Europe/Lisbon' } }), nextRunAt: null, lastRun: null }]))).toContain('every day at 09:00 (Europe/Lisbon)')
+  })
+
   it('without a preview it can say why; active, paused and archived policies have no buttons', () => {
     expect(text(policyMessage(policy(), { ...ctx, previewProblem: 'Rolepay could not read #help.' }))).toContain('Rolepay could not read #help.')
     const active = text(policyMessage(policy({ status: 'active', approvedBy: TREASURER, approvedAt: T0, mode: 'autopilot', autopilot: { enabledBy: TREASURER, enabledAt: T0, approverRoleId: TREASURER_ROLE }, vetoWindowMinutes: 90 }), { ...ctx, nextRunAt: T0 }))
@@ -204,6 +210,7 @@ describe('explainHold and explainPolicyError: every code in plain words', () => 
       [{ code: 'already_run' }, 'already been made'],
       [{ code: 'discord_not_configured' }, 'cannot read Discord activity'],
       [{ code: 'ai_disabled' }, 'AI proposals are off'],
+      [{ code: 'schedule_not_allowed', kind: 'daily' }, 'A daily schedule is a demo control (ROLEPAY_DEMO_CONTROLS=true on Moderato)'],
     ]
     for (const [error, says] of cases) expect([error.code, explainPolicyError(error, { community })]).toEqual([error.code, expect.stringContaining(says)])
     expect(explainPolicyError({ code: 'not_permitted' })).toContain('the approver role')

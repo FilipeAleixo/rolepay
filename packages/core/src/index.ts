@@ -33,6 +33,8 @@ export const DEFAULT_LINK_TTL_SECONDS = 1800
 
 export function createRolepay(deps: RolepayDeps): Rolepay {
   const { chain, repositories: r, vault, ids, clock, network } = deps
+  // Daily policy schedules: the testnet demo only, never off Moderato.
+  const demoControls = deps.demoControls === true && network === 'moderato'
   const communities = new CommunityService({
     communities: r.communities,
     chain,
@@ -60,6 +62,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     aiUsage: r.aiUsage,
     ...(deps.proposalLog ? { log: deps.proposalLog } : {}),
     ...(deps.minVetoMinutes ? { minVetoMinutes: deps.minVetoMinutes } : {}),
+    demoControls,
   })
   return {
     communities,
@@ -99,6 +102,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
       communityService: communities,
       payRuns,
       audit,
+      demoControls,
     }),
     audit: new AuditService({ log: r.audit }),
     aiUsage: new AiUsageService({ usage: r.aiUsage, clock }),

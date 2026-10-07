@@ -27,7 +27,8 @@ export const CONFIG: DiscordAppConfig = {
 export const SCOPE = { guildId: GUILD, channelId: CHANNEL }
 
 export async function appHarness(opts: { members?: MemberDirectory; config?: Partial<DiscordAppConfig>; proposer?: FakeRunProposer | null } = {}) {
-  const h = await harness(opts.proposer === undefined ? {} : { proposer: opts.proposer })
+  // Core and the Discord layer agree on the demo controls, as the server wires them from one setting.
+  const h = await harness({ ...(opts.proposer === undefined ? {} : { proposer: opts.proposer }), demoControls: opts.config?.demoControls ?? CONFIG.demoControls })
   const errors: unknown[] = []
   const deps: DiscordAppDeps = {
     rolepay: h.rolepay,

@@ -74,6 +74,7 @@ export async function testServer(
       activity,
       proposalLog: (entry) => logs.push({ event: 'proposal', fields: entry }),
       minVetoMinutes: config.policies.minVetoMinutes,
+      demoControls: config.core.demoControls,
     })
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()

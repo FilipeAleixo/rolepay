@@ -5,7 +5,7 @@ import { type CommunityAccess, actionAccess, communityAccess } from '../access.j
 import { type DashboardKit, html, redirect } from '../kit.js'
 import type { PolicyDraft, PolicyError, PolicyPort } from '../policyPort.js'
 import { type Section, messagePage, shell } from '../views/layout.js'
-import { type PolicyFormValues, notice, policiesBody, policyBody, policyFormBody } from '../views/policies.js'
+import { DAILY_REFUSED, type PolicyFormValues, notice, policiesBody, policyBody, policyFormBody } from '../views/policies.js'
 
 const MAX_NAMED = 60
 
@@ -29,7 +29,7 @@ const DraftForm = z.object({
     .trim()
     .min(1, 'Write the instruction: who gets paid, how much, and when.')
     .max(MAX_INSTRUCTION, `The instruction is at most ${MAX_INSTRUCTION.toLocaleString('en-US')} characters.`),
-  kind: z.enum(['weekly', 'monthly'], 'Choose weekly or monthly.'),
+  kind: z.enum(['daily', 'weekly', 'monthly'], 'Choose weekly or monthly.'),
   weekday: z.coerce.number().int().min(0).max(6),
   day: z.coerce.number().int().min(1, 'The day of the month is 1 to 28.').max(28, 'The day of the month is 1 to 28.'),
   hour: z.coerce.number().int().min(0, 'The hour is 0 to 23.').max(23, 'The hour is 0 to 23.'),
@@ -39,11 +39,18 @@ const DraftForm = z.object({
 const ModeForm = z.object({ mode: z.enum(['propose', 'autopilot']), vetoWindowHours: z.coerce.number().int().min(1).max(168) })
 const VersionForm = z.object({ version: z.coerce.number().int().min(1) })
 
-function draftFrom(form: Record<string, string>): { ok: true; draft: PolicyDraft } | { ok: false; error: string } {
+/** The draft a form describes. A daily schedule only where the policy services allow it (the testnet demo controls); refused here first, in words. */
+function draftFrom(form: Record<string, string>, opts: { daily: boolean }): { ok: true; draft: PolicyDraft } | { ok: false; error: string } {
   const parsed = DraftForm.safeParse(form)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Some of the values were not valid.' }
   const f = parsed.data
-  const schedule = f.kind === 'weekly' ? { kind: 'weekly' as const, weekday: f.weekday, hour: f.hour, timezone: f.timezone } : { kind: 'monthly' as const, day: f.day, hour: f.hour, timezone: f.timezone }
+  if (f.kind === 'daily' && !opts.daily) return { ok: false, error: DAILY_REFUSED }
+  const schedule: PolicyDraft['schedule'] =
+    f.kind === 'daily'
+      ? { kind: 'daily', hour: f.hour, timezone: f.timezone }
+      : f.kind === 'weekly'
+        ? { kind: 'weekly', weekday: f.weekday, hour: f.hour, timezone: f.timezone }
+        : { kind: 'monthly', day: f.day, hour: f.hour, timezone: f.timezone }
   return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule } }
 }
 
@@ -87,8 +94,9 @@ export function policyRoutes(kit: DashboardKit): Hono {
     return page(a, 'Policies', policiesBody({ guildId: a.community.id, policies, canAct: a.viewer.canAct }))
   })
 
+  const daily = () => kit.policies?.dailySchedules === true
   const form = (a: CommunityAccess, opts: { action: string; heading: string; submit: string; values: PolicyFormValues; error: string | null }, status = 200) =>
-    page(a, opts.heading, policyFormBody({ guildId: a.community.id, csrf: a.viewer.csrf, ...opts }), status)
+    page(a, opts.heading, policyFormBody({ guildId: a.community.id, csrf: a.viewer.csrf, daily: daily(), ...opts }), status)
 
   app.get('/dashboard/:guildId/policies/new', async (c) => {
     const access = await communityAccess(kit, c)
@@ -106,7 +114,7 @@ export function policyRoutes(kit: DashboardKit): Hono {
     const policies = port()
     if (!policies) return notFound(a)
     const opts = { action: `/dashboard/${a.community.id}/policies`, heading: 'New policy', submit: 'Compile and preview', values: formValues(a.form) }
-    const draft = draftFrom(a.form)
+    const draft = draftFrom(a.form, { daily: daily() })
     if (!draft.ok) return form(a, { ...opts, error: draft.error }, 400)
     const created = await policies.create({ guildId: a.community.id, actor: a.actor, draft: draft.draft })
     if (!created.ok) return form(a, { ...opts, error: compileError(created.error) }, created.error.code === 'not_permitted' ? 403 : 422)
@@ -181,7 +189,7 @@ export function policyRoutes(kit: DashboardKit): Hono {
     if (!policies) return notFound(a)
     const policyId = c.req.param('policyId')
     const opts = { action: `${base(a, policyId)}/edit`, heading: 'Edit policy', submit: 'Recompile and preview', values: formValues(a.form) }
-    const draft = draftFrom(a.form)
+    const draft = draftFrom(a.form, { daily: daily() })
     if (!draft.ok) return form(a, { ...opts, error: draft.error }, 400)
     const edited = await policies.edit({ guildId: a.community.id, policyId, actor: a.actor, draft: draft.draft })
     if (!edited.ok && edited.error.code === 'could_not_compile') return form(a, { ...opts, error: compileError(edited.error) }, 422)

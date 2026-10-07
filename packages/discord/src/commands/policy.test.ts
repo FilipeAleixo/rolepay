@@ -88,6 +88,28 @@ describe('/rolepay policy new', () => {
   })
 })
 
+describe('/rolepay policy new schedule:daily (a demo control: the judge demo)', () => {
+  it('with the demo controls on, a daily policy is drafted (no weekday or day needed) and its preview says every day at the hour', async () => {
+    const a = await ready()
+    const { shown, policyId } = await newPolicy(a, { schedule: 'daily', weekday: undefined as unknown as string })
+    expect(shown).toContain('every day at 18:00 (UTC)')
+    expect(shown).toContain('First run after approval')
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && p.value.schedule).toEqual({ kind: 'daily', hour: 18, timezone: 'UTC' })
+  })
+
+  it('without them it is refused before the model is called, even with the dev shortcuts on; off Moderato too', async () => {
+    for (const config of [{ devShortcuts: true, demoControls: false }, { network: 'mainnet' as const, demoControls: true }]) {
+      const a = await ready({ config })
+      const d = await a.send(slashCommand(SCOPE, 'rolepay', 'policy new', { ...NEW, schedule: 'daily' }, treasurer))
+      expect(isEphemeral(d)).toBe(true)
+      expect(body(d).data?.content).toContain('A daily `schedule` is a demo control (ROLEPAY_DEMO_CONTROLS=true on Moderato)')
+      expect(a.proposer.requests).toHaveLength(0)
+      expect(await a.rolepay.policies.list({ guildId: GUILD })).toEqual([])
+    }
+  })
+})
+
 describe('the preview buttons', () => {
   it('Approve: the approver role only; the preview turns into the active policy', async () => {
     const a = await ready()

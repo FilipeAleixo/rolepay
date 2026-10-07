@@ -159,6 +159,8 @@ export function explainPolicyError(error: CodedError, ctx: { token?: string; com
       return "This policy's next run has already been made."
     case 'discord_not_configured':
       return 'This Rolepay server cannot read Discord activity, so it cannot show who a policy applies to.'
+    case 'schedule_not_allowed':
+      return 'A daily schedule is a demo control (ROLEPAY_DEMO_CONTROLS=true on Moderato); it is off on this server. Use a weekly or monthly schedule.'
     default:
       return explainProposalError(error, ctx)
   }

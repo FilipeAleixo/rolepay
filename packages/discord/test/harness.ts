@@ -14,8 +14,11 @@ export const usd = (s: string) => {
 
 export type Harness = Awaited<ReturnType<typeof harness>>
 
-/** `proposer: null` = a server with no Anthropic API key. The activity reader is the real one, over the fake Discord. */
-export async function harness(opts: { proposer?: FakeRunProposer | null } = {}) {
+/**
+ * `proposer: null` = a server with no Anthropic API key. The activity reader is the real one, over the fake Discord.
+ * `demoControls: false` = core without the testnet demo controls (no daily schedules); on by default, like the test config.
+ */
+export async function harness(opts: { proposer?: FakeRunProposer | null; demoControls?: boolean } = {}) {
   const clock = new ManualClock(T0)
   const chain = new FakePayoutChain({ startTime: Math.floor(T0.getTime() / 1000) })
   chain.fund(TOKEN, TREASURY, usd('1000'))
@@ -30,8 +33,9 @@ export async function harness(opts: { proposer?: FakeRunProposer | null } = {}) 
     network: 'moderato',
     proposer,
     activity: new RestActivityReader(rest),
-    // As the server runs with the testnet dev shortcuts on: veto windows down to a minute.
+    // As the server runs with the testnet demo controls on: veto windows down to a minute, and daily schedules.
     minVetoMinutes: 1,
+    demoControls: opts.demoControls ?? true,
   })
   const queue = new RecordingQueue()
   /** Moves the service clock and chain time together, as real waiting would. */

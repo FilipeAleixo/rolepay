@@ -22,12 +22,22 @@ const usd = (s: string) => {
   return r.value
 }
 
-async function world(opts: { proposer?: FakeRunProposer | null; activity?: FakeActivityReader | null; ai?: boolean } = {}) {
+async function world(opts: { proposer?: FakeRunProposer | null; activity?: FakeActivityReader | null; ai?: boolean; demoControls?: boolean } = {}) {
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
   const activity = opts.activity === undefined ? new FakeActivityReader() : opts.activity
   const proposer = opts.proposer === undefined ? scriptedProposer() : opts.proposer
-  const rolepay = createRolepay({ chain, repositories: createMemoryRepositories({ clock }), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato', proposer, activity })
+  const rolepay = createRolepay({
+    chain,
+    repositories: createMemoryRepositories({ clock }),
+    vault: new PlainKeyVault(),
+    ids: new SequentialIds(),
+    clock,
+    network: 'moderato',
+    proposer,
+    activity,
+    ...(opts.demoControls ? { demoControls: true } : {}),
+  })
   const r = await rolepay.communities.register({ guildId: GUILD, name: 'Mods guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: ROLE })
   if (!r.ok) throw new Error(r.error.code)
   if (opts.ai !== false) await rolepay.communities.setAiProposals({ guildId: GUILD, enabled: true, actorRoleIds: [ROLE] })
@@ -53,6 +63,18 @@ describe('schedules between the dashboard (weekday 0 = Sunday) and core (weekday
     const monthly = { kind: 'monthly' as const, day: 15, hour: 9, timezone: 'Europe/Lisbon' }
     expect(toPortSchedule(toCoreSchedule(monthly))).toEqual(monthly)
   })
+
+  it('daily (the testnet demo controls) maps both ways too, and the port says whether core allows it', async () => {
+    const daily = { kind: 'daily' as const, hour: 18, timezone: 'UTC' }
+    expect(toCoreSchedule(daily)).toEqual(daily)
+    expect(toPortSchedule(daily)).toEqual(daily)
+    expect((await world()).port.dailySchedules).toBe(false)
+    const demo = await world({ demoControls: true })
+    expect(demo.port.dailySchedules).toBe(true)
+    const created = await demo.port.create({ guildId: GUILD, actor, draft: { name: 'Judges', instruction: RULE, schedule: daily } })
+    if (!created.ok) throw new Error(created.error.code)
+    expect((await demo.port.get({ guildId: GUILD, policyId: created.value.policyId })).ok && (await demo.port.list({ guildId: GUILD }))[0]?.schedule).toEqual(daily)
+  })
 })
 
 describe('policyPortFromCore: refusals in words', () => {
@@ -74,6 +96,13 @@ describe('policyPortFromCore: refusals in words', () => {
     expect(await w.port.create({ guildId: GUILD, actor, draft })).toMatchObject({ error: { code: 'could_not_compile' } })
     expect(await w.port.create({ guildId: GUILD, actor: { id: TREASURER, roleIds: [] }, draft })).toEqual({ ok: false, error: { code: 'not_permitted' } })
     expect(await w.port.create({ guildId: GUILD, actor, draft: { ...draft, name: 'x'.repeat(81) } })).toMatchObject({ error: { code: 'invalid_input', message: expect.any(String) } })
+    // A daily schedule on a server without the testnet demo controls: refused before the model, in words.
+    const asked = w.proposer?.requests.length
+    expect(await w.port.create({ guildId: GUILD, actor, draft: { ...draft, schedule: { kind: 'daily', hour: 18, timezone: 'UTC' } } })).toEqual({
+      ok: false,
+      error: { code: 'schedule_not_allowed', message: 'A daily schedule is a testnet demo control, off on this server: choose weekly or monthly.' },
+    })
+    expect(w.proposer?.requests.length).toBe(asked)
   })
 
   it('states: resume an active policy, approve an old version, discard a version that is not the one waiting', async () => {
