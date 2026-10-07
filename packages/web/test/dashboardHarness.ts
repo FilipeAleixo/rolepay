@@ -2,7 +2,7 @@
 // OAuth provider, a fake bot view of guild members and the in-memory policy port (or, for the page
 // contract, another policy backend: core's own services through the server's adapters). No network.
 import { type ActivityReader, type RunProposer, createRolepay, parseAmount } from '@rolepay/core'
-import { FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import type { Hono } from 'hono'
 import { createWebApp } from '../src/index.js'
 import type { AuditPort, PolicyActor, PolicyPort } from '../src/dashboard/policyPort.js'
@@ -127,6 +127,8 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
   const setup = opts.backend?.(clock)
+  // Deposit addresses: an in-memory registry and transfer log (the fake masterId is a salt's last 4 bytes).
+  const fundingChain = new FakeFundingChain()
   const rolepay = createRolepay({
     chain,
     repositories: createMemoryRepositories({ clock }),
@@ -134,6 +136,7 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
     ids: new SequentialIds(),
     clock,
     network: 'moderato',
+    fundingChain,
     ...(setup?.core ?? {}),
   })
   const kv = new MemoryKeyValueStore(clock)
@@ -235,7 +238,29 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
     return r.value
   }
 
-  return { app, origin, rolepay, chain, clock, kv, oauth, members, policies, aiUsage, payouts, backend, calls, errors, browser, signIn, community, payee, activeKey, run }
+  /** The treasury registered as a virtual-address master (as the setup page does), recorded by Rolepay. */
+  async function depositAddresses(masterId = '58e21090') {
+    const { txHash } = fundingChain.register(TREASURY, `0x${'00'.repeat(28)}${masterId}`)
+    const r = await rolepay.funding.confirmMaster({ guildId: GUILD, masterId: `0x${masterId}`, txHash })
+    if (!r.ok) throw new Error(r.error.code)
+    return r.value
+  }
+
+  /** A funding source made by the treasurer. */
+  async function fundingSource(name: string) {
+    const r = await rolepay.funding.createSource({ guildId: GUILD, actor: TREASURER.id, actorRoleIds: [ROLE], name })
+    if (!r.ok) throw new Error(r.error.code)
+    return r.value
+  }
+
+  /** Someone sends `amount` to a deposit address, and the watcher sees it. */
+  async function deposit(to: string, amount: string, opts: { token?: string; from?: string } = {}) {
+    const sent = fundingChain.transfer({ token: (opts.token ?? TOKEN) as `0x${string}`, from: (opts.from ?? '0x5555555555555555555555555555555555555555') as `0x${string}`, to: to as `0x${string}`, amount: usd(amount) })
+    await rolepay.funding.scan()
+    return sent
+  }
+
+  return { app, origin, rolepay, chain, fundingChain, clock, kv, oauth, members, policies, aiUsage, payouts, backend, calls, errors, browser, signIn, community, payee, activeKey, run, depositAddresses, fundingSource, deposit }
 }
 
 /** What a policy backend may use to set itself up: core's services, the clock, the chain, the bot's member view, the helpers. */

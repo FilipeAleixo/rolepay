@@ -75,7 +75,7 @@ export function communityRoutes(kit: DashboardKit): Hono {
     if (!access.ok) return access.response
     const a = access.value
     const guildId = a.community.id
-    const [balance, key, recent, upcoming, aiSpend, payouts] = await Promise.all([
+    const [balance, key, recent, upcoming, aiSpend, payouts, funding] = await Promise.all([
       chainRead(async () => {
         const r = await kit.rolepay.communities.treasuryBalance({ guildId })
         return r.ok ? { ok: true as const, value: r.value.balance } : r
@@ -85,9 +85,10 @@ export function communityRoutes(kit: DashboardKit): Hono {
       kit.policies ? kit.policies.upcoming({ guildId, limit: 5 }) : Promise.resolve(null),
       kit.aiUsage ? kit.aiUsage.spend({ guildId }) : Promise.resolve(null),
       kit.payouts ? kit.payouts.paidByWeek({ guildId }) : Promise.resolve(null),
+      kit.rolepay.funding.month({ guildId }),
     ])
     const runOrigins = await origins(guildId, recent)
-    const body = overviewBody({ community: a.community, explorer, balance, key, upcoming, recent, origins: runOrigins, names: await names(guildId, peopleIn(recent)), aiSpend, payouts })
+    const body = overviewBody({ community: a.community, explorer, balance, key, upcoming, recent, origins: runOrigins, names: await names(guildId, peopleIn(recent)), aiSpend, payouts, funding })
     return page(a, 'overview', 'Overview', body)
   })
 

@@ -31,9 +31,13 @@ describe('every string a person or Discord controls is escaped (XSS)', () => {
     // The model name comes from the API's answer (or ROLEPAY_AI_MODEL); the outcome is a code, escaped anyway.
     h.aiUsage.addProposal(GUILD, { at: new Date(), model: `Model ${EVIL}`, latencyMs: 2_100, costMicroUsd: 3_869n, mode: 'messages', actorId: MEMBER.id, outcome: `code ${EVIL}`, runId: run.id })
     h.aiUsage.addCompile(GUILD, policyId, 1, { at: new Date(), model: `Model ${EVIL}`, latencyMs: 3_400, costMicroUsd: null })
+    // A funding source is named by a treasurer: user text on the Funding page.
+    await h.depositAddresses()
+    const source = await h.fundingSource(`Sponsor ${EVIL}`)
+    await h.deposit(source.depositAddress, '5')
 
     const { browser } = await h.signIn(identity({ id: TREASURER.id, name: `Tess ${EVIL}` }, [{ id: GUILD, name: `Listed ${EVIL}` }]))
-    const pages = ['/dashboard', `/dashboard/${GUILD}`, `/dashboard/${GUILD}/runs`, `/dashboard/${GUILD}/runs/${run.id}`, `/dashboard/${GUILD}/payees`, `/dashboard/${GUILD}/policies`, `/dashboard/${GUILD}/policies/${policyId}`, `/dashboard/${GUILD}/policies/${policyId}/edit`, `/dashboard/${GUILD}/audit`]
+    const pages = ['/dashboard', `/dashboard/${GUILD}`, `/dashboard/${GUILD}/runs`, `/dashboard/${GUILD}/runs/${run.id}`, `/dashboard/${GUILD}/payees`, `/dashboard/${GUILD}/policies`, `/dashboard/${GUILD}/policies/${policyId}`, `/dashboard/${GUILD}/policies/${policyId}/edit`, `/dashboard/${GUILD}/audit`, `/dashboard/${GUILD}/funding`]
     let escapedSeen = 0
     for (const path of pages) {
       const res = await browser.get(path)
