@@ -1,7 +1,7 @@
 // A web app over the real core services on in-memory fakes, with fake passkey sessions and
 // a stub client bundle. No network, no browser.
 import { createRolepay } from '@rolepay/core'
-import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakeActivityReader, FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories, emptyCriteria } from '@rolepay/core/adapters'
 import { createWebApp } from '../src/index.js'
 import { FakePasskeySessions, staticAssets } from '../src/testing/index.js'
 
@@ -31,6 +31,9 @@ const MAINNET_WEB = {
 export function webHarness(opts: { mainnet?: boolean; discordAppId?: string } = {}) {
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
+  // The model (scripted) and Discord (fake) a policy needs to be written; AI stays off per community until a test turns it on.
+  const proposer = new FakeRunProposer()
+  const activity = new FakeActivityReader()
   const rolepay = createRolepay({
     chain,
     repositories: createMemoryRepositories(),
@@ -38,6 +41,8 @@ export function webHarness(opts: { mainnet?: boolean; discordAppId?: string } = 
     ids: new SequentialIds(),
     clock,
     network: opts.mainnet ? 'mainnet' : 'moderato',
+    proposer,
+    activity,
   })
   const sessions = new FakePasskeySessions()
   const app = createWebApp({
@@ -71,7 +76,30 @@ export function webHarness(opts: { mainnet?: boolean; discordAppId?: string } = 
   }
   const post = (path: string, body: unknown = {}, passkey?: Passkey) =>
     send(path, { method: 'POST', body: JSON.stringify(body), ...(passkey ? { passkey } : {}) })
-  return { app, rolepay, chain, clock, sessions, send, post }
+  return { app, rolepay, chain, clock, sessions, send, post, proposer, activity }
+}
+
+/**
+ * An approved standing policy of the registered community, written through core with the scripted
+ * model: "1 AlphaUSD to every Treasurer each Monday", capped at `perRun` (30 by default).
+ */
+export async function approvedPolicy(h: ReturnType<typeof webHarness>, opts: { perRun?: bigint | null; name?: string } = {}) {
+  const who = { guildId: GUILD, actor: TREASURER, actorRoleIds: [ROLE] }
+  await h.rolepay.communities.setAiProposals({ guildId: GUILD, enabled: true, actorRoleIds: [ROLE] })
+  h.activity.roles = [{ id: ROLE, name: 'Treasurer' }]
+  h.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' }, note: 'Treasurers' }, { hasRole: ['R1'] })
+  const perRun = opts.perRun === undefined ? 30_000_000n : opts.perRun
+  const created = await h.rolepay.policies.create({
+    ...who,
+    name: opts.name ?? 'Treasurers',
+    instruction: '1 AlphaUSD to every Treasurer each Monday',
+    schedule: { kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC' },
+    caps: { perRun, perPerson: null },
+  })
+  if (!created.ok) throw new Error(JSON.stringify(created.error))
+  const approved = await h.rolepay.policies.approve({ ...who, policyId: created.value.id, version: 1 })
+  if (!approved.ok) throw new Error(JSON.stringify(approved.error))
+  return approved.value
 }
 
 export async function registeredCommunity(h: ReturnType<typeof webHarness>, treasuryAddress = PASSKEY, over: Record<string, unknown> = {}) {

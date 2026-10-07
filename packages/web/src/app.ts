@@ -11,6 +11,7 @@ import type { Assets, PasskeySessions, RateLimiter } from './ports.js'
 import { accountRoutes } from './routes/account.js'
 import { claimRoutes } from './routes/claim.js'
 import { landingRoutes } from './routes/landing.js'
+import { policyBudgetRoutes } from './routes/policyBudget.js'
 import { setupRoutes } from './routes/setup.js'
 import { STYLE } from './views/page.js'
 import { MARK_SVG } from './views/theme.js'
@@ -151,6 +152,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
   app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))
   app.route('/', accountRoutes({ config, testnet }))
   app.route('/', setupRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))
+  app.route('/', policyBudgetRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))
   if (deps.dashboard) app.route('/', dashboardRoutes({ ...deps.dashboard, rolepay: deps.rolepay, clock: deps.clock, config, testnet }))
   return app
 }
