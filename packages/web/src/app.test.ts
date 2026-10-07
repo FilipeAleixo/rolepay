@@ -9,7 +9,7 @@ import { FakePasskeySessions, staticAssets } from './testing/index.js'
 describe('the web app', () => {
   it('serves the client bundle compressed when the browser accepts it, and 404 for anything else under /assets', async () => {
     const h = webHarness()
-    const res = await h.send('/assets/payrun.js', { headers: { 'accept-encoding': 'gzip' } })
+    const res = await h.send('/assets/rolepay.js', { headers: { 'accept-encoding': 'gzip' } })
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/javascript/)
     expect(res.headers.get('content-encoding')).toBe('gzip')

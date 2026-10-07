@@ -1,6 +1,6 @@
 /**
  * Pure HTML builders. Pages are rendered on the server with everything a person needs to
- * read; the client bundle (`/assets/payrun.js`) only adds the passkey and signing steps.
+ * read; the client bundle (`/assets/rolepay.js`) only adds the passkey and signing steps.
  */
 
 export function esc(s: string): string {
@@ -9,7 +9,7 @@ export function esc(s: string): string {
 
 /** Embeds JSON for the client. `<` is escaped so no value can close the script tag. */
 const configScript = (config: unknown) =>
-  `<script type="application/json" id="payrun-config">${JSON.stringify(config, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)).replaceAll('<', '\\u003c')}</script>`
+  `<script type="application/json" id="rolepay-config">${JSON.stringify(config, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)).replaceAll('<', '\\u003c')}</script>`
 
 /** The pages' only stylesheet, inline. Exported so the server can allow exactly it in the CSP (by hash). */
 export const STYLE = `
@@ -39,11 +39,11 @@ a{color:var(--accent)}
 `
 
 export function page(opts: { title: string; body: string; config?: unknown; testnet: boolean }): string {
-  const script = opts.config === undefined ? '' : `${configScript(opts.config)}<script type="module" src="/assets/payrun.js"></script>`
+  const script = opts.config === undefined ? '' : `${configScript(opts.config)}<script type="module" src="/assets/rolepay.js"></script>`
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>${esc(opts.title)}</title><style>${STYLE}</style></head>
-<body><main><p class="brand">payrun${opts.testnet ? '<span class="testnet">testnet</span>' : ''}</p>${opts.body}</main>${script}</body></html>`
+<body><main><p class="brand">Rolepay${opts.testnet ? '<span class="testnet">testnet</span>' : ''}</p>${opts.body}</main>${script}</body></html>`
 }
 
 /** What a person sees for a link that no longer works. `command` is the Discord command that issues a new one. */
@@ -55,7 +55,7 @@ export function linkErrorPage(code: string, command: string, testnet: boolean): 
         ? 'This link was already used.'
         : 'This link is not valid.'
   return page({
-    title: 'payrun: link not valid',
+    title: 'Rolepay: link not valid',
     testnet,
     body: `<h1>${why}</h1><p>Run <code>${esc(command)}</code> in Discord for a new one.</p>`,
   })

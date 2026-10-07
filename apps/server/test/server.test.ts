@@ -88,6 +88,6 @@ describe('web pages through the composed server', () => {
     })
     if (!link.ok) throw new Error()
     expect((await s.app.request(`/setup/${link.value.token}`)).status).toBe(200)
-    expect((await s.app.request('/assets/payrun.js')).status).toBe(200)
+    expect((await s.app.request('/assets/rolepay.js')).status).toBe(200)
   })
 })

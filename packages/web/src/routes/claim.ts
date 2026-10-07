@@ -22,7 +22,7 @@ export function claimRoutes(deps: ClaimRoutesDeps): Hono {
     const communityName = link.value.communityName ?? 'your Discord server'
     return c.html(
       claimPage(
-        { page: 'claim', token, communityName, passkeyName: `payrun: ${communityName}`, network: deps.network, explorerUrl: deps.explorerUrl },
+        { page: 'claim', token, communityName, passkeyName: `Rolepay: ${communityName}`, network: deps.network, explorerUrl: deps.explorerUrl },
         deps.testnet,
       ),
     )

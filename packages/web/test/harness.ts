@@ -33,7 +33,7 @@ export function webHarness() {
     rolepay,
     clock,
     sessions,
-    assets: staticAssets({ 'payrun.js': 'console.log("payrun");'.repeat(100) }),
+    assets: staticAssets({ 'rolepay.js': 'console.log("rolepay");'.repeat(100) }),
     config: {
       origin: 'http://localhost:8787',
       rpId: 'localhost',
@@ -86,7 +86,7 @@ export async function setupLink(h: ReturnType<typeof webHarness>, settings: Reco
 /** The JSON config the server embeds in a page for the client bundle. */
 export async function pageConfig(res: Response): Promise<Record<string, unknown>> {
   const html = await res.text()
-  const m = html.match(/<script type="application\/json" id="payrun-config">([^<]*)<\/script>/)
+  const m = html.match(/<script type="application\/json" id="rolepay-config">([^<]*)<\/script>/)
   if (!m?.[1]) throw new Error('no page config')
   return JSON.parse(m[1].replaceAll('\\u003c', '<'))
 }

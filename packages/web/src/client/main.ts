@@ -1,4 +1,4 @@
-// The one client bundle (/assets/payrun.js). The server renders each page and embeds its
+// The one client bundle (/assets/rolepay.js). The server renders each page and embeds its
 // config; this adds the passkey and signing steps for that page.
 import { type ClaimConfig, startClaim } from './claim.js'
 import { readConfig } from './dom.js'

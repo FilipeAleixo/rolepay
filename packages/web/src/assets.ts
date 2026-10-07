@@ -31,7 +31,7 @@ export function bundledAssets(): Assets {
   }
   return {
     async get(name) {
-      if (name !== 'payrun.js') return null
+      if (name !== 'rolepay.js') return null
       bundle ??= make().catch((e) => {
         bundle = null // retry on the next request rather than serving a stale failure forever
         throw e

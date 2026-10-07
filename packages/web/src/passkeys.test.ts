@@ -26,12 +26,12 @@ describe('passkeys (Accounts SDK Handler.webAuthn over core KeyValueStore)', () 
     const store = new MemoryKeyValueStore()
     const { handler, sessions } = createPasskeys({ kv: store, origin: 'https://pay.example.org', rpId: 'pay.example.org' })
     const res = await handler.fetch(
-      new Request('https://pay.example.org/webauthn/register/options', { method: 'POST', body: JSON.stringify({ name: 'payrun: Mods' }), headers: { 'content-type': 'application/json' } }),
+      new Request('https://pay.example.org/webauthn/register/options', { method: 'POST', body: JSON.stringify({ name: 'Rolepay: Mods' }), headers: { 'content-type': 'application/json' } }),
     )
     expect(res.status).toBe(200)
     const { options } = (await res.json()) as { options: { publicKey: { rp: { id: string }; user: { name: string } } } }
     expect(options.publicKey.rp.id).toBe('pay.example.org')
-    expect(options.publicKey.user.name).toBe('payrun: Mods')
+    expect(options.publicKey.user.name).toBe('Rolepay: Mods')
     expect(await sessions.current(new Request('https://pay.example.org/'))).toBeNull()
     expect(await sessions.current(new Request('https://pay.example.org/', { headers: { cookie: 'accounts_webauthn=forged' } }))).toBeNull()
   })

@@ -34,11 +34,11 @@ export function setupPage(c: SetupPageConfig): string {
       ? `<div><label for="feeBudget">Fee budget per period (${esc(c.feeTokenLabel ?? 'fee token')})</label><input id="feeBudget" inputmode="decimal" value="${esc(c.defaults.feeBudget)}"></div>`
       : ''
   return page({
-    title: `payrun: treasury for ${c.guildName}`,
+    title: `Rolepay: treasury for ${c.guildName}`,
     testnet: c.testnet,
     config: c,
     body: `<h1>Treasury for ${name}</h1>
-<p>The community's money lives in its own Tempo account. Your passkey is that account's root key: only you can move the funds, and you decide exactly what the payrun bot may spend.</p>
+<p>The community's money lives in its own Tempo account. Your passkey is that account's root key: only you can move the funds, and you decide exactly what the Rolepay bot may spend.</p>
 <section data-step="treasury">
   <h2>1. The community account</h2>
   <div data-when="unbound">

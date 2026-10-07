@@ -14,16 +14,16 @@ export type ClaimPageConfig = {
 export function claimPage(config: ClaimPageConfig, testnet: boolean): string {
   const name = esc(config.communityName)
   return page({
-    title: `payrun: get paid by ${config.communityName}`,
+    title: `Rolepay: get paid by ${config.communityName}`,
     testnet,
     config,
     body: `<h1>Get paid by ${name}</h1>
 <p>This one-time link sets up where ${name} pays you, in stablecoins on Tempo. You get a passkey on this device, like the ones you use to sign in to websites. There is no app to install, no wallet and no seed phrase.</p>
 <section data-step="choose">
   <h2>Your payout account</h2>
-  <p class="muted">Your passkey is your account. payrun never sees it, and nobody else can move what you are paid.</p>
+  <p class="muted">Your passkey is your account. Rolepay never sees it, and nobody else can move what you are paid.</p>
   <button id="create" type="button">Create my passkey</button>
-  <button id="signin" type="button" class="secondary">I already have a payrun passkey</button>
+  <button id="signin" type="button" class="secondary">I already have a Rolepay passkey</button>
 </section>
 <section data-step="done" hidden>
   <h2>You will be paid here</h2>

@@ -42,8 +42,8 @@ type State = {
 }
 
 const LINK_ERRORS: Record<string, string> = {
-  link_expired: 'This setup link has expired. Run /payrun setup in Discord for a new one.',
-  link_not_found: 'This setup link is not valid. Run /payrun setup in Discord for a new one.',
+  link_expired: 'This setup link has expired. Run /rolepay setup in Discord for a new one.',
+  link_not_found: 'This setup link is not valid. Run /rolepay setup in Discord for a new one.',
   treasury_mismatch: 'This passkey is not the treasury of this server.',
   not_the_treasury: 'This passkey is not the treasury of this server. Sign in with the treasury passkey.',
   no_passkey_session: 'Sign in with your passkey first.',

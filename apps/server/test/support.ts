@@ -60,7 +60,7 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
   const server = composeServer({
-    web: { sessions, assets: staticAssets({ 'payrun.js': '' }) },
+    web: { sessions, assets: staticAssets({ 'rolepay.js': '' }) },
     config,
     rolepay,
     rest,

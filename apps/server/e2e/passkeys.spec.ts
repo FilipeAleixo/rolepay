@@ -61,7 +61,7 @@ test('a recipient creates a passkey on the claim page, and a returning one signs
   const second = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000002' })
   if (!second.ok) throw new Error(second.error.code)
   await page.goto(`${server.url}/claim/${second.value.token}`)
-  await page.getByRole('button', { name: 'I already have a payrun passkey' }).click()
+  await page.getByRole('button', { name: 'I already have a Rolepay passkey' }).click()
   await expect(page.getByRole('heading', { name: 'You will be paid here' })).toBeVisible()
   expect((await page.locator('#address').textContent())?.trim()).toBe(address)
   expect(await auth.credentials()).toHaveLength(1)

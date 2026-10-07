@@ -1,8 +1,8 @@
 // Small DOM helpers shared by the pages. Browser only.
 
 export function readConfig<T>(): T {
-  const el = document.getElementById('payrun-config')
-  if (!el?.textContent) throw new Error('payrun: page config missing')
+  const el = document.getElementById('rolepay-config')
+  if (!el?.textContent) throw new Error('Rolepay: page config missing')
   return JSON.parse(el.textContent) as T
 }
 
@@ -66,7 +66,7 @@ export function formatMicros(micros: string): string {
 export function explainPasskeyError(error: unknown): string {
   const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
   if (/NotAllowedError|cancel|abort|timed out/i.test(text)) return 'The passkey prompt was closed before it finished. Try again.'
-  if (/InvalidStateError|already registered|excludeCredentials/i.test(text)) return 'This device already has a payrun passkey. Use "sign in" instead.'
+  if (/InvalidStateError|already registered|excludeCredentials/i.test(text)) return 'This device already has a Rolepay passkey. Use "sign in" instead.'
   // The details (which can carry RPC URLs and request bodies) are in the console, not on the page.
   return `Something went wrong${error instanceof Error && error.name !== 'Error' ? ` (${error.name})` : ''}. The details are in the browser console; try again in a moment.`
 }

@@ -10,7 +10,7 @@ describe('the recipient claim page', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/text\/html/)
     const config = await pageConfig(res)
-    expect(config).toMatchObject({ page: 'claim', token, communityName: 'Mods guild', network: 'moderato', passkeyName: 'payrun: Mods guild' })
+    expect(config).toMatchObject({ page: 'claim', token, communityName: 'Mods guild', network: 'moderato', passkeyName: 'Rolepay: Mods guild' })
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(res.headers.get('referrer-policy')).toBe('no-referrer')
   })
@@ -22,7 +22,7 @@ describe('the recipient claim page', () => {
     expect(unknown.status).toBe(404)
     const html = await unknown.text()
     expect(html).toMatch(/\/payee link/)
-    expect(html).not.toContain('payrun.js')
+    expect(html).not.toContain('rolepay.js')
 
     const token = await claimLink(h)
     h.clock.advance(1800)

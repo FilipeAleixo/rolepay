@@ -43,7 +43,7 @@ const provesPasskey = (s: PasskeySession, c: Community) => s.proof === 'login' |
 const keyJson = (s: KeyStatusView) => ({ address: s.key.address, status: s.key.status, policy: s.key.policy, chain: s.state })
 
 /**
- * /setup/:token: the treasurer page and its JSON endpoints. The link (from /payrun setup)
+ * /setup/:token: the treasurer page and its JSON endpoints. The link (from /rolepay setup)
  * names the guild; binding a treasury takes the passkey session; everything after that
  * takes the session of the passkey that IS the treasury. The bot key authorisation and
  * the revoke are signed in the browser; the server only reads the result from the chain.
@@ -71,7 +71,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
   app.get('/setup/:token', async (c) => {
     const token = c.req.param('token')
     const link = await rolepay.communities.describeSetupLink({ token })
-    if (!link.ok) return c.html(linkErrorPage(link.error.code, '/payrun setup', deps.testnet), linkStatus(link.error.code) as 404)
+    if (!link.ok) return c.html(linkErrorPage(link.error.code, '/rolepay setup', deps.testnet), linkStatus(link.error.code) as 404)
     const { community, settings } = link.value
     const feeMode = community?.feeMode ?? settings.feeMode
     const feeToken = community?.feeToken ?? settings.feeToken
@@ -94,7 +94,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
         feeMode,
         feeToken,
         feeTokenLabel: label(feeToken),
-        passkeyName: `payrun treasury: ${guildName}`,
+        passkeyName: `Rolepay treasury: ${guildName}`,
         defaults: {
           limit: formatAmount(d.limit),
           periodDays: Math.round(d.periodSeconds / DAY),

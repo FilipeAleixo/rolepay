@@ -31,7 +31,7 @@ describe('the treasurer setup page', () => {
       feeMode: 'sponsor',
       rpcUrl: 'https://rpc.moderato.tempo.xyz',
       sponsorUrl: 'https://sponsor.moderato.tempo.xyz',
-      passkeyName: 'payrun treasury: Mods guild',
+      passkeyName: 'Rolepay treasury: Mods guild',
       defaults: { limit: '100', periodDays: 30, validityDays: 30, feeBudget: '1' },
     })
   })
@@ -43,7 +43,7 @@ describe('the treasurer setup page', () => {
     h.clock.advance(1800)
     const res = await h.send(`/setup/${token}`)
     expect(res.status).toBe(410)
-    expect(await res.text()).toMatch(/\/payrun setup/)
+    expect(await res.text()).toMatch(/\/rolepay setup/)
   })
 
   it('binds the passkey signed in on this browser as the treasury, registering the community', async () => {

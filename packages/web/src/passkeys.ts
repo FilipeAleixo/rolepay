@@ -20,7 +20,10 @@ export function accountsKv(store: KeyValueStore): Kv.Kv {
 
 /** The Accounts SDK's session cookie (its default name). */
 const SESSION_COOKIE = 'accounts_webauthn'
-/** payrun's own record that a session came from a passkey login, keyed by a hash of its token. */
+/**
+ * Rolepay's own record that a session came from a passkey login, keyed by a hash of its token.
+ * The key prefix dates from before the rename and stays, so sessions in the store survive it.
+ */
 const LOGIN_PROOF = 'payrun:passkey-login:'
 const SESSION_TTL_SECONDS = 60 * 60
 
