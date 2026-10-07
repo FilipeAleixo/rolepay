@@ -20,8 +20,8 @@ export type PolicyNotifierDeps = {
  * message later): propose-mode runs with the normal review embed (Approve and Cancel), autopilot
  * runs with when they pay and a Veto button, held runs with why and the numbers, empty periods in
  * one line. When autopilot releases a run, the message becomes the result (receipts go out once);
- * when autopilot stops, it becomes the normal review with why. A policy with no channel posts
- * nothing. It never throws: a failure is reported and the next event goes on.
+ * when autopilot stops, it becomes the normal review with why; when the run is vetoed elsewhere
+ * (the web dashboard), it says who vetoed it. A policy with no channel posts nothing. It never throws: a failure is reported and the next event goes on.
  */
 export function createPolicyNotifier(deps: PolicyNotifierDeps): PolicyAnnouncer {
   async function context(policy: Policy, pr: PolicyRun): Promise<RunViewContext> {
@@ -71,7 +71,8 @@ export function createPolicyNotifier(deps: PolicyNotifierDeps): PolicyAnnouncer 
         return update(channelId, e.run, runMessage(e.run, { ...ctx, ...autopilot({ stopped: why }), ...(e.run.status === 'approved' ? { problem: why } : {}) }))
       }
       case 'cancelled':
-        return e.run ? update(channelId, e.run, runMessage(e.run, ctx)) : undefined
+        // Cancelled during the window: by a veto (the dashboard's, say), or by hand.
+        return e.run ? update(channelId, e.run, runMessage(e.run, { ...ctx, ...(pr.vetoedBy ? autopilot() : {}) })) : undefined
     }
   }
 

@@ -84,6 +84,22 @@ describe('createPolicyNotifier: telling the channel what the scheduler did', () 
     expect(w.chain.balance(TOKEN, TREASURY)).toBeLessThan(1000_000_000n)
   })
 
+  it('a run vetoed elsewhere (on the web dashboard) is announced as cancelled: its message says who vetoed it and loses the Veto button', async () => {
+    const w = await world({ autopilot: true })
+    await w.travelTo(MONDAY)
+    const made = (await w.rolepay.scheduler.tick()).events[0]
+    await w.notifier.announce(made ? [made] : [])
+    const post = w.rest.channelPosts.at(-1)
+    const vetoed = await w.rolepay.policies.veto({ ...asTreasurer, policyRunId: made?.policyRun.id as string })
+    if (!vetoed.ok || !made) throw new Error('not vetoed')
+    await w.notifier.announce([{ kind: 'cancelled', policy: made.policy, policyRun: vetoed.value.policyRun, run: vetoed.value.run }])
+    const edit = w.rest.channelEdits.at(-1)
+    expect(edit?.messageId).toBe(post?.messageId)
+    expect(text(edit?.message)).toContain('"title":"Vetoed"')
+    expect(text(edit?.message)).toContain(`Vetoed by <@${TREASURER}>`)
+    expect(text(edit?.message)).not.toContain('policy-run:veto:')
+  })
+
   it('a run held over the key budget is posted with the numbers; nothing was paid', async () => {
     const w = await world({ limit: '2' })
     await w.travelTo(MONDAY)

@@ -1,4 +1,4 @@
-import type { Clock, KeyValueStore, Rolepay } from '@rolepay/core'
+import type { Clock, KeyValueStore, Rolepay, SchedulerEvent } from '@rolepay/core'
 import {
   type DiscordRest,
   InProcessExecutionQueue,
@@ -12,7 +12,7 @@ import {
   createRecoveryNotifier,
   createRunExecutor,
 } from '@rolepay/discord'
-import { type Assets, type PasskeySessions, type RateLimiter, TokenBucketLimiter, createWebApp } from '@rolepay/web'
+import { type Assets, type PasskeySessions, type PolicyPort, type RateLimiter, TokenBucketLimiter, createWebApp } from '@rolepay/web'
 import { Hono } from 'hono'
 import type { ServerConfig } from './config.js'
 import { type DashboardOverrides, dashboardDeps } from './dashboard.js'
@@ -54,6 +54,40 @@ export const defaultRateLimits = () => ({
   perClient: new TokenBucketLimiter({ capacity: 30, refillPerSecond: 0.5 }),
   overall: new TokenBucketLimiter({ capacity: 300, refillPerSecond: 5 }),
 })
+
+/**
+ * The dashboard's policy port, with each successful veto announced in Discord: the run's message
+ * (posted with "pays at ... unless vetoed" and a Veto button) turns into "Vetoed by". A run that
+ * was not made by a core policy (another port) is left alone.
+ */
+export function vetoesAnnounced(port: PolicyPort, rolepay: Rolepay, announce: (events: SchedulerEvent[]) => Promise<void>): PolicyPort {
+  return {
+    list: (i) => port.list(i),
+    get: (i) => port.get(i),
+    preview: (i) => port.preview(i),
+    versions: (i) => port.versions(i),
+    upcoming: (i) => port.upcoming(i),
+    runOrigins: (i) => port.runOrigins(i),
+    create: (i) => port.create(i),
+    edit: (i) => port.edit(i),
+    approve: (i) => port.approve(i),
+    discard: (i) => port.discard(i),
+    pause: (i) => port.pause(i),
+    resume: (i) => port.resume(i),
+    archive: (i) => port.archive(i),
+    setMode: (i) => port.setMode(i),
+    async veto(input) {
+      const r = await port.veto(input)
+      if (!r.ok) return r
+      const found = await rolepay.policies.runFor({ guildId: input.guildId, runId: input.runId })
+      if (found) {
+        const run = await rolepay.payRuns.get({ guildId: input.guildId, runId: input.runId })
+        await announce([{ kind: 'cancelled', policy: found.policy, policyRun: found.policyRun, run: run.ok ? run.value : null }])
+      }
+      return r
+    },
+  }
+}
 
 /**
  * Wires the HTTP app over the core services and the Discord adapter. Shared by main.ts
@@ -130,7 +164,9 @@ export function composeServer(deps: ServerDeps) {
   const header = config.http.clientIpHeader
   const clientKey = header ? { clientKey: (req: Request) => req.headers.get(header)?.trim() || 'direct' } : {}
   const rateLimits = { ...(deps.web.rateLimits ?? defaultRateLimits()), ...clientKey }
-  const { dashboard: overrides, ...web } = deps.web
+  const { dashboard: given, ...web } = deps.web
+  // A veto on the dashboard updates the run's message in Discord too, as the Veto button does there.
+  const overrides = given?.policies ? { ...given, policies: vetoesAnnounced(given.policies, rolepay, (events) => policyNotifier.announce(events)) } : given
   const dashboard = dashboardDeps({ config, rest, kv: deps.kv, ...(overrides ? { overrides } : {}), onError: (error) => log('dashboard_error', errorFields(error)) })
   app.route('/', createWebApp({ rolepay, clock: deps.clock, config: config.web, ...web, rateLimits, dashboard }))
 

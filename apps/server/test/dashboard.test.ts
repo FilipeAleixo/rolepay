@@ -1,7 +1,9 @@
 // The dashboard as the server wires it: the bot's Discord REST client is the member view, the
 // config decides whether sign-in exists, and the policy seam is a dependency.
+import type { Rolepay, SchedulerEvent } from '@rolepay/core'
 import { FakeDiscordOAuth, InMemoryPolicies } from '@rolepay/web/testing'
 import { describe, expect, it } from 'vitest'
+import { vetoesAnnounced } from '../src/compose.js'
 import { restGuildMembers } from '../src/dashboard.js'
 import { GUILD, TOKEN, TREASURY, testServer } from './support.js'
 
@@ -106,5 +108,48 @@ describe('restGuildMembers (the member view over the bot REST client)', () => {
     })
     expect(await members.member(GUILD, FELIX)).toEqual({ roles: [ROLE], name: 'Felix' })
     expect(await members.member(GUILD, TESS)).toBeNull()
+  })
+})
+
+describe('vetoesAnnounced (a dashboard veto reaches Discord too)', () => {
+  it('passes every call through to the port, and announces only a successful veto of a run a core policy made', async () => {
+    const port = new InMemoryPolicies()
+    const announced: SchedulerEvent[][] = []
+    const made = { policy: { id: 'pol_1' }, policyRun: { id: 'prun_1' } }
+    const rolepay = {
+      policies: { runFor: async ({ runId }: { runId: string }) => (runId === 'run_core' ? made : null) },
+      payRuns: { get: async () => ({ ok: true, value: { id: 'run_core' } }) },
+    } as unknown as Rolepay
+    const wrapped = vetoesAnnounced(port, rolepay, async (events) => void announced.push(events))
+    const actor = { id: TESS, roleIds: [ROLE] }
+    const id = port.seed(GUILD, { name: 'Weekly helpers', instruction: 'x' })
+    const ref = { guildId: GUILD, policyId: id }
+    const origin = { policyId: id, policyRunId: 'prun_1', policyName: 'Weekly helpers', version: 1, period: 'p', mode: 'autopilot' as const, scheduledFor: new Date(), executesAt: new Date(), vetoedBy: null, vetoedAt: null, executedAt: null, vetoable: true }
+    port.linkRun(GUILD, 'run_core', { ...origin })
+    port.linkRun(GUILD, 'run_other', { ...origin, policyRunId: 'prun_2' })
+
+    expect((await wrapped.list({ guildId: GUILD })).map((p) => p.id)).toEqual([id])
+    expect((await wrapped.get(ref)).ok).toBe(true)
+    expect((await wrapped.preview(ref)).ok).toBe(false)
+    expect(await wrapped.versions(ref)).toHaveLength(1)
+    expect(await wrapped.upcoming({ guildId: GUILD, limit: 5 })).toEqual([])
+    expect(Object.keys(await wrapped.runOrigins({ guildId: GUILD, runIds: ['run_core'] }))).toEqual(['run_core'])
+    const created = await wrapped.create({ guildId: GUILD, actor, draft: { name: 'New', instruction: 'y', schedule: { kind: 'weekly', weekday: 1, hour: 1, timezone: 'UTC' } } })
+    const policyId = created.ok ? created.value.policyId : ''
+    await wrapped.edit({ guildId: GUILD, policyId, actor, draft: { name: 'New', instruction: 'z', schedule: { kind: 'weekly', weekday: 1, hour: 1, timezone: 'UTC' } } })
+    await wrapped.discard({ guildId: GUILD, policyId, actor, version: 2 })
+    await wrapped.approve({ ...ref, actor, version: 1 })
+    await wrapped.pause({ ...ref, actor })
+    await wrapped.resume({ ...ref, actor })
+    await wrapped.setMode({ ...ref, actor, mode: 'autopilot', vetoWindowMinutes: 60 })
+    await wrapped.archive({ ...ref, actor })
+    expect(port.calls.map((c) => c.method)).toEqual(['create', 'edit', 'discard', 'approve', 'pause', 'resume', 'setMode', 'archive'])
+
+    expect(await wrapped.veto({ guildId: GUILD, runId: 'run_other', actor })).toEqual({ ok: true, value: undefined })
+    expect(announced).toEqual([])
+    expect((await wrapped.veto({ guildId: GUILD, runId: 'run_core', actor })).ok).toBe(true)
+    expect(announced).toEqual([[{ kind: 'cancelled', ...made, run: { id: 'run_core' } }]])
+    expect((await wrapped.veto({ guildId: GUILD, runId: 'run_core', actor })).ok).toBe(false)
+    expect(announced).toHaveLength(1)
   })
 })
