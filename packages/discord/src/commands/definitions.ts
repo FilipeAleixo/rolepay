@@ -19,9 +19,10 @@ const capitalised = (w: string) => `${w[0]?.toUpperCase()}${w.slice(1)}`
 
 /**
  * /rolepay policy: standing policies. The AI compiles the instruction once; the approver role
- * approves, pauses, resumes and switches modes; code runs it on its schedule. `run_now` and
- * `veto_minutes` are demo controls (ROLEPAY_DEMO_CONTROLS on Moderato: a demo can skip to Monday
- * and use a short veto window), separate from the dev shortcuts.
+ * approves, pauses, resumes and switches modes; code runs it on its schedule. `run_now`,
+ * `veto_minutes` and the daily schedule are demo controls (ROLEPAY_DEMO_CONTROLS on Moderato: a
+ * demo can skip to Monday, use a short veto window, and pay judges every day), separate from the
+ * dev shortcuts.
  */
 const policyGroup = (opts: { demoControls: boolean }) => ({
   type: OptionType.SubCommandGroup,
@@ -46,6 +47,8 @@ const policyGroup = (opts: { demoControls: boolean }) => ({
           description: 'How often it runs',
           required: true,
           choices: [
+            // Daily is a demo control: a judge gets paid by the next daily run with nobody online.
+            ...(opts.demoControls ? [{ name: 'Daily (demo control)', value: 'daily' }] : []),
             { name: 'Weekly', value: 'weekly' },
             { name: 'Monthly', value: 'monthly' },
           ],

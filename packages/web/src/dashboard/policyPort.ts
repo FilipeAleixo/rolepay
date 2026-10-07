@@ -20,8 +20,9 @@ export type PolicyActor = { id: string; roleIds: string[] }
 export type PolicyStatus = 'draft' | 'active' | 'paused' | 'archived'
 export type PolicyMode = 'propose' | 'autopilot'
 
-/** When a policy runs, in the community's timezone (an IANA name, default UTC). */
+/** When a policy runs, in the community's timezone (an IANA name, default UTC). Daily is the testnet demo's only (`PolicyPort.dailySchedules`). */
 export type PolicySchedule =
+  | { kind: 'daily'; hour: number; timezone: string }
   | { kind: 'weekly'; /** 0 = Sunday ... 6 = Saturday */ weekday: number; hour: number; timezone: string }
   | { kind: 'monthly'; /** 1-28 */ day: number; hour: number; timezone: string }
 
@@ -127,6 +128,12 @@ export type PolicyError = { code: string; message?: string }
 type Ref = { guildId: string; policyId: string }
 
 export interface PolicyPort {
+  /**
+   * Whether policies here may run daily: only on a testnet server with the demo controls on
+   * (ROLEPAY_DEMO_CONTROLS). Absent or false: the form offers weekly and monthly, and the policy
+   * services refuse a daily schedule (`schedule_not_allowed`) anyway.
+   */
+  readonly dailySchedules?: boolean
   list(input: { guildId: string }): Promise<PolicySummary[]>
   get(input: Ref): Promise<Result<PolicyDetail, PolicyError>>
   /** Evaluates the rule now (reads Discord activity, so it can take a few seconds). */

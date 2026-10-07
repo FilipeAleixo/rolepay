@@ -144,6 +144,7 @@ export function proposal(over: Partial<Proposal> = {}): Proposal {
       mentionedIn: null,
       postedIn: null,
       paidInRun: null,
+      neverPaid: false,
       exclude: [],
       excludeProposer: false,
     },

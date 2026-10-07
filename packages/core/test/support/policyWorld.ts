@@ -35,6 +35,17 @@ export const asTreasurer = { guildId: GUILD, actor: TREASURER, actorRoleIds: [AP
 export const asWriter = { guildId: GUILD, actor: WRITER, actorRoleIds: [PROPOSERS] }
 export const INSTRUCTION = 'Every Monday: 1 per answered question in #help, max 50 a week each, for Mods'
 export const MONDAYS = { kind: 'weekly' as const, weekday: 'monday' as const, hour: 18, timezone: 'UTC' }
+/** The testnet demo's schedule (only with the demo controls on): every day at 18:00 UTC. */
+export const DAILY = { kind: 'daily' as const, hour: 18, timezone: 'UTC' }
+/** Today's 18:00 UTC, the first daily occurrence after T0. */
+export const TODAY_18 = new Date('2026-10-07T18:00:00Z')
+/** The judge demo's welcome post in #start-here, and the instruction that pays whoever reacts ✅ to it once. */
+export const START_HERE = '700000000000000010'
+export const WELCOME = '810000000000000123'
+export const JUDGES = `Every day at 18:00 UTC: 1 AlphaUSD to every registered payee who reacted ✅ to https://discord.com/channels/${GUILD}/${START_HERE}/${WELCOME} and has never been paid`
+/** The judge rule as the model writes it: a flat 1, reacted ✅ to the linked message (M1), never paid. */
+export const judgesAnswer = (): RawCriteriaProposal =>
+  emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' }, note: 'Judges' }, { anchors: [{ kind: 'reactedTo', message: 'M1', thread: '', emoji: '✅' }], neverPaid: true })
 
 const ADDRESS: Record<string, string> = {
   [ANA]: '0x1111111111111111111111111111111111111111',
@@ -66,13 +77,26 @@ const hoursBefore = (t: Date, h: number) => new Date(t.getTime() - h * 3_600_000
 
 export type PolicyWorld = Awaited<ReturnType<typeof policyWorld>>
 
-export async function policyWorld(opts: { limit?: number; key?: boolean; ai?: boolean; proposer?: FakeRunProposer | null; minVetoMinutes?: number; separateApprover?: boolean } = {}) {
+export async function policyWorld(
+  opts: { limit?: number; key?: boolean; ai?: boolean; proposer?: FakeRunProposer | null; minVetoMinutes?: number; separateApprover?: boolean; demoControls?: boolean } = {},
+) {
   const clock = new ManualClock(T0)
   const chain = new FakePayoutChain({ startTime: Math.floor(T0.getTime() / 1000) })
   const repos = createMemoryRepositories({ clock })
   const proposer = opts.proposer === undefined ? new FakeRunProposer() : opts.proposer
   const activity = new FakeActivityReader()
-  const deps = { chain, repositories: repos, vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato' as const, proposer, activity, ...(opts.minVetoMinutes ? { minVetoMinutes: opts.minVetoMinutes } : {}) }
+  const deps = {
+    chain,
+    repositories: repos,
+    vault: new PlainKeyVault(),
+    ids: new SequentialIds(),
+    clock,
+    network: 'moderato' as const,
+    proposer,
+    activity,
+    ...(opts.minVetoMinutes ? { minVetoMinutes: opts.minVetoMinutes } : {}),
+    ...(opts.demoControls ? { demoControls: true } : {}),
+  }
   const rolepay: Rolepay = createRolepay(deps)
   const reg = await rolepay.communities.register({
     guildId: GUILD,

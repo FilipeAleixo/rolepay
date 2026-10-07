@@ -106,6 +106,7 @@ export function criteriaInWords(c: Criteria, guildId: string): string {
   if (c.mentionedIn) clauses.push(`mentioned in [this message](${messageLink(guildId, c.mentionedIn.channelId, c.mentionedIn.messageId)})`)
   if (c.postedIn) clauses.push(`who posted in <#${c.postedIn.threadId}> in the last ${PROPOSAL_LIMITS.maxLookbackDays} days`)
   if (c.paidInRun) clauses.push(c.paidInRun.last ? `paid in the last run${c.paidInRun.runId ? ` (${c.paidInRun.runId})` : ' (there is none yet)'}` : `paid in run ${c.paidInRun.runId}`)
+  if (c.neverPaid) clauses.push('who have never been paid by this community')
   const except = [...c.exclude.map(mention), ...(c.excludeProposer ? ['the person proposing'] : [])]
   if (except.length) clauses.push(`except ${except.join(', ')}`)
   const joined = clauses.length <= 1 ? (clauses[0] ?? '') : `${clauses.slice(0, -1).join(', ')} and ${clauses.at(-1)}`

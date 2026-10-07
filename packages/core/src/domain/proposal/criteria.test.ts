@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { type Criteria, type CriteriaEvidence, type ScannedMessage, evaluateCriteria, needsMembers, resolveCriteria, scanPlan, seenUsers } from './criteria.js'
+import { type Run, type RunEvent, newRun, transition } from '../run.js'
+import { type Criteria, type CriteriaEvidence, type ScannedMessage, evaluateCriteria, needsMembers, paidPayees, resolveCriteria, scanPlan, seenUsers } from './criteria.js'
 import type { RawActivity, RawAnchor, RawCriteriaProposal } from './raw.js'
 
 const NOW = new Date('2026-10-06T12:00:00.000Z')
@@ -29,7 +30,7 @@ const anchor = (kind: RawAnchor['kind'], fields: Partial<Omit<RawAnchor, 'kind'>
 const raw = (over: Partial<RawCriteriaProposal> = {}, conditions: Partial<RawCriteriaProposal['conditions']> = {}): RawCriteriaProposal => ({
   understood: true,
   problem: '',
-  conditions: { hasRole: [], lacksRole: [], joinedBefore: '', joinedAfter: '', activity: [], anchors: [], paidInRun: '', ...conditions },
+  conditions: { hasRole: [], lacksRole: [], joinedBefore: '', joinedAfter: '', activity: [], anchors: [], paidInRun: '', neverPaid: false, ...conditions },
   exclude: [],
   excludeProposer: false,
   amount: rule({ kind: 'flat', amount: '20' }),
@@ -144,6 +145,14 @@ describe('resolveCriteria (the model writes the filter, code checks it)', () => 
     expect(resolve(raw({}, { paidInRun: 'not a run id with spaces' })).ok).toBe(false)
   })
 
+  it('never paid: people this community has never paid ("first-time"); not together with paid in a run, which nobody could meet', () => {
+    expect(resolve(raw({}, { anchors: [anchor('reactedTo', { message: 'M1', emoji: '✅' })], neverPaid: true }))).toMatchObject({ ok: true, value: { criteria: { reactedTo: { ...MSG, emoji: '✅' }, neverPaid: true } } })
+    const plain = resolve(raw())
+    expect(plain.ok && plain.value.criteria.neverPaid).toBe(false)
+    const both = resolve(raw({}, { paidInRun: 'last', neverPaid: true }))
+    expect(!both.ok && both.error.code === 'criteria_invalid' && both.error.issues.join(' | ')).toMatch(/paid in a run and never paid/)
+  })
+
   it('"" and [] mean not set: nothing in the raw answer becomes a null condition', () => {
     expect(resolve(raw())).toMatchObject({
       ok: true,
@@ -227,11 +236,12 @@ const criteria = (over: Partial<Criteria> = {}): Criteria => ({
   mentionedIn: null,
   postedIn: null,
   paidInRun: null,
+  neverPaid: false,
   exclude: [],
   excludeProposer: false,
   ...over,
 })
-const evidence = (over: Partial<CriteriaEvidence> = {}): CriteriaEvidence => ({ messages: [], reactors: null, mentioned: null, threadPosters: null, paidUserIds: null, members: {}, ...over })
+const evidence = (over: Partial<CriteriaEvidence> = {}): CriteriaEvidence => ({ messages: [], reactors: null, mentioned: null, threadPosters: null, paidUserIds: null, paidBefore: null, members: {}, ...over })
 const m = (authorId: string, day: number, over: Partial<ScannedMessage> = {}): ScannedMessage => ({ channelId: HELP, authorId, at: new Date(Date.UTC(2026, 9, day, 10)), replyToAuthorId: null, ...over })
 const since = new Date('2026-10-01T00:00:00Z')
 
@@ -279,6 +289,19 @@ describe('evaluateCriteria (code runs the filter over the candidates)', () => {
     ])
   })
 
+  it('never paid: someone this community already paid does not match; without the history read, nobody does (it never pays by default)', () => {
+    const c = criteria({ reactedTo: { ...MSG, emoji: '✅' }, neverPaid: true })
+    expect(evaluateCriteria(c, evidence({ reactors: [A, B, C], paidBefore: [B] }), [A, B, C], ME).map((v) => [v.userId, v.matched, v.failed])).toEqual([
+      [A, true, null],
+      [B, false, 'neverPaid'],
+      [C, true, null],
+    ])
+    expect(evaluateCriteria(c, evidence({ reactors: [A] }), [A], ME).map((v) => v.failed)).toEqual(['neverPaid'])
+    // A first-timer filter alone: every registered payee nobody has paid yet.
+    expect(evaluateCriteria(criteria({ neverPaid: true }), evidence({ paidBefore: [A] }), [A, B], ME).map((v) => v.matched)).toEqual([false, true])
+    expect(seenUsers(c, evidence({ reactors: [A], paidBefore: [B] }))).toEqual([A])
+  })
+
   it('exclusions: listed people and, with excludeProposer, the person asking', () => {
     const c = criteria({ exclude: [B], excludeProposer: true })
     expect(evaluateCriteria(c, evidence(), [A, B, ME], ME).map((v) => v.matched)).toEqual([true, false, false])
@@ -303,5 +326,41 @@ describe('scanPlan and seenUsers', () => {
   it('lists the people the evidence shows, most active first', () => {
     const c = criteria({ messagesIn: { channelIds: [HELP], since, until: NOW, min: 1 } })
     expect(seenUsers(c, evidence({ messages: [m(B, 2), m(A, 2), m(A, 3)], reactors: [C] }))).toEqual([A, B, C])
+  })
+})
+
+describe('paidPayees: who a community has paid, for never paid', () => {
+  const GUILD = '1094309218049937418'
+  const OTHER = '1094309218049937419'
+  const people = Array.from({ length: 9 }, (_, i) => `20000000000000010${i}`)
+  const run = (n: number, events: RunEvent[], communityId = GUILD): Run => {
+    const made = newRun({ id: `run_np${n}`, communityId, token: '0x20c0000000000000000000000000000000000001', note: null, createdBy: ME, lines: [{ payeeDiscordId: people[n] as string, address: `0x${String(n + 1).repeat(40)}`, amount: 1_000_000n }], now: NOW })
+    if (!made.ok) throw new Error(made.error.code)
+    return events.reduce((r, e) => {
+      const next = transition(r, e, NOW)
+      if (!next.ok) throw new Error(`${e.type}: ${next.error.code}`)
+      return next.value
+    }, made.value)
+  }
+  const submit: RunEvent = { type: 'submit', actor: ME }
+  const approve: RunEvent = { type: 'approve', actor: ME }
+  const start: RunEvent = { type: 'start_attempt', fromBlock: 1n, validBefore: 2_000_000_000 }
+  const paid: RunEvent = { type: 'mark_paid', txHash: `0x${'ab'.repeat(32)}`, blockNumber: 7n }
+  const failed = (reason: 'rejected' | 'partial_match'): RunEvent => ({ type: 'mark_failed', reason, detail: 'fixture' })
+
+  it('a paid line counts; so does a run being paid now (approved or executing) and a failure where money may have moved; drafts, unapproved, cancelled runs, failures that sent nothing and other communities do not', () => {
+    const runs = [
+      run(0, [submit, approve, start, paid]), // paid
+      run(1, []), // a draft
+      run(2, [submit]), // waiting for approval
+      run(3, [submit, { type: 'cancel', actor: ME }]), // cancelled (a veto)
+      run(4, [submit, approve, start, failed('rejected')]), // failed, nothing sent (retryable)
+      run(5, [submit, approve, start, failed('partial_match')]), // failed, the chain shows money moving: a person must look
+      run(6, [submit, approve]), // approved: about to be paid
+      run(7, [submit, approve, start]), // executing: being paid
+      run(8, [submit, approve, start, paid], OTHER), // paid, by another community
+    ]
+    expect(paidPayees(runs, GUILD)).toEqual([people[0], people[5], people[6], people[7]])
+    expect(paidPayees([], GUILD)).toEqual([])
   })
 })

@@ -1,7 +1,7 @@
 import { emptyCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { SCOPE, appHarness, body, isEphemeral, text } from '../../test/app.js'
-import { ADMIN, ALICE, BOB, CHANNEL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
+import { ADMIN, ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
 import { autocomplete, buttonClick, slashCommand } from '../testing/interactions.js'
 import { wireMessage } from '../testing/messages.js'
 
@@ -88,6 +88,69 @@ describe('/rolepay policy new', () => {
   })
 })
 
+describe('/rolepay policy new schedule:daily (a demo control: the judge demo)', () => {
+  it('with the demo controls on, a daily policy is drafted (no weekday or day needed) and its preview says every day at the hour', async () => {
+    const a = await ready()
+    const { shown, policyId } = await newPolicy(a, { schedule: 'daily', weekday: undefined as unknown as string })
+    expect(shown).toContain('every day at 18:00 (UTC)')
+    expect(shown).toContain('First run after approval')
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && p.value.schedule).toEqual({ kind: 'daily', hour: 18, timezone: 'UTC' })
+  })
+
+  it('the judge rule: everyone who reacted ✅ to the welcome post and has never been paid; the preview says it for the rule and for each person', async () => {
+    const a = await ready()
+    const START = '700000000000000010'
+    const WELCOME = '810000000000000123'
+    a.rest.channels.set(GUILD, [
+      { id: HELP, name: 'help', type: 0 },
+      { id: START, name: 'start-here', type: 0 },
+    ])
+    a.rest.setReactions(START, WELCOME, '✅', [{ id: ALICE }, { id: BOB }, { id: CAROL }])
+    // Alice and Bob are in a run approved by hand (about to be paid): they are not first-timers any more.
+    await a.approvedRun()
+    a.proposer.onCriteria = () =>
+      emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' }, note: 'Judges' }, { anchors: [{ kind: 'reactedTo', message: 'M1', thread: '', emoji: '✅' }], neverPaid: true })
+    const instruction = `Every day at 18:00 UTC: 1 AlphaUSD to every registered payee who reacted ✅ to https://discord.com/channels/${GUILD}/${START}/${WELCOME} and has never been paid`
+    const { shown } = await newPolicy(a, { instruction, schedule: 'daily', weekday: undefined as unknown as string, name: 'Judges' })
+    expect(shown).toContain(`Who: reacted ✅ to https://discord.com/channels/${GUILD}/${START}/${WELCOME}; has never been paid by this community.`)
+    expect(shown).toContain(`<@${CAROL}>  1 AlphaUSD  ·  reacted to the message; never paid by this community`)
+    expect(shown).not.toContain(`<@${ALICE}>  1 AlphaUSD`)
+    expect(shown).not.toContain(`<@${BOB}>  1 AlphaUSD`)
+    expect(shown).toContain('every day at 18:00 (UTC)')
+  })
+
+  it('run_now when nobody matches: the caller is told no run was made; a daily policy posts nothing, a weekly one says so in its channel', async () => {
+    for (const [schedule, posts] of [
+      ['daily', 0],
+      ['weekly', 1],
+    ] as const) {
+      const a = await ready()
+      // A rule nobody registered meets: the Treasurer role.
+      a.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' } }, { hasRole: ['R1'] })
+      const { policyId } = await newPolicy(a, { instruction: '1 to every Treasurer', schedule })
+      await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
+      const before = a.rest.channelPosts.length
+      await a.send(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: policyId }, treasurer, `tok-empty-${schedule}`))
+      const said = text(a.rest.lastEdit(`tok-empty-${schedule}`))
+      expect([schedule, said]).toEqual([schedule, expect.stringContaining('Nobody matched for the next period, so no run was made')])
+      expect([schedule, a.rest.channelPosts.length - before]).toEqual([schedule, posts])
+      if (schedule === 'daily') expect(said).toContain('a daily policy stays quiet on empty days')
+    }
+  })
+
+  it('without them it is refused before the model is called, even with the dev shortcuts on; off Moderato too', async () => {
+    for (const config of [{ devShortcuts: true, demoControls: false }, { network: 'mainnet' as const, demoControls: true }]) {
+      const a = await ready({ config })
+      const d = await a.send(slashCommand(SCOPE, 'rolepay', 'policy new', { ...NEW, schedule: 'daily' }, treasurer))
+      expect(isEphemeral(d)).toBe(true)
+      expect(body(d).data?.content).toContain('A daily `schedule` is a demo control (ROLEPAY_DEMO_CONTROLS=true on Moderato)')
+      expect(a.proposer.requests).toHaveLength(0)
+      expect(await a.rolepay.policies.list({ guildId: GUILD })).toEqual([])
+    }
+  })
+})
+
 describe('the preview buttons', () => {
   it('Approve: the approver role only; the preview turns into the active policy', async () => {
     const a = await ready()
@@ -123,6 +186,49 @@ describe('the preview buttons', () => {
     expect(text(body(d).data)).toContain('Discarded')
     const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
     expect(p.ok && p.value.status).toBe('archived')
+  })
+})
+
+describe('the policy option typed by name instead of picked from autocomplete', () => {
+  it('an exact name, in any case, resolves to the one policy with it, for mode, show, pause, resume and run_now', async () => {
+    const a = await ready()
+    const { policyId } = await newPolicy(a, { name: 'Test policy' })
+    await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
+    const mode = await a.send(slashCommand(SCOPE, 'rolepay', 'policy mode', { policy: 'test POLICY', mode: 'autopilot', veto_minutes: 5 }, treasurer))
+    expect(isEphemeral(mode)).toBe(false)
+    expect(text(body(mode).data)).toContain('Autopilot is on')
+    expect(text(body(await a.send(slashCommand(SCOPE, 'rolepay', 'policy pause', { policy: ' Test policy ' }, treasurer))).data)).toContain(`paused by <@${TREASURER}>`)
+    expect(text(body(await a.send(slashCommand(SCOPE, 'rolepay', 'policy resume', { policy: 'test policy' }, treasurer))).data)).toContain(`resumed by <@${TREASURER}>`)
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy show', { policy: 'Test Policy' }, treasurer, 'tok-show-name'))
+    expect(text(a.rest.lastEdit('tok-show-name'))).toContain(`Policy ${policyId}`)
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: 'TEST POLICY' }, treasurer, 'tok-now-name'))
+    expect(text(a.rest.lastEdit('tok-now-name'))).toContain('posted')
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && [p.value.status, p.value.mode, p.value.vetoWindowMinutes]).toEqual(['active', 'autopilot', 5])
+    // The ID that autocomplete fills in still works as before.
+    expect(text(body(await a.send(slashCommand(SCOPE, 'rolepay', 'policy pause', { policy: policyId }, treasurer))).data)).toContain('paused by')
+  })
+
+  it('a name two policies share lists both (archived ones do not count); no match says where to find them; nothing changes', async () => {
+    const a = await ready()
+    const one = await newPolicy(a, { name: 'Test policy' })
+    const two = await newPolicy(a, { name: 'test policy' })
+    await a.send(buttonClick(SCOPE, `policy:approve:${one.policyId}:1`, treasurer))
+    const ambiguous = await a.send(slashCommand(SCOPE, 'rolepay', 'policy pause', { policy: 'Test policy' }, treasurer))
+    expect(isEphemeral(ambiguous)).toBe(true)
+    const said = body(ambiguous).data?.content as string
+    expect(said).toContain('More than one policy here is called')
+    expect(said).toContain(`\`${one.policyId}\` (active)`)
+    expect(said).toContain(`\`${two.policyId}\` (draft)`)
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId: one.policyId })
+    expect(p.ok && p.value.status).toBe('active')
+    // Once one of them is archived, the name is the other's alone.
+    await a.send(buttonClick(SCOPE, `policy:discard:${two.policyId}:1`, treasurer))
+    expect(text(body(await a.send(slashCommand(SCOPE, 'rolepay', 'policy pause', { policy: 'test policy' }, treasurer))).data)).toContain('paused by')
+    for (const sub of ['policy mode', 'policy show', 'policy pause', 'policy resume', 'policy run_now']) {
+      const d = await a.send(slashCommand(SCOPE, 'rolepay', sub, { policy: 'No such policy', mode: 'propose' }, treasurer))
+      expect([sub, isEphemeral(d), body(d).data?.content]).toEqual([sub, true, 'There is no policy with that ID in this server. `/rolepay policy list` shows them.'])
+    }
   })
 })
 

@@ -193,6 +193,23 @@ describe('AnthropicRunProposer: the request', () => {
     }
   })
 
+  // "Who have never been paid" is a filter the model can write: a plain boolean, so the union count
+  // does not move. A schedule is not: it is an option of the command or form, never read from the
+  // instruction, so the model cannot return "daily" (or any schedule) on any server.
+  it('criteria mode: the model can say "never paid" (a boolean, not a union), and nothing in the answer is a schedule', async () => {
+    const { proposer, sent } = proposerWith(() => json(fixture('criteria-valid.json')))
+    const r = await proposer.fromCriteria(CRITERIA)
+    expect(r.ok && r.value.raw.conditions.neverPaid).toBe(false)
+    const body = sent[0]?.body as Record<string, unknown>
+    const schema = (body.output_config as { format: { schema: { properties: { conditions: { properties: Record<string, { type?: string }> } } } } }).format.schema
+    expect(schema.properties.conditions.properties.neverPaid?.type).toBe('boolean')
+    expect(JSON.stringify(schema)).not.toMatch(/schedule|daily|weekday/i)
+    const system = systemText(body)
+    expect(system).toContain('neverPaid')
+    expect(system).toMatch(/"who have never been paid", "first-time"/)
+    expect(system).toMatch(/schedule is set apart.*never a filter/)
+  })
+
   it('the union counter counts what the API counts (type arrays, anyOf, oneOf, nested)', () => {
     const nullable = { anyOf: [{ type: 'string' }, { type: 'null' }] }
     const schema = {

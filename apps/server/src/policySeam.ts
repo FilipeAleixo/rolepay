@@ -63,10 +63,12 @@ const notRegistered = (n: number) => `${people(n)} matched but ${n === 1 ? 'is' 
 const vetoWords = (minutes: number) => (minutes % 60 === 0 ? (minutes === 60 ? '1 hour' : `${minutes / 60} hours`) : minutes === 1 ? '1 minute' : `${minutes} minutes`)
 
 export function toPortSchedule(s: Schedule): PolicySchedule {
+  if (s.kind === 'daily') return { kind: 'daily', hour: s.hour, timezone: s.timezone }
   return s.kind === 'weekly' ? { kind: 'weekly', weekday: WEEKDAYS.indexOf(s.weekday), hour: s.hour, timezone: s.timezone } : { kind: 'monthly', day: s.day, hour: s.hour, timezone: s.timezone }
 }
 
 export function toCoreSchedule(s: PolicySchedule): Schedule {
+  if (s.kind === 'daily') return { kind: 'daily', hour: s.hour, timezone: s.timezone }
   return s.kind === 'weekly'
     ? { kind: 'weekly', weekday: WEEKDAYS[s.weekday] ?? 'monday', hour: s.hour, timezone: s.timezone }
     : { kind: 'monthly', day: s.day, hour: s.hour, timezone: s.timezone }
@@ -218,6 +220,8 @@ function compileError(e: { code: string; reason?: string; problem?: string }): P
       return failed('AI proposals are off in this community. A treasurer turns them on with /rolepay setup ai_proposals:true.')
     case 'invalid_input':
       return { code: e.code, message: 'Some of the values were not valid.' }
+    case 'schedule_not_allowed':
+      return { code: e.code, message: 'A daily schedule is a testnet demo control, off on this server: choose weekly or monthly.' }
     default:
       return actionError(e)
   }
@@ -249,6 +253,9 @@ export function policyPortFromCore(rolepay: Rolepay, opts: { names?: NameSource 
   const names = (guildId: string) => namesFor(rolepay, guildId, opts.names)
 
   return {
+    // Daily schedules: the testnet demo controls only (core decides; the form offers what core allows).
+    dailySchedules: policies.dailySchedules,
+
     async list({ guildId }): Promise<PolicySummary[]> {
       return (await policies.list({ guildId })).map(({ policy: p, nextRunAt }) => ({
         id: p.id,

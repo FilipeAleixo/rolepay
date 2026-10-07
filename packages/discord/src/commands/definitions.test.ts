@@ -67,10 +67,16 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     const policyGroup = (o: { devShortcuts: boolean; demoControls: boolean }) => (commandDefinitions(o) as Def[]).find((d) => d.name === 'rolepay')?.options?.find((x) => x.name === 'policy')
     const demo = policyGroup({ devShortcuts: false, demoControls: true })
     expect(demo?.options?.find((o) => o.name === 'mode')?.options?.map((o) => o.name)).toContain('veto_minutes')
+    // A daily schedule is a demo control too: offered only with them, never in production.
+    type Choices = Def & { choices?: { name: string; value: string }[] }
+    const scheduleChoices = (group: Def | undefined) => (group?.options?.find((o) => o.name === 'new')?.options?.find((o) => o.name === 'schedule') as Choices | undefined)?.choices?.map((c) => c.value)
+    expect(scheduleChoices(policy)).toEqual(['weekly', 'monthly'])
+    expect(scheduleChoices(demo)).toEqual(['daily', 'weekly', 'monthly'])
     expect(demo?.options?.map((o) => o.name)).toContain('run_now')
     // The dev shortcuts alone do not bring the demo controls.
     const dev = policyGroup({ devShortcuts: true, demoControls: false })
     expect(dev?.options?.find((o) => o.name === 'mode')?.options?.map((o) => o.name)).not.toContain('veto_minutes')
+    expect(scheduleChoices(dev)).toEqual(['weekly', 'monthly'])
     expect(dev?.options?.map((o) => o.name)).not.toContain('run_now')
   })
 

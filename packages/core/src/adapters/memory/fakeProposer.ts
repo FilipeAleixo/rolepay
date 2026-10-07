@@ -67,7 +67,7 @@ export function emptyCriteria(over: Partial<RawCriteriaProposal> = {}, condition
   return {
     understood: true,
     problem: '',
-    conditions: { hasRole: [], lacksRole: [], joinedBefore: '', joinedAfter: '', activity: [], anchors: [], paidInRun: '', ...conditions },
+    conditions: { hasRole: [], lacksRole: [], joinedBefore: '', joinedAfter: '', activity: [], anchors: [], paidInRun: '', neverPaid: false, ...conditions },
     exclude: [],
     excludeProposer: false,
     amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' },

@@ -38,6 +38,7 @@ Filters (every condition you set must hold; leave the others "" or []):
 - activity: one entry per metric counted, at most one each. metric "messages": at least min messages; "activeDays": at least min distinct days with a message; "replies": at least min replies to other people's messages ("answered", "helped" usually mean replies). Each counts in up to 5 channels (C tokens from <channels>), from since (YYYY-MM-DD, no earlier than the lookback in <context> allows) until until (YYYY-MM-DD, or "" for now).
 - anchors: one entry per kind, at most one each, with the fields that kind does not use "". kind "reactedTo": reacted to a message linked in the instruction ([message M1]); its M token in message, one emoji in emoji or "" for any. kind "mentionedIn": is mentioned in a message linked in the instruction (a winners announcement); its M token in message. kind "postedIn": posted in a thread; its C token in thread.
 - paidInRun: "last" for the last paid pay run, or a run ID written in the instruction.
+- neverPaid: true when the instruction pays only people this community has never paid before ("who have never been paid", "first-time", "not paid yet"); false otherwise. Never together with paidInRun.
 - exclude: U tokens of people never to pay. excludeProposer: true if the instruction says "except me" or "not me".
 Not available: voice activity, reactions people received, and OR between groups of conditions. If the instruction needs any of these, or cannot be turned into these filters, set understood to false and say why in problem.
 
@@ -46,6 +47,7 @@ Amount rule (the fields its kind does not use are ""):
 - overrides: people (U tokens) the instruction gives a different amount. perPersonCap: the most anyone gets, if the instruction says so.
 Use only amounts the instruction states, digits only, as written. If the instruction states no amount, set understood to false.
 
+The instruction may also say when it runs ("every Monday", "every day at 18:00 UTC"): the schedule is set apart from the instruction, so leave it out; it is never a filter and never a reason to set understood to false.
 Today's date (UTC) is in <context>. "This month" means from the first day of this month; "this week" from the last Monday; "the last 7 days" from 7 days before today.
 Match roles and channels written as plain text ("Mods", "#help") to the closest name in the lists. If none fits, set understood to false and say which one is missing.
 If the instruction gives a note for the run, put it in note. Put anything you assumed in assumptions, one short sentence each.

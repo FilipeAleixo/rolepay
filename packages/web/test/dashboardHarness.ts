@@ -91,6 +91,7 @@ export function recording(port: PolicyPort, calls: PortCall[]): PolicyPort {
   const record = (method: string, input: { guildId: string; policyId?: string; actor: PolicyActor }) =>
     calls.push({ method, guildId: input.guildId, ...(input.policyId ? { policyId: input.policyId } : {}), actor: input.actor })
   return {
+    ...(port.dailySchedules === undefined ? {} : { dailySchedules: port.dailySchedules }),
     list: (i) => port.list(i),
     get: (i) => port.get(i),
     preview: (i) => port.preview(i),

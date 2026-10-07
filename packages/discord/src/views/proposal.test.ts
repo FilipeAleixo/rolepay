@@ -107,6 +107,7 @@ describe('proposalMessage', () => {
       mentionedIn: null,
       postedIn: null,
       paidInRun: null,
+      neverPaid: false,
       exclude: many(50),
       excludeProposer: true,
     }
@@ -133,6 +134,7 @@ describe('proposalMessage', () => {
       mentionedIn: null,
       postedIn: null,
       paidInRun: null,
+      neverPaid: false,
       exclude: [],
       excludeProposer: true,
     }
@@ -153,7 +155,7 @@ describe('proposalMessage', () => {
 })
 
 describe('criteriaInWords and amountInWords', () => {
-  const none: Criteria = { hasRole: [], lacksRole: [], joinedBefore: null, joinedAfter: null, messagesIn: null, activeDaysIn: null, repliesIn: null, reactedTo: null, mentionedIn: null, postedIn: null, paidInRun: null, exclude: [], excludeProposer: false }
+  const none: Criteria = { hasRole: [], lacksRole: [], joinedBefore: null, joinedAfter: null, messagesIn: null, activeDaysIn: null, repliesIn: null, reactedTo: null, mentionedIn: null, postedIn: null, paidInRun: null, neverPaid: false, exclude: [], excludeProposer: false }
 
   it('no conditions is every registered payee; each condition reads as a clause', () => {
     expect(criteriaInWords(none, GUILD)).toBe('Every registered payee.')
@@ -161,6 +163,9 @@ describe('criteriaInWords and amountInWords', () => {
       `Registered payees who reacted ✅ to [this message](https://discord.com/channels/${GUILD}/${CHANNEL}/810000000000000009).`,
     )
     expect(criteriaInWords({ ...none, paidInRun: { last: true, runId: 'run_abc' }, exclude: [BOB] }, GUILD)).toBe(`Registered payees paid in the last run (run_abc) and except <@${BOB}>.`)
+    expect(criteriaInWords({ ...none, reactedTo: { channelId: CHANNEL, messageId: '810000000000000009', emoji: '✅' }, neverPaid: true }, GUILD)).toBe(
+      `Registered payees who reacted ✅ to [this message](https://discord.com/channels/${GUILD}/${CHANNEL}/810000000000000009) and who have never been paid by this community.`,
+    )
   })
 
   it('amount rules', () => {

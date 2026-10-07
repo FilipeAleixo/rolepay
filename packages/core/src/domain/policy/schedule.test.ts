@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Schedule, ScheduleSchema, describeSchedule, isTimezone, nextOccurrence, occurrenceAtOrBefore, periodEnding, periodKey } from './schedule.js'
+import { type Schedule, ScheduleSchema, describeSchedule, isTimezone, nextOccurrence, occurrenceAtOrBefore, periodEnding, periodKey, quietWhenEmpty, scheduleAllowed } from './schedule.js'
 
 const weekly = (over: Partial<Extract<Schedule, { kind: 'weekly' }>> = {}): Schedule => ({ kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC', ...over })
 const monthly = (over: Partial<Extract<Schedule, { kind: 'monthly' }>> = {}): Schedule => ({ kind: 'monthly', day: 1, hour: 9, timezone: 'UTC', ...over })
@@ -95,5 +95,61 @@ describe('schedule: monthly', () => {
     const s = monthly({ day: 1, hour: 0, timezone: 'Europe/Lisbon' })
     expect(nextOccurrence(s, d('2026-12-15T00:00:00Z'))).toEqual(d('2027-01-01T00:00:00Z'))
     expect(occurrenceAtOrBefore(s, d('2026-12-31T23:59:59Z'))).toEqual(d('2026-12-01T00:00:00Z'))
+  })
+})
+
+describe('schedule: daily (the testnet demo controls only; the services refuse it elsewhere)', () => {
+  const daily = (over: Partial<Extract<Schedule, { kind: 'daily' }>> = {}): Schedule => ({ kind: 'daily', hour: 18, timezone: 'UTC', ...over })
+
+  it('exists only with the demo controls; its empty days are not announced (one line a day would be noise)', () => {
+    expect(scheduleAllowed(daily(), { demoControls: false })).toBe(false)
+    expect(scheduleAllowed(daily(), { demoControls: true })).toBe(true)
+    expect(scheduleAllowed(weekly(), { demoControls: false })).toBe(true)
+    expect([quietWhenEmpty(daily()), quietWhenEmpty(weekly()), quietWhenEmpty(monthly())]).toEqual([true, false, false])
+  })
+
+  it('is an hour in an IANA timezone, UTC by default, and says itself in plain words', () => {
+    expect(ScheduleSchema.parse({ kind: 'daily', hour: 18 })).toEqual(daily())
+    expect(ScheduleSchema.safeParse({ kind: 'daily', hour: 24 }).success).toBe(false)
+    expect(ScheduleSchema.safeParse({ kind: 'daily', hour: 18, timezone: 'Mars/Olympus' }).success).toBe(false)
+    expect(describeSchedule(daily())).toBe('every day at 18:00 (UTC)')
+    expect(describeSchedule(daily({ hour: 9, timezone: 'Europe/Lisbon' }))).toBe('every day at 09:00 (Europe/Lisbon)')
+  })
+
+  it('the occurrence at or before a moment is today at the hour once it has passed, else yesterday; the next is strictly after', () => {
+    const s = daily()
+    expect(occurrenceAtOrBefore(s, d('2026-10-14T10:00:00Z'))).toEqual(d('2026-10-13T18:00:00Z'))
+    expect(nextOccurrence(s, d('2026-10-14T10:00:00Z'))).toEqual(d('2026-10-14T18:00:00Z'))
+    expect(occurrenceAtOrBefore(s, d('2026-10-14T18:00:00Z'))).toEqual(d('2026-10-14T18:00:00Z'))
+    expect(nextOccurrence(s, d('2026-10-14T18:00:00Z'))).toEqual(d('2026-10-15T18:00:00Z'))
+    expect(occurrenceAtOrBefore(s, d('2026-10-14T17:59:59Z'))).toEqual(d('2026-10-13T18:00:00Z'))
+  })
+
+  it('a period is the day since the previous occurrence, and each day has its own key (one run per policy per day)', () => {
+    const s = daily()
+    expect(periodEnding(s, d('2026-10-14T18:00:00Z'))).toEqual({ start: d('2026-10-13T18:00:00Z'), end: d('2026-10-14T18:00:00Z') })
+    const keys = ['2026-10-14T18:00:00Z', '2026-10-14T23:00:00Z', '2026-10-15T17:59:59Z'].map((t) => periodKey(occurrenceAtOrBefore(s, d(t))))
+    expect(keys).toEqual(['2026-10-14T18:00:00.000Z', '2026-10-14T18:00:00.000Z', '2026-10-14T18:00:00.000Z'])
+    expect(periodKey(occurrenceAtOrBefore(s, d('2026-10-15T18:00:00Z')))).toBe('2026-10-15T18:00:00.000Z')
+  })
+
+  it('crosses months and years', () => {
+    expect(nextOccurrence(daily({ hour: 0 }), d('2026-12-31T12:00:00Z'))).toEqual(d('2027-01-01T00:00:00Z'))
+    expect(occurrenceAtOrBefore(daily(), d('2026-11-01T06:00:00Z'))).toEqual(d('2026-10-31T18:00:00Z'))
+  })
+
+  it('in a timezone, across daylight saving: the period spanning the change is 25 hours, and the gap and overlap run once', () => {
+    const lisbon = daily({ timezone: 'Europe/Lisbon' })
+    expect(nextOccurrence(lisbon, d('2026-10-24T12:00:00Z'))).toEqual(d('2026-10-24T17:00:00Z'))
+    // Clocks go back on 25 October 2026.
+    expect(periodEnding(lisbon, d('2026-10-25T18:00:00Z'))).toEqual({ start: d('2026-10-24T17:00:00Z'), end: d('2026-10-25T18:00:00Z') })
+    // New York skips 02:00-03:00 on 8 March 2026 and repeats 01:00-02:00 on 1 November 2026.
+    const gap = daily({ hour: 2, timezone: 'America/New_York' })
+    expect(nextOccurrence(gap, d('2026-03-08T05:00:00Z'))).toEqual(d('2026-03-08T07:00:00Z')) // 03:00 EDT
+    expect(nextOccurrence(gap, d('2026-03-08T07:00:00Z'))).toEqual(d('2026-03-09T06:00:00Z')) // 02:00 EDT
+    const overlap = daily({ hour: 1, timezone: 'America/New_York' })
+    const first = nextOccurrence(overlap, d('2026-10-31T12:00:00Z'))
+    expect(first).toEqual(d('2026-11-01T05:00:00Z')) // 01:00 EDT
+    expect(nextOccurrence(overlap, first)).toEqual(d('2026-11-02T06:00:00Z')) // 01:00 EST, the next day
   })
 })

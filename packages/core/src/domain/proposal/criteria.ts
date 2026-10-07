@@ -3,6 +3,7 @@ import { MAX_LINES_PER_RUN, PROPOSAL_LIMITS } from '../../constants/limits.js'
 import { DiscordIdSchema, RunIdSchema } from '../ids.js'
 import type { Micros } from '../money.js'
 import { type Result, err, ok } from '../result.js'
+import type { Run } from '../run.js'
 import { type AmountPlan, type Metric, type Metrics } from './amounts.js'
 import { parseLooseAmount } from './numbers.js'
 import type { RawActivity, RawAnchor, RawCriteriaProposal } from './raw.js'
@@ -35,6 +36,11 @@ export const CriteriaSchema = z.object({
   postedIn: z.object({ threadId: DiscordIdSchema }).nullable(),
   /** `last`: the community's most recent paid run (resolved to `runId` when the proposal is made). */
   paidInRun: z.object({ last: z.boolean(), runId: RunIdSchema.nullable() }).nullable(),
+  /**
+   * Only people this community has never paid (`paidPayees`): "first-time", "who have never been
+   * paid". False when not set, which is also what a rule stored before the filter existed reads as.
+   */
+  neverPaid: z.boolean().default(false),
   exclude: z.array(DiscordIdSchema).max(MAX_LINES_PER_RUN),
   excludeProposer: z.boolean(),
 })
@@ -169,6 +175,7 @@ export function resolveCriteria(
   const thread = threadToken === null ? null : channel(threadToken)
   const paid = given(k.paidInRun)
   if (paid !== null && paid !== 'last' && !RunIdSchema.safeParse(paid).success) issues.push(`"${paid}" is not a pay run ID`)
+  if (paid !== null && k.neverPaid) issues.push('paid in a run and never paid cannot both hold: say one')
   const date = (text: string) => {
     const t = given(text)
     if (t === null) return null
@@ -191,6 +198,7 @@ export function resolveCriteria(
     mentionedIn: mentionedMessage,
     postedIn: thread ? { threadId: thread } : null,
     paidInRun: paid === null ? null : paid === 'last' ? { last: true, runId: null } : { last: false, runId: paid },
+    neverPaid: k.neverPaid,
     exclude: [...new Set(raw.exclude.map(user).filter((x): x is string => x !== null))],
     excludeProposer: raw.excludeProposer,
   }
@@ -264,6 +272,8 @@ export type CriteriaEvidence = {
   mentioned: readonly string[] | null
   threadPosters: readonly string[] | null
   paidUserIds: readonly string[] | null
+  /** Only for `neverPaid`: everyone this community has paid or is paying (`paidPayees`). null = not read, and then nobody matches. */
+  paidBefore: readonly string[] | null
   /** Only for criteria with role or join-date conditions. null = not a member of the server. */
   members: Readonly<Record<string, MemberFacts | null>>
 }
@@ -282,6 +292,7 @@ export const CONDITION_KEYS = [
   'mentionedIn',
   'postedIn',
   'paidInRun',
+  'neverPaid',
 ] as const
 export type ConditionKey = (typeof CONDITION_KEYS)[number]
 
@@ -333,6 +344,7 @@ export function evaluateCriteria(c: Criteria, ev: CriteriaEvidence, candidates: 
     postedIn: ev.threadPosters ? new Set(ev.threadPosters) : null,
     paidInRun: ev.paidUserIds ? new Set(ev.paidUserIds) : null,
   }
+  const paidBefore = ev.paidBefore ? new Set(ev.paidBefore) : null
   const exclude = new Set(c.exclude)
   const memberChecks = needsMembers(c)
 
@@ -359,6 +371,23 @@ export function evaluateCriteria(c: Criteria, ev: CriteriaEvidence, candidates: 
       const set = sets[key]
       if (c[key] && !set?.has(userId)) return fail(key)
     }
+    // Never paid: fails for anyone already paid, and for everyone when the history was not read.
+    if (c.neverPaid && (!paidBefore || paidBefore.has(userId))) return fail('neverPaid')
     return { userId, matched: true, metrics, failed: null }
   })
+}
+
+const PAYING: ReadonlySet<Run['status']> = new Set(['paid', 'approved', 'executing'])
+
+/**
+ * Who a community has paid, for `neverPaid`: everyone with a line in one of its runs that paid, or
+ * that may still pay or may have paid, so a person is never in two runs that both pay them. That is
+ * a paid run, a run approved or being paid now, and a failed run whose failure is not retryable (the
+ * chain showed money moving, so a person must look). Drafts, runs waiting for approval, cancelled
+ * (vetoed) runs and failures that sent nothing do not count, nor does any other community's run.
+ * In the order the runs come, each person once.
+ */
+export function paidPayees(runs: readonly Run[], communityId: string): string[] {
+  const counted = runs.filter((r) => r.communityId === communityId && (PAYING.has(r.status) || (r.status === 'failed' && r.failure?.retryable === false)))
+  return [...new Set(counted.flatMap((r) => r.lines.map((l) => l.payeeDiscordId)))]
 }

@@ -37,6 +37,11 @@ export type RolepayDeps = {
   proposalLog?: ProposalLog
   /** Standing policies: the shortest veto window, in minutes (default 60; the testnet demo controls lower it to 1). */
   minVetoMinutes?: number
+  /**
+   * The testnet demo controls (ROLEPAY_DEMO_CONTROLS, which config allows only on Moderato): standing
+   * policies may run daily. Off by default, and core refuses daily schedules off Moderato whatever this says.
+   */
+  demoControls?: boolean
   /** A pay run's audit event could not be written (it never fails the payment): for the server's log. */
   onAuditError?: (error: unknown) => void
   /** One worker per pay run at a time, across processes (`KvRunLeases` in production). */

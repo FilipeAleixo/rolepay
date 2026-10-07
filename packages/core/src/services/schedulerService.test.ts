@@ -1,20 +1,28 @@
 import { describe, expect, it } from 'vitest'
+import { emptyCriteria } from '../adapters/memory/fakeProposer.js'
 import { createRolepay } from '../index.js'
 import {
   ANA,
   BIG,
+  DAILY,
   DAVE,
   GUILD,
+  JUDGES,
+  LI,
   MONDAY,
   MONDAYS,
   RUI,
+  START_HERE,
   T0,
+  TODAY_18,
   TOKEN,
   TREASURER,
   TREASURY,
+  WELCOME,
   addressOf,
   asTreasurer,
   asWriter,
+  judgesAnswer,
   policyWorld,
   usd,
 } from '../../test/support/policyWorld.js'
@@ -320,6 +328,128 @@ describe('SchedulerService: crashes and restarts', () => {
     const [rel] = (await createRolepay(w.deps).scheduler.tick()).events
     expect(rel).toMatchObject({ kind: 'released', outcome: 'paid' })
     expect(w.chain.landedTxCount).toBe(1)
+  })
+})
+
+describe('SchedulerService: a daily policy (the testnet demo controls)', () => {
+  /** "1 to every Mod", every day at 18:00 UTC: Ana, Rui and Big are registered Mods. */
+  const flatToMods = (w: Awaited<ReturnType<typeof policyWorld>>, roleToken = 'R2') => {
+    w.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' } }, { hasRole: [roleToken] })
+  }
+
+  it('one run a day at its hour, over the day since the previous run; a second tick, a restart and a second instance make nothing more', async () => {
+    const w = await policyWorld({ demoControls: true })
+    flatToMods(w)
+    const p = await w.active({ instruction: 'Every day: 1 to every Mod', schedule: DAILY })
+    w.travelTo(new Date(TODAY_18.getTime() - 1000))
+    expect((await w.rolepay.scheduler.tick()).events).toEqual([])
+    w.travelTo(TODAY_18)
+    const [a, b] = await Promise.all([w.rolepay.scheduler.tick(), createRolepay(w.deps).scheduler.tick()])
+    const made = [...a.events, ...b.events]
+    expect(made).toHaveLength(1)
+    expect(made[0]?.policyRun).toMatchObject({ policyId: p.id, status: 'proposed', periodStart: new Date('2026-10-06T18:00:00Z'), periodEnd: TODAY_18, total: usd(3) })
+    w.travel(HOUR)
+    expect((await createRolepay(w.deps).scheduler.tick()).events).toEqual([])
+    // Tomorrow is a new period, and the day after another: one run each.
+    w.travelTo(new Date(TODAY_18.getTime() + DAY * 1000))
+    expect((await w.rolepay.scheduler.tick()).events.map((e) => e.policyRun.periodStart)).toEqual([TODAY_18])
+    w.travelTo(new Date(TODAY_18.getTime() + (2 * DAY + 5) * 1000))
+    expect((await w.rolepay.scheduler.tick()).events).toHaveLength(1)
+    expect((await w.rolepay.scheduler.tick()).events).toEqual([])
+    expect(await w.repos.runs.listByCommunity(GUILD)).toHaveLength(3)
+  })
+
+  it('a server that was down for days makes one run, for the latest day, not a backlog', async () => {
+    const w = await policyWorld({ demoControls: true })
+    flatToMods(w)
+    await w.active({ instruction: 'Every day: 1 to every Mod', schedule: DAILY })
+    w.travelTo(new Date(TODAY_18.getTime() + (3 * DAY + HOUR) * 1000))
+    expect((await w.rolepay.scheduler.tick()).events.map((e) => e.policyRun.periodEnd)).toEqual([new Date(TODAY_18.getTime() + 3 * DAY * 1000)])
+    expect(await w.repos.runs.listByCommunity(GUILD)).toHaveLength(1)
+  })
+
+  it('on autopilot with the demo minimum window (1 minute) it pays with nobody online, in the name of the approver who switched it on', async () => {
+    const w = await policyWorld({ demoControls: true, minVetoMinutes: 1 })
+    flatToMods(w)
+    await w.active({ instruction: 'Every day: 1 to every Mod', schedule: DAILY }, { vetoWindowMinutes: 1 })
+    w.travelTo(TODAY_18)
+    const [gen] = (await w.rolepay.scheduler.tick()).events
+    expect(gen?.policyRun).toMatchObject({ status: 'scheduled', executeAfter: new Date(TODAY_18.getTime() + 60_000) })
+    w.travel(60)
+    const [rel] = (await w.rolepay.scheduler.tick()).events
+    expect(rel).toMatchObject({ kind: 'released', outcome: 'paid', run: { approvedBy: TREASURER } })
+    expect(w.chain.balance(TOKEN, addressOf(ANA))).toBe(usd(1))
+  })
+
+  it('zero matches: no pay run, the day is recorded once as empty (the audit log says so quietly), and the next day is checked again', async () => {
+    const w = await policyWorld({ demoControls: true })
+    flatToMods(w, 'R1') // the Treasurer role: nobody registered holds it
+    await w.active({ instruction: 'Every day: 1 to every Treasurer', schedule: DAILY }, { vetoWindowMinutes: 60 })
+    w.travelTo(TODAY_18)
+    const [e] = (await w.rolepay.scheduler.tick()).events
+    expect(e).toMatchObject({ kind: 'generated', run: null, policyRun: { status: 'empty', runId: null, total: 0n, lines: [] } })
+    expect((await w.rolepay.scheduler.tick()).events).toEqual([])
+    expect(await createRolepay(w.deps).scheduler.tick()).toEqual({ events: [], errors: [] })
+    expect(await w.repos.runs.listByCommunity(GUILD)).toEqual([])
+    expect(await typesSince(w, 'policy.mode_changed')).toEqual(['policy_run.empty'])
+    w.travelTo(new Date(TODAY_18.getTime() + DAY * 1000))
+    expect((await w.rolepay.scheduler.tick()).events.map((x) => x.policyRun.status)).toEqual(['empty'])
+    expect(await typesSince(w, 'policy.mode_changed')).toEqual(['policy_run.empty', 'policy_run.empty'])
+    expect(w.chain.landedTxCount).toBe(0)
+  })
+
+  it('the judge demo: whoever reacted ✅ to the welcome post is paid by the next daily run, once; someone already paid (or being paid) is never in a run again', async () => {
+    const w = await policyWorld({ demoControls: true, minVetoMinutes: 1 })
+    w.proposer.onCriteria = () => judgesAnswer()
+    const p = await w.active({ name: 'Judges', instruction: JUDGES, schedule: DAILY }, { vetoWindowMinutes: 1 })
+    expect(p.compiled.criteria).toMatchObject({ reactedTo: { channelId: START_HERE, messageId: WELCOME, emoji: '✅' }, neverPaid: true })
+    // Big was paid by hand last week; Rui is in a run approved by hand and not paid yet: neither may be paid by the policy.
+    const byHand = async (who: string, pay: boolean) => {
+      const r = await w.rolepay.payRuns.create({ guildId: GUILD, createdBy: TREASURER, note: null, lines: [{ discordUserId: who, amount: usd(5) }] })
+      if (!r.ok) throw new Error(r.error.code)
+      await w.rolepay.payRuns.submit({ guildId: GUILD, runId: r.value.id, actor: TREASURER })
+      await w.rolepay.payRuns.approve({ guildId: GUILD, runId: r.value.id, actor: TREASURER, actorCanApprove: true })
+      if (pay) await w.rolepay.payRuns.execute({ guildId: GUILD, runId: r.value.id })
+    }
+    await byHand(BIG, true)
+    await byHand(RUI, false)
+    w.activity.setReactions(START_HERE, WELCOME, '✅', [ANA, RUI, BIG, DAVE])
+
+    // Day 1: Ana only (Dave reacted but never registered: listed, not paid).
+    w.travelTo(TODAY_18)
+    const [day1] = (await w.rolepay.scheduler.tick()).events
+    expect(day1?.policyRun.lines.map((l) => l.discordUserId)).toEqual([ANA])
+    expect(day1?.policyRun.unregistered.map((u) => u.discordUserId)).toEqual([DAVE])
+    w.travel(60)
+    expect((await w.rolepay.scheduler.tick()).events[0]).toMatchObject({ kind: 'released', outcome: 'paid' })
+    expect(w.chain.balance(TOKEN, addressOf(ANA))).toBe(usd(1))
+
+    // Day 2: Li registered and reacted since; Ana is never paid again.
+    w.activity.setReactions(START_HERE, WELCOME, '✅', [ANA, RUI, BIG, DAVE, LI])
+    w.travelTo(new Date(TODAY_18.getTime() + DAY * 1000))
+    const [day2] = (await w.rolepay.scheduler.tick()).events
+    expect(day2?.policyRun.lines.map((l) => [l.discordUserId, l.amount])).toEqual([[LI, usd(1)]])
+    w.travel(60)
+    await w.rolepay.scheduler.tick()
+
+    // Day 3: nobody new. No run at all.
+    w.travelTo(new Date(TODAY_18.getTime() + 2 * DAY * 1000))
+    const [day3] = (await w.rolepay.scheduler.tick()).events
+    expect(day3).toMatchObject({ kind: 'generated', run: null, policyRun: { status: 'empty' } })
+    expect([ANA, LI, BIG].map((u) => w.chain.balance(TOKEN, addressOf(u)))).toEqual([usd(1), usd(1), usd(5)])
+    expect((await w.rolepay.policies.listRuns({ guildId: GUILD, policyId: p.id })).map((r) => r.status)).toEqual(['empty', 'released', 'released'])
+  })
+
+  it('a server without the demo controls never runs a daily policy (one approved while they were on), and run_now refuses it', async () => {
+    const w = await policyWorld({ demoControls: true })
+    flatToMods(w)
+    const p = await w.active({ instruction: 'Every day: 1 to every Mod', schedule: DAILY })
+    const without = createRolepay({ ...w.deps, demoControls: false })
+    w.travelTo(TODAY_18)
+    expect(await without.scheduler.tick()).toEqual({ events: [], errors: [] })
+    expect(await without.scheduler.runNow({ ...asTreasurer, policyId: p.id })).toEqual({ ok: false, error: { code: 'schedule_not_allowed', kind: 'daily' } })
+    expect(await w.repos.runs.listByCommunity(GUILD)).toEqual([])
+    expect(await w.rolepay.policies.listRuns({ guildId: GUILD, policyId: p.id })).toEqual([])
   })
 })
 

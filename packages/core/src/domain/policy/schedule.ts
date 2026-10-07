@@ -2,7 +2,9 @@ import { z } from 'zod'
 
 /**
  * When a standing policy runs: weekly (a weekday and an hour) or monthly (a day and an hour), in
- * the community's IANA timezone (UTC by default). Local times are turned into instants with the
+ * the community's IANA timezone (UTC by default). Daily (an hour) exists for the testnet demo
+ * only: the policy and scheduler services refuse it unless the demo controls are on
+ * (ROLEPAY_DEMO_CONTROLS, which config allows only on Moderato). Local times are turned into instants with the
  * runtime's timezone database (Intl), so daylight saving is handled: an hour that does not exist
  * (the spring gap) runs when the gap ends, and an hour that happens twice runs the first time.
  * Each run covers one period: from the previous occurrence to this one.
@@ -24,11 +26,26 @@ export const TimezoneSchema = z.string().min(1).max(64).refine(isTimezone, 'not 
 const Hour = z.number().int().min(0).max(23)
 
 export const ScheduleSchema = z.discriminatedUnion('kind', [
+  /** The testnet demo only (see above): the shape is the same everywhere, the services gate it. */
+  z.object({ kind: z.literal('daily'), hour: Hour, timezone: TimezoneSchema.default('UTC') }),
   z.object({ kind: z.literal('weekly'), weekday: z.enum(WEEKDAYS), hour: Hour, timezone: TimezoneSchema.default('UTC') }),
   /** Days past the end of a shorter month run on its last day. */
   z.object({ kind: z.literal('monthly'), day: z.number().int().min(1).max(31), hour: Hour, timezone: TimezoneSchema.default('UTC') }),
 ])
 export type Schedule = z.infer<typeof ScheduleSchema>
+
+/**
+ * Daily runs exist for the testnet demo (a judge paid by the next run with nobody online), never in
+ * production: allowed only with the demo controls on, which config allows only on Moderato.
+ */
+export const scheduleAllowed = (s: Pick<Schedule, 'kind'>, opts: { demoControls: boolean }) => s.kind !== 'daily' || opts.demoControls
+
+/**
+ * Whether a period where nobody matched goes unannounced. A daily policy's empty days would be a
+ * line in the channel every day (the judge demo waits most days for someone new), so only the
+ * audit log records them; a weekly or monthly policy says so in one line.
+ */
+export const quietWhenEmpty = (s: Pick<Schedule, 'kind'>) => s.kind === 'daily'
 
 /** A calendar date in the schedule's timezone. Month is 1-12. */
 type LocalDate = { y: number; m: number; d: number }
@@ -77,6 +94,7 @@ const weekdayOf = (date: LocalDate) => new Date(Date.UTC(date.y, date.m - 1, dat
 
 /** The occurrence's date `n` periods after (or before, n < 0) the one on `date`. */
 function step(s: Schedule, date: LocalDate, n: number): LocalDate {
+  if (s.kind === 'daily') return addDays(date, n)
   if (s.kind === 'weekly') return addDays(date, 7 * n)
   const index = date.y * 12 + (date.m - 1) + n
   const y = Math.floor(index / 12)
@@ -89,9 +107,11 @@ function anchor(s: Schedule, t: Date): LocalDate {
   const w = wall(t, s.timezone)
   const today = { y: w.y, m: w.m, d: w.d }
   const date =
-    s.kind === 'weekly'
-      ? addDays(today, -((weekdayOf(today) - WEEKDAYS.indexOf(s.weekday) + 7) % 7))
-      : { y: w.y, m: w.m, d: Math.min(s.day, daysIn(w.y, w.m)) }
+    s.kind === 'daily'
+      ? today
+      : s.kind === 'weekly'
+        ? addDays(today, -((weekdayOf(today) - WEEKDAYS.indexOf(s.weekday) + 7) % 7))
+        : { y: w.y, m: w.m, d: Math.min(s.day, daysIn(w.y, w.m)) }
   return atLocal(date, s.hour, s.timezone) > t ? step(s, date, -1) : date
 }
 
@@ -117,6 +137,7 @@ const capital = (w: string) => w[0]?.toUpperCase() + w.slice(1)
 const hh = (h: number) => `${String(h).padStart(2, '0')}:00`
 
 export function describeSchedule(s: Schedule): string {
+  if (s.kind === 'daily') return `every day at ${hh(s.hour)} (${s.timezone})`
   if (s.kind === 'weekly') return `every ${capital(s.weekday)} at ${hh(s.hour)} (${s.timezone})`
   const short = s.day > 28 ? ' (the last day in shorter months)' : ''
   return `every month on day ${s.day}${short} at ${hh(s.hour)} (${s.timezone})`

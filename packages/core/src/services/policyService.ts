@@ -16,7 +16,7 @@ import {
   previewWindow,
 } from '../domain/policy/policy.js'
 import { type PolicyRun, type PolicyRunStatus, movePolicyRun, runGuards } from '../domain/policy/policyRun.js'
-import { ScheduleSchema, nextOccurrence } from '../domain/policy/schedule.js'
+import { type Schedule, ScheduleSchema, nextOccurrence, scheduleAllowed } from '../domain/policy/schedule.js'
 import { type CriteriaError, resolveCriteria } from '../domain/proposal/criteria.js'
 import { amountsIn } from '../domain/proposal/numbers.js'
 import type { ChannelScan } from '../domain/proposal/proposal.js'
@@ -56,6 +56,8 @@ export type PolicyServiceDeps = {
   log?: ProposalLog
   /** The shortest veto window allowed, in minutes. 60 by default; the testnet demo controls lower it to 1. */
   minVetoMinutes?: number
+  /** The testnet demo controls (Moderato only, `createRolepay` checks): daily schedules are allowed. */
+  demoControls?: boolean
 }
 
 /** Who is asking, as Discord signed it into the interaction (or the dashboard re-read it). Checked on every request. */
@@ -66,6 +68,8 @@ type NotFound = { code: 'community_not_found' } | { code: 'policy_not_found' }
 type NotPermitted = { code: 'not_permitted' }
 type AiGate = { code: 'ai_not_configured' } | { code: 'ai_disabled' }
 type Conflict = { code: 'concurrent_update' }
+/** A daily schedule on a server without the testnet demo controls. */
+export type ScheduleNotAllowed = { code: 'schedule_not_allowed'; kind: Schedule['kind'] }
 export type CompileError = CouldNotPropose | CriteriaError
 export type PolicyStateError =
   | { code: 'policy_archived' }
@@ -77,6 +81,7 @@ export type PolicyStateError =
   | { code: 'policy_blocked'; problems: string[] }
   | { code: 'creator_cannot_approve' }
   | { code: 'invalid_veto_window'; min: number; max: number }
+  | ScheduleNotAllowed
 
 export type PolicySummary = { policy: Policy; nextRunAt: Date | null; lastRun: PolicyRun | null }
 export type PolicyDetail = PolicySummary & { versions: PolicyVersion[]; runs: PolicyRun[]; rule: string[] }
@@ -141,13 +146,29 @@ export class PolicyService {
     return this.deps.minVetoMinutes ?? POLICY_LIMITS.minVetoMinutes
   }
 
+  /** Whether policies here may run daily: only with the testnet demo controls on (never off Moderato). */
+  get dailySchedules(): boolean {
+    return this.deps.demoControls === true
+  }
+
+  private refused(s: Schedule): ScheduleNotAllowed | null {
+    return scheduleAllowed(s, { demoControls: this.dailySchedules }) ? null : { code: 'schedule_not_allowed', kind: s.kind }
+  }
+
+  private nextRunAt(p: Policy, now: Date): Date | null {
+    return p.status === 'active' && !this.refused(p.schedule) ? nextOccurrence(p.schedule, now) : null
+  }
+
   // ---- writing ---------------------------------------------------------------------------
 
   /** Compiles the instruction ONCE into a filter and an amount plan and stores the policy as a draft (version 1). */
-  async create(input: CreatePolicyInput): Promise<Result<Policy, InvalidInput | NotFound | NotPermitted | AiGate | CompileError | ReadError>> {
+  async create(input: CreatePolicyInput): Promise<Result<Policy, InvalidInput | ScheduleNotAllowed | NotFound | NotPermitted | AiGate | CompileError | ReadError>> {
     const parsed = CreateInputSchema.safeParse(input)
     if (!parsed.success) return invalidInput(parsed.error)
     const i = parsed.data
+    // Before anything else, and so before the model: a daily schedule is the testnet demo's only.
+    const schedule = this.refused(i.schedule)
+    if (schedule) return err(schedule)
     const gate = await this.writerGate(i, { ai: true })
     if (!gate.ok) return gate
     const community = gate.value
@@ -187,7 +208,9 @@ export class PolicyService {
    * A new version: any of name, instruction (recompiled by the AI), schedule and caps. The policy
    * stops (draft) until an approver approves the new version, and autopilot is switched off.
    */
-  async edit(input: EditPolicyInput): Promise<Result<Policy, InvalidInput | NotFound | NotPermitted | AiGate | CompileError | ReadError | Conflict | { code: 'policy_archived' }>> {
+  async edit(
+    input: EditPolicyInput,
+  ): Promise<Result<Policy, InvalidInput | ScheduleNotAllowed | NotFound | NotPermitted | AiGate | CompileError | ReadError | Conflict | { code: 'policy_archived' }>> {
     const parsed = EditInputSchema.safeParse(input)
     if (!parsed.success) return invalidInput(parsed.error)
     const i = parsed.data
@@ -198,6 +221,9 @@ export class PolicyService {
     if (!policy.ok) return policy
     const p = policy.value
     if (p.status === 'archived') return err({ code: 'policy_archived' })
+    // The version this edit makes keeps the current schedule unless it names one: either way, no daily without the demo controls.
+    const schedule = this.refused(i.schedule ?? p.schedule)
+    if (schedule) return err(schedule)
     const latest = Math.max(...(await this.deps.policies.listVersions(p.id)).map((v) => v.version), p.version)
     let compiled = p.compiled
     if (recompile) {
@@ -241,6 +267,8 @@ export class PolicyService {
     const { community, policy: p } = g.value
     if (p.status !== 'draft') return err({ code: 'policy_not_draft', status: p.status })
     if (input.version !== p.version) return err({ code: 'version_mismatch', version: p.version })
+    const schedule = this.refused(p.schedule)
+    if (schedule) return err(schedule)
     if (!p.compiled.amountsInInstruction) return err({ code: 'policy_blocked', problems: ['amount_not_in_instruction'] })
     const version = await this.deps.policies.getVersion(p.id, p.version)
     if (!version) throw new Error(`policy ${p.id} has no version ${p.version}`)
@@ -299,7 +327,11 @@ export class PolicyService {
 
   /** Resumes a paused policy. Periods that ended while it was paused are never run (no backfill). */
   async resume(input: PolicyActor & { policyId: string }): Promise<Result<Policy, NotFound | NotPermitted | PolicyStateError | Conflict>> {
-    return this.transition(input, 'policy.resumed', (p, now) => (p.status === 'paused' ? ok({ status: 'active', activeSince: now }) : err({ code: 'policy_not_paused', status: p.status })))
+    return this.transition(input, 'policy.resumed', (p, now) => {
+      if (p.status !== 'paused') return err({ code: 'policy_not_paused', status: p.status })
+      const schedule = this.refused(p.schedule)
+      return schedule ? err(schedule) : ok({ status: 'active', activeSince: now })
+    })
   }
 
   async archive(input: PolicyActor & { policyId: string }): Promise<Result<Policy, NotFound | NotPermitted | PolicyStateError | Conflict>> {
@@ -399,7 +431,7 @@ export class PolicyService {
   async list(input: { guildId: string }): Promise<PolicySummary[]> {
     const now = this.deps.clock.now()
     const policies = await this.deps.policies.listByCommunity(input.guildId)
-    return Promise.all(policies.map(async (policy) => ({ policy, nextRunAt: nextRunAt(policy, now), lastRun: (await this.deps.policyRuns.list(input.guildId, { policyId: policy.id, limit: 1 }))[0] ?? null })))
+    return Promise.all(policies.map(async (policy) => ({ policy, nextRunAt: this.nextRunAt(policy, now), lastRun: (await this.deps.policyRuns.list(input.guildId, { policyId: policy.id, limit: 1 }))[0] ?? null })))
   }
 
   /** One policy: its version history (oldest first), its recent runs, the next run and the rule in plain words. */
@@ -413,7 +445,7 @@ export class PolicyService {
       versions,
       runs,
       lastRun: runs[0] ?? null,
-      nextRunAt: nextRunAt(policy, this.deps.clock.now()),
+      nextRunAt: this.nextRunAt(policy, this.deps.clock.now()),
       rule: describeRule(policy.compiled, { schedule: policy.schedule, caps: policy.caps, guildId: policy.communityId }),
     })
   }
@@ -467,8 +499,10 @@ export class PolicyService {
   async nextRuns(input: { guildId: string; limit?: number }): Promise<{ policyId: string; name: string; mode: PolicyMode; at: Date }[]> {
     const now = this.deps.clock.now()
     return (await this.deps.policies.listByCommunity(input.guildId))
-      .filter((p) => p.status === 'active')
-      .map((p) => ({ policyId: p.id, name: p.name, mode: p.mode, at: nextOccurrence(p.schedule, now) }))
+      .flatMap((p) => {
+        const at = this.nextRunAt(p, now)
+        return at ? [{ policyId: p.id, name: p.name, mode: p.mode, at }] : []
+      })
       .sort((a, b) => a.at.getTime() - b.at.getTime())
       .slice(0, input.limit ?? 10)
   }
@@ -638,7 +672,9 @@ export class PolicyService {
 
   private compiledEvent(p: Policy, actor: string) {
     const c = p.compiled.criteria
-    const conditions = [c.hasRole.length, c.lacksRole.length, c.joinedBefore, c.joinedAfter, c.messagesIn, c.activeDaysIn, c.repliesIn, c.reactedTo, c.mentionedIn, c.postedIn, c.paidInRun, c.exclude.length, c.excludeProposer].filter(Boolean).length
+    const conditions = [c.hasRole.length, c.lacksRole.length, c.joinedBefore, c.joinedAfter, c.messagesIn, c.activeDaysIn, c.repliesIn, c.reactedTo, c.mentionedIn, c.postedIn, c.paidInRun, c.neverPaid, c.exclude.length, c.excludeProposer].filter(
+      Boolean,
+    ).length
     return this.event(p, 'policy.compiled', actor, { rule: p.compiled.plan.rule.kind, conditions, amountsInInstruction: p.compiled.amountsInInstruction })
   }
 }
@@ -661,5 +697,3 @@ function versionOf(p: Policy, authoredBy: string, at: Date): PolicyVersion {
     discardedAt: null,
   }
 }
-
-const nextRunAt = (p: Policy, now: Date) => (p.status === 'active' ? nextOccurrence(p.schedule, now) : null)
