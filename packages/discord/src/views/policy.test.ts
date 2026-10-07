@@ -2,7 +2,7 @@ import type { Policy, PolicyPreview, PolicyRun } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { ALICE, BOB, CAROL, GUILD, MODS_ROLE, T0, TOKEN, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
 import { explainPolicyError } from './errors.js'
-import { explainHold, policyChangedMessage, policyDiscardedMessage, policyListMessage, policyMessage, policyRunNoticeMessage } from './policy.js'
+import { budgetLine, explainHold, policyBudgetOffer, policyChangedMessage, policyDiscardedMessage, policyListMessage, policyMessage, policyRunNoticeMessage } from './policy.js'
 
 const text = (v: unknown) => JSON.stringify(v)
 const ctx = { token: TOKEN, approverRoleId: TREASURER_ROLE }
@@ -172,6 +172,34 @@ describe('policy list, changes, discards and notices', () => {
   })
 })
 
+describe("a policy's own budget in words", () => {
+  const key = { address: '0x6666666666666666666666666666666666666666' as const, communityId: '1094309218049937418', policyId: 'pol_view01', status: 'active' as const, policy: { token: TOKEN, limit: 30_000_000n, periodSeconds: 604_800, expiresAt: 1_800_000_000, recipients: null, feeToken: null, feeBudget: null }, createdAt: T0, authorizedAt: T0, revokedAt: null }
+  const state = { status: 'active' as const, expiry: 1_800_000_000, remaining: 20_000_000n, periodEnd: 1_760_000_000, chainTime: 1_759_000_000, feeBudgetRemaining: null }
+  it('its own key, from the chain: what is left this period, chain-enforced, when it resets and expires', () => {
+    expect(budgetLine({ policyId: 'pol_view01', signs: 'own', key, state }, TOKEN)).toBe(
+      'Own budget: 20 of 30 AlphaUSD left this period (chain-enforced). Resets <t:1760000000:R>, expires <t:1800000000:R>.',
+    )
+    expect(budgetLine({ policyId: 'pol_view01', signs: 'own', key: { ...key, policy: { ...key.policy, periodSeconds: null } }, state: { ...state, periodEnd: null } }, TOKEN)).toBe(
+      'Own budget: 20 of 30 AlphaUSD left in total (chain-enforced). Expires <t:1800000000:R>.',
+    )
+    expect(budgetLine({ policyId: 'pol_view01', signs: 'own', key, state: { ...state, status: 'expired' } }, TOKEN)).toContain('its key has expired, so it pays nothing')
+    expect(budgetLine({ policyId: 'pol_view01', signs: 'own', key, state: { ...state, status: 'not_authorized' } }, TOKEN)).toContain('cannot pay right now')
+  })
+
+  it("shared (the bot key's budget, a key of its own perhaps waiting), or stopped (its key revoked)", () => {
+    expect(budgetLine({ policyId: 'pol_view01', signs: 'bot', key: null, state: null }, TOKEN)).toBe("Shared: it pays from the bot key's budget, with manual runs, AI-proposed runs and other policies.")
+    expect(budgetLine({ policyId: 'pol_view01', signs: 'bot', key: { ...key, status: 'pending_authorization' }, state }, TOKEN)).toContain('A key of its own waits for the treasury passkey.')
+    expect(budgetLine({ policyId: 'pol_view01', signs: 'retired', key: { ...key, status: 'revoked' }, state: null }, TOKEN)).toContain('It never falls back to the bot key.')
+  })
+
+  it('the offer after approval is private and carries only the link', () => {
+    const offer = policyBudgetOffer(policy({ status: 'active', name: 'Judges *bold*' }), { url: 'https://rolepay.test/setup/t/policies/pol_view01', expiresAt: new Date(T0.getTime() + 1_800_000) })
+    expect(offer.flags).toBe(64)
+    expect(offer.content).toContain('Give **Judges \\*bold\\*** its own budget?')
+    expect(offer.components).toEqual([{ type: 1, components: [{ type: 2, style: 5, label: 'Give this policy its own budget', url: 'https://rolepay.test/setup/t/policies/pol_view01' }] }])
+  })
+})
+
 describe('explainHold and explainPolicyError: every code in plain words', () => {
   it('holds', () => {
     const say = (code: string, autopilotBy: string | null = null) => explainHold({ code, total: 20_000_000n, limit: 5_000_000n }, { token: TOKEN, autopilotBy })
@@ -187,6 +215,10 @@ describe('explainHold and explainPolicyError: every code in plain words', () => 
     expect(say('approver_changed')).toContain('The treasurer who switched autopilot on')
     expect(say('creator_cannot_approve')).toContain('separate approver')
     expect(say('cannot_read')).toContain('could not read')
+    expect(say('over_policy_budget')).toBe(
+      "The run would pay 20 AlphaUSD, more than this policy's own key has left (5 AlphaUSD). Held whole: nothing was paid, and the chain would refuse it anyway. A treasurer raises this policy's budget on the treasury page (`/rolepay policy show`), or it waits for the key's next period.",
+    )
+    expect(say('policy_key_inactive')).toContain('never falls back to the bot key')
     expect(say('mystery')).toBe('Held (mystery). Nothing was paid.')
     expect(explainHold({ code: 'over_budget', total: null, limit: null }, { token: TOKEN })).toContain('?')
   })

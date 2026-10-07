@@ -1,6 +1,6 @@
 import { type Community, POLICY_LIMITS, PROPOSAL_LIMITS, type Rolepay, type Schedule, WEEKDAYS, canPropose, isTimezone, parseAmount, quietWhenEmpty } from '@rolepay/core'
 import { z } from 'zod'
-import { demoControlsOn } from '../app/deps.js'
+import { type DiscordAppDeps, demoControlsOn } from '../app/deps.js'
 import { type AutocompleteHandler, type CommandHandler, type GuildContext, parseOptions, replyError } from '../app/handlers.js'
 import { type DeferredResult, type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canOperate, holdsApproverRole } from '../app/permissions.js'
@@ -83,6 +83,21 @@ async function resolvePolicy(rolepay: Rolepay, guildId: string, typed: string): 
 const view = (c: Community) => ({ token: c.payoutToken, approverRoleId: c.approverRoleId })
 
 /**
+ * The treasury page for one policy's own budget: a fresh setup link (30 minutes, as `/rolepay setup`
+ * issues) with the policy's path. For the approver role only, and only ever in a private answer: the
+ * page needs the treasury passkey for anything, but a link is still nobody else's business.
+ */
+export async function policyBudgetLink(deps: Pick<DiscordAppDeps, 'rolepay' | 'config'>, c: Community, ctx: GuildContext, policyId: string): Promise<{ url: string; expiresAt: Date } | null> {
+  const link = await deps.rolepay.communities.issueSetupLink({
+    guildId: c.id,
+    discordUserId: ctx.caller.userId,
+    settings: { name: c.name, payoutToken: c.payoutToken, feeMode: c.feeMode, feeToken: c.feeToken, approverRoleId: c.approverRoleId, requireSeparateApprover: c.requireSeparateApprover },
+  })
+  if (!link.ok) return null
+  return { url: `${deps.config.setupBaseUrl.replace(/\/+$/, '')}/${encodeURIComponent(link.value.token)}/policies/${encodeURIComponent(policyId)}`, expiresAt: link.value.expiresAt }
+}
+
+/**
  * /rolepay policy new: the AI compiles the instruction once (criteria mode), and the preview is
  * posted publicly in the channel (where the policy's runs will be posted too), so a treasurer can
  * approve it: the rule in plain words, who it applies to right now, the next run against the budget.
@@ -135,7 +150,8 @@ export const policyListCommand: CommandHandler = async ({ ctx }, { rolepay }) =>
 }
 
 /** One policy, with who it applies to right now (deferred: it reads Discord and the chain). Only for the caller. */
-export const policyShowCommand: CommandHandler = async ({ options, ctx }, { rolepay }) => {
+export const policyShowCommand: CommandHandler = async ({ options, ctx }, deps) => {
+  const { rolepay } = deps
   const guard = await requireReader(ctx, rolepay)
   if (!guard.ok) return guard.reply
   const parsed = parseOptions(PolicyOption, options)
@@ -151,10 +167,18 @@ export const policyShowCommand: CommandHandler = async ({ options, ctx }, { role
       if (!detail.ok) return { ok: false, message: { content: explainPolicyError(detail.error) } }
       const p = detail.value.policy
       if (p.status === 'archived') return { ok: true, message: policyMessage(p, view(community)) }
-      const preview = await rolepay.policies.preview({ guildId: ctx.guildId, policyId: p.id })
+      const [preview, budget] = await Promise.all([rolepay.policies.preview({ guildId: ctx.guildId, policyId: p.id }), rolepay.policyKeys.status({ guildId: ctx.guildId, policyId: p.id })])
+      // The treasury page link, for the approver role only (this answer is private to the caller).
+      const link = holdsApproverRole(ctx.caller, community) ? await policyBudgetLink(deps, community, ctx, p.id) : null
       return {
         ok: true,
-        message: policyMessage(p, { ...view(community), nextRunAt: detail.value.nextRunAt, ...(preview.ok ? { preview: preview.value } : { previewProblem: explainPolicyError(preview.error, { community }) }) }),
+        message: policyMessage(p, {
+          ...view(community),
+          nextRunAt: detail.value.nextRunAt,
+          ...(preview.ok ? { preview: preview.value } : { previewProblem: explainPolicyError(preview.error, { community }) }),
+          ...(budget.ok ? { budget: budget.value } : {}),
+          ...(link ? { budgetUrl: link.url } : {}),
+        }),
       }
     },
   }

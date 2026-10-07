@@ -1,19 +1,27 @@
 import { nextOccurrence } from '@rolepay/core'
 import type { PolicyButtonHandler, VetoButtonHandler } from '../app/handlers.js'
 import { ephemeralReply } from '../app/outcome.js'
-import { requirePolicyApprover } from '../commands/policy.js'
+import { policyBudgetLink, requirePolicyApprover } from '../commands/policy.js'
 import { explainPolicyError } from '../views/errors.js'
-import { policyDiscardedMessage, policyMessage } from '../views/policy.js'
+import { policyBudgetOffer, policyDiscardedMessage, policyMessage } from '../views/policy.js'
 import { runMessage } from '../views/run.js'
 
-/** Approve policy: the approver role, for the version the preview showed. The preview turns into the active policy. */
-export const approvePolicyButton: PolicyButtonHandler = async ({ policyId, version, ctx }, { rolepay, clock }) => {
+/**
+ * Approve policy: the approver role, for the version the preview showed. The preview turns into the
+ * active policy, and the approver alone is offered the policy's own budget (a private follow-up with
+ * the treasury page link), unless it has one already.
+ */
+export const approvePolicyButton: PolicyButtonHandler = async ({ policyId, version, ctx }, deps) => {
+  const { rolepay, clock } = deps
   const guard = await requirePolicyApprover(ctx, rolepay)
   if (!guard.ok) return guard.reply
   const r = await rolepay.policies.approve({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, policyId, version })
   if (!r.ok) return ephemeralReply(explainPolicyError(r.error, { community: guard.community }))
   const c = guard.community
-  return { kind: 'update', message: policyMessage(r.value, { token: c.payoutToken, approverRoleId: c.approverRoleId, nextRunAt: nextOccurrence(r.value.schedule, clock.now()) }) }
+  const message = policyMessage(r.value, { token: c.payoutToken, approverRoleId: c.approverRoleId, nextRunAt: nextOccurrence(r.value.schedule, clock.now()) })
+  const budget = await rolepay.policyKeys.status({ guildId: ctx.guildId, policyId })
+  const link = budget.ok && budget.value.signs === 'own' ? null : await policyBudgetLink(deps, c, ctx, policyId)
+  return { kind: 'update', message, ...(link ? { followUp: policyBudgetOffer(r.value, link) } : {}) }
 }
 
 /** Discard: the author of the draft or an approver (core decides; an edit goes back to the approved version, paused). */

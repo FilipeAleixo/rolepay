@@ -81,6 +81,15 @@ describe('renderOutcome', () => {
     expect(rest.channelPosts).toEqual([{ channelId: '700000000000000001', message: { content: 'review' } }])
   })
 
+  it('a private follow-up (a treasury page link) is never posted in the channel instead, even if the follow-up fails', async () => {
+    const rest = new FakeDiscordRest()
+    rest.expiredTokens.add('tok')
+    const d = renderOutcome({ kind: 'update', message: { content: 'approved' }, followUp: { content: 'your link', flags: 64 } }, { ...ctx, channelId: '700000000000000001' }, rest)
+    if (d.kind !== 'respond') throw new Error('expected a response')
+    await d.background?.()
+    expect(rest.channelPosts).toEqual([])
+  })
+
   it('an answer Discord refuses (too long) is replaced by a short message, and reported', async () => {
     const rest = new FakeDiscordRest()
     const editOriginal = rest.editOriginal.bind(rest)
