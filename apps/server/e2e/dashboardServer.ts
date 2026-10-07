@@ -6,7 +6,7 @@
 import { randomBytes } from 'node:crypto'
 import { serve } from '@hono/node-server'
 import { TESTNET_TOKENS, WEEKDAYS, createRolepay, parseAmount } from '@rolepay/core'
-import { FakePayoutChain, FakeRunProposer, MemoryKeyValueStore, PlainKeyVault, SequentialIds, SystemClock, createMemoryRepositories, emptyCriteria } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, FakeRunProposer, MemoryKeyValueStore, PlainKeyVault, SequentialIds, SystemClock, createMemoryRepositories, emptyCriteria } from '@rolepay/core/adapters'
 import { RestActivityReader } from '@rolepay/discord'
 import { FakeDiscordRest, wireMessage } from '@rolepay/discord/testing'
 import { FakeDiscordOAuth, FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
@@ -54,7 +54,9 @@ export async function startDashboardServer(port: number) {
       { amount: { kind: 'perUnit', amount: /(\d+)\s*USDC/i.exec(r.instruction)?.[1] ?? '1', per: 'replies', cap: '50', total: '', splitBy: '' }, note: 'Help desk' },
       { hasRole: ['R2'], activity: [{ metric: 'replies', channels: ['C1'], since: new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10), until: '', min: 1 }] },
     )
-  const rolepay = createRolepay({ chain, repositories: createMemoryRepositories({ clock }), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato', proposer, activity })
+  // Deposit addresses: an in-memory registry and transfer log (its deposits do not move the payout fake's balances).
+  const fundingChain = new FakeFundingChain()
+  const rolepay = createRolepay({ chain, repositories: createMemoryRepositories({ clock }), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato', proposer, activity, fundingChain })
   const oauth = new FakeDiscordOAuth()
   const kv = new MemoryKeyValueStore(clock)
 
@@ -108,6 +110,13 @@ export async function startDashboardServer(port: number) {
   const scheduled = must(await rolepay.scheduler.runNow({ ...tess, policyId: autopilotId }))
   if (!scheduled.run || scheduled.policyRun.status !== 'scheduled') throw new Error(`no autopilot run: ${scheduled.policyRun.status}`)
 
+  // Deposit addresses set up on the treasury page, a funding source made by Tess, and a 25 AlphaUSD deposit to it.
+  const registered = fundingChain.register(TREASURY, `0x${'00'.repeat(28)}58e21090`)
+  must(await rolepay.funding.confirmMaster({ guildId: GUILD, ...registered }))
+  const acme = must(await rolepay.funding.createSource({ ...tess, name: 'Acme DAO' }))
+  const deposit = fundingChain.transfer({ token: TOKEN, from: '0x5555555555555555555555555555555555555555', to: acme.depositAddress, amount: usd('25') })
+  await rolepay.funding.scan()
+
   const composed = composeServer({
     config,
     rolepay,
@@ -131,6 +140,7 @@ export async function startDashboardServer(port: number) {
     runId: run.id,
     policyId,
     autopilotRunId: scheduled.run.id,
+    deposit: { address: acme.depositAddress, txHash: deposit.txHash },
     stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
   }
 }

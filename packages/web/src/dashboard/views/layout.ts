@@ -156,12 +156,20 @@ svg.viz{display:block;width:100%;overflow:visible}
 .viz .wk:hover .seg{filter:brightness(1.2)}
 svg.viz-narrow{display:none}
 .glance details{margin-top:.5rem}
+.deposit-to{display:flex;flex-wrap:wrap;gap:1rem 1.25rem;align-items:center;margin-top:.9rem}
+.deposit-to>div{flex:1 1 14rem;min-width:0}
+.deposit-to p{margin:.3rem 0}
+.deposit-to code{overflow-wrap:anywhere}
+.deposit-to .label{font:500 10px/1.4 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--meta)}
+svg.qr{display:block;flex:none;width:9.5rem;height:9.5rem;border-radius:8px}
+.qr .qr-bg{fill:#fff}
+.qr .qr-on{fill:#0B0B0D}
 @media (min-width:64rem){.glance-grid.two{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:0}.glance-grid.two>.glance-part:first-child{padding-right:2.25rem}.glance-grid.two>.glance-part+.glance-part{padding:0 0 0 2.25rem;border-top:0;border-left:1px solid var(--line)}}
 @media (min-width:48rem){header.top,main{padding-left:2rem;padding-right:2rem}header.top{padding-top:1.75rem}main{padding-top:3rem}.card{padding:1.5rem 1.6rem}ul.card{padding:.35rem 1.6rem}}
 @media (max-width:40rem){svg.viz-wide{display:none}svg.viz-narrow{display:block}.figure .value{font-size:23px}dl.facts{grid-template-columns:1fr}dl.facts dt{padding-bottom:0;border-top:1px solid var(--line)}dl.facts dd{border-top:0;padding-top:.1rem}dl.facts dt:first-of-type{padding-top:0}.big{font-size:30px}nav.sections ul{gap:0}.bar button.link{min-height:2.5rem}form.filters>div{flex:1 1 9rem}.pager a{min-height:2.75rem}}
 `
 
-export type Section = 'overview' | 'runs' | 'payees' | 'policies' | 'audit'
+export type Section = 'overview' | 'runs' | 'payees' | 'policies' | 'funding' | 'audit'
 
 /** Who is looking, for the header: their name and what they may do here. */
 export type HeaderViewer = { userName: string; csrf: string; canAct?: boolean }
@@ -171,6 +179,7 @@ const SECTIONS: { id: Section; label: string; path: string }[] = [
   { id: 'runs', label: 'Runs', path: '/runs' },
   { id: 'payees', label: 'Payees', path: '/payees' },
   { id: 'policies', label: 'Policies', path: '/policies' },
+  { id: 'funding', label: 'Funding', path: '/funding' },
   { id: 'audit', label: 'Audit log', path: '/audit' },
 ]
 

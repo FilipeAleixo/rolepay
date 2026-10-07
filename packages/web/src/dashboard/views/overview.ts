@@ -1,6 +1,7 @@
-import { type Community, type KeyStatusView, type Run, usdText } from '@rolepay/core'
+import { type Community, type FundingMonth, type KeyStatusView, type Run, usdText } from '@rolepay/core'
 import type { AiSpendView, PaidByWeekView, RunOrigin, ScheduledRunView } from '../policyPort.js'
 import { atAGlance } from './charts.js'
+import { fundedCard } from './funding.js'
 import { type Names, addressLink, day, esc, money, period, person, pill, row, runPill, table, tokenLabel, when } from './format.js'
 
 /** A chain read that may have failed: the value, `missing` (no key yet), or `unavailable` (the RPC). */
@@ -20,6 +21,8 @@ export type OverviewData = {
   aiSpend: AiSpendView | null
   /** What was paid each week; null: not wired on this server (the panel keeps the bot key budget alone). */
   payouts: PaidByWeekView | null
+  /** What deposit addresses brought in this month; the card shows only once they are set up. */
+  funding?: FundingMonth | null
 }
 
 const UNREADABLE = '<p class="muted">Rolepay could not read the chain just now. Reload in a moment.</p>'
@@ -106,6 +109,6 @@ export function overviewBody(d: OverviewData): string {
     : '<p class="muted">No runs yet. <code>/rolepay new</code> in Discord makes one.</p>'
   return `<h1>Overview</h1><p class="lede">The treasury, what the bot may spend, and what is coming.</p>
 ${atAGlance({ key: d.key, payouts: d.payouts })}
-<div class="grid">${treasuryCard(d)}${keyCard(d)}${upcomingCard(d)}${aiCard(d.aiSpend)}</div>
+<div class="grid">${treasuryCard(d)}${keyCard(d)}${fundedCard(d.community.id, d.funding ?? null, d.community.payoutToken)}${upcomingCard(d)}${aiCard(d.aiSpend)}</div>
 <section class="card"><h2>Recent runs</h2>${recent}<p><a href="/dashboard/${g}/runs">All runs</a> · <a href="/dashboard/${g}/payees">Payees</a> · <a href="/dashboard/${g}/policies">Policies</a> · <a href="/dashboard/${g}/audit">Audit log</a></p></section>`
 }

@@ -1,4 +1,4 @@
-import type { Clock, KeyValueStore, Rolepay, SchedulerEvent } from '@rolepay/core'
+import { type Clock, type KeyValueStore, type Rolepay, type SchedulerEvent, formatAmount } from '@rolepay/core'
 import {
   type DiscordRest,
   InProcessExecutionQueue,
@@ -18,6 +18,7 @@ import { bodyLimit } from 'hono/body-limit'
 import type { ServerConfig } from './config.js'
 import { type DashboardOverrides, dashboardDeps } from './dashboard.js'
 import { errorFields } from './logging.js'
+import { startFundingWatcher } from './funding.js'
 import { startRecovery } from './recovery.js'
 import { startScheduler } from './scheduler.js'
 
@@ -248,6 +249,25 @@ export function composeServer(deps: ServerDeps) {
             errors: report.errors,
           }),
         onError: (error) => log('policies_error', errorFields(error)),
+      }),
+    /** One deposit watcher pass (what the interval runs, and the tests call). */
+    tickFunding: () => rolepay.funding.scan(),
+    /**
+     * Starts the deposit watcher (on start, then every interval, never two scans at once): attributes
+     * deposits to deposit addresses to their funding sources. No community with deposit addresses:
+     * no chain call.
+     */
+    startFunding: () =>
+      startFundingWatcher({
+        scan: () => rolepay.funding.scan(),
+        intervalMs: config.fundingIntervalMs,
+        // Content-free: source IDs, amounts, tokens and transactions, never a source's name.
+        onReport: (report) =>
+          log('funding', {
+            deposits: report.deposits.map((d) => ({ guildId: d.communityId, sourceId: d.sourceId, amount: formatAmount(d.amount), token: d.token, txHash: d.txHash })),
+            errors: report.errors,
+          }),
+        onError: (error) => log('funding_error', errorFields(error)),
       }),
     /** Resolves once deferred replies and queued payments have all finished. */
     async drain() {

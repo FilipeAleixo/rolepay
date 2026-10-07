@@ -27,6 +27,7 @@ describe('parseServerConfig', () => {
     expect(c.http).toEqual({ host: '127.0.0.1', port: 8787, clientIpHeader: null })
     expect(c.app.claimBaseUrl).toBe('https://pay.example.org/claim')
     expect(c.app.setupBaseUrl).toBe('https://pay.example.org/setup')
+    expect(c.app.dashboardBaseUrl).toBe('https://pay.example.org/dashboard')
     expect(c.app.defaultFeeToken).toBe(TESTNET_TOKENS.path_usd)
     expect(c.web).toEqual({
       origin: 'https://pay.example.org',
@@ -46,6 +47,12 @@ describe('parseServerConfig', () => {
     expect(c.app.sponsor).toBe(true)
     expect(c.recoveryIntervalMs).toBe(30_000)
     expect(c.policies).toEqual({ schedulerIntervalMs: 30_000, minVetoMinutes: 60 })
+    expect(c.fundingIntervalMs).toBe(30_000)
+  })
+
+  it('deposit addresses: the watcher interval is configurable', () => {
+    expect(parseServerConfig(env({ ROLEPAY_FUNDING_INTERVAL_SECONDS: '15' })).fundingIntervalMs).toBe(15_000)
+    expect(() => parseServerConfig(env({ ROLEPAY_FUNDING_INTERVAL_SECONDS: '0' }))).toThrow(/ROLEPAY_FUNDING_INTERVAL_SECONDS/)
   })
 
   it('policies: the scheduler interval is configurable; the demo controls (not the dev shortcuts) allow a one-minute veto window', () => {

@@ -4,16 +4,17 @@ import { join } from 'node:path'
 import BetterSqlite3 from 'better-sqlite3'
 import { Kysely, SqliteDialect } from 'kysely'
 import { afterAll, describe, expect, it } from 'vitest'
+import { fundingRepositoryContract } from '../../../test/support/fundingRepositoryContract.js'
 import { keyValueContract } from '../../../test/support/keyValueContract.js'
 import { policyRepositoryContract } from '../../../test/support/policyRepositoryContract.js'
 import { proposalRepositoryContract } from '../../../test/support/proposalRepositoryContract.js'
 import { repositoryContracts } from '../../../test/support/repositoryContracts.js'
 import * as f from '../../../test/support/fixtures.js'
 import { type Database, openSqliteDatabase } from './index.js'
-import { migrateTo } from './migrations.js'
+import { MIGRATION_NAMES, migrateTo } from './migrations.js'
 import { SqlitePolicyKeyRepository } from './policyKeyRepository.js'
 import { SqliteAuditLog, SqlitePolicyRepository } from './policyRepositories.js'
-import { SqliteCommunityRepository } from './repositories.js'
+import { SqliteCommunityRepository, SqlitePayeeRepository, SqliteRunRepository } from './repositories.js'
 
 // Real SQLite on a temp file (not :memory:), so file-level behaviour is exercised too.
 const dir = mkdtempSync(join(tmpdir(), 'rolepay-sqlite-'))
@@ -34,6 +35,7 @@ repositoryContracts('sqlite', async () => (await fresh()).repositories)
 keyValueContract('sqlite', async (clock) => (await fresh({ clock })).kv)
 proposalRepositoryContract('sqlite', async (clock) => (await fresh({ clock })).repositories.proposals)
 policyRepositoryContract('sqlite', async () => (await fresh()).repositories)
+fundingRepositoryContract('sqlite', async () => (await fresh()).repositories)
 
 /**
  * Rows as a release before 0009 wrote them (its columns only), so a migration test starts from the
@@ -207,6 +209,47 @@ describe('sqlite: migrations and persistence', () => {
     await after.repositories.communities.update(f.community({ preferredTokens: true }))
     expect((await after.repositories.payees.get(f.GUILD, f.ALICE))?.preferredToken).toBe(BETA)
     expect((await after.repositories.communities.get(f.GUILD))?.preferredTokens).toBe(true)
+  })
+
+  it('0010 adds the funding tables to a database 0009 left, with a community, a payee who prefers a stablecoin, a run, a policy and its own key in it, and keeps them', async () => {
+    // The migration right before it is 0009: the database the last release left.
+    expect(MIGRATION_NAMES[MIGRATION_NAMES.indexOf('0010_funding') - 1]).toBe('0009_preferred_tokens')
+    const path = join(dir, 'before-0010.db')
+    const sqlite = new BetterSqlite3(path)
+    sqlite.pragma('foreign_keys = ON')
+    const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+    await migrateTo(before as unknown as Kysely<unknown>, '0009_preferred_tokens')
+    // 0010 adds tables only, so today's repositories write these rows exactly as the 0009 release did.
+    const BETA = '0x20c0000000000000000000000000000000000002'
+    const community = f.community({ preferredTokens: true })
+    const payee = f.payee({ preferredToken: BETA })
+    const own = f.policyKey({ status: 'active', authorizedAt: f.at(2) })
+    await new SqliteCommunityRepository(before).insert(community)
+    await new SqlitePayeeRepository(before).upsert(payee)
+    await new SqliteRunRepository(before).insert(f.run())
+    await new SqlitePolicyRepository(before).insert(f.policy(), f.policyVersion())
+    await new SqlitePolicyKeyRepository(before).save(own)
+    const tables = () => (sqlite.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((t) => t.name)
+    expect(tables()).toContain('policy_keys')
+    expect(tables()).not.toContain('funding_sources')
+    await before.destroy()
+
+    const after = await openSqliteDatabase(path)
+    expect(await after.repositories.communities.get(f.GUILD)).toEqual(community)
+    expect(await after.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(payee)
+    expect(await after.repositories.runs.get('run_fixture01')).toEqual(f.run())
+    expect(await after.repositories.policies.get('pol_fixture01')).toEqual(f.policy())
+    expect(await after.repositories.policyKeys.get(own.address)).toEqual(own)
+    expect(await after.repositories.funding.insertMaster(f.depositMaster())).toBe(true)
+    expect(await after.repositories.funding.insertSource(f.fundingSource())).toBe('inserted')
+    expect(await after.repositories.funding.insertDeposit(f.deposit())).toBe(true)
+    await after.close()
+    // Opening again runs nothing twice and keeps the rows.
+    const again = await openSqliteDatabase(path)
+    opened.push(again)
+    expect(await again.repositories.funding.getMaster(f.GUILD)).toEqual(f.depositMaster())
+    expect(await again.repositories.funding.listDeposits(f.GUILD)).toEqual([f.deposit()])
+    expect(await again.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(payee)
   })
 
   it('keeps key-value records across reopen', async () => {

@@ -6,11 +6,11 @@ import { AesGcmKeyVault, RandomIds, SystemClock } from './crypto/index.js'
 import { DailyCappedProposer } from './kv/proposerDailyCap.js'
 import { KvRunLeases } from './kv/runLeases.js'
 import { openSqliteDatabase } from './sqlite/index.js'
-import { TempoPayoutChain } from './tempo/index.js'
+import { TempoFundingChain, TempoPayoutChain } from './tempo/index.js'
 
 /**
  * The production adapters, opened from config: SQLite file, AES-256-GCM vault,
- * Tempo chain, random IDs, system clock, and Anthropic's API when ANTHROPIC_API_KEY is set
+ * Tempo chain (payouts, and the read-only funding chain for deposit addresses), random IDs, system clock, and Anthropic's API when ANTHROPIC_API_KEY is set
  * (AI proposals, at most ROLEPAY_AI_DAILY_CAP model calls per UTC day, counted in the same
  * database file; the Discord activity reader is added by the server), and pay run leases in the
  * same file (one worker per run at a time). For composition roots:
@@ -37,6 +37,8 @@ export async function openRolepayAdapters(
         : null,
       leases: new KvRunLeases(db.kv),
       swapMaxSlippageBps: config.swapMaxSlippageBps,
+      // Read only: the registry and deposit events. Nothing is read until a community sets up deposit addresses.
+      fundingChain: new TempoFundingChain({ network: config.network, rpcUrl: config.rpcUrl }),
     },
     /** Same database: passkey credentials and sessions, delivery markers. */
     kv: db.kv,

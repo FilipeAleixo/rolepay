@@ -487,6 +487,14 @@ export function auditSummary(e: AuditEvent, symbol: string): string {
       return `Paid ${amount('total')} to ${people(num('lines'))}.`
     case 'run.failed':
       return `The payment failed (${String(d.reason)})${d.retryable ? '; it can be retried' : ''}.`
+    // Funding sources are named by people: the stream names them by ID, never by their name.
+    case 'funding_source.created':
+      return `Created a funding source with the deposit address ${String(d.depositAddress)}.`
+    case 'deposit.received': {
+      const token = String(d.token).toLowerCase()
+      const label = TOKEN_SYMBOLS[token] ?? `${token.slice(0, 6)}...${token.slice(-4)}`
+      return `Received ${String(d.amount)} ${label} at the deposit address of funding source ${String(d.sourceId)}.`
+    }
   }
 }
 

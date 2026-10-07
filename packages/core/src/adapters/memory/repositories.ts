@@ -1,5 +1,6 @@
 import type { AiUsage, AiUsagePurpose, NewAiUsage } from '../../domain/aiUsage.js'
 import type { BotKey, Community, SetupLink } from '../../domain/community.js'
+import type { Deposit, DepositMaster, FundingSource } from '../../domain/funding.js'
 import type { LinkToken, Payee } from '../../domain/payee.js'
 import type { AuditEvent, AuditQuery, NewAuditEvent } from '../../domain/policy/audit.js'
 import type { Policy, PolicyStatus, PolicyVersion } from '../../domain/policy/policy.js'
@@ -12,6 +13,7 @@ import type {
   AiUsageRepository,
   AuditLog,
   CommunityRepository,
+  FundingRepository,
   PayeeRepository,
   PolicyKeyRepository,
   PolicyRepository,
@@ -275,6 +277,54 @@ export class MemoryAiUsageRepository implements AiUsageRepository {
   }
 }
 
+export class MemoryFundingRepository implements FundingRepository {
+  private masters = new Map<string, DepositMaster>()
+  private sources = new Map<string, FundingSource>()
+  private deposits = new Map<string, Deposit>()
+
+  async getMaster(communityId: string) {
+    const m = this.masters.get(communityId)
+    return m ? copy(m) : null
+  }
+  async insertMaster(master: DepositMaster) {
+    if (this.masters.has(master.communityId)) return false
+    this.masters.set(master.communityId, copy(master))
+    return true
+  }
+  async listMasters() {
+    return [...this.masters.values()].map(copy)
+  }
+  async advanceScan(communityId: string, scannedTo: bigint) {
+    const m = this.masters.get(communityId)
+    if (m && scannedTo > m.scannedTo) this.masters.set(communityId, { ...m, scannedTo })
+  }
+  async insertSource(source: FundingSource) {
+    const taken = [...this.sources.values()].some((s) => s.communityId === source.communityId && s.userTag === source.userTag)
+    if (taken || this.sources.has(source.id)) return 'tag_taken' as const
+    this.sources.set(source.id, copy(source))
+    return 'inserted' as const
+  }
+  async getSource(id: string) {
+    const s = this.sources.get(id)
+    return s ? copy(s) : null
+  }
+  async listSources(communityId: string) {
+    return [...this.sources.values()].filter((s) => s.communityId === communityId).sort((a, b) => a.userTag.localeCompare(b.userTag)).map(copy)
+  }
+  async insertDeposit(deposit: Deposit) {
+    const key = `${deposit.txHash}:${deposit.logIndex}`
+    if (this.deposits.has(key)) return false
+    this.deposits.set(key, copy(deposit))
+    return true
+  }
+  async listDeposits(communityId: string, opts: { sourceId?: string; since?: Date; limit?: number } = {}) {
+    const all = [...this.deposits.values()]
+      .filter((d) => d.communityId === communityId && (!opts.sourceId || d.sourceId === opts.sourceId) && (!opts.since || d.blockTime >= opts.since))
+      .sort((a, b) => (a.blockNumber === b.blockNumber ? b.logIndex - a.logIndex : a.blockNumber > b.blockNumber ? -1 : 1))
+    return all.slice(0, opts.limit ?? all.length).map(copy)
+  }
+}
+
 export function createMemoryRepositories(opts: { clock?: Clock } = {}) {
   const clock = opts.clock ?? { now: () => new Date() }
   return {
@@ -287,5 +337,6 @@ export function createMemoryRepositories(opts: { clock?: Clock } = {}) {
     policyKeys: new MemoryPolicyKeyRepository(),
     audit: new MemoryAuditLog(),
     aiUsage: new MemoryAiUsageRepository(),
+    funding: new MemoryFundingRepository(),
   }
 }

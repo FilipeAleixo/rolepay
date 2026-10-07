@@ -29,6 +29,26 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     expect(ROUTED_COMMANDS.filter((c) => !subcommands.includes(c))).toEqual(['rolepay policy run_now'])
   })
 
+  it('the default build registers exactly these subcommands: funding sources and preferred stablecoins included', () => {
+    expect(subcommands).toEqual([
+      'rolepay setup',
+      'rolepay new',
+      'rolepay propose',
+      'rolepay status',
+      'rolepay export',
+      'rolepay policy new',
+      'rolepay policy list',
+      'rolepay policy show',
+      'rolepay policy pause',
+      'rolepay policy resume',
+      'rolepay policy mode',
+      'rolepay fund new',
+      'rolepay fund list',
+      'payee link',
+      'payee prefer',
+    ])
+  })
+
   it('/payee prefer token: a fixed list of USD stablecoins per network, and the payout token as the default', () => {
     const prefer = (network?: 'moderato' | 'mainnet') =>
       ((commandDefinitions({ devShortcuts: false, demoControls: false, ...(network ? { network } : {}) }) as Def[]).find((c) => c.name === 'payee')?.options ?? []).find((o) => o.name === 'prefer') as
@@ -43,6 +63,14 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     ])
     expect(prefer('mainnet')?.options?.[0]?.choices?.map((c) => c.name)).toEqual(["The server's payout token (the default)", 'USDC.e', 'OUSD', 'USDT0'])
     expect(prefer()?.options?.[0]?.choices).toEqual(prefer('moderato')?.options?.[0]?.choices)
+  })
+
+  it('/rolepay fund new|list: funding sources, a name up to 80 characters, in every build (no flag)', () => {
+    expect(subcommands.filter((c) => c.startsWith('rolepay fund '))).toEqual(['rolepay fund new', 'rolepay fund list'])
+    const fund = defs.find((d) => d.name === 'rolepay')?.options?.find((o) => o.name === 'fund')
+    const name = fund?.options?.find((o) => o.name === 'new')?.options?.[0] as (Def & { max_length?: number }) | undefined
+    expect([name?.name, name?.type, name?.required, name?.max_length]).toEqual(['name', OptionType.String, true, 80])
+    for (const o of [fund, ...(fund?.options ?? [])]) expect((o?.description ?? '').length).toBeLessThanOrEqual(100)
   })
 
   it('/rolepay setup fees: the choices say which default holds where (sponsored on testnet, a fee budget on mainnet, which has no sponsor)', () => {

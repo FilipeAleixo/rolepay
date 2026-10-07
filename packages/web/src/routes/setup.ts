@@ -13,6 +13,11 @@ export type SetupRoutesDeps = { rolepay: Rolepay; sessions: PasskeySessions; con
 /** Pay each person in the stablecoin they prefer: on or off. */
 const PreferredTokensBody = z.object({ enabled: z.boolean() })
 
+/** Deposit addresses: the salt this browser mined, then the registration it sent (core re-validates both). */
+const SaltBody = z.object({ salt: z.string().max(80) })
+const RegisteredBody = z.object({ masterId: z.string().max(20), txHash: z.string().max(80).nullable().default(null) })
+const DEPOSIT_STATUS: Record<string, number> = { invalid_input: 400, invalid_salt: 400, community_not_found: 404 }
+
 const keyJson = (s: KeyStatusView) => ({ address: s.key.address, status: s.key.status, policy: s.key.policy, chain: s.state })
 
 /**
@@ -61,6 +66,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
         feeToken,
         feeTokenLabel: label(feeToken),
         passkeyName: `Rolepay treasury: ${guildName}`,
+        deposits: rolepay.funding.isConfigured(),
         defaults: {
           limit: formatAmount(d.limit),
           periodDays: Math.round(d.periodSeconds / DAY),
@@ -79,6 +85,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     const session = await deps.sessions.current(c.req.raw)
     const status = community ? await rolepay.communities.keyStatus({ guildId: community.id }) : null
     const keys = community ? await rolepay.communities.listKeys({ guildId: community.id }) : null
+    const funding = community ? await rolepay.funding.status({ guildId: community.id }) : null
     return jsonResponse(200, {
       ok: true,
       community: community
@@ -97,6 +104,17 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
       keys: keys?.ok ? keys.value.map(keyJson) : [],
       // Preferred stablecoins are on but the active key cannot swap: runs with swaps wait for a new key.
       keyNeedsSwapScope: Boolean(community && keyLacksSwapScope(community, status?.ok && status.value.key.status === 'active' ? status.value.key.policy : null)),
+      // Deposit addresses (virtual addresses): whether this server offers them, and the treasury's master once registered.
+      deposits:
+        community && funding?.ok
+          ? {
+              available: funding.value.configured,
+              masterId: funding.value.master?.masterId ?? null,
+              txHash: funding.value.master?.txHash ?? null,
+              sources: funding.value.sources.length,
+              dashboard: `/dashboard/${community.id}/funding`,
+            }
+          : null,
       session: session ? { address: session.address } : null,
       isTreasurer: Boolean(community && session && session.address === community.treasuryAddress && provesPasskey(session, community)),
       signInRequired: Boolean(community && session && session.address === community.treasuryAddress && !provesPasskey(session, community)),
@@ -156,6 +174,32 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     const revoked = await rolepay.communities.confirmRevocation({ guildId: t.value.community.id, keyAddress })
     if (!revoked.ok) return failure(409, revoked.error)
     return jsonResponse(200, { ok: true, key: revoked.value })
+  })
+
+  /**
+   * Deposit addresses, step 1: the page mined a salt for the treasury (the 32-bit proof of work
+   * TIP-1022 asks for). Core checks it and that its masterId is free, and answers with its copy of
+   * the registration call; the page builds its own and signs nothing if they differ.
+   */
+  app.post('/setup/:token/deposits/plan', async (c) => {
+    const t = await treasurer(c)
+    if (!t.ok) return t.response
+    const body = SaltBody.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) return failure(400, { code: 'invalid_input', issues: ['salt: the 32-byte salt this page mined'] })
+    const plan = await rolepay.funding.planMaster({ guildId: t.value.community.id, salt: body.data.salt })
+    if (!plan.ok) return failure(DEPOSIT_STATUS[plan.error.code] ?? 409, plan.error)
+    return jsonResponse(200, { ok: true, ...plan.value })
+  })
+
+  /** Step 2: the passkey sent the registration; core reads it from the chain (never this page's word) and records it. */
+  app.post('/setup/:token/deposits/confirm', async (c) => {
+    const t = await treasurer(c)
+    if (!t.ok) return t.response
+    const body = RegisteredBody.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) return failure(400, { code: 'invalid_input', issues: ['masterId and txHash: the registration this page sent'] })
+    const confirmed = await rolepay.funding.confirmMaster({ guildId: t.value.community.id, ...body.data })
+    if (!confirmed.ok) return failure(DEPOSIT_STATUS[confirmed.error.code] ?? 409, confirmed.error)
+    return jsonResponse(200, { ok: true, masterId: confirmed.value.masterId, txHash: confirmed.value.txHash })
   })
 
   return app

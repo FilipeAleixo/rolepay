@@ -2,7 +2,8 @@
 // provider, the real flow: state cookie, PKCE, callback, session cookie), then walk Overview ->
 // Runs -> a run -> Policies (core's real policy services on memory adapters, through the policy
 // seam) -> pause as the Treasurer -> veto an autopilot run -> write and approve a policy from the
-// web -> Audit log -> CSV -> sign out. No dashboard page may run a script or trip the
+// web -> Funding (a source's deposit address and QR code, its deposit, a new source from the web)
+// -> Audit log -> CSV -> sign out. No dashboard page may run a script or trip the
 // Content-Security-Policy.
 import { expect, test } from '@playwright/test'
 import { GUILD, TESS, startDashboardServer } from './dashboardServer.js'
@@ -28,7 +29,7 @@ test.afterEach(() => {
   expect(cspViolations).toEqual([])
 })
 
-test('a treasurer signs in with Discord and walks Overview, Runs, Policies (pause, veto, a new policy) and the Audit log', async ({ page }) => {
+test('a treasurer signs in with Discord and walks Overview, Runs, Policies (pause, veto, a new policy), Funding (a new source) and the Audit log', async ({ page }) => {
   server.oauth.signInAs({ user: { id: TESS.id, name: 'tess_d' }, guilds: [{ id: GUILD, name: 'E2E guild' }] })
   const nav = () => page.getByRole('navigation', { name: 'E2E guild' })
 
@@ -53,6 +54,9 @@ test('a treasurer signs in with Discord and walks Overview, Runs, Policies (paus
   await expect(page.getByRole('img', { name: /^Paid per week for the last 12 weeks: 62 AlphaUSD in all, 62 by a policy and 0 by hand\./ })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Weekly helpers' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'Autopilot helpers' })).toBeVisible()
+  // Funded this month, through the deposit address of one funding source.
+  await expect(page.getByRole('heading', { name: 'Funded this month' })).toBeVisible()
+  await expect(page.getByText('from 1 source, since')).toBeVisible()
 
   // Keyboard: the first Tab lands on "Skip to content".
   await page.keyboard.press('Tab')
@@ -108,11 +112,26 @@ test('a treasurer signs in with Discord and walks Overview, Runs, Policies (paus
   await expect(page.getByText('Approved.', { exact: true })).toBeVisible()
   expect(server.proposer.requests).toHaveLength(3)
 
+  // Funding: the source's deposit address with its QR code, its deposit with the transaction, then a new source.
+  await nav().getByRole('link', { name: 'Funding' }).click()
+  await expect(page.getByRole('heading', { name: 'Funding', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Acme DAO' })).toBeVisible()
+  await expect(page.getByText(server.deposit.address, { exact: true })).toBeVisible()
+  await expect(page.getByRole('img', { name: `QR code of the deposit address ${server.deposit.address}` })).toBeVisible()
+  await expect(page.getByRole('cell', { name: '25 AlphaUSD' })).toBeVisible()
+  await expect(page.locator(`a[href$="/tx/${server.deposit.txHash}"]`)).toBeVisible()
+  await page.getByLabel('Name').fill('Judges pool')
+  await page.getByRole('button', { name: 'Create its deposit address' }).click()
+  await expect(page.getByText('Funding source created.')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Judges pool' })).toBeVisible()
+  await expect(page.getByText('0x58e21090fdfdfdfdfdfdfdfdfdfd000000000002', { exact: true })).toBeVisible()
+
   // Audit log, filtered, and its CSV.
   await nav().getByRole('link', { name: 'Audit log' }).click()
   await expect(page.getByRole('heading', { name: 'Audit log' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Paused it: no runs until it is resumed.' })).toBeVisible()
   await expect(page.getByRole('cell', { name: 'Vetoed the run of 62 AlphaUSD for 2 people: nothing is paid.' })).toBeVisible()
+  await expect(page.getByRole('cell', { name: /^Received 25 AlphaUSD at the deposit address of funding source fsrc_/ })).toBeVisible()
   await page.getByLabel('Event').selectOption('policy.paused')
   await page.getByRole('button', { name: 'Filter' }).click()
   await expect(page.getByRole('cell', { name: 'Vetoed the run of 62 AlphaUSD for 2 people: nothing is paid.' })).toHaveCount(0)

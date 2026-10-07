@@ -36,6 +36,9 @@ export class RandomIds implements IdGenerator {
   policyRunId() {
     return `prun_${base32(randomBytes(10))}`
   }
+  fundingSourceId() {
+    return `fsrc_${base32(randomBytes(10))}`
+  }
 }
 
 export class SystemClock implements Clock {

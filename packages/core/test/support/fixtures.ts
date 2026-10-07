@@ -1,6 +1,7 @@
 // Test fixtures: valid domain objects with overridable fields.
 import type { NewAiUsage } from '../../src/domain/aiUsage.js'
 import type { BotKey, Community, SetupLink } from '../../src/domain/community.js'
+import { type Deposit, type DepositMaster, type FundingSource, depositAddress, userTagFor } from '../../src/domain/funding.js'
 import type { LinkToken, Payee } from '../../src/domain/payee.js'
 import type { NewAuditEvent } from '../../src/domain/policy/audit.js'
 import type { Policy, PolicyVersion } from '../../src/domain/policy/policy.js'
@@ -295,6 +296,44 @@ export function aiUsage(over: Partial<NewAiUsage> = {}): NewAiUsage {
     runId: null,
     policyId: null,
     policyVersion: null,
+    ...over,
+  }
+}
+
+export const MASTER_ID = '0x58e21090'
+export const SPONSOR = '0x5555555555555555555555555555555555555555'
+
+/** The treasury registered as a virtual-address master at block 1000, scanned up to it. */
+export function depositMaster(over: Partial<DepositMaster> = {}): DepositMaster {
+  return { communityId: GUILD, masterId: MASTER_ID, masterAddress: TREASURY, txHash: `0x${'ee'.repeat(32)}`, registeredBlock: 1000n, registeredAt: T0, scannedTo: 1000n, ...over }
+}
+
+/** The nth funding source of the fixture master. */
+export function fundingSource(n = 1, over: Partial<FundingSource> = {}): FundingSource {
+  return {
+    id: `fsrc_fixture${n}`,
+    communityId: GUILD,
+    name: `Sponsor ${n}`,
+    userTag: userTagFor(n),
+    depositAddress: depositAddress(MASTER_ID, userTagFor(n)),
+    createdBy: TREASURER,
+    createdAt: at(n),
+    ...over,
+  }
+}
+
+/** 5 AlphaUSD from the sponsor to the first source, in block 1001. */
+export function deposit(over: Partial<Deposit> = {}): Deposit {
+  return {
+    communityId: GUILD,
+    sourceId: 'fsrc_fixture1',
+    token: TOKEN,
+    amount: 5_000_000n,
+    from: SPONSOR,
+    txHash: `0x${'d1'.repeat(32)}`,
+    logIndex: 0,
+    blockNumber: 1001n,
+    blockTime: at(60),
     ...over,
   }
 }

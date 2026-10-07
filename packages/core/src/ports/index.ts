@@ -1,5 +1,6 @@
 export type * from './clock.js'
 export type * from './deps.js'
+export type * from './fundingChain.js'
 export type * from './idGenerator.js'
 export type * from './keyVault.js'
 export type * from './keyValueStore.js'

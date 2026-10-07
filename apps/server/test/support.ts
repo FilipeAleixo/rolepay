@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import { TESTNET_TOKENS, createRolepay, parseAmount } from '@rolepay/core'
 import { type KeyValueStore, type Rolepay } from '@rolepay/core'
-import { FakePayoutChain, FakeRunProposer, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, FakeRunProposer, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { RestActivityReader } from '@rolepay/discord'
 import { FakeDiscordRest, createTestSigner } from '@rolepay/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
@@ -20,7 +20,7 @@ export const usd = (s: string) => {
   return r.value
 }
 
-type SharedState = { rolepay: Rolepay; chain: FakePayoutChain; clock: ManualClock; kv: KeyValueStore; rest: FakeDiscordRest; proposer: FakeRunProposer }
+type SharedState = { rolepay: Rolepay; chain: FakePayoutChain; fundingChain: FakeFundingChain; clock: ManualClock; kv: KeyValueStore; rest: FakeDiscordRest; proposer: FakeRunProposer }
 
 /**
  * `from`: start a second server over the first one's database and chain, as a restarted
@@ -56,6 +56,8 @@ export async function testServer(
   const clock = opts.from?.clock ?? new ManualClock(new Date())
   const chain = opts.from?.chain ?? new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
   if (!opts.from) chain.fund(TOKEN, TREASURY, usd('1000'))
+  // Deposit addresses: an in-memory registry and transfer log (the fake masterId is a salt's last 4 bytes).
+  const fundingChain = opts.from?.fundingChain ?? new FakeFundingChain()
   const logs: { event: string; fields?: Record<string, unknown> }[] = []
   // A restarted process gets a fresh Discord connection; the AI proposals read through it.
   const rest = new FakeDiscordRest()
@@ -75,6 +77,7 @@ export async function testServer(
       proposalLog: (entry) => logs.push({ event: 'proposal', fields: entry }),
       minVetoMinutes: config.policies.minVetoMinutes,
       demoControls: config.core.demoControls,
+      fundingChain,
     })
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
@@ -118,5 +121,5 @@ export async function testServer(
   /** Discord's signature over `text` (the timestamp, then the body). */
   const sign = (text: string) => signer.sign(text)
 
-  return { ...server, config, clock, chain, rolepay, kv, rest, proposer, logs, interact, browserPost, sign }
+  return { ...server, config, clock, chain, fundingChain, rolepay, kv, rest, proposer, logs, interact, browserPost, sign }
 }

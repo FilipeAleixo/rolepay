@@ -1,10 +1,11 @@
 // The treasurer setup page: the community account (passkey as root), funding, and the bot
 // key's authorisation and revocation, signed with the passkey.
+import { MiningStalled, type Registration, buildRegistration, describeRegistration, mineSalt, registrationMismatch } from './deposits.js'
 import { $, busy, displayMicros, explainPasskeyError, fill, get, post, shortAddress, show, status } from './dom.js'
 import { treasuryFeeToken } from './fees.js'
 import { type KeyForm, STABLECOIN_DEX, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
 import { passkeys } from './passkey.js'
-import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, faucet, revokeAccessKey } from './tempo.js'
+import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, faucet, registerMaster, revokeAccessKey } from './tempo.js'
 
 export type SetupConfig = {
   page: 'setup'
@@ -24,6 +25,8 @@ export type SetupConfig = {
   /** The stablecoins the key may swap into and deliver when preferred stablecoins are on. */
   swapTokens: { address: string; label: string }[]
   passkeyName: string
+  /** Whether this server offers deposit addresses. */
+  deposits: boolean
   defaults: { limit: string; periodDays: number; validityDays: number; feeBudget: string }
 }
 
@@ -40,6 +43,8 @@ type State = {
   key: KeyView | null
   /** Every key not yet revoked; the ones live on chain are listed with a Revoke button each. */
   keys: KeyView[]
+  /** Deposit addresses: offered here, and the treasury's masterId once registered. */
+  deposits: { available: boolean; masterId: string | null; txHash: string | null; sources: number; dashboard: string } | null
   session: { address: string } | null
   isTreasurer: boolean
   /** Signed in as the treasury's address, but not with a passkey login: sign in to act. */
@@ -53,6 +58,10 @@ const LINK_ERRORS: Record<string, string> = {
   not_the_treasury: 'This passkey is not the treasury of this server. Sign in with the treasury passkey.',
   no_passkey_session: 'Sign in with your passkey first.',
   sign_in_required: 'Sign in with the treasury passkey first: this session does not prove it.',
+  invalid_salt: 'Nothing was signed: the registration code this page found does not pass the proof of work. Try again.',
+  already_set_up: 'Deposit addresses are already set up for this treasury.',
+  not_registered: 'The chain does not show this treasury as registered yet. Wait a few seconds and reload.',
+  not_configured: 'This Rolepay server does not offer deposit addresses.',
 }
 const explain = (e: { code: string } & Record<string, unknown>) =>
   e.code === 'treasury_mismatch' && typeof e.treasuryAddress === 'string'
@@ -74,7 +83,7 @@ export function startSetup(config: SetupConfig) {
   const base = `/setup/${encodeURIComponent(config.token)}`
   const chain: ChainConfig = { rpcUrl: config.rpcUrl, sponsorUrl: config.sponsorUrl, testnet: config.testnet, feeToken: config.feeToken ?? config.payoutToken }
   let state: State | null = null
-  const fixed = ['#create', '#signin', '#signin-bound', '#faucet', '#authorize'].map((s) => $<HTMLButtonElement>(s))
+  const fixed = ['#create', '#signin', '#signin-bound', '#faucet', '#authorize', '#deposits'].map((s) => $<HTMLButtonElement>(s))
   const preferred = $<HTMLInputElement>('#preferred-tokens')
   /** The page's buttons right now: the fixed ones and one Revoke per live key. */
   const buttons = () => [...fixed, ...document.querySelectorAll<HTMLButtonElement>('#live-keys button')]
@@ -104,6 +113,7 @@ export function startSetup(config: SetupConfig) {
     show('[data-when="signed-out"]', bound && !s.isTreasurer)
     show('[data-step="fund"]', s.isTreasurer)
     show('[data-step="key"]', s.isTreasurer)
+    show('[data-step="deposits"]', s.isTreasurer && Boolean(s.deposits?.available))
     if (s.community) {
       fill('treasury', s.community.treasury)
       for (const a of document.querySelectorAll<HTMLAnchorElement>('[data-field="explorer"]')) a.href = `${config.explorerUrl}/address/${s.community.treasury}`
@@ -127,6 +137,26 @@ export function startSetup(config: SetupConfig) {
     const authorize = $<HTMLButtonElement>('#authorize')
     if (authorize) authorize.textContent = live.length ? 'Replace the bot key with these limits' : 'Authorise the bot key with my passkey'
     renderLiveKeys(live)
+    renderDeposits(s)
+  }
+
+  /** Deposit addresses: set up or not; once set up, where to create funding sources. */
+  function renderDeposits(s: State) {
+    const d = s.deposits
+    if (!d?.available) return
+    show('[data-when="deposits-off"]', d.masterId === null)
+    show('[data-when="deposits-on"]', d.masterId !== null)
+    fill(
+      'deposits-status',
+      d.masterId === null
+        ? 'Not set up yet.'
+        : `Set up: this account's deposit addresses start with ${d.masterId}. ${d.sources === 1 ? '1 funding source so far.' : `${d.sources} funding sources so far.`}`,
+    )
+    for (const a of document.querySelectorAll<HTMLAnchorElement>('[data-field="deposits-dashboard"]')) a.href = d.dashboard
+    for (const a of document.querySelectorAll<HTMLAnchorElement>('[data-field="deposits-tx"]')) {
+      a.hidden = d.txHash === null
+      if (d.txHash) a.href = `${config.explorerUrl}/tx/${d.txHash}`
+    }
   }
 
   /** One line and one Revoke button per key live on chain. Built with the DOM, never HTML strings. */
@@ -292,6 +322,48 @@ export function startSetup(config: SetupConfig) {
     status('The bot key is revoked.', 'ok')
   }
 
+  /**
+   * Deposit addresses, set up once: mine the salt here (a 32-bit proof of work, in workers), build
+   * the registration from it, check the server's copy against it (sign nothing if they differ),
+   * then one passkey prompt sends it, and the server reads the result from the chain. A masterId
+   * someone else already holds (rare) means mining on from there.
+   */
+  async function setUpDeposits() {
+    const account = await treasuryAccount()
+    const treasury = account.address.toLowerCase()
+    let start = 0n
+    for (let round = 0; round < 3; round++) {
+      status('Finding a registration code for this account (a proof of work Tempo asks for). Keep this page open: usually under a minute...')
+      const mined = await mineSalt(treasury, (tries) => status(`Finding a registration code: ${Math.floor(tries / 1_000_000).toLocaleString()} million tries so far (about 4,300 million on average)...`), start).catch((error: unknown) => {
+        if (error instanceof MiningStalled) return 'stalled' as const
+        throw error
+      })
+      if (mined === 'stalled') return status('This browser stopped working on the registration code. Nothing was signed. Reload the page and try again, with this tab in front.', 'bad')
+      if (!mined) return status('No registration code was found. Try again.', 'bad')
+      const mine = buildRegistration(treasury, mined.salt)
+      if (!mine) return status('Nothing was signed: this account cannot own deposit addresses.', 'bad')
+      const p = await post<Registration>(`${base}/deposits/plan`, { salt: mined.salt })
+      if (!p.ok && p.error.code === 'master_id_taken') {
+        start = BigInt(mined.salt) + 1n
+        continue
+      }
+      if (!p.ok) return status(explain(p.error), 'bad')
+      // The server only confirms the salt. If its copy of the call differs from what this page built, sign nothing.
+      const mismatch = registrationMismatch(mine, p)
+      if (mismatch) return status(`Nothing was signed: the server's copy of the registration has ${mismatch}, not what this page built. Do not sign until this is explained.`, 'bad')
+      fill('deposits-signs', `You are signing: ${describeRegistration(mine)}`)
+      status('Confirm with your passkey to register the deposit addresses...')
+      const sent = await registerMaster(await chainForTreasury(account.address), account, mined.salt)
+      if (sent.masterId !== mine.masterId) return status(`The chain registered ${sent.masterId}, not ${mine.masterId}. Reload before going on.`, 'bad')
+      status('Registered on chain. Checking...')
+      const c = await post<{ masterId: string }>(`${base}/deposits/confirm`, { masterId: mine.masterId, txHash: sent.txHash })
+      if (!c.ok) return status(explain(c.error), 'bad')
+      await refresh()
+      return status(`Deposit addresses are set up. Transaction: ${config.explorerUrl}/tx/${sent.txHash}`, 'ok')
+    }
+    status('Every registration code found was taken. Try again in a moment.', 'bad')
+  }
+
   async function fund() {
     const treasury = state?.community?.treasury
     if (!treasury) return
@@ -307,6 +379,7 @@ export function startSetup(config: SetupConfig) {
   signinBound?.addEventListener('click', action(() => bind(() => keys.signIn())))
   faucetButton?.addEventListener('click', action(fund))
   preferred?.addEventListener('change', () => void action(() => setPreferred(preferred.checked))())
+  $('#deposits')?.addEventListener('click', action(setUpDeposits))
   $('#key-form')?.addEventListener('input', showSigns)
   showSigns()
   $('#key-form')?.addEventListener('submit', (e) => {

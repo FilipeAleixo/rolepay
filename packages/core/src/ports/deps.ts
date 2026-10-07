@@ -1,5 +1,6 @@
 import type { NetworkName } from '../constants/tempo.js'
 import type { Clock } from './clock.js'
+import type { FundingChain } from './fundingChain.js'
 import type { IdGenerator } from './idGenerator.js'
 import type { KeyVault } from './keyVault.js'
 import type { PayoutChain } from './payoutChain.js'
@@ -9,6 +10,7 @@ import type {
   AiUsageRepository,
   AuditLog,
   CommunityRepository,
+  FundingRepository,
   PayeeRepository,
   PolicyKeyRepository,
   PolicyRepository,
@@ -34,6 +36,8 @@ export type RolepayDeps = {
     audit: AuditLog
     /** One content-free row per model call: the AI spend. */
     aiUsage: AiUsageRepository
+    /** Funding with attribution: the master registration, funding sources and their deposits. */
+    funding: FundingRepository
   }
   vault: KeyVault
   ids: IdGenerator
@@ -60,4 +64,10 @@ export type RolepayDeps = {
   leases?: RunLeases
   /** A line paid in a preferred stablecoin may spend at most this many basis points over its amount (default 100, 1%). */
   swapMaxSlippageBps?: number
+  /**
+   * Funding with attribution: the registry and the deposit events on chain (`TempoFundingChain` in
+   * production). Without it, setting up deposit addresses answers `not_configured` and the watcher
+   * reads nothing.
+   */
+  fundingChain?: FundingChain | null
 }

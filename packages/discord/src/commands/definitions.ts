@@ -1,4 +1,4 @@
-import { MAX_NOTE_LENGTH, type NetworkName, POLICY_LIMITS, PREFERRED_TOKENS, PROPOSAL_LIMITS, TOKEN_SYMBOLS, WEEKDAYS } from '@rolepay/core'
+import { FUNDING_LIMITS, MAX_NOTE_LENGTH, type NetworkName, POLICY_LIMITS, PREFERRED_TOKENS, PROPOSAL_LIMITS, TOKEN_SYMBOLS, WEEKDAYS } from '@rolepay/core'
 import { ChannelType, CommandType, OptionType, Permission } from '../api.js'
 import { PAY_AUTHOR_COMMAND, PAY_MEMBER_COMMAND } from './payDirect.js'
 import { PROPOSE_MESSAGE_COMMAND } from './proposeFromMessage.js'
@@ -117,6 +117,25 @@ const payeePrefer = (network: NetworkName) => ({
 })
 
 /**
+ * /rolepay fund: funding sources, each with its own deposit address (a Tempo virtual address of the
+ * treasury). The approver role creates them; admins and treasurers list them.
+ */
+const fundGroup = {
+  type: OptionType.SubCommandGroup,
+  name: 'fund',
+  description: 'Funding sources, each with its own deposit address into the treasury',
+  options: [
+    {
+      type: OptionType.SubCommand,
+      name: 'new',
+      description: 'Create a funding source with its own deposit address (the approver role)',
+      options: [{ type: OptionType.String, name: 'name', description: 'For example: Q4 bounty sponsor: Acme DAO', required: true, max_length: FUNDING_LIMITS.maxNameLength }],
+    },
+    { type: OptionType.SubCommand, name: 'list', description: 'The funding sources, their deposit addresses and what each received' },
+  ],
+}
+
+/**
  * The slash commands, as JSON for `PUT /applications/{id}/commands`. /rolepay is visible
  * to Manage Server by default (admins can grant it to the Treasurer role in Server
  * Settings > Integrations); the handlers re-check permissions regardless. The dev shortcut
@@ -199,6 +218,7 @@ export const commandDefinitions = (opts: { devShortcuts: boolean; demoControls: 
         options: [runOption('The run to export (default: the latest)')],
       },
       policyGroup(opts),
+      fundGroup,
     ],
   },
   {

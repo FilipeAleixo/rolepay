@@ -44,6 +44,8 @@ const ServerEnvSchema = z.object({
   ROLEPAY_RECOVERY_INTERVAL_SECONDS: z.coerce.number().int().positive().default(30),
   /** How often the policy scheduler ticks (makes due runs, releases autopilot runs whose veto window passed). */
   ROLEPAY_SCHEDULER_INTERVAL_SECONDS: z.coerce.number().int().positive().default(30),
+  /** How often the deposit watcher reads new deposits to deposit addresses (only for communities that set them up). */
+  ROLEPAY_FUNDING_INTERVAL_SECONDS: z.coerce.number().int().positive().default(30),
 })
 
 export type ServerConfig = {
@@ -53,6 +55,8 @@ export type ServerConfig = {
   /** `clientIpHeader`: where the proxy in front puts the client's IP (lowercase), or null for the last X-Forwarded-For hop. */
   http: { host: string; port: number; clientIpHeader: string | null }
   recoveryIntervalMs: number
+  /** Deposit addresses: how often the watcher reads new deposits. */
+  fundingIntervalMs: number
   /** Standing policies: the scheduler's interval, and the shortest veto window (1 minute with the testnet demo controls). */
   policies: { schedulerIntervalMs: number; minVetoMinutes: number }
   /** The web pages: origin, passkey relying party, chain endpoints for the browser, the app id for the home page's install link. */
@@ -105,6 +109,7 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       network: core.network,
       claimBaseUrl: `${origin}/claim`,
       setupBaseUrl: `${origin}/setup`,
+      dashboardBaseUrl: `${origin}/dashboard`,
       defaultFeeToken: feeToken,
       defaultPayoutToken: payoutToken,
       sponsor,
@@ -115,6 +120,7 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
     },
     http: { host: e.HOST, port: e.PORT, clientIpHeader: e.ROLEPAY_CLIENT_IP_HEADER ?? null },
     recoveryIntervalMs: e.ROLEPAY_RECOVERY_INTERVAL_SECONDS * 1000,
+    fundingIntervalMs: e.ROLEPAY_FUNDING_INTERVAL_SECONDS * 1000,
     policies: { schedulerIntervalMs: e.ROLEPAY_SCHEDULER_INTERVAL_SECONDS * 1000, minVetoMinutes: core.demoControls ? 1 : POLICY_LIMITS.minVetoMinutes },
     web: {
       origin,

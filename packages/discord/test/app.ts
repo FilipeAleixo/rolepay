@@ -15,6 +15,7 @@ export const CONFIG: DiscordAppConfig = {
   network: 'moderato',
   claimBaseUrl: 'https://rolepay.test/claim',
   setupBaseUrl: 'https://rolepay.test/setup',
+  dashboardBaseUrl: 'https://rolepay.test/dashboard',
   defaultFeeToken: TESTNET_TOKENS.path_usd,
   defaultPayoutToken: TESTNET_TOKENS.alpha_usd,
   sponsor: true,
