@@ -102,12 +102,12 @@ describe('parseServerConfig', () => {
     expect(() => parseServerConfig(env({ ROLEPAY_CLIENT_IP_HEADER: 'not a header' }))).toThrow(/ROLEPAY_CLIENT_IP_HEADER/)
   })
 
-  it('AI proposals: off without ANTHROPIC_API_KEY (blank is unset), Opus 5.5 by default, ROLEPAY_AI_MODEL overrides', () => {
-    expect(parseServerConfig(env()).core.ai).toEqual({ apiKey: null, model: 'claude-opus-5-5', dailyCap: 50 })
-    expect(parseServerConfig(env({ ANTHROPIC_API_KEY: '', ROLEPAY_AI_MODEL: '', ROLEPAY_AI_DAILY_CAP: '' })).core.ai).toEqual({ apiKey: null, model: 'claude-opus-5-5', dailyCap: 50 })
-    expect(parseServerConfig(env({ ANTHROPIC_API_KEY: 'sk-ant-api03-SECRET', ROLEPAY_AI_MODEL: 'claude-sonnet-5-5', ROLEPAY_AI_DAILY_CAP: '20' })).core.ai).toEqual({
+  it('AI proposals: off without ANTHROPIC_API_KEY (blank is unset), Sonnet 5.5 by default, ROLEPAY_AI_MODEL overrides', () => {
+    expect(parseServerConfig(env()).core.ai).toEqual({ apiKey: null, model: 'claude-sonnet-5-5', dailyCap: 50 })
+    expect(parseServerConfig(env({ ANTHROPIC_API_KEY: '', ROLEPAY_AI_MODEL: '', ROLEPAY_AI_DAILY_CAP: '' })).core.ai).toEqual({ apiKey: null, model: 'claude-sonnet-5-5', dailyCap: 50 })
+    expect(parseServerConfig(env({ ANTHROPIC_API_KEY: 'sk-ant-api03-SECRET', ROLEPAY_AI_MODEL: 'claude-opus-5-5', ROLEPAY_AI_DAILY_CAP: '20' })).core.ai).toEqual({
       apiKey: 'sk-ant-api03-SECRET',
-      model: 'claude-sonnet-5-5',
+      model: 'claude-opus-5-5',
       dailyCap: 20,
     })
   })

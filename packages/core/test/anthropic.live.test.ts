@@ -1,6 +1,8 @@
 // Opt-in, real Anthropic API: ROLEPAY_AI_LIVE=true and ANTHROPIC_API_KEY (environment or repo-root
 // .env). Three calls (a few cents): the demo from a message with an injection attempt beside it,
-// the criteria demo, and an instruction the filters cannot express. Run: `pnpm test:ai-live`.
+// the criteria demo, and an instruction the filters cannot express. Each call must write or read
+// the prompt cache (the static prefix is over the model's minimum), and the second criteria call
+// must read what the first wrote (nothing per request leaks into the prefix). Run: `pnpm test:ai-live`.
 import { join } from 'node:path'
 import { config as loadEnv } from 'dotenv'
 import { describe, expect, it } from 'vitest'
@@ -75,6 +77,12 @@ async function live() {
   return { proposals, activity, logs }
 }
 
+/** The cache tokens of the last proposal: a call that neither writes nor reads the cache has a prefix under the minimum, or none. */
+function cacheOf(logs: ProposalLogEntry[]) {
+  const last = logs.at(-1)
+  return { written: last?.cacheCreationInputTokens ?? 0, read: last?.cacheReadInputTokens ?? 0 }
+}
+
 describe.skipIf(!LIVE)('live: Anthropic proposes, code checks', () => {
   it('the demo from #bounties, with an injection attempt in the channel: three lines, the attacker never paid', async () => {
     const w = await live()
@@ -94,6 +102,8 @@ describe.skipIf(!LIVE)('live: Anthropic proposes, code checks', () => {
     expect(Object.fromEntries(r.value.lines.map((l) => [l.discordUserId, l.amount]))).toEqual({ [ANA]: usd(50), [RUI]: usd(50), [LI]: usd(200) })
     expect(r.value.lines.some((l) => l.discordUserId === MALLORY)).toBe(false)
     expect(r.value.lines.every((l) => l.sources.some((s) => s.messageId === '810000000000000001'))).toBe(true)
+    const cache = cacheOf(w.logs)
+    expect(cache.written + cache.read).toBeGreaterThan(0)
   })
 
   it('criteria: "pay 20 to every Mod who answered at least 10 messages in #help this month"', async () => {
@@ -118,6 +128,8 @@ describe.skipIf(!LIVE)('live: Anthropic proposes, code checks', () => {
     expect(r.value.criteria).toMatchObject({ hasRole: [MODS] })
     expect(r.value.criteria?.repliesIn ?? r.value.criteria?.messagesIn).toMatchObject({ channelIds: [HELP], min: 10 })
     expect(r.value.lines.map((l) => [l.discordUserId, l.amount])).toEqual([[ANA, usd(20)]])
+    const cache = cacheOf(w.logs)
+    expect(cache.written + cache.read).toBeGreaterThan(0)
   })
 
   it('an instruction the filters cannot express is a clear answer, not a guess', async () => {
@@ -125,5 +137,7 @@ describe.skipIf(!LIVE)('live: Anthropic proposes, code checks', () => {
     const r = await w.proposals.proposeFromCriteria({ guildId: GUILD, actor: TREASURER, actorRoleIds: [APPROVER], instruction: 'pay 5 to everyone who spent an hour in the voice channel yesterday' })
     console.log('unclear:', JSON.stringify(w.logs.at(-1)))
     expect(r).toMatchObject({ ok: false, error: { code: 'criteria_unclear' } })
+    // A different instruction, the same criteria prefix the previous test wrote or refreshed.
+    expect(cacheOf(w.logs).read).toBeGreaterThan(0)
   })
 })

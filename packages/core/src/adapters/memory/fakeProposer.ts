@@ -13,7 +13,7 @@ const isFailure = (a: unknown): a is ProposerFailure => typeof a === 'object' &&
 export class FakeRunProposer implements RunProposer {
   readonly model = 'fake-proposer'
   readonly requests: ({ mode: 'messages'; request: MessageProposalRequest } | { mode: 'criteria'; request: CriteriaProposalRequest })[] = []
-  usage: ProposerUsage = { model: 'fake-proposer', inputTokens: 1200, outputTokens: 300, latencyMs: 7, costMicroUsd: 10_800 }
+  usage: ProposerUsage = { model: 'fake-proposer', inputTokens: 1200, cacheCreationInputTokens: 0, cacheReadInputTokens: 2400, outputTokens: 300, latencyMs: 7, costMicroUsd: 10_800 }
   onMessages: (request: MessageProposalRequest) => Answer<RawMessageProposal> = (r) => naiveMessageProposal(r)
   onCriteria: (request: CriteriaProposalRequest) => Answer<RawCriteriaProposal> = () => unclearCriteria('The fake proposer has no criteria scripted.')
 

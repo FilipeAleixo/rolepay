@@ -209,6 +209,8 @@ describe('ProposalService: message mode', () => {
         unregistered: 0,
         model: 'fake-proposer',
         inputTokens: null,
+        cacheCreationInputTokens: null,
+        cacheReadInputTokens: null,
         outputTokens: null,
         costUsd: null,
         latencyMs: null,
@@ -217,7 +219,7 @@ describe('ProposalService: message mode', () => {
     ])
   })
 
-  it('logs one line per proposal: counts, tokens, cost and latency, never text', async () => {
+  it('logs one line per proposal: counts, tokens (cache writes and reads too), cost and latency, never text', async () => {
     const w = await world()
     demoAnswer(w)
     const r = await fromMessage(w)
@@ -233,6 +235,8 @@ describe('ProposalService: message mode', () => {
         unregistered: 0,
         model: 'fake-proposer',
         inputTokens: 1200,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 2400,
         outputTokens: 300,
         costUsd: '0.0108',
         latencyMs: 7,

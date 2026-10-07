@@ -18,7 +18,7 @@ const EnvSchema = z.object({
     .string()
     .optional()
     .transform((v) => v?.trim() || undefined),
-  ROLEPAY_AI_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,63}$/, 'must be a model ID such as claude-opus-5-5').default('claude-opus-5-5'),
+  ROLEPAY_AI_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,63}$/, 'must be a model ID such as claude-sonnet-5-5').default('claude-sonnet-5-5'),
   /** At most this many model calls per UTC day, across every community on this server, so a public server cannot run up the bill. */
   ROLEPAY_AI_DAILY_CAP: z.coerce.number().int().positive().default(50),
 })
