@@ -13,23 +13,24 @@ export const hasAsset = (file: string) => getStaticFiles().some((f) => f.name ==
 /**
  * A slot for one of the founder's recordings. When `file` is in video/assets/, the clip plays
  * (a camera clip fills the frame; a screen recording is fitted whole on the ink ground, and
- * plays silent). When it is missing, a neutral card says what goes here, so the timeline can be
- * reviewed before anything is recorded.
+ * plays silent unless `audible`). When it is missing, a neutral card says what goes here, so
+ * the timeline can be reviewed before anything is recorded.
  */
-export const Slot: React.FC<{ file: string; kind: SlotKind; label: string; note: string; plannedSeconds: number; index?: string }> = ({
+export const Slot: React.FC<{ file: string; kind: SlotKind; label: string; note: string; plannedSeconds: number; index?: string; audible?: boolean }> = ({
   file,
   kind,
   label,
   note,
   plannedSeconds,
   index,
+  audible = false,
 }) => {
   if (hasAsset(file)) {
     return (
       <AbsoluteFill style={{ backgroundColor: C.ink }}>
         <OffthreadVideo
           src={staticFile(file)}
-          muted={kind === 'screen'}
+          muted={kind === 'screen' && !audible}
           style={{ width: '100%', height: '100%', objectFit: kind === 'camera' ? 'cover' : 'contain' }}
         />
       </AbsoluteFill>

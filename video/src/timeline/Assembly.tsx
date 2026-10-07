@@ -30,8 +30,18 @@ export type SlotItem = {
   seconds: number
   captions?: CaptionCue[]
   overlays?: Overlay[]
+  /** A screen recording plays silent unless this is set (for one narrated while recording). */
+  audible?: boolean
 }
-export type SceneItem = { type: 'scene'; scene: SceneId }
+export type SceneItem = {
+  type: 'scene'
+  scene: SceneId
+  /**
+   * An optional voice-over for the scene: a base name in video/assets/ (".m4a", ".mp3" or ".wav").
+   * When it exists it plays over the scene, and a longer one holds the scene's last state for it.
+   */
+  voice?: string
+}
 export type Item = SlotItem | SceneItem
 
 export type AssemblyProps = {
@@ -49,19 +59,35 @@ const planned = (item: Item) => (item.type === 'scene' ? SCENES[item.scene].fram
 
 export const totalFrames = (frames: number[]) => frames.reduce((a, b) => a + b, 0) - TRANSITION_FRAMES * Math.max(0, frames.length - 1)
 
-/** Reads each recording's real length, so a slot is as long as the clip dropped into it. */
-async function clipFrames(item: SlotItem): Promise<number> {
-  if (!hasAsset(item.file)) return sec(item.seconds)
+const VOICE_EXTENSIONS = ['.m4a', '.mp3', '.wav'] as const
+
+/** The voice-over file for a scene, if one of its extensions is in video/assets/. */
+export const voiceFile = (base: string | undefined) => (base ? (VOICE_EXTENSIONS.map((e) => base + e).find(hasAsset) ?? null) : null)
+
+/** A media file's length in frames, or null when it cannot be read. */
+async function mediaFrames(file: string): Promise<number | null> {
   try {
-    const { durationInSeconds } = await parseMedia({ src: staticFile(item.file), fields: { durationInSeconds: true }, acknowledgeRemotionLicense: true })
-    return durationInSeconds ? Math.max(TRANSITION_FRAMES * 2 + 1, Math.floor(durationInSeconds * FPS)) : sec(item.seconds)
+    const { durationInSeconds } = await parseMedia({ src: staticFile(file), fields: { durationInSeconds: true }, acknowledgeRemotionLicense: true })
+    return durationInSeconds ? Math.floor(durationInSeconds * FPS) : null
   } catch {
-    return sec(item.seconds)
+    return null
   }
 }
 
+/** A slot is as long as the clip dropped into it; a scene is at least as long as its voice-over. */
+async function itemFrames(item: Item): Promise<number> {
+  if (item.type === 'scene') {
+    const voice = voiceFile(item.voice)
+    const spoken = voice ? await mediaFrames(voice) : null
+    return Math.max(planned(item), spoken === null ? 0 : spoken + sec(0.6))
+  }
+  if (!hasAsset(item.file)) return sec(item.seconds)
+  const clip = await mediaFrames(item.file)
+  return clip === null ? sec(item.seconds) : Math.max(TRANSITION_FRAMES * 2 + 1, clip)
+}
+
 export const fitTimeline: CalculateMetadataFunction<AssemblyProps> = async ({ props }) => {
-  const frames = await Promise.all(props.items.map((item) => (item.type === 'scene' ? Promise.resolve(planned(item)) : clipFrames(item))))
+  const frames = await Promise.all(props.items.map(itemFrames))
   return { durationInFrames: totalFrames(frames), props: { ...props, frames } }
 }
 
@@ -78,7 +104,7 @@ export const Assembly: React.FC<AssemblyProps> = ({ items, frames, audio, audioV
     if (item.type === 'slot') slotNumber += 1
     children.push(
       <TransitionSeries.Sequence key={`s${i}`} durationInFrames={lengths[i] ?? planned(item)} name={item.type === 'scene' ? SCENES[item.scene].id : `${item.kind}: ${item.label}`}>
-        {item.type === 'scene' ? <SceneView id={item.scene} /> : <SlotView item={item} index={`Slot ${slotNumber} of ${slots}`} />}
+        {item.type === 'scene' ? <SceneView id={item.scene} voice={item.voice} /> : <SlotView item={item} index={`Slot ${slotNumber} of ${slots}`} />}
       </TransitionSeries.Sequence>,
     )
   })
@@ -91,14 +117,20 @@ export const Assembly: React.FC<AssemblyProps> = ({ items, frames, audio, audioV
   )
 }
 
-const SceneView: React.FC<{ id: SceneId }> = ({ id }) => {
+const SceneView: React.FC<{ id: SceneId; voice?: string }> = ({ id, voice }) => {
   const Component = SCENES[id].component
-  return <Component />
+  const file = voiceFile(voice)
+  return (
+    <AbsoluteFill>
+      <Component />
+      {file ? <Audio src={staticFile(file)} /> : null}
+    </AbsoluteFill>
+  )
 }
 
 const SlotView: React.FC<{ item: SlotItem; index: string }> = ({ item, index }) => (
   <AbsoluteFill>
-    <Slot file={item.file} kind={item.kind} label={item.label} note={item.note} plannedSeconds={item.seconds} index={index} />
+    <Slot file={item.file} kind={item.kind} label={item.label} note={item.note} plannedSeconds={item.seconds} index={index} audible={item.audible ?? false} />
     {item.overlays?.map((o, i) =>
       o.kind === 'lowerThird' ? (
         <LowerThird key={i} from={sec(o.at)} to={sec(o.until)} />
