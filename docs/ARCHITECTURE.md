@@ -214,8 +214,8 @@ Weekly (weekday and hour) or monthly (day and hour) in an IANA timezone, UTC by 
 ### Modes, the veto window and autopilot
 
 - **propose** (the default): each run is created and submitted, then waits for the normal one-tap approval (the existing review embed).
-- **autopilot** (an explicit switch by an approver on an approved policy): the run is posted with "pays at <time> unless vetoed" and a Veto button, and pays after the veto window (default 24 h, at least 1 h; a server with the testnet dev shortcuts allows 1 minute for manual tests). The scheduler approves it in the name of the approver who switched autopilot on, through `PayRunService.approve`, then `execute`; the bot key's on-chain limit caps it like any run. Before approving it checks again, every time: the policy is still active, still on autopilot and at the version that made the run, the community's approver role is the one recorded when autopilot was switched on, and that person still holds it (one Get Guild Member through the ActivityReader). If any of these fail, autopilot stops: the run stays pending for the normal approval and the message says why.
-- **The veto** (`PolicyService.veto`, the approver role): cancels the run, records who and when. It counts until the run is released: the release takes the run from `scheduled` by compare-and-set, the veto takes it the same way, and exactly one wins. The domain itself refuses a release before `executeAfter` (`movePolicyRun`), so no scheduler bug can pay early.
+- **autopilot** (an explicit switch by an approver on an approved policy): the run is posted with "pays at <time> unless vetoed" and a Veto button, and pays after the veto window (default 24 h, at least 1 h; a testnet server with the demo controls, `ROLEPAY_DEMO_CONTROLS=true`, allows 1 minute for demos and manual tests). The scheduler approves it in the name of the approver who switched autopilot on, through `PayRunService.approve`, then `execute`; the bot key's on-chain limit caps it like any run. Before approving it checks again, every time: the policy is still active, still on autopilot and at the version that made the run, the community's approver role is the one recorded when autopilot was switched on, and that person still holds it (one Get Guild Member through the ActivityReader). If any of these fail, autopilot stops: the run stays pending for the normal approval and the message says why.
+- **The veto** (`PolicyService.veto`, the approver role, from the Veto button in Discord or the run's page on the dashboard): cancels the run, records who and when. It counts until the run is released: the release takes the run from `scheduled` by compare-and-set, the veto takes it the same way, and exactly one wins. The domain itself refuses a release before `executeAfter` (`movePolicyRun`), so no scheduler bug can pay early.
 
 ### Guardrails
 
@@ -270,7 +270,7 @@ The composition root (`src/main.ts`). It parses config (`src/config.ts`: the ser
 - `POST /discord/interactions`: the Discord interactions endpoint (HTTP interactions, no gateway bot).
 - `GET /health`: `{ ok, network, jobsInFlight }`.
 - `/claim/:token`, `/setup/:token`, `/webauthn/*`, `/assets/rolepay.js`: the web pages (`@rolepay/web`, below).
-- `/dashboard`, `/auth/discord`: the web dashboard (below). `src/dashboard.ts` wires it: the bot's REST client as the member view, Discord OAuth2 when `ROLEPAY_DISCORD_CLIENT_SECRET` is set, and the policy seam.
+- `/dashboard`, `/auth/discord`: the web dashboard (below). `src/dashboard.ts` wires it: the bot's REST client as the member view, Discord OAuth2 when `ROLEPAY_DISCORD_CLIENT_SECRET` is set, and the policy seam (`src/policySeam.ts`, below), whose vetoes `compose.ts` also announces in Discord.
 - The recovery sweep: `payRuns.recoverInFlight()` on start and every 30 seconds (`src/recovery.ts`), never two at once. Runs it settles are reported in Discord as part of the sweep (`createRecoveryNotifier`).
 - The policy scheduler: `scheduler.tick()` on start and every `ROLEPAY_SCHEDULER_INTERVAL_SECONDS` (30 by default) on the same non-overlapping loop (`src/scheduler.ts`), then `createPolicyNotifier` posts what it did. A second instance on the same database is safe (one run per policy per period, compare-and-set releases).
 
@@ -280,13 +280,24 @@ The composition root (`src/main.ts`). It parses config (`src/config.ts`: the ser
 const config = parseServerConfig(loadEnvironment())        // root .env, DB path anchored at the repo root
 const { deps, kv, close } = await openRolepayAdapters(config.core)   // Anthropic too, when ANTHROPIC_API_KEY is set
 const rest = new FetchDiscordRest({ botToken })
-const rolepay = createRolepay({ ...deps, activity: new RestActivityReader(rest), proposalLog })
+const activity = new RestActivityReader(rest)                // Discord as AI proposals and policies read it
+const rolepay = createRolepay({ ...deps, activity, proposalLog, minVetoMinutes: config.policies.minVetoMinutes })
 const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
-const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets() }
+const dashboard = { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay) }
+const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets: bundledAssets(), dashboard }
 const server = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web })
 ```
 
 `composeServer` (`src/compose.ts`) is the wiring shared by `main.ts` and the tests: the tests pass in-memory adapters, a fake Discord and fake passkey sessions and drive the real Hono app over HTTP; the Playwright e2e passes the production set with real passkeys. Scripts: `pnpm register-commands`, and on testnet with `ROLEPAY_DEV_SHORTCUTS=true` the dev shortcut `pnpm dev:treasury` (print and fund a dev treasury whose key is in `.env`) and `pnpm dev:authorize-key <guildId>` (that in-process root signs the pending bot key). How to run it: `apps/server/README.md`.
+
+**Two testnet flags, kept apart.** Both are refused by config off Moderato, and both decide which command options `pnpm register-commands` registers.
+
+| Flag | Turns on | Who may use it | On the public demo |
+| --- | --- | --- | --- |
+| `ROLEPAY_DEV_SHORTCUTS=true` | `/rolepay setup treasury:`, `new_key`, `key_limit`, `pnpm dev:treasury`, `pnpm dev:authorize-key`: a treasury and a key without the passkey page | Manage Server and the approver role | off |
+| `ROLEPAY_DEMO_CONTROLS=true` | `/rolepay policy run_now` (make the next period's run now) and veto windows down to 1 minute (`veto_minutes`, and `minVetoMinutes` 1 in core) | the approver role (core checks it again) | on (`fly.demo.toml`) |
+
+The demo controls never touch a treasury or a key: a run made with `run_now` is a normal policy run, capped by the bot key and vetoable like any other.
 
 ## packages/web
 
@@ -348,16 +359,29 @@ views/           pure HTML builders: layout and stylesheet, formatting, one per 
 
 ### The policy seam
 
-The Policies and Audit pages, the next scheduled runs on the Overview and the "made by a policy" part of a run read and act through two ports in `dashboard/policyPort.ts`, because core's policy services were built on another branch at the same time:
+The Policies and Audit pages, the next scheduled runs on the Overview and the "made by a policy" part of a run (with its Veto button) read and act through two ports in `dashboard/policyPort.ts`. `packages/web` never imports core's policy services: the port's types stay plain (Dates, bigint micro-units, a JSON-safe filter, words written by code), and the pages are tested without the AI or Discord.
 
 | Port | Methods |
 | --- | --- |
-| `PolicyPort` | reads: `list`, `get`, `preview` (who it applies to now with metrics and reasons, near-misses, the next run against the key's budget, why it would be held), `versions`, `upcoming`, `runOrigins`; actions, each with the `actor` (`{ id, roleIds }`, read fresh from Discord): `create` (compile once into a draft), `edit` (recompile into a new version), `approve(version)`, `discard(version)`, `pause`, `resume`, `archive`, `setMode(mode, vetoWindowHours)` |
+| `PolicyPort` | reads: `list`, `get`, `preview` (who it applies to now with metrics and reasons, near misses, the next run against the key's budget, why it would be held), `versions`, `upcoming`, `runOrigins` (the policy, version, period and veto state behind each run); actions, each with the `actor` (`{ id, roleIds }`, read fresh from Discord): `create` (compile once into a draft), `edit` (a new version), `approve(version)`, `discard(version)`, `pause`, `resume`, `archive`, `setMode(mode, vetoWindowMinutes)`, `veto(runId)` |
 | `AuditPort` | `eventTypes`, `events({ guildId, type?, actorId?, policyId?, beforeId?, limit })`, newest first |
 
-Expected failures are results with snake_case codes (`not_permitted`, `illegal_state`, `could_not_compile`, ...), shown in words. The port's types are deliberately plain (Dates, bigint micro-units, a JSON-safe filter), so an adapter maps core's entities onto them in a few lines. `InMemoryPolicies` (`@rolepay/web/testing`) implements both ports the way the services are specified (approver role re-checked, compile once into a draft, an edit needs a new approval, every action audited); the web tests and the browser e2e use it.
+**Wired in apps/server** (`src/policySeam.ts`): `policyPortFromCore(rolepay, { names })` and `auditPortFromCore(rolepay)`, passed by `main.ts` as `composeServer({ ..., web: { ..., dashboard: { policies, audit } } })`. Thin on purpose: core decides everything (the actor's roles, states, versions, the veto race) and the adapter maps shapes and writes words.
 
-**Wiring (the main session, after the policies branch merges).** `packages/web` never imports core's policy services. In `apps/server`, write `policyPortFromCore(rolepay)` and `auditPortFromCore(rolepay)` (for example in `src/dashboard.ts`) mapping `PolicyService` and the `AuditEvent` stream onto the two ports, and pass them from `main.ts` as `composeServer({ ..., web: { ..., dashboard: { policies, audit } } })` (`DashboardOverrides`). Nothing else changes; without them the pages say policies are not available on this server.
+| Port method | Core |
+| --- | --- |
+| `list`, `get`, `versions` | `policies.list`, `policies.detail`; the rule in words is core's `describeRule` with role and channel names from the bot's Discord view (`names`, the same ActivityReader core uses; IDs if Discord does not answer) |
+| `preview` | `policies.preview` (alias `listMatches`); reasons from core's `describeMatch`, "capped at" for a capped line, `held` from the hold problems with their numbers. `matchesNow` on the list is unknown (`?`): it takes a Discord read per policy |
+| `upcoming`, `runOrigins` | `policies.nextRuns`; `policies.runFor` per run (a run is vetoable while its policy run is `scheduled`) |
+| `create`, `edit`, `approve`, `discard`, `pause`, `resume`, `archive`, `setMode` | the same `policies.*` with `{ guildId, actor, actorRoleIds }`; `edit` sends the instruction only when it changed (one model call), `discard` checks the version shown is the one waiting; the policy is created with no Discord channel |
+| `veto(runId)` | `policies.runFor`, then `policies.veto({ policyRunId })` |
+| `events` | `audit.list` (`beforeId` is the stream's `seq`; an unknown type or a malformed filter matches nothing); each event's summary is written from its codes, counts and amounts (`auditSummary`), never anyone's words. The dashboard's CSV pages through it and adds names |
+
+Expected failures are results with snake_case codes. Core's state codes (`policy_not_draft`, `policy_not_active`, `policy_not_paused`, `policy_archived`, `not_scheduled`) arrive as `illegal_state`; a refusal while compiling (no model, AI off, the model declined, an unclear rule) as `could_not_compile` with the reason in words; the rest keep core's code (`not_permitted`, `version_mismatch`, `policy_blocked`, `creator_cannot_approve`, `invalid_veto_window`, `policy_not_approved`, `too_late`, ...), and the pages say each in words.
+
+**One behaviour, two implementations, one contract.** `InMemoryPolicies` (`@rolepay/web/testing`) implements both ports the way core behaves: an edit puts the policy back to draft until approved (it stops running, autopilot goes off), discarding an edit restores the last approved version paused, autopilot needs an approved policy, every action is audited. The page tests for Policies, a policy, the policy actions and the create flow, a run made by a policy and its veto, and the Audit log and its CSV are a contract (`policyPagesContract`, exported as `@rolepay/web/contract`) asserting against what each backend's own ports answer: `packages/web` runs it against `InMemoryPolicies`, `apps/server/test/dashboardContract.test.ts` against core on memory adapters through the adapters above. A backend says how it reaches each state (`PolicyBackend`: the Monday rule with a capped, an unregistered and a near-miss person, an unreadable channel, a spent key, an autopilot run in its window, a run Rolepay released).
+
+**A veto on the dashboard reaches Discord.** The run's message there says "pays at ... unless vetoed" with a Veto button; `vetoesAnnounced` (`compose.ts`) wraps the dashboard's policy port so a successful veto is announced to `createPolicyNotifier` as a cancelled run, and the message turns into "Vetoed by" without buttons, as when the button is pressed in Discord.
 
 ## packages/discord
 
@@ -396,8 +420,8 @@ A handler is a thin route: parse options with Zod, check permissions, call a ser
 | `/rolepay policy list`, `show policy:` | Manage Server, approver or proposer role | `policies.list`; `policies.detail` and `preview` (deferred, ephemeral) |
 | `/rolepay policy pause\|resume\|mode policy: [mode:] [veto_hours:]` | approver role | `policies.pause`, `resume`, `setMode`; answered publicly so the channel sees the change |
 | Veto (on an autopilot run) | approver role | `policies.veto`; the message turns into "Vetoed by" |
-| `/rolepay policy run_now policy:`, `mode veto_minutes:` | approver role, testnet dev shortcuts only | `scheduler.runNow` (the next period's run, now), then the notifier posts it |
-| (the scheduler) | Rolepay | `createPolicyNotifier`: propose-mode runs as the normal review embed (Approve, Cancel) with the policy and period; autopilot runs with "pays at <time> unless vetoed" and Veto; held runs with why and the numbers; one line when nobody matched; the same message is edited when autopilot pays (receipts once) or stops |
+| `/rolepay policy run_now policy:`, `mode veto_minutes:` | approver role, demo controls only (`ROLEPAY_DEMO_CONTROLS` on Moderato; not the dev shortcuts) | `scheduler.runNow` (the next period's run, now), then the notifier posts it; `policies.setMode` with a window of minutes |
+| (the scheduler) | Rolepay | `createPolicyNotifier`: propose-mode runs as the normal review embed (Approve, Cancel) with the policy and period; autopilot runs with "pays at <time> unless vetoed" and Veto; held runs with why and the numbers; one line when nobody matched; the same message is edited when autopilot pays (receipts once), stops, or the run is vetoed on the dashboard |
 
 Decisions worth knowing:
 
@@ -433,9 +457,11 @@ interface ExecutionQueue { enqueue(job: ExecutionJob): Promise<void> }
 | Standing policies: schedules and timezones, caps, the PolicyRun state machine (veto timing), the audit CSV; PolicyService and SchedulerService on fakes (two ticks, restart, two instances, veto, over-budget hold, crash at each step, no AI at runtime); two instances on one SQLite file; the handlers, buttons and notifier over a fake Discord with signed interactions; the in-process end to end (`apps/server/test/policies.test.ts`) | `domain/policy/`, `services/policy*`, `services/scheduler*`, `test/policies.sqlite.integration.test.ts`, `packages/discord/src/**/policy*` | `pnpm test` |
 | AI, live, opt-in (three real calls: the demo with an injection beside it, the criteria demo, an instruction the filters cannot express) | `packages/core/test/anthropic.live.test.ts` | `ROLEPAY_AI_LIVE=true pnpm test:ai-live` |
 | Chain, Moderato testnet, opt-in | `packages/core/test/*.chain.test.ts` (incl. fee budget and one autopilot policy payout after a one-minute veto window), `apps/server/test/server.chain.test.ts` | `pnpm test:chain` |
-| Dashboard: sign-in (state, PKCE, CSRF, fixation, logout, expiry, open redirects), authorisation (member read only, approver acts, non-member refused, role revoked mid-session), every page per role, policy actions and the create flow, audit filters and CSV, XSS escaping on every page, the OAuth adapter on a fake fetch | `packages/web/src/dashboard/**/*.test.ts`, `apps/server/test/dashboard.test.ts` | `pnpm test` |
+| Dashboard: sign-in (state, PKCE, CSRF, fixation, logout, expiry, open redirects), authorisation (member read only, approver acts, non-member refused, role revoked mid-session), every page per role, XSS escaping on every page, the OAuth adapter on a fake fetch | `packages/web/src/dashboard/**/*.test.ts`, `apps/server/test/dashboard.test.ts` | `pnpm test` |
+| The policy page contract: Policies, a policy (rule, filter, who it applies to, held, versions), the actions and the create flow, a run made by a policy and its veto, the Audit log (order, filters, paging, CSV) | `packages/web/test/contract/policyPages.ts`, run against `InMemoryPolicies` (`packages/web/test/policyPages.contract.test.ts`) and against core on memory adapters through the policy seam (`apps/server/test/dashboardContract.test.ts`); the seam's own edges in `apps/server/src/policySeam.test.ts` | `pnpm test` |
+| Policies across Discord and the dashboard, in process, with the demo's flags (demo controls on, dev shortcuts off): treasury page setup, `/rolepay policy new`, preview, Approve, who it applies to on the dashboard, autopilot with a one-minute window, `run_now`, a veto on the dashboard (Discord's message follows), the next week's run paid once, every step in the audit log and its CSV | `apps/server/test/policiesDashboard.test.ts` | `pnpm test` |
 | Browser, Moderato testnet, opt-in | `apps/server/e2e/passkeys.spec.ts` (Playwright, Chromium's virtual WebAuthn authenticator, the real server on `localhost`) | `pnpm test:e2e` |
-| Browser, dashboard, opt-in (no network) | `apps/server/e2e/dashboard.spec.ts`: sign in through the fake Discord OAuth, walk Overview, Runs, a run, Policies (in-memory port), a Treasurer action, the Audit log and its CSV, sign out; fails on any CSP violation | `pnpm test:e2e` |
+| Browser, dashboard, opt-in (no network) | `apps/server/e2e/dashboard.spec.ts`: sign in through the fake Discord OAuth, walk Overview, Runs, a run, Policies (core's policy services on memory adapters with a scripted model, through the policy seam), pause, veto an autopilot run, write and approve a policy from the web, the Audit log and its CSV, sign out; fails on any CSP violation | `pnpm test:e2e` |
 
 CI (`.github/workflows/ci.yml`) runs `pnpm typecheck` and `pnpm test:coverage` on every push and pull request: the default suite with v8 coverage over every source file, a per-package threshold a little below the current numbers, and a coverage table in the job summary. The opt-in suites (chain, browser, live AI) and secrets never run there.
 
@@ -474,4 +500,5 @@ The product was called payrun while it was built. What was already stored or pos
 - AI proposals: the model can misread an instruction; the checks hold what they can prove wrong (sources, amounts, budget) and the treasurer reads the rest. Plain-text names in messages reach Anthropic as written. A pool (and a message-mode split) is shared among registered matches only. Proposals expire after a day. Criteria mode counts activity in any channel the bot can read, whoever proposes: proposers are the approver role or a role the approver chose, and only counts come back, never text.
 - Standing policies: only the latest due period is run (no backlog after downtime, no backfill after a resume); a held run is not retried automatically (the next period runs as usual); a pool is shared among registered matches only; a policy posts in the channel where it was written (no command to move it yet); a policy created from the dashboard without a channel posts nowhere in Discord. A treasurer who approves an autopilot run by hand during its window (from `/rolepay status run:`) races a veto at the same instant; the run's own status is then the truth. Policy names are user text, so the audit stream refers to policies by ID.
 - The dashboard reads at most 1,000 runs per page view and keeps its member cache in memory per process; dashboard sessions last eight hours whatever the activity. The member's server list is a snapshot from sign-in (sign out and in to refresh it); access itself is always the bot's live view.
+- On the dashboard: the mode form takes whole hours (minute windows are a Discord demo control); the Policies list shows "?" for how many people a policy matches now (its page works it out); the policy page reads Discord for the preview and the rule's names on every view.
 - The WebAuthn endpoints are open (anyone can register a passkey with the server; a registration session never counts as the treasury's passkey, see Setup). POSTs to /webauthn, /claim and /setup are rate limited behind the `RateLimiter` port (`defaultRateLimits` in `apps/server/src/compose.ts`: per client, by the last X-Forwarded-For hop or, behind Fly, by `Fly-Client-IP` (`ROLEPAY_CLIENT_IP_HEADER`), and per endpoint group overall), in memory per process. Expired key-value rows read as absent and are swept on the recovery interval; request bodies have no size cap yet.
