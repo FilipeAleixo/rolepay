@@ -65,6 +65,7 @@ async function world(opts: { ai?: boolean; proposer?: FakeRunProposer | null; li
     activity,
     communityService: communities,
     payRuns,
+    aiUsage: repos.aiUsage,
     log: (e) => logs.push(e),
   })
   await communities.register({ guildId: GUILD, name: 'Bounties', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: APPROVER })
@@ -621,5 +622,75 @@ describe('ProposalService: latency (independent reads at the same time, time per
     expect(timings?.discordMs).toBeGreaterThanOrEqual(300)
     expect(timings?.chainMs).toBeGreaterThanOrEqual(200)
     expect(timings?.totalMs).toBe(2500)
+  })
+})
+
+describe('ProposalService: the ai_usage record (one row per model call, never any text)', () => {
+  const noBigints = (v: unknown) => JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? x.toString() : x))
+
+  it('a drafted proposal: who asked, the model, the tokens, the latency and the cost; then the pay run it became', async () => {
+    const w = await world()
+    demoAnswer(w)
+    const r = await fromMessage(w)
+    if (!r.ok) throw new Error(r.error.code)
+    expect(await w.repos.aiUsage.list(GUILD)).toEqual([
+      {
+        seq: 1,
+        communityId: GUILD,
+        purpose: 'proposal_messages',
+        actor: TREASURER,
+        model: 'fake-proposer',
+        inputTokens: 1200,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 2400,
+        outputTokens: 300,
+        latencyMs: 7,
+        costMicroUsd: 10_800n,
+        outcome: 'proposed',
+        createdAt: T0,
+        proposalId: r.value.id,
+        runId: null,
+        policyId: null,
+        policyVersion: null,
+      },
+    ])
+    const made = await w.proposals.createRun({ ...asTreasurer, proposalId: r.value.id })
+    if (!made.ok) throw new Error(made.error.code)
+    expect((await w.repos.aiUsage.list(GUILD)).map((u) => [u.proposalId, u.runId])).toEqual([[r.value.id, made.value.run.id]])
+    expect(noBigints(await w.repos.aiUsage.list(GUILD))).not.toMatch(/Winners|indexer|bounties|claim page|50 each/)
+  })
+
+  it('every call that reached the model is stored, failures after it too, with their code and whatever usage came back', async () => {
+    const w = await world()
+    w.activity.channels = [{ id: HELP, name: 'help', kind: 'text' }]
+    // Criteria mode: the model answers, code finds the rule unclear.
+    w.proposer.onCriteria = () => emptyCriteria({ understood: false, problem: 'Voice activity is not available.' })
+    await w.proposals.proposeFromCriteria({ ...asTreasurer, instruction: 'pay 5 to everyone in voice' })
+    // Criteria mode: the model answers, then a channel the rule reads cannot be read.
+    w.activity.forbidden.add(HELP)
+    w.proposer.onCriteria = () =>
+      emptyCriteria({ amount: { kind: 'flat', amount: '5', per: '', cap: '', total: '', splitBy: '' } }, { activity: [{ metric: 'replies', channels: ['C1'], since: '2026-10-01', until: '', min: 1 }] })
+    expect(await w.proposals.proposeFromCriteria({ ...asTreasurer, instruction: 'pay 5 to everyone who replied in #help' })).toMatchObject({ ok: false, error: { code: 'cannot_read' } })
+    // Message mode: the model declined (billed), then the API failed (no usage at all).
+    w.proposer.onMessages = () => ({ code: 'could_not_propose', reason: 'refused', detail: 'refusal', usage: w.proposer.usage })
+    await fromMessage(w)
+    w.proposer.onMessages = () => ({ code: 'could_not_propose', reason: 'unavailable', detail: 'HTTP 529', usage: null })
+    await fromMessage(w, { actor: RUI, actorRoleIds: [PROPOSERS] })
+    expect((await w.repos.aiUsage.list(GUILD)).map((u) => [u.purpose, u.outcome, u.actor, u.model, u.outputTokens, u.costMicroUsd, u.proposalId])).toEqual([
+      ['proposal_messages', 'could_not_propose', RUI, 'fake-proposer', null, null, null],
+      ['proposal_messages', 'could_not_propose', TREASURER, 'fake-proposer', 300, 10_800n, null],
+      ['proposal_criteria', 'cannot_read', TREASURER, 'fake-proposer', 300, 10_800n, null],
+      ['proposal_criteria', 'criteria_unclear', TREASURER, 'fake-proposer', 300, 10_800n, null],
+    ])
+  })
+
+  it('nothing is stored when the model was not called: refused before it, past the daily cap, or a read that failed first', async () => {
+    const w = await world()
+    await fromMessage(w, { actor: DAVE, actorRoleIds: [MODS] })
+    w.activity.forbidden.add(CHANNEL)
+    await w.proposals.proposeFromMessages({ ...asTreasurer, instruction: '50 each', source: { kind: 'history', channelId: CHANNEL, since: minutesAgo(60) } })
+    w.proposer.onMessages = () => ({ code: 'could_not_propose', reason: 'daily_cap', detail: 'daily cap of 50 model calls reached', usage: null })
+    expect(await fromMessage(w)).toEqual({ ok: false, error: { code: 'could_not_propose', reason: 'daily_cap' } })
+    expect(await w.repos.aiUsage.list(GUILD)).toEqual([])
   })
 })

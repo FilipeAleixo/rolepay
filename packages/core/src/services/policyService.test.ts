@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { emptyCriteria } from '../adapters/memory/fakeProposer.js'
 import {
   ANA,
   APPROVER,
@@ -288,5 +289,28 @@ describe('PolicyService: reading', () => {
       [b.id, new Date('2026-11-01T09:00:00Z')],
     ])
     expect(await w.rolepay.policies.get({ guildId: OTHER_GUILD, policyId: a.id })).toEqual({ ok: false, error: { code: 'policy_not_found' } })
+  })
+})
+
+describe('PolicyService: the ai_usage record of each compile', () => {
+  it('create, and an edit with a new instruction, each store one row linked to the version they made; other edits call no model', async () => {
+    const w = await policyWorld()
+    const p = await w.draft()
+    expect((await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, name: 'Renamed' })).ok).toBe(true)
+    const e = await w.rolepay.policies.edit({ ...asWriter, policyId: p.id, instruction: `${INSTRUCTION}, from today` })
+    expect(e.ok && e.value.version).toBe(3)
+    expect((await w.repos.aiUsage.list(GUILD)).map((u) => [u.purpose, u.actor, u.model, u.outcome, u.policyId, u.policyVersion, u.costMicroUsd, u.proposalId])).toEqual([
+      ['policy_compile', WRITER, 'fake-proposer', 'proposed', p.id, 3, 10_800n, null],
+      ['policy_compile', TREASURER, 'fake-proposer', 'proposed', p.id, 1, 10_800n, null],
+    ])
+  })
+
+  it('a compile that fails after the model call is stored with its code and links no version; past the daily cap nothing is', async () => {
+    const w = await policyWorld()
+    w.proposer.onCriteria = () => emptyCriteria({ understood: false, problem: 'Voice activity is not available.' })
+    expect((await w.rolepay.policies.create({ ...asTreasurer, instruction: INSTRUCTION, schedule: MONDAYS })).ok).toBe(false)
+    w.proposer.onCriteria = () => ({ code: 'could_not_propose', reason: 'daily_cap', detail: 'daily cap of 50 model calls reached', usage: null })
+    expect((await w.rolepay.policies.create({ ...asTreasurer, instruction: INSTRUCTION, schedule: MONDAYS })).ok).toBe(false)
+    expect((await w.repos.aiUsage.list(GUILD)).map((u) => [u.purpose, u.outcome, u.policyId, u.policyVersion, u.costMicroUsd])).toEqual([['policy_compile', 'criteria_unclear', null, null, 10_800n]])
   })
 })

@@ -4,6 +4,7 @@
  * composition roots import them from `@rolepay/core/adapters`.
  */
 import type { RolepayDeps } from './ports/deps.js'
+import { AiUsageService } from './services/aiUsageService.js'
 import { AuditService, AuditTrail } from './services/auditTrail.js'
 import { CommunityService } from './services/communityService.js'
 import { PayeeService } from './services/payeeService.js'
@@ -24,6 +25,8 @@ export type Rolepay = {
   scheduler: SchedulerService
   /** The audit stream: every policy and run event, filterable, as CSV. */
   audit: AuditService
+  /** What the AI cost: one content-free row per model call, the month's spend. */
+  aiUsage: AiUsageService
 }
 
 export const DEFAULT_LINK_TTL_SECONDS = 1800
@@ -54,6 +57,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     communityService: communities,
     payRuns,
     audit,
+    aiUsage: r.aiUsage,
     ...(deps.proposalLog ? { log: deps.proposalLog } : {}),
     ...(deps.minVetoMinutes ? { minVetoMinutes: deps.minVetoMinutes } : {}),
   })
@@ -79,6 +83,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
       activity: deps.activity ?? null,
       communityService: communities,
       payRuns,
+      aiUsage: r.aiUsage,
       ...(deps.proposalLog ? { log: deps.proposalLog } : {}),
     }),
     policies,
@@ -96,6 +101,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
       audit,
     }),
     audit: new AuditService({ log: r.audit }),
+    aiUsage: new AiUsageService({ usage: r.aiUsage, clock }),
   }
 }
 

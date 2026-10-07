@@ -24,8 +24,8 @@ import type { ActivityReader, ReadError } from '../ports/activityReader.js'
 import type { Clock } from '../ports/clock.js'
 import type { IdGenerator } from '../ports/idGenerator.js'
 import type { ProposalLog, ProposalLogEntry } from '../ports/proposalLog.js'
-import type { CommunityRepository, PayeeRepository, ProposalRepository, RunRepository } from '../ports/repositories.js'
-import type { ProposerFailure, ProposerUsage, RunProposer } from '../ports/runProposer.js'
+import type { AiUsageRepository, CommunityRepository, PayeeRepository, ProposalRepository, RunRepository } from '../ports/repositories.js'
+import type { ProposerFailure, ProposerUsage, Proposed, RunProposer } from '../ports/runProposer.js'
 import { type InvalidInput, invalidInput } from './common.js'
 import type { CommunityService } from './communityService.js'
 import { runCriteria } from './criteriaRunner.js'
@@ -45,6 +45,8 @@ export type ProposalServiceDeps = {
   activity: ActivityReader | null
   communityService: CommunityService
   payRuns: PayRunService
+  /** One content-free row per model call (the AI spend). */
+  aiUsage: AiUsageRepository
   log?: ProposalLog
 }
 
@@ -70,6 +72,8 @@ export type ProposeError =
 type Found = { code: 'proposal_not_found' }
 type ErrorOf<F extends (...args: never[]) => Promise<Result<unknown, { code: string }>>> = Extract<Awaited<ReturnType<F>>, { ok: false }>['error']
 type Closed = { code: 'proposal_closed'; status: Proposal['status']; runId: string | null }
+/** A call that reached the model: where, who asked, and the usage it returned (none on an API error). */
+type ModelCall = { guildId: string; actor: string; usage: ProposerUsage | null }
 
 export type CreateRunError =
   | Found
@@ -148,7 +152,8 @@ export class ProposalService {
         maxLines: MAX_LINES_PER_RUN,
       }),
     )
-    if (!answer.ok) return this.fail('messages', { code: 'could_not_propose', reason: answer.error.reason }, { sourceMessages: messages.length, usage: answer.error.usage, timer })
+    const call = called(input, answer)
+    if (!answer.ok) return this.fail('messages', { code: 'could_not_propose', reason: answer.error.reason }, { sourceMessages: messages.length, call, timer })
 
     const registered = await this.registered(community.id)
     const resolved = resolveMessageProposal(answer.value.raw, { map: pseudo.map, instruction: instruction.data, isRegistered: (id) => registered.has(id) })
@@ -176,7 +181,7 @@ export class ProposalService {
       ...assembled,
     })
     await this.deps.proposals.save(proposal)
-    this.record(proposal, { sourceMessages: messages.length, scannedMessages: 0, usage: answer.value.usage, timer })
+    await this.record(proposal, { sourceMessages: messages.length, scannedMessages: 0, call, timer })
     return ok(proposal)
   }
 
@@ -210,16 +215,16 @@ export class ProposalService {
         remaining: remaining === null ? null : formatAmount(remaining),
       }),
     )
-    if (!answer.ok) return this.fail('criteria', { code: 'could_not_propose', reason: answer.error.reason }, { usage: answer.error.usage, timer })
-    const usage = answer.value.usage
+    const call = called(input, answer)
+    if (!answer.ok) return this.fail('criteria', { code: 'could_not_propose', reason: answer.error.reason }, { call, timer })
 
     const resolved = resolveCriteria(answer.value.raw, { refs: tokens.refs, now, instructionAmounts: amountsIn(instruction.data) })
-    if (!resolved.ok) return this.fail('criteria', resolved.error, { usage, timer })
+    if (!resolved.ok) return this.fail('criteria', resolved.error, { call, timer })
     const { criteria, plan } = resolved.value
 
     // Read what the criteria need (within the bounds) and run them over the payees: code only.
     const ran = await runCriteria({ activity, payees: this.deps.payees, runs: this.deps.runs }, { communityId: community.id, criteria, plan, authorId: input.actor, now })
-    if (!ran.ok) return this.fail('criteria', ran.error, { usage, scannedMessages: ran.scannedMessages, timer })
+    if (!ran.ok) return this.fail('criteria', ran.error, { call, scannedMessages: ran.scannedMessages, timer })
     const { matched, registered, scans } = ran.value
     const amountOf = new Map(ran.value.amounts.map((a) => [a.userId, a]))
     const sources = [criteria.reactedTo, criteria.mentionedIn].filter((s) => s !== null).map(({ channelId, messageId }) => ({ channelId, messageId }))
@@ -257,7 +262,7 @@ export class ProposalService {
       ...assembled,
     })
     await this.deps.proposals.save(proposal)
-    this.record(proposal, { sourceMessages: 0, scannedMessages: ran.value.scannedMessages, usage, timer })
+    await this.record(proposal, { sourceMessages: 0, scannedMessages: ran.value.scannedMessages, call, timer })
     return ok(proposal)
   }
 
@@ -326,6 +331,7 @@ export class ProposalService {
       created = made.value
       const proposal: Proposal = { ...p, status: 'run_created', runId: created.id, closedBy: input.actor, updatedAt: this.deps.clock.now() }
       await this.deps.proposals.save(proposal)
+      await this.deps.aiUsage.linkRun(p.id, created.id)
       // If the submit fails the run stays a draft (it shows in /rolepay status and can be cancelled), never a second run.
       const submitted = await this.deps.payRuns.submit({ guildId: p.communityId, runId: created.id, actor: input.actor })
       if (!submitted.ok) return submitted
@@ -393,40 +399,69 @@ export class ProposalService {
     }
   }
 
-  private fail<E extends { code: string }>(
+  /** An expected failure: one log line, and a usage row when the model had been called. */
+  private async fail<E extends { code: string }>(
     mode: Proposal['mode'],
     error: E,
-    counts: { sourceMessages?: number; scannedMessages?: number; usage?: ProposerUsage | null; timer?: Stopwatch },
-  ): { ok: false; error: E } {
-    this.log({ proposalId: null, mode, outcome: error.code, lines: 0, held: 0, unregistered: 0, ...counts })
+    counts: { sourceMessages?: number; scannedMessages?: number; call?: ModelCall | null; timer?: Stopwatch },
+  ): Promise<{ ok: false; error: E }> {
+    await this.log({ proposalId: null, mode, outcome: error.code, lines: 0, held: 0, unregistered: 0, ...counts })
     return err(error)
   }
 
-  private record(p: Proposal, counts: { sourceMessages: number; scannedMessages: number; usage: ProposerUsage; timer: Stopwatch }) {
-    this.log({ proposalId: p.id, mode: p.mode, outcome: 'proposed', lines: p.lines.length, held: p.held.length, unregistered: p.unregistered.length, ...counts })
+  private async record(p: Proposal, counts: { sourceMessages: number; scannedMessages: number; call: ModelCall | null; timer: Stopwatch }) {
+    await this.log({ proposalId: p.id, mode: p.mode, outcome: 'proposed', lines: p.lines.length, held: p.held.length, unregistered: p.unregistered.length, ...counts })
   }
 
-  private log(e: Omit<ProposalLogEntry, 'model' | 'inputTokens' | 'cacheCreationInputTokens' | 'cacheReadInputTokens' | 'outputTokens' | 'costUsd' | 'latencyMs' | 'sourceMessages' | 'scannedMessages' | 'timings'> & {
+  private async log(e: Omit<ProposalLogEntry, 'model' | 'inputTokens' | 'cacheCreationInputTokens' | 'cacheReadInputTokens' | 'outputTokens' | 'costUsd' | 'latencyMs' | 'sourceMessages' | 'scannedMessages' | 'timings'> & {
     sourceMessages?: number
     scannedMessages?: number
-    usage?: ProposerUsage | null
+    call?: ModelCall | null
     timer?: Stopwatch
   }) {
-    const { usage, timer, ...rest } = e
+    const { call, timer, ...rest } = e
+    const usage = call?.usage
+    const model = usage?.model ?? this.deps.proposer?.model ?? null
+    const costUsd = usage?.costMicroUsd == null ? null : formatAmount(BigInt(usage.costMicroUsd))
     this.deps.log?.({
       sourceMessages: 0,
       scannedMessages: 0,
       ...rest,
-      model: usage?.model ?? this.deps.proposer?.model ?? null,
+      model,
       inputTokens: usage?.inputTokens ?? null,
       cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
       cacheReadInputTokens: usage?.cacheReadInputTokens ?? null,
       outputTokens: usage?.outputTokens ?? null,
-      costUsd: usage?.costMicroUsd == null ? null : formatAmount(BigInt(usage.costMicroUsd)),
+      costUsd,
       latencyMs: usage?.latencyMs ?? null,
       timings: timer?.done() ?? null,
     })
+    if (!call || model === null) return
+    await this.deps.aiUsage.append({
+      communityId: call.guildId,
+      purpose: e.mode === 'messages' ? 'proposal_messages' : 'proposal_criteria',
+      actor: call.actor,
+      model,
+      inputTokens: usage?.inputTokens ?? null,
+      cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
+      cacheReadInputTokens: usage?.cacheReadInputTokens ?? null,
+      outputTokens: usage?.outputTokens ?? null,
+      latencyMs: usage?.latencyMs ?? null,
+      costMicroUsd: usage?.costMicroUsd == null ? null : BigInt(usage.costMicroUsd),
+      outcome: e.outcome,
+      createdAt: this.deps.clock.now(),
+      proposalId: e.proposalId,
+      runId: null,
+      policyId: null,
+      policyVersion: null,
+    })
   }
+}
+
+/** The model call behind an answer; null when the model was not called (the server's daily cap). */
+function called(who: Actor, answer: Proposed<unknown>): ModelCall | null {
+  if (!answer.ok && answer.error.reason === 'daily_cap') return null
+  return { guildId: who.guildId, actor: who.actor, usage: answer.ok ? answer.value.usage : answer.error.usage }
 }
 
 const symbol = (c: Community) => TOKEN_SYMBOLS[c.payoutToken] ?? 'tokens'

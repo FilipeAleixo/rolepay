@@ -27,7 +27,7 @@ import type { ActivityReader, ReadError } from '../ports/activityReader.js'
 import type { Clock } from '../ports/clock.js'
 import type { IdGenerator } from '../ports/idGenerator.js'
 import type { ProposalLog } from '../ports/proposalLog.js'
-import type { CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, RunRepository } from '../ports/repositories.js'
+import type { AiUsageRepository, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, RunRepository } from '../ports/repositories.js'
 import type { RunProposer } from '../ports/runProposer.js'
 import type { AuditTrail } from './auditTrail.js'
 import { type InvalidInput, invalidInput } from './common.js'
@@ -51,6 +51,8 @@ export type PolicyServiceDeps = {
   communityService: CommunityService
   payRuns: PayRunService
   audit: AuditTrail
+  /** One content-free row per model call (the AI spend): each compile. */
+  aiUsage: AiUsageRepository
   log?: ProposalLog
   /** The shortest veto window allowed, in minutes. 60 by default; the testnet demo controls lower it to 1. */
   minVetoMinutes?: number
@@ -151,7 +153,7 @@ export class PolicyService {
     const community = gate.value
     const now = this.deps.clock.now()
     const id = this.deps.ids.policyId()
-    const compiled = await this.compile(community, i.instruction, id)
+    const compiled = await this.compile(community, i.instruction, { actor: i.actor, policyId: id, version: 1 })
     if (!compiled.ok) return compiled
     const policy = PolicySchema.parse({
       id,
@@ -196,14 +198,14 @@ export class PolicyService {
     if (!policy.ok) return policy
     const p = policy.value
     if (p.status === 'archived') return err({ code: 'policy_archived' })
+    const latest = Math.max(...(await this.deps.policies.listVersions(p.id)).map((v) => v.version), p.version)
     let compiled = p.compiled
     if (recompile) {
-      const c = await this.compile(gate.value, i.instruction as string, p.id)
+      const c = await this.compile(gate.value, i.instruction as string, { actor: i.actor, policyId: p.id, version: latest + 1 })
       if (!c.ok) return c
       compiled = c.value
     }
     const now = this.deps.clock.now()
-    const latest = Math.max(...(await this.deps.policies.listVersions(p.id)).map((v) => v.version), p.version)
     const next: Policy = {
       ...p,
       name: i.name ?? p.name,
@@ -539,8 +541,17 @@ export class PolicyService {
     return (await this.deps.policies.update(PolicySchema.parse(next), version)) === 'updated' ? ok(undefined) : err({ code: 'concurrent_update' })
   }
 
-  /** Criteria mode, once: the instruction (roles, channels and people as tokens) to a checked filter and amount plan. */
-  private async compile(community: Community, instruction: string, policyId: string): Promise<Result<CompiledRule, CompileError | AiGate>> {
+  /**
+   * Criteria mode, once: the instruction (roles, channels and people as tokens) to a checked filter
+   * and amount plan. Every call that reaches the model is a usage row; one that compiles is linked
+   * to the version it makes.
+   */
+  private async compile(
+    community: Community,
+    instruction: string,
+    target: { actor: string; policyId: string; version: number },
+  ): Promise<Result<CompiledRule, CompileError | AiGate>> {
+    const { policyId } = target
     const { proposer, activity } = this.deps
     if (!proposer || !activity) return err({ code: 'ai_not_configured' })
     const now = this.deps.clock.now()
@@ -561,7 +572,7 @@ export class PolicyService {
     }))
     const timings = watch.done()
     const usage = answer.ok ? answer.value.usage : answer.error.usage
-    const log = (outcome: string) =>
+    const log = async (outcome: string) => {
       this.deps.log?.({
         proposalId: policyId,
         mode: 'criteria',
@@ -580,16 +591,38 @@ export class PolicyService {
         latencyMs: usage?.latencyMs ?? null,
         timings,
       })
+      // Past the daily cap the model was not called: nothing was spent.
+      if (!answer.ok && answer.error.reason === 'daily_cap') return
+      const compiled = outcome === 'policy_compiled'
+      await this.deps.aiUsage.append({
+        communityId: community.id,
+        purpose: 'policy_compile',
+        actor: target.actor,
+        model: usage?.model ?? proposer.model,
+        inputTokens: usage?.inputTokens ?? null,
+        cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
+        cacheReadInputTokens: usage?.cacheReadInputTokens ?? null,
+        outputTokens: usage?.outputTokens ?? null,
+        latencyMs: usage?.latencyMs ?? null,
+        costMicroUsd: usage?.costMicroUsd == null ? null : BigInt(usage.costMicroUsd),
+        outcome: compiled ? 'proposed' : outcome,
+        createdAt: this.deps.clock.now(),
+        proposalId: null,
+        runId: null,
+        policyId: compiled ? policyId : null,
+        policyVersion: compiled ? target.version : null,
+      })
+    }
     if (!answer.ok) {
-      log('could_not_propose')
+      await log('could_not_propose')
       return err({ code: 'could_not_propose', reason: answer.error.reason })
     }
     const resolved = resolveCriteria(answer.value.raw, { refs: tokens.refs, now, instructionAmounts: amountsIn(instruction) })
     if (!resolved.ok) {
-      log(resolved.error.code)
+      await log(resolved.error.code)
       return resolved
     }
-    log('policy_compiled')
+    await log('policy_compiled')
     const r = resolved.value
     return ok({ criteria: r.criteria, plan: r.plan, note: r.note, assumptions: r.assumptions, amountsInInstruction: r.amountsInInstruction })
   }
