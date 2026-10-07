@@ -1,0 +1,30 @@
+# The image needs the package manifests, the lockfile and the TypeScript sources the server runs.
+# Never secrets or databases.
+.env
+.env.*
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+
+.git
+.github
+.chain-results
+**/node_modules
+**/coverage
+**/test-results
+**/playwright-report
+
+# Tests and docs are not needed to run.
+**/*.test.ts
+**/test
+**/e2e
+**/vitest*.config.ts
+**/playwright.config.ts
+**/VERIFY.md
+docs
+README.md
+
+Dockerfile
+.dockerignore
+fly.*.toml
