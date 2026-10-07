@@ -66,6 +66,22 @@ describe('InProcessExecutionQueue', () => {
     await queue.idle()
   })
 
+  it('says which runs have a job queued or in flight, until the last one for that run ends', async () => {
+    const g = gate()
+    const queue = new InProcessExecutionQueue(async () => {
+      await g.opened
+    })
+    expect(queue.isBusy('1094309218049937418', 'run_1')).toBe(false)
+    await queue.enqueue(job('run_1'))
+    await queue.enqueue(job('run_1'))
+    expect(queue.isBusy('1094309218049937418', 'run_1')).toBe(true)
+    expect(queue.isBusy('1094309218049937418', 'run_2')).toBe(false)
+    expect(queue.isBusy('1094309218049937419', 'run_1')).toBe(false)
+    g.open()
+    await queue.idle()
+    expect(queue.isBusy('1094309218049937418', 'run_1')).toBe(false)
+  })
+
   it('a job that throws is reported and does not block the next job for that run', async () => {
     const errors: unknown[] = []
     const ran: string[] = []

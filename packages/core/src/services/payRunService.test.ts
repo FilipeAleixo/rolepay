@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import { KvRunLeases } from '../adapters/kv/runLeases.js'
 import { FakePayoutChain } from '../adapters/memory/fakeChain.js'
+import { MemoryKeyValueStore } from '../adapters/memory/keyValue.js'
 import { createMemoryRepositories } from '../adapters/memory/repositories.js'
 import { ManualClock, PlainKeyVault, SequentialIds } from '../adapters/memory/support.js'
 import type { Run } from '../domain/run.js'
 import type { RunRepository } from '../ports/repositories.js'
+import type { RunLeases } from '../ports/runLeases.js'
 import { CommunityService } from './communityService.js'
 import { PayRunService } from './payRunService.js'
 
@@ -42,8 +45,8 @@ async function world(opts: { limit?: bigint; fund?: bigint } = {}) {
   const vault = new PlainKeyVault()
   const ids = new SequentialIds()
   const communitySvc = new CommunityService({ communities: repos.communities, chain, vault, clock, network: 'moderato', ids, setupLinkTtlSeconds: 1800 })
-  const makeService = () =>
-    new PayRunService({ runs, payees: repos.payees, communities: repos.communities, chain, vault, ids, clock, network: 'moderato' })
+  const makeService = (leases: RunLeases | null = null) =>
+    new PayRunService({ runs, payees: repos.payees, communities: repos.communities, chain, vault, ids, clock, network: 'moderato', leases })
 
   await communitySvc.register({ guildId: GUILD, name: 'Mods', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
   await communitySvc.register({ guildId: OTHER_GUILD, name: 'Other', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
@@ -80,6 +83,29 @@ async function approvedRun(w: World, lines = LINES): Promise<Run> {
 }
 
 const paidTo = (w: World) => [w.chain.balance(TOKEN, ADDR.alice), w.chain.balance(TOKEN, ADDR.bob)]
+
+/**
+ * Holds the next broadcast until `open()`: a payment in flight, so another worker can be run in the
+ * middle of it. `reached` resolves once the broadcast has started. Any other broadcast meanwhile
+ * waits at the same gate.
+ */
+function holdBroadcast(chain: FakePayoutChain) {
+  const real = chain.broadcast.bind(chain)
+  let open = () => {}
+  const gate = new Promise<void>((resolve) => {
+    open = resolve
+  })
+  let entered = () => {}
+  const reached = new Promise<void>((resolve) => {
+    entered = resolve
+  })
+  chain.broadcast = async (rawTx) => {
+    entered()
+    await gate
+    return real(rawTx)
+  }
+  return { reached, open }
+}
 
 describe('PayRunService: building and approving runs', () => {
   let w: World
@@ -225,6 +251,25 @@ describe('PayRunService: execution', () => {
     expect(results.filter((r) => r.ok && r.value.status === 'paid')).toHaveLength(1)
     expect(results.filter((r) => !r.ok && r.error.code === 'concurrent_update')).toHaveLength(1)
     expect(w.chain.landedTxCount).toBe(1)
+  })
+
+  it('reads the key state and the chain head at the same time (one round trip to the node, not two)', async () => {
+    const run = await approvedRun(w)
+    const keyState = w.chain.keyState.bind(w.chain)
+    const head = w.chain.head.bind(w.chain)
+    let inFlight = 0
+    let peak = 0
+    const slowRead = async <T>(read: () => Promise<T>): Promise<T> => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise((r) => setTimeout(r, 5))
+      inFlight--
+      return read()
+    }
+    w.chain.keyState = (input) => slowRead(() => keyState(input))
+    w.chain.head = () => slowRead(() => head())
+    expect(await w.svc.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'paid' } })
+    expect(peak).toBe(2)
   })
 
   it('checks the key first: a revoked key fails fast and leaves the run approved', async () => {
@@ -547,6 +592,105 @@ describe('PayRunService: crash recovery (a crash mid-run never pays twice)', () 
     expect(await restarted.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'paid' } })
     expect(w.chain.landedTxCount).toBe(1)
     expect(paidTo(w)).toEqual([1_500_000n, 2_000_000n])
+  })
+})
+
+describe('PayRunService: one worker per run (the Approve job, the recovery sweep, another instance)', () => {
+  let w: World
+  beforeEach(async () => {
+    w = await world()
+  })
+  const ref = (run: Run) => ({ guildId: GUILD, runId: run.id })
+  /** Two server instances over the same database and chain, each with its own leases. */
+  const instances = () => {
+    const kv = new MemoryKeyValueStore(w.clock)
+    return { a: w.makeService(new KvRunLeases(kv, { instance: 'machine-a' })), b: w.makeService(new KvRunLeases(kv, { instance: 'machine-b' })) }
+  }
+
+  it('the sweep of another instance leaves alone a run whose payment is in flight: one broadcast, no conflict', async () => {
+    const { a, b } = instances()
+    const run = await approvedRun(w)
+    const hold = holdBroadcast(w.chain)
+    const paying = a.execute(ref(run))
+    await hold.reached
+    expect((await w.repos.runs.get(run.id))?.status).toBe('executing')
+
+    expect(await b.recoverInFlight()).toEqual([])
+
+    hold.open()
+    expect(await paying).toMatchObject({ ok: true, value: { status: 'paid' } })
+    expect(w.chain.broadcastCount).toBe(1)
+    expect(w.chain.landedTxCount).toBe(1)
+    expect(await b.recoverInFlight()).toEqual([])
+  })
+
+  it('a second worker asking to execute or reconcile a run another holds is told concurrent_update at once and sends nothing', async () => {
+    const { a, b } = instances()
+    const run = await approvedRun(w)
+    const hold = holdBroadcast(w.chain)
+    const paying = a.execute(ref(run))
+    await hold.reached
+
+    expect(await b.execute(ref(run))).toEqual({ ok: false, error: { code: 'concurrent_update' } })
+    expect(await b.reconcile(ref(run))).toEqual({ ok: false, error: { code: 'concurrent_update' } })
+
+    hold.open()
+    await paying
+    expect(w.chain.broadcastCount).toBe(1)
+    expect(paidTo(w)).toEqual([1_500_000n, 2_000_000n])
+  })
+
+  it('a worker gives the run back when its step ends, also when the step throws', async () => {
+    const { a, b } = instances()
+    const run = await approvedRun(w)
+    w.runs.crashOnUpdate = (next) => next.status === 'paid'
+    await expect(a.execute(ref(run))).rejects.toThrow('simulated crash')
+    expect(await b.recoverInFlight()).toEqual([{ guildId: GUILD, runId: run.id, status: 'paid' }])
+    expect(w.chain.landedTxCount).toBe(1)
+  })
+
+  it('the sweep skips a run its caller has a job for in this process, even between the job steps', async () => {
+    const run = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'land_then_lose_response'
+    expect(await w.svc.execute(ref(run))).toMatchObject({ ok: true, value: { status: 'pending' } })
+
+    expect(await w.svc.recoverInFlight({ skip: (r) => r.runId === run.id })).toEqual([])
+    expect((await w.repos.runs.get(run.id))?.status).toBe('executing')
+
+    expect(await w.svc.recoverInFlight()).toEqual([{ guildId: GUILD, runId: run.id, status: 'paid' }])
+  })
+
+  it('the sweep reads each run again before reconciling it: one another worker finished after the listing is left alone', async () => {
+    const first = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'land_then_lose_response'
+    await w.svc.execute(ref(first))
+    w.clock.advance(1)
+    const second = await approvedRun(w)
+    w.chain.faults.nextBroadcast = 'land_then_lose_response'
+    await w.svc.execute(ref(second))
+
+    // While the sweep works on the first run it listed, another worker (the run's own job) settles the other one.
+    const lookup = w.chain.lookupTx.bind(w.chain)
+    let other: Run | null = null
+    let settling = false
+    const sweptLookups: string[] = []
+    w.chain.lookupTx = async (hash) => {
+      if (!settling) sweptLookups.push(hash)
+      if (other === null) {
+        other = hash === (await w.repos.runs.get(first.id))?.attempts[0]?.txHash ? second : first
+        settling = true
+        expect(await w.svc.reconcile(ref(other))).toMatchObject({ ok: true, value: { status: 'paid' } })
+        settling = false
+      }
+      return lookup(hash)
+    }
+    const results = await w.makeService().recoverInFlight()
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ status: 'paid' })
+    expect(results.map((r) => r.runId)).not.toContain((other as Run | null)?.id)
+    // The settled run was not even looked up on chain: the sweep read it first and left it.
+    expect(sweptLookups).toHaveLength(1)
+    expect(w.chain.landedTxCount).toBe(2)
   })
 })
 

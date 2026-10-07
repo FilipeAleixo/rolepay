@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { BackgroundReport } from '../http/handler.js'
 import { FakeDiscordRest } from '../testing/fakeDiscordRest.js'
-import { type Outcome, renderOutcome } from './outcome.js'
+import { type Outcome, renderLate, renderOutcome } from './outcome.js'
 
 const ctx = { applicationId: '500000000000000001', token: 'tok', guildId: '1094309218049937418', channelId: null, caller: { userId: '200000000000000001', roles: [], permissions: 0n } }
 
@@ -97,6 +98,25 @@ describe('renderOutcome', () => {
     await d.background?.()
     expect(rest.lastEdit('tok')?.content).toMatch(/could not show this answer/)
     expect(errors).toHaveLength(1)
+  })
+
+  it('deferred work reports where its time went: its own phases, the work in all, and the reply to Discord', async () => {
+    const rest = new FakeDiscordRest()
+    const d = renderOutcome({ kind: 'defer', ephemeral: false, work: async () => ({ ok: true, message: { content: 'done' }, timings: { db: 3 } }) }, ctx, rest)
+    if (d.kind !== 'respond') throw new Error('expected a response')
+    const report = (await d.background?.()) as BackgroundReport | undefined
+    expect(report).toMatchObject({ phases: { db: 3 } })
+    expect(Object.keys(report?.phases ?? {}).sort()).toEqual(['db', 'reply', 'work'])
+    expect(rest.lastEdit('tok')).toEqual({ content: 'done' }) // the timings never reach Discord
+  })
+
+  it('a late answer reports its phases too: the wait for the handler and the reply', async () => {
+    const rest = new FakeDiscordRest()
+    const d = renderLate(Promise.resolve({ kind: 'update', message: { content: 'paying' } }), 'update', ctx, rest)
+    if (d.kind !== 'respond') throw new Error('expected a response')
+    const report = (await d.background?.()) as BackgroundReport | undefined
+    expect(Object.keys(report?.phases ?? {}).sort()).toEqual(['reply', 'work'])
+    expect(rest.lastEdit('tok')).toEqual({ content: 'paying' })
   })
 
   it('autocomplete choices', async () => {

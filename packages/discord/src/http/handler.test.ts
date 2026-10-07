@@ -1,22 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import { MemoryInteractionLog } from '../testing/index.js'
 import { createTestSigner } from '../testing/signer.js'
-import { type Dispatch, type InteractionTiming, createInteractionsHandler } from './handler.js'
+import { type BackgroundTiming, type Dispatch, type InteractionTiming, createInteractionsHandler } from './handler.js'
 import { createSignatureVerifier } from './verify.js'
 
 const URL = 'https://rolepay.test/discord/interactions'
 
-async function setup(dispatch: Dispatch, opts: { now?: () => number } = {}) {
+/** The time Discord's snowflake ID 900000000000000010 carries: (id >> 22) + Discord's epoch. */
+const CREATED_AT_MS = Number(900000000000000010n >> 22n) + 1_420_070_400_000
+
+async function setup(dispatch: Dispatch, opts: { now?: () => number; wallClock?: () => number } = {}) {
   const signer = await createTestSigner()
   const background: Promise<unknown>[] = []
   const timings: InteractionTiming[] = []
+  const deferred: BackgroundTiming[] = []
   const handler = createInteractionsHandler({
     verify: createSignatureVerifier(signer.publicKeyHex),
     dispatch,
     waitUntil: (p) => background.push(p),
     seen: new MemoryInteractionLog(),
     onResponse: (t) => timings.push(t),
+    onBackground: (t) => deferred.push(t),
     ...(opts.now ? { now: opts.now } : {}),
+    ...(opts.wallClock ? { wallClock: opts.wallClock } : {}),
   })
   const post = async (payload: unknown, opts: { sign?: boolean; raw?: string; timestamp?: string } = {}) => {
     const body = opts.raw ?? JSON.stringify(payload)
@@ -25,7 +31,7 @@ async function setup(dispatch: Dispatch, opts: { now?: () => number } = {}) {
     if (opts.sign !== false) headers['x-signature-ed25519'] = await signer.sign(timestamp + body)
     return handler(new Request(URL, { method: 'POST', headers, body }))
   }
-  return { post, background, timings }
+  return { post, background, timings, deferred }
 }
 
 describe('createInteractionsHandler', () => {
@@ -128,11 +134,53 @@ describe('createInteractionsHandler', () => {
         clock += 42 // the handler's work
         return { kind: 'respond', body: { type: 7, data: { content: 'Approved, paying: secret text' } }, label: { kind: 'component', name: 'rolepay:approve' } }
       },
-      { now: () => clock },
+      { now: () => clock, wallClock: () => CREATED_AT_MS + 1700 },
     )
     await post({ id: '900000000000000010', type: 3 })
-    expect(timings).toEqual([{ kind: 'component', name: 'rolepay:approve', ms: 42, status: 200, responseType: 7, ok: true, late: false }])
+    expect(timings).toEqual([{ kind: 'component', name: 'rolepay:approve', ms: 42, sinceCreatedMs: 1700, status: 200, responseType: 7, ok: true, late: false }])
     expect(JSON.stringify(timings)).not.toContain('secret')
+    expect(JSON.stringify(timings)).not.toContain('900000000000000010')
+  })
+
+  it('says how long after Discord created the interaction it reached us (from the ID), null without an ID', async () => {
+    const { post, timings } = await setup(async () => ({ kind: 'respond', body: { type: 1 } }), { wallClock: () => CREATED_AT_MS + 250 })
+    await post({ id: '900000000000000010', type: 1 })
+    await post({ type: 1 })
+    expect(timings.map((t) => t.sinceCreatedMs)).toEqual([250, null])
+  })
+
+  it('logs work done after the answer once it ends: how long, its phases, never its content', async () => {
+    let clock = 1000
+    const { post, background, deferred } = await setup(
+      async () => ({
+        kind: 'respond',
+        body: { type: 5, data: {} },
+        label: { kind: 'command', name: 'rolepay new' },
+        background: async () => {
+          clock += 350
+          return { phases: { db: 4, reply: 340 } }
+        },
+      }),
+      { now: () => clock },
+    )
+    await post({ type: 2 })
+    expect(deferred).toEqual([])
+    await Promise.all(background)
+    expect(deferred).toEqual([{ kind: 'command', name: 'rolepay new', ms: 350, ok: true, phases: { db: 4, reply: 340 } }])
+  })
+
+  it('logs deferred work that throws as not ok', async () => {
+    const { post, background, deferred } = await setup(async () => ({
+      kind: 'respond',
+      body: { type: 6 },
+      label: { kind: 'component', name: 'rolepay:cancel' },
+      background: async () => {
+        throw new Error('discord is down')
+      },
+    }))
+    await post({ type: 3 })
+    await Promise.all(background)
+    expect(deferred).toMatchObject([{ name: 'rolepay:cancel', ok: false, phases: {} }])
   })
 
   it('logs a late acknowledgement and a failed handler as such', async () => {

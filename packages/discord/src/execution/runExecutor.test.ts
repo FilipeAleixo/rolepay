@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { ALICE, APP_ID, BOB, CHANNEL, GUILD, TREASURY } from '../../test/fixtures.js'
-import { type Harness, harness } from '../../test/harness.js'
+import { ALICE, APP_ID, BOB, CHANNEL, GUILD, TOKEN, TREASURY } from '../../test/fixtures.js'
+import { type Harness, harness, usd } from '../../test/harness.js'
 import { MemoryRunNotices } from '../testing/index.js'
 import type { Message } from '../api.js'
 import type { ExecutionJob } from '../ports.js'
-import { createRunExecutor } from './runExecutor.js'
+import { type JobReport, createRunExecutor } from './runExecutor.js'
 
 const text = (m: Message | undefined) => JSON.stringify(m ?? null)
 const job = (runId: string, token = 'tok-approve'): ExecutionJob => ({
@@ -174,6 +174,18 @@ describe('createRunExecutor', () => {
     expect(text(h.rest.channelPosts.at(-1)?.message)).toMatch(/"title":"Paid"/)
   })
 
+  it('reports how long the job took and where: paying (chain and database) and telling Discord', async () => {
+    const reports: JobReport[] = []
+    const h = await ready()
+    const execute = createRunExecutor({ rolepay: h.rolepay, rest: h.rest, notices: h.notices, network: 'moderato', now: () => h.clock.now(), sleep: h.sleep, onDone: (r) => reports.push(r) })
+    await execute(job(h.run.id))
+    expect(reports).toHaveLength(1)
+    expect(reports[0]).toMatchObject({ runId: h.run.id, status: 'paid', checks: 0, contended: 0 })
+    const r = reports[0] as JobReport
+    expect(r.ms).toBeGreaterThanOrEqual(r.phases.pay)
+    expect(r.phases.discord).toBeGreaterThanOrEqual(0)
+  })
+
   it('an outage before signing leaves the run approved and offers Retry, without throwing', async () => {
     const h = await ready()
     const original = h.chain.keyState.bind(h.chain)
@@ -185,5 +197,83 @@ describe('createRunExecutor', () => {
     expect(final).toMatch(/could not reach/i)
     expect(final).toContain('rolepay:retry:')
     h.chain.keyState = original
+  })
+})
+
+describe('createRunExecutor: another worker on the same run (the recovery sweep, another instance)', () => {
+  type Ready = Awaited<ReturnType<typeof ready>>
+  const ref = (h: Ready) => ({ guildId: GUILD, runId: h.run.id })
+
+  type Execute = Ready['rolepay']['payRuns']['execute']
+
+  /**
+   * The job's first execute loses to another worker: `meanwhile` is what that worker did to the run
+   * first (given the real execute, as another instance would call it).
+   */
+  function contended(h: Ready, meanwhile: (execute: Execute) => Promise<unknown>) {
+    const payRuns = h.rolepay.payRuns
+    const real = payRuns.execute.bind(payRuns)
+    let first = true
+    payRuns.execute = async (input) => {
+      if (!first) return real(input)
+      first = false
+      await meanwhile(real)
+      return { ok: false, error: { code: 'concurrent_update' } }
+    }
+  }
+
+  it('another worker paid it first: the job reads that and reports Paid at once (no wait), receipts sent once', async () => {
+    const h = await ready()
+    contended(h, (execute) => execute(ref(h)))
+    const started = h.clock.now().getTime()
+    await h.execute(job(h.run.id))
+    expect(text(h.rest.lastEdit('tok-approve'))).toMatch(/"title":"Paid"/)
+    expect(h.clock.now().getTime()).toBe(started)
+    expect(h.rest.dms.map((d) => d.userId)).toEqual([ALICE, BOB])
+    expect(h.chain.landedTxCount).toBe(1)
+  })
+
+  it('another worker is still paying it: the job waits, follows that payment and never sends a second transaction', async () => {
+    const h = await ready()
+    contended(h, async (execute) => {
+      h.chain.faults.nextBroadcast = 'land_then_lose_response'
+      await execute(ref(h))
+    })
+    await h.execute(job(h.run.id))
+    expect(text(h.rest.lastEdit('tok-approve'))).toMatch(/"title":"Paid"/)
+    expect(h.chain.broadcastCount).toBe(1)
+    expect(h.chain.landedTxCount).toBe(1)
+  })
+
+  it('another worker recorded a failure: the job shows it with Retry at once and does not try again by itself', async () => {
+    const h = await ready()
+    h.chain.fund(TOKEN, TREASURY, -usd('1000')) // an empty treasury: the network refuses the payment
+    contended(h, (execute) => execute(ref(h)))
+    const started = h.clock.now().getTime()
+    await h.execute(job(h.run.id))
+    const final = text(h.rest.lastEdit('tok-approve'))
+    expect(final).toMatch(/Payment failed/)
+    expect(final).toContain('rolepay:retry:')
+    expect(h.clock.now().getTime()).toBe(started)
+    const run = await h.rolepay.payRuns.get(ref(h))
+    expect(run.ok && run.value.attempts).toHaveLength(1)
+  })
+
+  it('the run is still approved (the other worker let go without starting it): the job pays it instead of dropping it', async () => {
+    const h = await ready()
+    contended(h, async () => {})
+    await h.execute(job(h.run.id))
+    expect(text(h.rest.lastEdit('tok-approve'))).toMatch(/"title":"Paid"/)
+    expect(h.chain.landedTxCount).toBe(1)
+    expect(h.rest.dms).toHaveLength(2)
+  })
+
+  it('reports the contention in its timing line', async () => {
+    const reports: JobReport[] = []
+    const h = await ready()
+    contended(h, (execute) => execute(ref(h)))
+    const execute = createRunExecutor({ rolepay: h.rolepay, rest: h.rest, notices: h.notices, network: 'moderato', now: () => h.clock.now(), sleep: h.sleep, onDone: (r) => reports.push(r) })
+    await execute(job(h.run.id))
+    expect(reports[0]).toMatchObject({ status: 'paid', contended: 1 })
   })
 })

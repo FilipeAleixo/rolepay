@@ -109,6 +109,8 @@ export function composeServer(deps: ServerDeps) {
       now: () => deps.clock.now(),
       sleep,
       onError: (error, job) => log('job_error', { runId: job.runId, ...errorFields(error) }),
+      // One line per payment job: how it ended, ms in all, split into paying (chain, database) and Discord.
+      onDone: (report) => log('job', report),
     }),
     { onError: (error, job) => log('job_error', { runId: job.runId, ...errorFields(error) }) },
   )
@@ -148,6 +150,8 @@ export function composeServer(deps: ServerDeps) {
     interactionLog: new KvInteractionLog(deps.kv),
     // One line per request: kind, command or button name, ms until the response, its type, ok (never options or text).
     onResponse: (timing) => log('interaction', timing),
+    // One line per deferred reply or late answer as it ends: ms after the response, per phase (Discord, database...).
+    onBackground: (timing) => log('deferred', timing),
   })
 
   const notifyRecovered = createRecoveryNotifier({
@@ -180,7 +184,8 @@ export function composeServer(deps: ServerDeps) {
       startRecovery({
         // A run the sweep settles (typically after a restart) is reported in Discord as part of the sweep.
         recover: async () => {
-          const results = await rolepay.payRuns.recoverInFlight()
+          // A run with a job in this process (paying, or waiting between checks) is the job's to finish and report.
+          const results = await rolepay.payRuns.recoverInFlight({ skip: (run) => queue.isBusy(run.guildId, run.runId) })
           await notifyRecovered(results)
           // Expired records (an abandoned proposal modal's message, old proposals) leave the disk too.
           await deps.kv.sweep().catch((error) => log('kv_sweep_error', errorFields(error)))

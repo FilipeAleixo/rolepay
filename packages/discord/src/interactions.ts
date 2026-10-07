@@ -1,6 +1,6 @@
 import type { DiscordAppDeps } from './app/deps.js'
 import { createDispatcher } from './app/router.js'
-import { type InteractionTiming, createInteractionsHandler } from './http/handler.js'
+import { type BackgroundTiming, type InteractionTiming, createInteractionsHandler } from './http/handler.js'
 import { createSignatureVerifier } from './http/verify.js'
 import type { InteractionLog } from './ports.js'
 
@@ -17,6 +17,8 @@ export function createDiscordInteractions(opts: {
   interactionLog?: InteractionLog
   /** One call per request as its response goes out: what was asked and how fast (content-free). */
   onResponse?: (timing: InteractionTiming) => void
+  /** One call per piece of work done after the answer (a deferred reply, a late answer), as it ends: how long and where. */
+  onBackground?: (timing: BackgroundTiming) => void
   /** A handler not done by then is acknowledged with a deferred response (default 1.5 s; Discord allows 3). */
   ackDeadlineMs?: number
 }): (request: Request) => Promise<Response> {
@@ -27,5 +29,6 @@ export function createDiscordInteractions(opts: {
     ...(opts.deps.onError ? { onError: opts.deps.onError } : {}),
     ...(opts.interactionLog ? { seen: opts.interactionLog } : {}),
     ...(opts.onResponse ? { onResponse: opts.onResponse } : {}),
+    ...(opts.onBackground ? { onBackground: opts.onBackground } : {}),
   })
 }

@@ -6,6 +6,7 @@ import type { PayoutChain } from './payoutChain.js'
 import type { ActivityReader } from './activityReader.js'
 import type { ProposalLog } from './proposalLog.js'
 import type { AuditLog, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, ProposalRepository, RunRepository } from './repositories.js'
+import type { RunLeases } from './runLeases.js'
 import type { RunProposer } from './runProposer.js'
 
 /** Everything `createRolepay` needs: one implementation of each port. */
@@ -36,4 +37,6 @@ export type RolepayDeps = {
   minVetoMinutes?: number
   /** A pay run's audit event could not be written (it never fails the payment): for the server's log. */
   onAuditError?: (error: unknown) => void
+  /** One worker per pay run at a time, across processes (`KvRunLeases` in production). */
+  leases?: RunLeases
 }
