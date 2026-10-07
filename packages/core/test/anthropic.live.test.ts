@@ -54,7 +54,7 @@ async function live() {
   const ids = new SequentialIds()
   const vault = new PlainKeyVault()
   const communities = new CommunityService({ communities: repos.communities, chain, vault, clock, network: 'moderato', ids, setupLinkTtlSeconds: 1800 })
-  const payRuns = new PayRunService({ runs: repos.runs, payees: repos.payees, communities: repos.communities, policyRuns: repos.policyRuns, chain, vault, ids, clock, network: 'moderato' })
+  const payRuns = new PayRunService({ runs: repos.runs, payees: repos.payees, communities: repos.communities, policyRuns: repos.policyRuns, policyKeys: repos.policyKeys, chain, vault, ids, clock, network: 'moderato' })
   const activity = new FakeActivityReader()
   const logs: ProposalLogEntry[] = []
   const proposals = new ProposalService({

@@ -50,7 +50,7 @@ async function world(opts: { ai?: boolean; proposer?: FakeRunProposer | null; li
   const ids = new SequentialIds()
   const vault = new PlainKeyVault()
   const communities = new CommunityService({ communities: repos.communities, chain, vault, clock, network: 'moderato', ids, setupLinkTtlSeconds: 1800 })
-  const payRuns = new PayRunService({ runs: repos.runs, payees: repos.payees, communities: repos.communities, policyRuns: repos.policyRuns, chain, vault, ids, clock, network: 'moderato' })
+  const payRuns = new PayRunService({ runs: repos.runs, payees: repos.payees, communities: repos.communities, policyRuns: repos.policyRuns, policyKeys: repos.policyKeys, chain, vault, ids, clock, network: 'moderato' })
   const proposer = opts.proposer === undefined ? new FakeRunProposer() : opts.proposer
   const activity = new FakeActivityReader()
   const logs: ProposalLogEntry[] = []

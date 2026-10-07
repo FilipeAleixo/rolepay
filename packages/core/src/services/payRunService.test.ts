@@ -48,7 +48,7 @@ async function world(opts: { limit?: bigint; fund?: bigint } = {}) {
   const ids = new SequentialIds()
   const communitySvc = new CommunityService({ communities: repos.communities, chain, vault, clock, network: 'moderato', ids, setupLinkTtlSeconds: 1800 })
   const makeService = (leases: RunLeases | null = null) =>
-    new PayRunService({ runs, payees: repos.payees, communities: repos.communities, policyRuns: repos.policyRuns, chain, vault, ids, clock, network: 'moderato', leases })
+    new PayRunService({ runs, payees: repos.payees, communities: repos.communities, policyRuns: repos.policyRuns, policyKeys: repos.policyKeys, chain, vault, ids, clock, network: 'moderato', leases })
 
   await communitySvc.register({ guildId: GUILD, name: 'Mods', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
   await communitySvc.register({ guildId: OTHER_GUILD, name: 'Other', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })

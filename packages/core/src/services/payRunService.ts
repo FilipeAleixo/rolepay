@@ -5,6 +5,7 @@ import { type BotKey, type Community, type KeyCheckError, botKeyContext, checkKe
 import { runToCsv } from '../domain/csv.js'
 import { type Address, DiscordIdSchema } from '../domain/ids.js'
 import { type PaidByWeek, firstWeekStart, paidByWeek } from '../domain/paidByWeek.js'
+import { type PolicyKeyCheckError, policyKeyContext, policyKeyError, policySigner } from '../domain/policy/policyKey.js'
 import { type MatchResult, matchTransfers } from '../domain/reconcile.js'
 import { type Result, err, ok } from '../domain/result.js'
 import { type Failure, type NewRunError, type Run, type RunEvent, type RunStatus, currentAttempt, newRun, transition } from '../domain/run.js'
@@ -12,7 +13,7 @@ import type { Clock } from '../ports/clock.js'
 import type { IdGenerator } from '../ports/idGenerator.js'
 import type { KeyVault } from '../ports/keyVault.js'
 import type { BroadcastOutcome, FeePayment, PayoutChain } from '../ports/payoutChain.js'
-import type { CommunityRepository, PayeeRepository, PolicyRunRepository, RunRepository } from '../ports/repositories.js'
+import type { CommunityRepository, PayeeRepository, PolicyKeyRepository, PolicyRunRepository, RunRepository } from '../ports/repositories.js'
 import type { AuditTrail } from './auditTrail.js'
 import type { RunLeases } from '../ports/runLeases.js'
 import { type InvalidInput, invalidInput } from './common.js'
@@ -21,8 +22,10 @@ export type PayRunServiceDeps = {
   runs: RunRepository
   payees: PayeeRepository
   communities: CommunityRepository
-  /** Read only: which policy made a run (the weekly totals split policy runs from runs made by hand). */
+  /** Read only: which policy made a run (the weekly totals split policy runs from runs made by hand; which key signs it). */
   policyRuns: PolicyRunRepository
+  /** Read only: a policy's own access key, which signs that policy's runs instead of the bot key. */
+  policyKeys: PolicyKeyRepository
   chain: PayoutChain
   vault: KeyVault
   ids: IdGenerator
@@ -75,6 +78,8 @@ export type ExecuteOutcome =
 export type ExecuteError =
   | StepError
   | KeyCheckError
+  /** The same checks on a policy's own key (`key: 'policy'`): never explained as the bot key's. */
+  | PolicyKeyCheckError
   | { code: 'community_not_found' }
   | { code: 'no_active_key' }
   | { code: 'unseal_failed' }
@@ -244,8 +249,11 @@ export class PayRunService {
       }
     }
 
-    const key = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
-    if (!key) return err({ code: 'no_active_key' })
+    // Which key signs, decided per attempt, after the checks above: a policy's own key for that
+    // policy's runs, the bot key for every other run. Nothing below depends on which one it is.
+    const signer = await this.signingKey(run, community)
+    if (!signer.ok) return signer
+    const { key, vaultContext, scope } = signer.value
 
     // Independent reads, so at the same time: the key's state on chain and the head the attempt opens at.
     const [state, head] = await Promise.all([
@@ -258,9 +266,9 @@ export class PayRunService {
       this.deps.chain.head(),
     ])
     const check = checkKeyForRun(state, { total: run.total, needsFeeBudget: community.feeMode === 'fee_budget' })
-    if (!check.ok) return check
+    if (!check.ok) return scope === 'policy' ? err(policyKeyError(check.error)) : check
     if (!key.sealedSecret) return err({ code: 'unseal_failed' })
-    const secret = await this.deps.vault.open(key.sealedSecret, botKeyContext(community.id, key.address))
+    const secret = await this.deps.vault.open(key.sealedSecret, vaultContext)
     if (!secret.ok) return secret
 
     const validBefore = Math.floor(this.deps.clock.now().getTime() / 1000) + VALID_BEFORE_SECONDS
@@ -326,6 +334,28 @@ export class PayRunService {
   }
 
   // ---- internals -------------------------------------------------------------
+
+  /**
+   * The key that signs this run's next attempt. A run a policy made (its PolicyRun links it) is
+   * signed with that policy's own key once the treasury has authorised one, and never with the bot
+   * key after that: a revoked own key stops the policy (`key_revoked`, the policy key). Every other
+   * run, and a policy with no key of its own, is signed with the community's active bot key.
+   */
+  private async signingKey(
+    run: Run,
+    community: Community,
+  ): Promise<Result<{ key: BotKey; vaultContext: string; scope: 'bot' | 'policy' }, { code: 'no_active_key' } | PolicyKeyCheckError>> {
+    const origin = await this.deps.policyRuns.getByRunId(run.id)
+    if (origin && origin.communityId === community.id) {
+      const keys = (await this.deps.policyKeys.listByPolicy(origin.policyId)).filter((k) => k.communityId === community.id)
+      const signer = policySigner(keys)
+      if (signer.kind === 'retired') return err(policyKeyError({ code: 'key_revoked' }))
+      if (signer.kind === 'own') return ok({ key: signer.key, vaultContext: policyKeyContext(community.id, signer.key.policyId, signer.key.address), scope: 'policy' })
+    }
+    const key = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
+    if (!key) return err({ code: 'no_active_key' })
+    return ok({ key, vaultContext: botKeyContext(community.id, key.address), scope: 'bot' })
+  }
 
   /**
    * Runs one step on a run while holding its lease, and gives the lease back after, also when the

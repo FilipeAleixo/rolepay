@@ -66,6 +66,7 @@ const preview = (over: Partial<PolicyPreview> = {}): PolicyPreview => ({
   nearMisses: [{ userId: BOB, condition: 'repliesIn', count: 2, min: 3, text: '2 replies (at least 3)' }],
   total: 50_000_000n,
   remaining: null,
+  budgetKey: 'bot',
   problems: ['amount_not_in_instruction', 'over_budget', 'something_new'],
   rule: ['1 per reply.'],
   scans: [],
