@@ -11,6 +11,8 @@ const ServerEnvSchema = z.object({
   DISCORD_PUBLIC_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'must be the 64-character hex public key'),
   DISCORD_BOT_TOKEN: z.string().regex(/^\S+$/, 'must be the bot token, with no spaces'),
   DISCORD_DEV_GUILD_ID: DiscordIdSchema.optional(),
+  /** The OAuth2 client secret (Developer Portal > OAuth2) for the dashboard's "Sign in with Discord". Unset: sign-in is not configured. */
+  ROLEPAY_DISCORD_CLIENT_SECRET: z.string().regex(/^\S+$/, 'must be the OAuth2 client secret, with no spaces').optional(),
   /** The public origin of this server (claim and setup pages, WebAuthn). The tunnel URL while developing. */
   PUBLIC_URL: z.url(),
   /** Passkeys are bound to this host for good. Default: PUBLIC_URL's host. */
@@ -51,6 +53,8 @@ export type ServerConfig = {
   recoveryIntervalMs: number
   /** The claim and setup pages: origin, passkey relying party, chain endpoints for the browser. */
   web: WebConfig
+  /** The dashboard's Discord OAuth2 client: the app itself. `clientSecret` null = sign-in not configured. */
+  dashboard: { clientId: string; clientSecret: string | null }
 }
 
 /** Shown only with the testnet dev shortcuts on (ROLEPAY_DEV_SHORTCUTS=true). */
@@ -102,6 +106,7 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       explorerUrl: core.explorerUrl,
       botKeyDefaults: { ...botKey, feeBudget: feeBudget.value },
     },
+    dashboard: { clientId: e.DISCORD_APP_ID, clientSecret: e.ROLEPAY_DISCORD_CLIENT_SECRET ?? null },
   }
 }
 

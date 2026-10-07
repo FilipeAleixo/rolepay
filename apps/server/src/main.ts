@@ -35,6 +35,7 @@ async function main() {
       publicUrl: config.web.origin,
       passkeyRpId: config.web.rpId,
       ai: config.core.ai.apiKey ? config.core.ai.model : 'off (no ANTHROPIC_API_KEY)',
+      dashboard: config.dashboard.clientSecret ? `${config.web.origin}/dashboard` : 'sign-in off (no ROLEPAY_DISCORD_CLIENT_SECRET)',
     })
   })
 

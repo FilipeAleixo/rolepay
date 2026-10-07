@@ -14,6 +14,7 @@ import {
 import { type Assets, type PasskeySessions, type RateLimiter, TokenBucketLimiter, createWebApp } from '@rolepay/web'
 import { Hono } from 'hono'
 import type { ServerConfig } from './config.js'
+import { type DashboardOverrides, dashboardDeps } from './dashboard.js'
 import { errorFields } from './logging.js'
 import { startRecovery } from './recovery.js'
 
@@ -27,13 +28,15 @@ export type ServerDeps = {
   /** Small records that must survive a restart (where a run's message is, receipts sent). The SQLite file in production. */
   kv: KeyValueStore
   members?: MemberDirectory
-  /** The claim and setup pages: passkey sessions, the WebAuthn endpoints (production) and the client bundle. */
+  /** The web pages: passkey sessions, the WebAuthn endpoints (production), the client bundle and the dashboard. */
   web: {
     sessions: PasskeySessions
     assets: Assets
     passkeys?: { fetch: (req: Request) => Response | Promise<Response> }
     /** Default: in-memory token buckets (`defaultRateLimits`). */
     rateLimits?: { perClient: RateLimiter; overall: RateLimiter }
+    /** The dashboard's OAuth, member view and the policy seam (`dashboard.ts`); defaults from config and the bot's REST client. */
+    dashboard?: DashboardOverrides
   }
   sleep?: (ms: number) => Promise<void>
   log?: Log
@@ -114,7 +117,9 @@ export function composeServer(deps: ServerDeps) {
   const header = config.http.clientIpHeader
   const clientKey = header ? { clientKey: (req: Request) => req.headers.get(header)?.trim() || 'direct' } : {}
   const rateLimits = { ...(deps.web.rateLimits ?? defaultRateLimits()), ...clientKey }
-  app.route('/', createWebApp({ rolepay, clock: deps.clock, config: config.web, ...deps.web, rateLimits }))
+  const { dashboard: overrides, ...web } = deps.web
+  const dashboard = dashboardDeps({ config, rest, kv: deps.kv, ...(overrides ? { overrides } : {}), onError: (error) => log('dashboard_error', errorFields(error)) })
+  app.route('/', createWebApp({ rolepay, clock: deps.clock, config: config.web, ...web, rateLimits, dashboard }))
 
   return {
     app,

@@ -57,6 +57,20 @@ describe('parseServerConfig', () => {
     expect(c.discord.devGuildId).toBe('1094309218049937418')
   })
 
+  it("the dashboard's Discord sign-in: client ID = the app ID, the secret from ROLEPAY_DISCORD_CLIENT_SECRET (unset or blank: not configured)", () => {
+    expect(parseServerConfig(env()).dashboard).toEqual({ clientId: '500000000000000001', clientSecret: null })
+    expect(parseServerConfig(env({ ROLEPAY_DISCORD_CLIENT_SECRET: '' })).dashboard.clientSecret).toBeNull()
+    expect(parseServerConfig(env({ ROLEPAY_DISCORD_CLIENT_SECRET: 'oauth-client-secret' })).dashboard).toEqual({ clientId: '500000000000000001', clientSecret: 'oauth-client-secret' })
+    let message = ''
+    try {
+      parseServerConfig(env({ ROLEPAY_DISCORD_CLIENT_SECRET: 'has a space', DISCORD_APP_ID: 'nope' }))
+    } catch (e) {
+      message = (e as Error).message
+    }
+    expect(message).toMatch(/ROLEPAY_DISCORD_CLIENT_SECRET/)
+    expect(message).not.toContain('has a space')
+  })
+
   it('the rate limits key on the last X-Forwarded-For hop unless ROLEPAY_CLIENT_IP_HEADER names the header the proxy in front sets', () => {
     expect(parseServerConfig(env()).http.clientIpHeader).toBeNull()
     expect(parseServerConfig(env({ ROLEPAY_CLIENT_IP_HEADER: 'Fly-Client-IP' })).http.clientIpHeader).toBe('fly-client-ip')
