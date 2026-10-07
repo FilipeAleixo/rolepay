@@ -9,7 +9,7 @@ primary_region = "cdg"
 # The server drains payments in flight on SIGTERM (up to 10 s) before closing the database.
 kill_signal = "SIGTERM"
 kill_timeout = "20s"
-# Absorbs the memory peak of the first client bundle build (see [[vm]]).
+# Headroom only (see [[vm]]): the client bundle is built with the image, so nothing peaks at runtime.
 swap_size_mb = 512
 
 [build]
@@ -53,8 +53,7 @@ swap_size_mb = 512
     path = "/health"
     timeout = "5s"
 
-# Node with tsx about 170 MB, plus about 180 MB for esbuild while it builds the client bundle on the
-# first page request (it stays resident). Swap absorbs the peak.
+# The compiled server (node dist/main.js) uses about 130 MB, leaving about 330 MB available.
 [[vm]]
   size = "shared-cpu-1x"
   memory = "512mb"
