@@ -1,4 +1,4 @@
-import { type Clock, type KeyState, type Policy, type PolicyKeyView, type Rolepay, describeSchedule, formatAmount, policyKeyDefaults } from '@rolepay/core'
+import { type Clock, type KeyState, type Policy, type PolicyKeyView, type Rolepay, describeSchedule, formatAmount, keyLacksSwapScope, policyKeyDefaults, swapTokensFor } from '@rolepay/core'
 import { type Context, Hono } from 'hono'
 import type { WebConfig } from '../config.js'
 import { failure, jsonResponse, linkStatus } from '../json.js'
@@ -70,6 +70,9 @@ export function policyBudgetRoutes(deps: PolicyBudgetRoutesDeps): Hono {
           validityDays: Math.round(d.validitySeconds / DAY),
           feeBudget: formatAmount(d.feeBudget),
         },
+        // The stablecoins a policy key may swap into while the community has preferred stablecoins on
+        // (exactly core's list for this community): the page adds them to the authorisation it builds.
+        swapTokens: swapTokensFor(community).map((address) => ({ address, label: tokenLabel(address) as string })),
       }),
     )
   })
@@ -94,6 +97,9 @@ export function policyBudgetRoutes(deps: PolicyBudgetRoutesDeps): Hono {
       session: session ? { address: session.address } : null,
       isTreasurer: own && provesPasskey(session, community),
       signInRequired: own && !provesPasskey(session, community),
+      // Preferred stablecoins: on for the community, and whether this policy's own active key lacks the swap scope.
+      preferredTokens: community.preferredTokens,
+      keyNeedsSwapScope: status.value.signs === 'own' && status.value.key !== null && keyLacksSwapScope(community, status.value.key.policy),
     })
   })
 

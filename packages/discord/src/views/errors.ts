@@ -64,7 +64,10 @@ type CodedError = { code: string } & Record<string, unknown>
  */
 export function explainError(error: CodedError, ctx: { token?: string } = {}): string {
   const amount = (v: unknown) => (typeof v === 'bigint' ? (ctx.token ? money(v, ctx.token) : String(v)) : '?')
-  if (error.key === 'policy') return explainPolicyKeyCheck(error, amount)
+  if (error.key === 'policy') {
+    const own = explainPolicyKeyCheck(error, amount)
+    if (own !== null) return own
+  }
   switch (error.code) {
     case 'community_not_found':
       return 'This server has not set up Rolepay yet. An admin runs /rolepay setup first.'
@@ -143,10 +146,18 @@ export function explainError(error: CodedError, ctx: { token?: string } = {}): s
 /**
  * A pre-flight that failed on a policy's own key (`key: 'policy'`): this run was made by a policy
  * with its own budget, so it is never paid from the bot key, and the fix is that policy's budget.
+ * null for the swap holds that are about the exchange, not the key: they read as for any run.
  */
-function explainPolicyKeyCheck(error: CodedError, amount: (v: unknown) => string): string {
+function explainPolicyKeyCheck(error: CodedError, amount: (v: unknown) => string): string | null {
   const fix = 'A treasurer gives it a new budget on the treasury page (`/rolepay policy show`), then presses Retry.'
   switch (error.code) {
+    case 'swap_not_authorized':
+      return `This policy's own key was authorised before preferred stablecoins were turned on, so it cannot swap into ${tokenList(error.tokens)}. Nothing was signed, and it never falls back to the bot key. ${fix}`
+    case 'swap_limit_low':
+      return `This policy's own key has ${typeof error.remaining === 'bigint' ? money(error.remaining, String(error.token)) : '?'} of its ${tokenList([error.token])} limit left this period, and this run delivers ${typeof error.needed === 'bigint' ? money(error.needed, String(error.token)) : '?'}. Nothing was signed.`
+    case 'swap_no_route':
+    case 'swap_over_cap':
+      return null
     case 'insufficient_limit': {
       const resets = typeof error.periodEnd === 'number' ? ` (it resets ${relativeTime(error.periodEnd)})` : ''
       return `This run needs ${amount(error.needed)} but this policy's own key has ${amount(error.remaining)} left this period${resets}. Nothing was paid; the chain would refuse it anyway.`

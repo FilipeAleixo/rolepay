@@ -16,7 +16,7 @@ import {
   keyAuthorization,
   toBotKeyView,
 } from '../domain/community.js'
-import { keyLacksSwapScope, swapTokensFor } from '../domain/delivery.js'
+import { keyLacksSwapScope, preferredTokenPolicy } from '../domain/delivery.js'
 import type { Hex } from '../domain/hex.js'
 import { type Address, AddressSchema, DiscordIdSchema } from '../domain/ids.js'
 import { type Result, err, ok } from '../domain/result.js'
@@ -479,9 +479,3 @@ export class CommunityService {
 }
 
 export type ConfirmError = { code: 'no_pending_key' } | { code: 'key_not_authorized_on_chain' }
-
-/** The swap scope a new key carries: only when the community pays people in their preferred stablecoin (`preferredTokenGrants`). */
-function preferredTokenPolicy(community: Community): { swapTokens?: Address[] } {
-  const tokens = community.preferredTokens ? swapTokensFor(community) : []
-  return tokens.length ? { swapTokens: tokens } : {}
-}

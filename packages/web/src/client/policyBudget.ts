@@ -4,7 +4,7 @@
 // sign at all when the server's copy differs (authorizationMismatch). One passkey prompt per action.
 import { $, busy, explainPasskeyError, fill, formatMicros, get, post, shortAddress, show, status } from './dom.js'
 import { treasuryFeeToken } from './fees.js'
-import { type KeyForm, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
+import { type KeyForm, STABLECOIN_DEX, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
 import { passkeys } from './passkey.js'
 import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, revokeAccessKey } from './tempo.js'
 
@@ -28,6 +28,8 @@ export type PolicyBudgetConfig = {
   feeTokenLabel: string | null
   about: string
   defaults: { limit: string; periodDays: number; validityDays: number; feeBudget: string }
+  /** The stablecoins the key may swap into and deliver while the community has preferred stablecoins on. */
+  swapTokens: { address: string; label: string }[]
 }
 
 type KeyView = {
@@ -46,6 +48,10 @@ type State = {
   session: { address: string } | null
   isTreasurer: boolean
   signInRequired: boolean
+  /** The community pays each person in the stablecoin they prefer: a new key carries the swap scope. */
+  preferredTokens: boolean
+  /** Preferred stablecoins are on but this policy's active key was authorised without the swap scope. */
+  keyNeedsSwapScope: boolean
 }
 
 const ERRORS: Record<string, string> = {
@@ -85,6 +91,7 @@ export function startPolicyBudget(config: PolicyBudgetConfig) {
     }
     state = s
     render(s)
+    showSigns()
   }
 
   function render(s: State) {
@@ -113,7 +120,10 @@ export function startPolicyBudget(config: PolicyBudgetConfig) {
     if (c.status === 'expired') return `This policy's key ${shortAddress(k.address)} has expired: it pays nothing until you give it a new budget.`
     if (c.status !== 'active') return `This policy's key ${shortAddress(k.address)} is not authorised on chain.`
     const resets = c.periodEnd ? `, resets ${date(c.periodEnd)}` : ''
-    return `This policy has its own key ${shortAddress(k.address)}: ${formatMicros(c.remaining)} of ${formatMicros(k.policy.limit)} ${t} left${resets}. Expires ${date(c.expiry)}. The chain enforces it.`
+    const swaps = s.keyNeedsSwapScope
+      ? " Preferred stablecoins are on, but this key cannot swap: until you replace it below, this policy's runs that pay someone in another stablecoin wait, and nothing is sent."
+      : ''
+    return `This policy has its own key ${shortAddress(k.address)}: ${formatMicros(c.remaining)} of ${formatMicros(k.policy.limit)} ${t} left${resets}. Expires ${date(c.expiry)}. The chain enforces it.${swaps}`
   }
 
   /** One line and one Revoke button per key of this policy live on chain. Built with the DOM, never HTML strings. */
@@ -166,20 +176,35 @@ export function startPolicyBudget(config: PolicyBudgetConfig) {
     validityDays: input('validityDays'),
     ...(config.feeMode === 'fee_budget' ? { feeBudget: input('feeBudget') } : {}),
   })
-  /** What this page signs comes from the form and the page config, never from the server. */
-  const keyPage = { payoutToken: config.payoutToken, feeToken: config.feeMode === 'fee_budget' ? config.feeToken : null }
+  /**
+   * What this page signs comes from the form and the page config, never from the server. While the
+   * community pays people in their preferred stablecoin, it adds the swap scope for the page config's
+   * swap tokens, as the setup page does for the bot key.
+   */
+  const keyPage = () => ({
+    payoutToken: config.payoutToken,
+    feeToken: config.feeMode === 'fee_budget' ? config.feeToken : null,
+    swapTokens: state?.preferredTokens ? config.swapTokens.map((t) => t.address) : null,
+  })
   const labels = {
-    label: (token: string) => (token.toLowerCase() === config.payoutToken.toLowerCase() ? config.tokenLabel : token.toLowerCase() === config.feeToken?.toLowerCase() ? (config.feeTokenLabel ?? token) : token),
+    label: (token: string) =>
+      token.toLowerCase() === config.payoutToken.toLowerCase()
+        ? config.tokenLabel
+        : token.toLowerCase() === config.feeToken?.toLowerCase()
+          ? (config.feeTokenLabel ?? token)
+          : token.toLowerCase() === STABLECOIN_DEX
+            ? "Tempo's stablecoin exchange"
+            : (config.swapTokens.find((t) => t.address.toLowerCase() === token.toLowerCase())?.label ?? token),
     date,
   }
   const nowSeconds = () => Math.floor(Date.now() / 1000)
   function showSigns() {
-    const built = buildAuthorization(form(), keyPage, nowSeconds())
+    const built = buildAuthorization(form(), keyPage(), nowSeconds())
     fill('key-signs', built.ok ? `You will sign, for this policy only: ${describeAuthorization(built.value, labels)}` : `Check the form: ${built.error}.`)
   }
 
   async function authorize() {
-    const built = buildAuthorization(form(), keyPage, nowSeconds())
+    const built = buildAuthorization(form(), keyPage(), nowSeconds())
     if (!built.ok) return status(`Nothing was signed: ${built.error}.`, 'bad')
     const mine = built.value
     const account = await treasuryAccount()

@@ -306,6 +306,20 @@ describe('a line paid in the payee\'s preferred stablecoin', () => {
     expect(explainError({ code: 'swap_limit_low', token: BETA, remaining: 1_000_000n, needed: 2_000_000n })).toContain('1 BetaUSD')
     expect(explainError({ code: 'swap_not_authorized', tokens: [BETA] })).toMatch(/new key/)
   })
+
+  it("on a policy's own key, the key's holds name that key and its treasury page, never the bot key; the exchange's own holds read as for any run", () => {
+    const notAuthorized = explainError({ code: 'swap_not_authorized', tokens: [BETA], key: 'policy' })
+    expect(notAuthorized).toBe(
+      "This policy's own key was authorised before preferred stablecoins were turned on, so it cannot swap into BetaUSD. Nothing was signed, and it never falls back to the bot key. A treasurer gives it a new budget on the treasury page (`/rolepay policy show`), then presses Retry.",
+    )
+    const low = explainError({ code: 'swap_limit_low', token: BETA, remaining: 1_000_000n, needed: 2_000_000n, key: 'policy' })
+    expect(low).toBe("This policy's own key has 1 BetaUSD of its BetaUSD limit left this period, and this run delivers 2 BetaUSD. Nothing was signed.")
+    for (const said of [notAuthorized, low]) expect(said).not.toMatch(/bot key (was|has)|setup page/)
+    expect(explainError({ code: 'swap_no_route', token: BETA, key: 'policy' })).toBe(explainError({ code: 'swap_no_route', token: BETA }))
+    expect(explainError({ code: 'swap_over_cap', token: BETA, quoted: 5_100_000n, max: 5_050_000n, key: 'policy' }, { token: TOKEN })).toBe(
+      explainError({ code: 'swap_over_cap', token: BETA, quoted: 5_100_000n, max: 5_050_000n }, { token: TOKEN }),
+    )
+  })
 })
 
 describe('receiptDm', () => {

@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import { BotKeySchema, type KeyCheckError } from '../community.js'
+import type { SwapCheckError } from '../delivery.js'
 import type { Micros } from '../money.js'
 import { type PolicyCaps, PolicyIdSchema } from './policy.js'
 import type { Schedule } from './schedule.js'
@@ -57,4 +58,6 @@ export function policyKeyDefaults(p: { caps: PolicyCaps; schedule: Schedule }): 
 
 /** A pre-flight that failed on a policy's own key: the same check, marked so it is never explained as the bot key's. */
 export type PolicyKeyCheckError = KeyCheckError & { key: 'policy' }
-export const policyKeyError = (e: KeyCheckError): PolicyKeyCheckError => ({ ...e, key: 'policy' })
+/** The swap pre-flight (preferred stablecoins) on a policy's own key: the same codes, marked the same way. */
+export type PolicySwapCheckError = SwapCheckError & { key: 'policy' }
+export const policyKeyError = <E extends KeyCheckError | SwapCheckError>(e: E): E & { key: 'policy' } => ({ ...e, key: 'policy' as const })

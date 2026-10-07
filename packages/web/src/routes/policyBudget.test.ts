@@ -1,5 +1,7 @@
+import { TESTNET_TOKENS } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { GUILD, OTHER_PASSKEY, PASSKEY, ROLE, TOKEN, TREASURER, approvedPolicy, pageConfig, registeredCommunity, setupLink, webHarness } from '../../test/harness.js'
+import { authorizationMismatch, buildAuthorization } from '../client/keychain.js'
 
 type H = ReturnType<typeof webHarness>
 type Json = any
@@ -143,6 +145,32 @@ describe("a policy's budget page (/setup/:token/policies/:policyId)", () => {
     expect(await json(await h.send(`${base}/state`, { passkey: PASSKEY }))).toMatchObject({ signs: 'retired', key: { status: 'revoked' }, keys: [] })
     expect(await h.rolepay.policyKeys.budget({ guildId: GUILD, policyId: policy.id })).toEqual({ key: 'policy', remaining: null })
     expect((await h.post(`${base}/key/revoked`, {}, PASSKEY)).status).toBe(400)
+  })
+
+  it("with preferred stablecoins on: the page knows the swap tokens, the state says when this policy's key cannot swap, and a new key carries the swap scope the page builds itself", async () => {
+    const { beta_usd: BETA, theta_usd: THETA } = TESTNET_TOKENS
+    const { h, token, base } = await world()
+    expect(await pageConfig(await h.send(base))).toMatchObject({ swapTokens: [{ address: BETA, label: 'BetaUSD' }, { address: THETA, label: 'ThetaUSD' }] })
+    expect(await json(await h.send(`${base}/state`, { passkey: PASSKEY }))).toMatchObject({ preferredTokens: false, keyNeedsSwapScope: false })
+    // The policy's key, authorised while the switch is off, has no swap scope.
+    const first = await json(await h.post(`${base}/key`, { limit: '30', periodDays: 7, expiresAt: inDays(h, 30) }, PASSKEY))
+    expect(first.authorization.scopes).toEqual([{ address: TOKEN, selector: 'transferWithMemo(address,uint256,bytes32)' }])
+    await signOnChain(h, first)
+    await h.post(`${base}/key/confirm`, { keyAddress: first.keyAddress }, PASSKEY)
+    await h.post(`/setup/${token}/preferred-tokens`, { enabled: true }, PASSKEY)
+    expect(await json(await h.send(`${base}/state`, { passkey: PASSKEY }))).toMatchObject({ preferredTokens: true, keyNeedsSwapScope: true })
+    // Its replacement does, exactly as the page builds it from the form with the switch on (nothing to refuse).
+    const expiresAt = inDays(h, 30)
+    const next = await json(await h.post(`${base}/key`, { limit: '30', periodDays: 7, expiresAt }, PASSKEY))
+    const form = { limit: '30', periodDays: '7', validityDays: '30' }
+    const mine = buildAuthorization(form, { payoutToken: TOKEN, feeToken: null, swapTokens: [BETA, THETA] }, inDays(h, 0))
+    if (!mine.ok) throw new Error(mine.error)
+    expect(authorizationMismatch(mine.value, next.authorization)).toBeNull()
+    const off = buildAuthorization(form, { payoutToken: TOKEN, feeToken: null, swapTokens: null }, inDays(h, 0))
+    expect(off.ok && authorizationMismatch(off.value, next.authorization)).toBe('different spending limits')
+    await signOnChain(h, next)
+    await h.post(`${base}/key/confirm`, { keyAddress: next.keyAddress }, PASSKEY)
+    expect(await json(await h.send(`${base}/state`, { passkey: PASSKEY }))).toMatchObject({ signs: 'own', key: { address: next.keyAddress }, preferredTokens: true, keyNeedsSwapScope: false })
   })
 
   it('an archived policy can still have its key revoked here, but not get a new one', async () => {

@@ -70,7 +70,7 @@ const keyView = (address: string, status = 'active') => ({
 })
 let state: Record<string, unknown>
 
-function page() {
+function page(config: { swapTokens?: { address: string; label: string }[] } = {}) {
   ids = Object.fromEntries(['signin', 'authorize', 'limit', 'periodDays', 'validityDays', 'budget-form', 'live-keys', 'status'].map((k) => [k, new El()]))
   ;(ids.limit as El).value = '30'
   ;(ids.periodDays as El).value = '7'
@@ -113,6 +113,7 @@ function page() {
     feeTokenLabel: null,
     about: 'Every day at 18:00 (UTC).',
     defaults: { limit: '30', periodDays: 7, validityDays: 30, feeBudget: '1' },
+    swapTokens: config.swapTokens ?? [],
   })
 }
 
@@ -131,6 +132,27 @@ const provisioned = (over: { limit?: string; period?: number; expiry?: number } 
         },
       }
     : { ok: true, key: {} }
+}
+
+const BETA = '0x20c0000000000000000000000000000000000002'
+const THETA = '0x20c0000000000000000000000000000000000003'
+const DEX = '0xdec0000000000000000000000000000000000000'
+const SWAP_TOKENS = [
+  { address: BETA, label: 'BetaUSD' },
+  { address: THETA, label: 'ThetaUSD' },
+]
+/** The authorisation core provisions for a policy key while preferred stablecoins are on (`preferredTokenGrants`). */
+const withSwaps = (path: string, sent: unknown) => {
+  const answer = provisioned()(path, sent) as { authorization?: { limits: unknown[]; scopes: unknown[] } }
+  if (!answer.authorization) return answer
+  const period = 604_800
+  answer.authorization.limits.push({ token: BETA, limit: '30000000', period }, { token: THETA, limit: '30000000', period })
+  answer.authorization.scopes.push(
+    { address: DEX, selector: 'swapExactAmountOut(address,address,uint128,uint128)' },
+    { address: BETA, selector: 'transferWithMemo(address,uint256,bytes32)' },
+    { address: THETA, selector: 'transferWithMemo(address,uint256,bytes32)' },
+  )
+  return answer
 }
 
 const submit = async () => {
@@ -206,6 +228,49 @@ describe("a policy's budget page (browser code)", () => {
     await vi.waitFor(() => expect(statusText()).toBe("This policy's key is revoked."))
     expect(h.revoked).toEqual([OLD_KEY])
     expect(h.requests.find((r) => r.path.endsWith('/key/revoked'))?.body).toEqual({ keyAddress: OLD_KEY })
+  })
+
+  it("with preferred stablecoins on, it builds and signs the bot key's swap scope for them, under this policy's limit, and says so before signing", async () => {
+    state = { ...state, preferredTokens: true, keyNeedsSwapScope: false }
+    h.answer = withSwaps
+    page({ swapTokens: SWAP_TOKENS })
+    await vi.waitFor(() => expect((fields['key-signs'] as El).textContent).toContain('swapExactAmountOut'))
+    expect((fields['key-signs'] as El).textContent).toContain("plus up to 30 BetaUSD and up to 30 ThetaUSD every 7 days to pay people who chose them. Only transferWithMemo on AlphaUSD")
+    expect((fields['key-signs'] as El).textContent).toContain("Only swapExactAmountOut on Tempo's stablecoin exchange")
+    await submit()
+    expect(h.authorized).toHaveLength(1)
+    expect(h.authorized[0]?.auth.limits).toEqual([
+      { token: ALPHA, limit: '30000000', period: 604_800 },
+      { token: BETA, limit: '30000000', period: 604_800 },
+      { token: THETA, limit: '30000000', period: 604_800 },
+    ])
+    expect(statusText()).toBe('Judges has its own budget now. Transaction: https://explore.testnet.tempo.xyz/tx/0xabc')
+  })
+
+  it('signs nothing when the swap scope in the server answer is not the one the switch calls for: added while off, missing while on', async () => {
+    for (const [preferredTokens, answer] of [
+      [false, withSwaps],
+      [true, provisioned()],
+    ] as const) {
+      state = { ...state, preferredTokens, keyNeedsSwapScope: false }
+      h.answer = answer
+      h.requests = []
+      page({ swapTokens: SWAP_TOKENS })
+      await flush()
+      await submit()
+      expect(h.authorized).toEqual([])
+      expect(statusText()).toMatch(/^Nothing was signed: the server's copy of the authorisation has different spending limits/)
+      expect(h.requests.map((r) => r.path)).not.toContain('/setup/tok/policies/pol_000001/key/confirm')
+    }
+  })
+
+  it("says when preferred stablecoins are on and this policy's key cannot swap yet", async () => {
+    state = { ...state, signs: 'own', key: keyView(OLD_KEY), keys: [keyView(OLD_KEY)], preferredTokens: true, keyNeedsSwapScope: true }
+    page({ swapTokens: SWAP_TOKENS })
+    await vi.waitFor(() => expect((fields['budget-status'] as El).textContent).toContain('20 of 30 AlphaUSD left'))
+    expect((fields['budget-status'] as El).textContent).toContain(
+      "Preferred stablecoins are on, but this key cannot swap: until you replace it below, this policy's runs that pay someone in another stablecoin wait, and nothing is sent.",
+    )
   })
 
   it('a revoked key says the policy is stopped and never falls back to the bot key', async () => {

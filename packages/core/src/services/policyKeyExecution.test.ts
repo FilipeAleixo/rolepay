@@ -3,6 +3,7 @@
 // with a second key on the same treasury. Real services from createRolepay on in-memory fakes.
 import { describe, expect, it } from 'vitest'
 import { ANA, GUILD, MONDAY, RUI, TOKEN, TREASURER, TREASURY, asTreasurer, policyWorld, usd } from '../../test/support/policyWorld.js'
+import { STABLECOIN_DEX_ADDRESS, SWAP_EXACT_AMOUNT_OUT_SIGNATURE, TESTNET_TOKENS, TRANSFER_WITH_MEMO_SIGNATURE } from '../constants/tempo.js'
 import type { Run } from '../domain/run.js'
 
 const WEEK = 7 * 86_400
@@ -218,6 +219,99 @@ describe('the scheduler and the preview hold a policy against its own key', () =
     expect(w.chain.landedTxCount).toBe(0)
     expect(w.chain.balance(TOKEN, '0x2222222222222222222222222222222222222222')).toBe(0n)
     void RUI
+  })
+})
+
+describe("a policy's own key and preferred stablecoins (each payee in the stablecoin they chose)", () => {
+  const BETA = TESTNET_TOKENS.beta_usd
+  const THETA = TESTNET_TOKENS.theta_usd
+
+  /**
+   * The help desk policy with preferred stablecoins on and Ana choosing BetaUSD. Its own key is
+   * authorised after the switch (with the swap scope), or with `keyFirst` before it (without). The
+   * bot key, authorised before the switch, cannot swap: a swap that pays must be the policy key's.
+   */
+  async function preferring(opts: { keyFirst?: boolean; limit?: number; autopilot?: boolean } = {}) {
+    const w = await policyWorld({ limit: 1000, ...(opts.autopilot ? { minVetoMinutes: 1 } : {}) })
+    const p = await w.active({}, opts.autopilot ? { vetoWindowMinutes: 60 } : null)
+    const first = opts.keyFirst ? await ownKey(w, p.id, opts.limit ?? 100) : null
+    expect(await w.rolepay.communities.setPreferredTokens({ guildId: GUILD, enabled: true })).toMatchObject({ ok: true, value: { keyNeedsSwapScope: true } })
+    const own = first ?? (await ownKey(w, p.id, opts.limit ?? 100))
+    expect(await w.rolepay.payees.setPreferredToken({ guildId: GUILD, discordUserId: ANA, token: BETA })).toMatchObject({ ok: true })
+    w.chain.setSwapRoute(TOKEN, BETA, { inPerOutBps: 9_954, liquidity: usd(100_000) })
+    return { w, p, own }
+  }
+
+  it('provisioned while preferred stablecoins are on, its authorisation carries exactly the bot key scope for them, under the policy limit', async () => {
+    const w = await policyWorld({ limit: 1000 })
+    const p = await w.active()
+    await w.rolepay.communities.setPreferredTokens({ guildId: GUILD, enabled: true })
+    const provisioned = await w.rolepay.policyKeys.provision({ guildId: GUILD, policyId: p.id, limit: usd(30), periodSeconds: WEEK, expiresAt: w.chain.time + 86_400 })
+    if (!provisioned.ok) throw new Error(JSON.stringify(provisioned.error))
+    expect(provisioned.value.authorization.scopes).toEqual([
+      { address: TOKEN, selector: TRANSFER_WITH_MEMO_SIGNATURE },
+      { address: STABLECOIN_DEX_ADDRESS, selector: SWAP_EXACT_AMOUNT_OUT_SIGNATURE },
+      { address: BETA, selector: TRANSFER_WITH_MEMO_SIGNATURE },
+      { address: THETA, selector: TRANSFER_WITH_MEMO_SIGNATURE },
+    ])
+    expect(provisioned.value.authorization.limits).toEqual([
+      { token: TOKEN, limit: usd(30), period: WEEK },
+      { token: BETA, limit: usd(30), period: WEEK },
+      { token: THETA, limit: usd(30), period: WEEK },
+    ])
+    const bot = await w.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd(30), periodSeconds: WEEK, expiresAt: w.chain.time + 86_400 })
+    expect(bot.ok && bot.value.authorization.scopes).toEqual(provisioned.value.authorization.scopes)
+  })
+
+  it('a policy run with a swapped line is paid by the policy key alone: the swap input off its payout limit, the delivery off its BetaUSD limit', async () => {
+    const { w, p, own } = await preferring()
+    const run = await proposedRun(w, p.id)
+    expect(run.lines.find((l) => l.payeeDiscordId === ANA)).toMatchObject({ amount: usd(12), swap: { token: BETA, maxIn: usd(12.12) } })
+    const quote = await w.chain.quoteSwap({ tokenIn: TOKEN, tokenOut: BETA, amountOut: usd(12) })
+    if (quote.kind !== 'quoted') throw new Error('no quote')
+    expect(await w.rolepay.payRuns.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'paid' } })
+    expect(w.chain.landedTxCount).toBe(1)
+    expect(w.chain.balance(BETA, '0x1111111111111111111111111111111111111111')).toBe(usd(12))
+    expect(await keyLeft(w, own)).toBe(usd(100 - 52) - quote.amountIn)
+    expect((await w.chain.keyState({ account: TREASURY, accessKey: own as `0x${string}`, token: BETA, feeToken: null })).remaining).toBe(usd(100 - 12))
+    expect(await keyLeft(w, await botKey(w))).toBe(usd(1000))
+  })
+
+  it("the pre-flight holds it against the policy key's remaining budget with the swap at its maximum input (64 to pay, up to 64.12, 64.1 left): refused as the policy key's, nothing signed", async () => {
+    const { w, p } = await preferring()
+    const run = await proposedRun(w, p.id)
+    expect(run.total).toBe(usd(64))
+    // The policy's key is replaced by one with 64.1 a week: enough for the total, not for the swap's maximum.
+    const smaller = await ownKey(w, p.id, 64.1)
+    const before = w.chain.broadcastCount
+    expect(await w.rolepay.payRuns.execute({ guildId: GUILD, runId: run.id })).toEqual({
+      ok: false,
+      error: { code: 'insufficient_limit', remaining: usd(64.1), needed: usd(64.12), periodEnd: expect.any(Number), key: 'policy' },
+    })
+    expect(w.chain.broadcastCount).toBe(before)
+    expect(await w.repos.runs.get(run.id)).toMatchObject({ status: 'approved', attempts: [] })
+    expect(await keyLeft(w, smaller)).toBe(usd(64.1))
+    expect(await keyLeft(w, await botKey(w))).toBe(usd(1000))
+  })
+
+  it('a policy key authorised before the switch cannot swap: the run is held with swap_not_authorized, as the bot key would be, never signed and never handed to the bot key', async () => {
+    const { w, p, own } = await preferring({ keyFirst: true })
+    const run = await proposedRun(w, p.id)
+    expect(await w.rolepay.payRuns.execute({ guildId: GUILD, runId: run.id })).toEqual({ ok: false, error: { code: 'swap_not_authorized', tokens: [BETA], key: 'policy' } })
+    expect(w.chain.broadcastCount).toBe(0)
+    expect(await w.repos.runs.get(run.id)).toMatchObject({ status: 'approved', attempts: [] })
+    expect(await keyLeft(w, own)).toBe(usd(100))
+    expect(await keyLeft(w, await botKey(w))).toBe(usd(1000))
+  })
+
+  it('autopilot: the same refusal at the release holds the policy run (swap_not_authorized); nothing is paid', async () => {
+    const { w, p } = await preferring({ keyFirst: true, autopilot: true })
+    const made = await w.rolepay.scheduler.runNow({ ...asTreasurer, policyId: p.id })
+    expect(made.ok && made.value.policyRun.status).toBe('scheduled')
+    w.travel(3601)
+    const held = await w.rolepay.scheduler.tick()
+    expect(held.events).toMatchObject([{ kind: 'held', policyRun: { status: 'held', hold: { code: 'swap_not_authorized' } } }])
+    expect(w.chain.broadcastCount).toBe(0)
   })
 })
 

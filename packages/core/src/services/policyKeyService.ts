@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { type Community, type KeyAuthorization, type KeyState, keyAuthorization } from '../domain/community.js'
+import { preferredTokenPolicy } from '../domain/delivery.js'
 import type { Hex } from '../domain/hex.js'
 import { type Address, DiscordIdSchema } from '../domain/ids.js'
 import { type Micros, formatAmount } from '../domain/money.js'
@@ -69,8 +70,9 @@ export class PolicyKeyService {
 
   /**
    * Mints a fresh key for the policy and returns the authorisation the treasury root must sign
-   * (the same restrictions as the bot key: `keyAuthorization`). It stays `pending_authorization`
-   * until the chain shows it; a key of this policy still waiting is superseded.
+   * (the same restrictions as the bot key: `keyAuthorization`, with the swap scope for preferred
+   * stablecoins while the community has them on). It stays `pending_authorization` until the chain
+   * shows it; a key of this policy still waiting is superseded.
    */
   async provision(
     input: ProvisionPolicyKeyInput,
@@ -103,6 +105,8 @@ export class PolicyKeyService {
         recipients: null,
         feeToken: community.feeMode === 'fee_budget' ? community.feeToken : null,
         feeBudget: community.feeMode === 'fee_budget' ? p.feeBudget : null,
+        // With preferred stablecoins on, the same swap scope as the bot key, under this policy's limit.
+        ...preferredTokenPolicy(community),
       },
       createdAt: now,
       authorizedAt: null,
@@ -273,8 +277,9 @@ export class PolicyKeyService {
 
 /**
  * What the treasury signs for a policy key: exactly the bot key's restrictions (`keyAuthorization`:
- * the expiry, the limit per period, the fee budget, `transferWithMemo` on the payout token), with
- * the policy's own numbers. The one place the policy key's call scope is decided.
+ * the expiry, the limit per period, the fee budget, `transferWithMemo` on the payout token, and,
+ * when the key was provisioned with preferred stablecoins on, `preferredTokenGrants`), with the
+ * policy's own numbers. The one place the policy key's call scope is decided.
  */
 export function policyKeyAuthorization(key: Pick<PolicyKey, 'policy'>): KeyAuthorization {
   return keyAuthorization(key.policy)

@@ -39,6 +39,16 @@ export function keyLacksSwapScope(c: Pick<Community, 'network' | 'payoutToken' |
   return swapTokensFor(c).some((t) => !granted.some((g) => same(g, t)))
 }
 
+/**
+ * The swap scope a new key carries (the bot key's and a policy's own key alike): only while the
+ * community pays people in their preferred stablecoin, and then exactly its swap tokens, which
+ * `keyAuthorization` turns into `preferredTokenGrants`. Nothing otherwise, so the key is as before.
+ */
+export function preferredTokenPolicy(c: Pick<Community, 'network' | 'payoutToken' | 'feeToken' | 'preferredTokens'>): { swapTokens?: Address[] } {
+  const tokens = c.preferredTokens ? swapTokensFor(c) : []
+  return tokens.length ? { swapTokens: tokens } : {}
+}
+
 /** What a payee may choose from: the payout token (the default, "no preference") and the swap tokens. */
 export function preferenceChoices(c: Pick<Community, 'network' | 'payoutToken' | 'feeToken'>): Address[] {
   return [c.payoutToken, ...swapTokensFor(c)]
@@ -96,7 +106,7 @@ export function payoutSpendCap(lines: readonly Line[]): Micros {
 export type SwapQuote = { kind: 'quoted'; amountIn: Micros } | { kind: 'no_route'; detail: string }
 
 export type SwapCheckError =
-  /** The bot key was authorised without these tokens: the chain would refuse the batch with CallNotAllowed. */
+  /** The signing key (the bot key, or a policy's own key) was authorised without these tokens: the chain would refuse the batch with CallNotAllowed. */
   | { code: 'swap_not_authorized'; tokens: Address[] }
   /** The DEX has no route to this token right now (no pair, or not enough liquidity). */
   | { code: 'swap_no_route'; token: Address }

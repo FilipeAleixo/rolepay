@@ -22,6 +22,15 @@ export type PolicyBudgetPageConfig = {
   /** The policy in words: its schedule and caps, so the treasurer sees what the budget is for. */
   about: string
   defaults: { limit: string; periodDays: number; validityDays: number; feeBudget: string }
+  /** The stablecoins a policy key may swap into and deliver while the community has preferred stablecoins on. */
+  swapTokens: { address: string; label: string }[]
+}
+
+/** While the community pays people in their preferred stablecoin, what the key may also do (the page then signs it). */
+function swapNote(c: PolicyBudgetPageConfig): string {
+  if (c.swapTokens.length === 0) return ''
+  const list = c.swapTokens.map((t) => esc(t.label)).join(' or ')
+  return ` If this server pays people in the stablecoin they prefer (the switch on the setup page), the key may also buy ${list} on Tempo's stablecoin exchange (an exact-output swap) and send them with transferWithMemo, each limited like ${esc(c.tokenLabel)}.`
 }
 
 /**
@@ -66,7 +75,7 @@ export function policyBudgetPage(c: PolicyBudgetPageConfig): string {
       <div><label for="validityDays">Key expires after (days)</label><input id="validityDays" inputmode="numeric" value="${c.defaults.validityDays}"></div>
       ${feeField}
     </div>
-    <p class="muted">The key can only call transferWithMemo on ${token}, up to this limit, until it expires. The chain enforces it, whatever Rolepay's code does. Fees are ${c.feeMode === 'sponsor' ? 'paid by the sponsor' : `paid from the fee budget in ${feeLabel}`}.</p>
+    <p class="muted">The key can only call transferWithMemo on ${token}, up to this limit, until it expires. The chain enforces it, whatever Rolepay's code does. Fees are ${c.feeMode === 'sponsor' ? 'paid by the sponsor' : `paid from the fee budget in ${feeLabel}`}.${swapNote(c)}</p>
     <p data-field="key-signs"></p>
     <p data-field="key-replaces" class="muted"></p>
     <p data-field="key-prompts"></p>

@@ -6,7 +6,7 @@ import { runToCsv } from '../domain/csv.js'
 import { type SwapCheckError, checkSwapQuotes, checkSwapScope, lineSwapFor, payoutSpendCap, swapLegs } from '../domain/delivery.js'
 import { type Address, DiscordIdSchema } from '../domain/ids.js'
 import { type PaidByWeek, firstWeekStart, paidByWeek } from '../domain/paidByWeek.js'
-import { type PolicyKeyCheckError, policyKeyContext, policyKeyError, policySigner } from '../domain/policy/policyKey.js'
+import { type PolicyKeyCheckError, type PolicySwapCheckError, policyKeyContext, policyKeyError, policySigner } from '../domain/policy/policyKey.js'
 import { type MatchResult, matchTransfers, runTokens } from '../domain/reconcile.js'
 import { type Result, err, ok } from '../domain/result.js'
 import { type Failure, type NewRunError, type Run, type RunEvent, type RunStatus, currentAttempt, newRun, transition } from '../domain/run.js'
@@ -93,6 +93,8 @@ export type ExecuteError =
   | { code: 'not_retryable' }
   | ChainShowsPayments
   | SwapCheckError
+  /** The swap pre-flight on a policy's own key (`key: 'policy'`): the same codes, never explained as the bot key's. */
+  | PolicySwapCheckError
 
 /** A failed run's memos are on chain: Rolepay records what the chain shows and sends nothing. */
 export type ChainShowsPayments = { code: 'chain_shows_payments'; detail: 'all_paid' | 'partial' | 'mismatch' }
@@ -285,7 +287,7 @@ export class PayRunService {
     const check = checkKeyForRun(state, { total: payoutSpendCap(run.lines), needsFeeBudget: community.feeMode === 'fee_budget' })
     if (!check.ok) return scope === 'policy' ? err(policyKeyError(check.error)) : check
     const swaps = await this.swapPreflight(run, community, key)
-    if (!swaps.ok) return swaps
+    if (!swaps.ok) return scope === 'policy' ? err(policyKeyError(swaps.error)) : swaps
     if (!key.sealedSecret) return err({ code: 'unseal_failed' })
     const secret = await this.deps.vault.open(key.sealedSecret, vaultContext)
     if (!secret.ok) return secret
@@ -445,10 +447,11 @@ export class PayRunService {
   }
 
   /**
-   * Before signing a run with lines in preferred stablecoins: the key must have been authorised to
-   * deliver them, the DEX must quote each swap within its maximum (read only), and the key's limit in
-   * each preferred token must cover what the run delivers in it. Any problem holds the run whole with
-   * the reason; nothing is signed. The chain enforces each swap's maximum anyway (the batch reverts).
+   * Before signing a run with lines in preferred stablecoins: the key that signs this attempt (the bot
+   * key, or the policy's own key) must have been authorised to deliver them, the DEX must quote each
+   * swap within its maximum (read only), and that key's limit in each preferred token must cover what
+   * the run delivers in it. Any problem holds the run whole with the reason; nothing is signed. The
+   * chain enforces each swap's maximum anyway (the batch reverts).
    */
   private async swapPreflight(run: Run, community: Community, key: BotKey): Promise<Result<void, SwapCheckError>> {
     const legs = swapLegs(run.lines)
