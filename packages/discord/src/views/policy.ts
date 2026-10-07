@@ -9,7 +9,7 @@ import {
   type PolicySummary,
   describeRule,
   describeSchedule,
-  formatAmount,
+  displayAmount,
 } from '@rolepay/core'
 import { type ActionRow, ButtonStyle, ComponentType, type Embed, type Message, MessageFlags } from '../api.js'
 import { encodePolicyButton } from '../components/customId.js'
@@ -202,7 +202,7 @@ export function budgetLine(b: PolicyKeyStatus, token: string): string {
   const left = s.remaining > limit ? limit : s.remaining
   const periodic = k.policy.periodSeconds !== null
   const timing = periodic && s.periodEnd ? ` Resets <t:${s.periodEnd}:R>, expires <t:${s.expiry}:R>.` : ` Expires <t:${s.expiry}:R>.`
-  return `Own budget: ${formatAmount(left)} of ${money(limit, token)} left ${periodic ? 'this period' : 'in total'} (chain-enforced).${timing}`
+  return `Own budget: ${displayAmount(left)} of ${money(limit, token)} left ${periodic ? 'this period' : 'in total'} (chain-enforced).${timing}`
 }
 
 /**
