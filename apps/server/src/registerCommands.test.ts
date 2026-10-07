@@ -29,15 +29,15 @@ describe('registerCommands', () => {
     expect(calls[0]?.url).toMatch(/\/applications\/500000000000000001\/commands$/)
   })
 
-  it('registers the dev shortcut options only with PAYRUN_DEV_SHORTCUTS=true on testnet', async () => {
+  it('registers the dev shortcut options only with ROLEPAY_DEV_SHORTCUTS=true on testnet', async () => {
     const off = fakeFetch()
     await registerCommands(env, off.fetch)
     expect(JSON.stringify(JSON.parse(off.calls[0]?.body ?? ''))).not.toMatch(/new_key|key_limit|"treasury"/)
     const on = fakeFetch()
-    await registerCommands({ ...env, PAYRUN_DEV_SHORTCUTS: 'true' }, on.fetch)
+    await registerCommands({ ...env, ROLEPAY_DEV_SHORTCUTS: 'true' }, on.fetch)
     expect(JSON.parse(on.calls[0]?.body ?? '')).toEqual(commandDefinitions({ devShortcuts: true }))
     const mainnet = fakeFetch()
-    const r = await registerCommands({ ...env, PAYRUN_DEV_SHORTCUTS: 'true', PAYRUN_NETWORK: 'mainnet' }, mainnet.fetch)
+    const r = await registerCommands({ ...env, ROLEPAY_DEV_SHORTCUTS: 'true', ROLEPAY_NETWORK: 'mainnet' }, mainnet.fetch)
     expect(r).toMatchObject({ ok: false, error: { code: 'invalid_env' } })
     expect(mainnet.calls).toHaveLength(0)
   })

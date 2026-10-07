@@ -218,7 +218,7 @@ describe('/payrun setup', () => {
 describe('/payrun setup dev shortcuts (treasury, new_key, key_limit)', () => {
   const NOT_HERE = /dev shortcuts.*off/i
 
-  it('are refused unless PAYRUN_DEV_SHORTCUTS is on, and then change nothing', async () => {
+  it('are refused unless ROLEPAY_DEV_SHORTCUTS is on, and then change nothing', async () => {
     const a = await appHarness({ config: { devShortcuts: false } })
     for (const values of [{ treasury: TREASURY, approver_role: TREASURER_ROLE }, { new_key: true }, { key_limit: '500' }]) {
       const { d } = await setup(a, values, treasurerAdmin)

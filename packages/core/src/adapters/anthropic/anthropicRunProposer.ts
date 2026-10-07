@@ -106,7 +106,7 @@ function apiFailure(e: unknown): ProposerFailure {
   const failure = (reason: ProposerFailure['reason'], detail: string): ProposerFailure => ({ code: 'could_not_propose', reason, detail, usage: null })
   if (e instanceof Anthropic.AuthenticationError || e instanceof Anthropic.PermissionDeniedError) return failure('auth', `HTTP ${e.status}: check ANTHROPIC_API_KEY`)
   if (e instanceof Anthropic.BadRequestError || e instanceof Anthropic.NotFoundError || e instanceof Anthropic.UnprocessableEntityError) {
-    return failure('rejected', `HTTP ${e.status}: the request was refused (check PAYRUN_AI_MODEL)`)
+    return failure('rejected', `HTTP ${e.status}: the request was refused (check ROLEPAY_AI_MODEL)`)
   }
   if (e instanceof Anthropic.APIConnectionError) return failure('unavailable', e instanceof Anthropic.APIConnectionTimeoutError ? 'timeout' : 'connection error')
   if (e instanceof Anthropic.APIError) return failure('unavailable', `HTTP ${e.status ?? 'unknown'}`)

@@ -19,9 +19,9 @@ export const NET = NETWORKS.moderato
 export async function startServer(port: number) {
   const dir = mkdtempSync(join(tmpdir(), 'payrun-e2e-'))
   const config = parseServerConfig({
-    PAYRUN_NETWORK: 'moderato',
-    PAYRUN_MASTER_KEY: generatePrivateKey().slice(2),
-    PAYRUN_DB_PATH: join(dir, 'payrun.db'),
+    ROLEPAY_NETWORK: 'moderato',
+    ROLEPAY_MASTER_KEY: generatePrivateKey().slice(2),
+    ROLEPAY_DB_PATH: join(dir, 'payrun.db'),
     DISCORD_APP_ID: '500000000000000001',
     DISCORD_PUBLIC_KEY: 'cd'.repeat(32),
     DISCORD_BOT_TOKEN: 'fake-bot-token',

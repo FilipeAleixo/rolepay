@@ -182,7 +182,7 @@ describe('AnthropicRunProposer: the answer', () => {
     expect(await proposer.fromMessages(MESSAGES)).toMatchObject({ ok: false, error: { code: 'could_not_propose', reason: 'unavailable', detail: 'connection error' } })
   })
 
-  it('PAYRUN_AI_MODEL picks another model', async () => {
+  it('ROLEPAY_AI_MODEL picks another model', async () => {
     const sent: string[] = []
     const proposer = new AnthropicRunProposer({
       apiKey: 'sk-ant-test',

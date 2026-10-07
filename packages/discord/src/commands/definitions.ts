@@ -7,7 +7,7 @@ const GUILD_ONLY = { contexts: [0], integration_types: [0] }
 
 const runOption = (description: string) => ({ type: OptionType.String, name: 'run', description, autocomplete: true })
 
-/** Testnet only (Moderato with PAYRUN_DEV_SHORTCUTS=true); never registered anywhere else. */
+/** Testnet only (Moderato with ROLEPAY_DEV_SHORTCUTS=true); never registered anywhere else. */
 const DEV_SETUP_OPTIONS = [
   { type: OptionType.String, name: 'treasury', description: 'Dev shortcut: an existing treasury address instead of the passkey page' },
   { type: OptionType.String, name: 'key_limit', description: 'Dev shortcut: spend limit for a new key issued here (default 100)' },

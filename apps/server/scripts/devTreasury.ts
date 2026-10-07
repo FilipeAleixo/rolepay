@@ -1,5 +1,5 @@
-// pnpm dev:treasury (TESTNET ONLY, with PAYRUN_DEV_SHORTCUTS=true): prints the dev treasury address and tops it up from
-// the Moderato faucet. The treasury key is PAYRUN_TEST_ROOT_PRIVATE_KEY in the gitignored
+// pnpm dev:treasury (TESTNET ONLY, with ROLEPAY_DEV_SHORTCUTS=true): prints the dev treasury address and tops it up from
+// the Moderato faucet. The treasury key is ROLEPAY_TEST_ROOT_PRIVATE_KEY in the gitignored
 // .env (the chain test generates it); if it is missing, a throwaway one is generated there.
 // The key itself is never printed.
 import { randomBytes } from 'node:crypto'
@@ -14,13 +14,13 @@ const env = loadEnvironment()
 const config = parseConfig(env)
 requireDevShortcuts(config, 'dev:treasury')
 
-let key = env.PAYRUN_TEST_ROOT_PRIVATE_KEY
+let key = env.ROLEPAY_TEST_ROOT_PRIVATE_KEY
 if (!key || !/^0x[0-9a-fA-F]{64}$/.test(key)) {
   key = `0x${randomBytes(32).toString('hex')}`
   const path = join(REPO_ROOT, '.env')
   const current = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  appendFileSync(path, `${current === '' || current.endsWith('\n') ? '' : '\n'}PAYRUN_TEST_ROOT_PRIVATE_KEY=${key}\n`, { mode: 0o600 })
-  console.log('Generated a throwaway testnet treasury key into .env (PAYRUN_TEST_ROOT_PRIVATE_KEY).')
+  appendFileSync(path, `${current === '' || current.endsWith('\n') ? '' : '\n'}ROLEPAY_TEST_ROOT_PRIVATE_KEY=${key}\n`, { mode: 0o600 })
+  console.log('Generated a throwaway testnet treasury key into .env (ROLEPAY_TEST_ROOT_PRIVATE_KEY).')
 }
 
 const treasury = rootSignerFromPrivateKey(key as `0x${string}`).address

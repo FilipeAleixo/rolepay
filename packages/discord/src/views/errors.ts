@@ -114,7 +114,7 @@ export function explainError(error: CodedError, ctx: { token?: string } = {}): s
     case 'fee_budget_exhausted':
       return 'The bot key has used up its fee budget.'
     case 'unseal_failed':
-      return 'The bot key could not be unsealed on this server. Check PAYRUN_MASTER_KEY.'
+      return 'The bot key could not be unsealed on this server. Check ROLEPAY_MASTER_KEY.'
     case 'already_registered':
       return 'This server is already registered.'
     default:

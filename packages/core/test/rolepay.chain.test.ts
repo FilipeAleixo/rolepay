@@ -19,7 +19,7 @@ import {
   openSqliteDatabase,
   rootSignerFromPrivateKey,
 } from '../src/adapters/index.js'
-import { NETWORKS, type Rolepay, type Run, TESTNET_TOKENS, createRolepay, parseAmount } from '../src/index.js'
+import { NETWORKS, type Rolepay, type Run, TESTNET_TOKENS, createRolepay, parseAmount, withDeprecatedEnvNames } from '../src/index.js'
 import type { RunRepository } from '../src/ports/repositories.js'
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../..')
@@ -37,9 +37,9 @@ const usd = (s: string) => {
 const snowflake = () => `1${Date.now()}${String(Math.floor(Math.random() * 1e4)).padStart(4, '0')}`.slice(0, 19)
 const fresh = () => privateKeyToAddress(generatePrivateKey()).toLowerCase() as `0x${string}`
 
-/** Reads a throwaway secret from .env, generating and persisting it on first use. Never printed. */
+/** Reads a throwaway secret from .env (or its deprecated PAYRUN_* name), generating and persisting it on first use. Never printed. */
 function envSecret(name: string, make: () => string, valid: RegExp): string {
-  const existing = process.env[name]
+  const existing = withDeprecatedEnvNames(process.env)[name]
   if (existing && valid.test(existing)) return existing
   const value = make()
   const current = existsSync(ENV_PATH) ? readFileSync(ENV_PATH, 'utf8') : ''
@@ -77,8 +77,8 @@ describe('pay run end to end on Moderato (service level)', () => {
   const guildId = snowflake()
   const mods = ['200000000000000101', '200000000000000102', '200000000000000103']
   const addresses = mods.map(() => fresh())
-  const root = rootSignerFromPrivateKey(envSecret('PAYRUN_TEST_ROOT_PRIVATE_KEY', generatePrivateKey, /^0x[0-9a-fA-F]{64}$/) as `0x${string}`)
-  const masterKey = envSecret('PAYRUN_MASTER_KEY', () => generatePrivateKey().slice(2), /^[0-9a-fA-F]{64}$/)
+  const root = rootSignerFromPrivateKey(envSecret('ROLEPAY_TEST_ROOT_PRIVATE_KEY', generatePrivateKey, /^0x[0-9a-fA-F]{64}$/) as `0x${string}`)
+  const masterKey = envSecret('ROLEPAY_MASTER_KEY', () => generatePrivateKey().slice(2), /^[0-9a-fA-F]{64}$/)
   const chain = new TempoPayoutChain({ network: 'moderato', rpcUrl: NET.rpcUrl, sponsorUrl: NET.sponsorUrl })
   const testnet = createTestnetTools({ rpcUrl: NET.rpcUrl })
   let db: Awaited<ReturnType<typeof openSqliteDatabase>>

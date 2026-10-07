@@ -1,4 +1,4 @@
-// Opt-in, real Anthropic API: PAYRUN_AI_LIVE=true and ANTHROPIC_API_KEY (environment or repo-root
+// Opt-in, real Anthropic API: ROLEPAY_AI_LIVE=true and ANTHROPIC_API_KEY (environment or repo-root
 // .env). Three calls (a few cents): the demo from a message with an injection attempt beside it,
 // the criteria demo, and an instruction the filters cannot express. Run: `pnpm test:ai-live`.
 import { join } from 'node:path'
@@ -9,7 +9,7 @@ import { FakeActivityReader } from '../src/adapters/memory/fakeActivity.js'
 import { FakePayoutChain } from '../src/adapters/memory/fakeChain.js'
 import { createMemoryRepositories } from '../src/adapters/memory/repositories.js'
 import { ManualClock, PlainKeyVault, SequentialIds } from '../src/adapters/memory/support.js'
-import { parseConfig } from '../src/config/env.js'
+import { parseConfig, withDeprecatedEnvNames } from '../src/config/env.js'
 import type { SourceMessage } from '../src/domain/proposal/sources.js'
 import type { ProposalLogEntry } from '../src/ports/proposalLog.js'
 import { CommunityService } from '../src/services/communityService.js'
@@ -17,7 +17,8 @@ import { PayRunService } from '../src/services/payRunService.js'
 import { ProposalService } from '../src/services/proposalService.js'
 
 loadEnv({ path: join(import.meta.dirname, '../../../.env'), quiet: true })
-const LIVE = process.env.PAYRUN_AI_LIVE === 'true' && Boolean(process.env.ANTHROPIC_API_KEY?.trim())
+const ENV = withDeprecatedEnvNames(process.env) // the deprecated PAYRUN_* names still count
+const LIVE = ENV.ROLEPAY_AI_LIVE === 'true' && Boolean(ENV.ANTHROPIC_API_KEY?.trim())
 
 const GUILD = '1094309218049937418'
 const BOUNTIES = '700000000000000001'
@@ -44,7 +45,7 @@ const message = (id: string, authorId: string, content: string, at: Date, mentio
 })
 
 async function live() {
-  const env = parseConfig({ PAYRUN_MASTER_KEY: 'a'.repeat(64), ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY, PAYRUN_AI_MODEL: process.env.PAYRUN_AI_MODEL })
+  const env = parseConfig({ ROLEPAY_MASTER_KEY: 'a'.repeat(64), ANTHROPIC_API_KEY: ENV.ANTHROPIC_API_KEY, ROLEPAY_AI_MODEL: ENV.ROLEPAY_AI_MODEL })
   const clock = new ManualClock(T0)
   const chain = new FakePayoutChain({ startTime: Math.floor(T0.getTime() / 1000) })
   const repos = createMemoryRepositories({ clock })

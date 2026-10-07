@@ -42,7 +42,7 @@ const DEV_SHORTCUTS_OFF =
  * role gets a short-lived link to the treasury page, where the treasurer's passkey creates
  * the community account (the first time), authorises the bot key or revokes it. The command
  * itself sets the approver role, the fee mode and the server name. Dev path (Moderato with
- * PAYRUN_DEV_SHORTCUTS=true only, and only for a member who holds the approver role): the
+ * ROLEPAY_DEV_SHORTCUTS=true only, and only for a member who holds the approver role): the
  * `treasury` option registers an existing account and `new_key` issues a key here, for
  * `pnpm dev:authorize-key`. Deferred, because the key status is read from the chain.
  */

@@ -29,9 +29,9 @@ type SharedState = { rolepay: Rolepay; chain: FakePayoutChain; clock: ManualCloc
 export async function testServer(opts: { from?: SharedState; sleep?: (ms: number) => Promise<void>; devShortcuts?: boolean } = {}) {
   const signer = await createTestSigner()
   const config = parseServerConfig({
-    PAYRUN_MASTER_KEY: randomBytes(32).toString('hex'),
+    ROLEPAY_MASTER_KEY: randomBytes(32).toString('hex'),
     // These tests run on testnet with the dev path on, unless a test asks for the production default.
-    PAYRUN_DEV_SHORTCUTS: String(opts.devShortcuts ?? true),
+    ROLEPAY_DEV_SHORTCUTS: String(opts.devShortcuts ?? true),
     DISCORD_APP_ID: '500000000000000001',
     DISCORD_PUBLIC_KEY: signer.publicKeyHex,
     DISCORD_BOT_TOKEN: 'test-bot-token',

@@ -151,7 +151,7 @@ describe('pay run end to end through the HTTP endpoint', () => {
     expect(after.rest.dms).toHaveLength(1)
   })
 
-  it('with the production default (no PAYRUN_DEV_SHORTCUTS), Discord cannot register a treasury or issue a key', async () => {
+  it('with the production default (no ROLEPAY_DEV_SHORTCUTS), Discord cannot register a treasury or issue a key', async () => {
     const s = await testServer({ devShortcuts: false })
     const res = await s.interact(slashCommand(SCOPE, 'payrun', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE }, TREASURER_ADMIN, 'tok-setup'))
     expect(text(await res.json())).toMatch(/dev shortcuts.*off/)

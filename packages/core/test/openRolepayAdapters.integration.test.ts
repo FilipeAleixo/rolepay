@@ -11,7 +11,7 @@ afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
 describe('openRolepayAdapters', () => {
   it('opens production adapters from config and composes working services', async () => {
-    const config = parseConfig({ PAYRUN_MASTER_KEY: 'c'.repeat(64), PAYRUN_DB_PATH: join(dir, 'p.db') })
+    const config = parseConfig({ ROLEPAY_MASTER_KEY: 'c'.repeat(64), ROLEPAY_DB_PATH: join(dir, 'p.db') })
     const { deps, kv, close } = await openRolepayAdapters(config)
     expect(deps.chain).toBeInstanceOf(TempoPayoutChain)
     expect(deps.network).toBe('moderato')
@@ -33,7 +33,7 @@ describe('openRolepayAdapters', () => {
   })
 
   it('with ANTHROPIC_API_KEY, proposals use Anthropic with the configured model (no request is made here)', async () => {
-    const config = parseConfig({ PAYRUN_MASTER_KEY: 'c'.repeat(64), PAYRUN_DB_PATH: join(dir, 'ai.db'), ANTHROPIC_API_KEY: 'sk-ant-test', PAYRUN_AI_MODEL: 'claude-opus-5-5' })
+    const config = parseConfig({ ROLEPAY_MASTER_KEY: 'c'.repeat(64), ROLEPAY_DB_PATH: join(dir, 'ai.db'), ANTHROPIC_API_KEY: 'sk-ant-test', ROLEPAY_AI_MODEL: 'claude-opus-5-5' })
     const { deps, close } = await openRolepayAdapters(config)
     expect(deps.proposer).toBeInstanceOf(AnthropicRunProposer)
     expect(deps.proposer?.model).toBe('claude-opus-5-5')

@@ -8,7 +8,7 @@ const VERSION = 'v1'
  * Local KeyVault: AES-256-GCM with the vault context as additional authenticated
  * data, so a sealed secret only opens for the community and key it was sealed for.
  * Encryption and fingerprint keys are derived separately from one 32-byte master
- * key (PAYRUN_MASTER_KEY). Sealed form: v1.<iv>.<ciphertext>.<tag> (base64url).
+ * key (ROLEPAY_MASTER_KEY). Sealed form: v1.<iv>.<ciphertext>.<tag> (base64url).
  */
 export class AesGcmKeyVault implements KeyVault {
   private readonly encKey: Buffer

@@ -3,7 +3,7 @@
 // Discord REST faked. Run with `pnpm test:chain`. Refuses any chain but Moderato.
 //
 // Reuses the throwaway keys core's chain test keeps in the gitignored .env
-// (PAYRUN_TEST_ROOT_PRIVATE_KEY, PAYRUN_MASTER_KEY); never prints them.
+// (ROLEPAY_TEST_ROOT_PRIVATE_KEY, ROLEPAY_MASTER_KEY); never prints them.
 import { randomBytes } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -30,7 +30,7 @@ const text = (v: unknown) => JSON.stringify(v ?? null)
 
 describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)', () => {
   const env = loadEnvironment()
-  const rootKey = env.PAYRUN_TEST_ROOT_PRIVATE_KEY
+  const rootKey = env.ROLEPAY_TEST_ROOT_PRIVATE_KEY
   const dbDir = mkdtempSync(join(tmpdir(), 'payrun-server-chain-'))
   const guildId = snowflake()
   const scope = { guildId, channelId: '700000000000000001' }
@@ -49,7 +49,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
   const sessions = new FakePasskeySessions()
 
   beforeAll(async () => {
-    if (!rootKey || !env.PAYRUN_MASTER_KEY) throw new Error('Run `pnpm --filter @rolepay/core test:chain` (or `pnpm dev:treasury`) first: it creates the throwaway testnet keys in .env')
+    if (!rootKey || !env.ROLEPAY_MASTER_KEY) throw new Error('Run `pnpm --filter @rolepay/core test:chain` (or `pnpm dev:treasury`) first: it creates the throwaway testnet keys in .env')
     expect(await testnet.chainId()).toBe(42431) // testnet only, never mainnet
     const root = rootSignerFromPrivateKey(rootKey as `0x${string}`)
     await testnet.ensureFunded(root.address, TOKEN, usd('100'))
@@ -57,14 +57,14 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
     const signer = await createTestSigner()
     const config = parseServerConfig({
       ...env,
-      PAYRUN_NETWORK: 'moderato',
-      PAYRUN_DB_PATH: join(dbDir, 'payrun.db'),
+      ROLEPAY_NETWORK: 'moderato',
+      ROLEPAY_DB_PATH: join(dbDir, 'payrun.db'),
       DISCORD_APP_ID: '500000000000000001',
       DISCORD_PUBLIC_KEY: signer.publicKeyHex,
       DISCORD_BOT_TOKEN: 'fake-bot-token',
       PUBLIC_URL: 'https://payrun.test',
-      PAYRUN_BOT_KEY_LIMIT: '10',
-      PAYRUN_DEV_SHORTCUTS: 'true',
+      ROLEPAY_BOT_KEY_LIMIT: '10',
+      ROLEPAY_DEV_SHORTCUTS: 'true',
     })
     const opened = await openRolepayAdapters(config.core)
     close = opened.close

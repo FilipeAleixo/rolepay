@@ -1,7 +1,7 @@
 // The composition root: config from env, production adapters, core services, the
 // Discord adapter, an HTTP server. The only place (with scripts/) that opens adapters.
 import { serve } from '@hono/node-server'
-import { createRolepay } from '@rolepay/core'
+import { createRolepay, deprecatedEnvNames } from '@rolepay/core'
 import { openRolepayAdapters } from '@rolepay/core/adapters'
 import { FetchDiscordRest, RestActivityReader } from '@rolepay/discord'
 import { bundledAssets, createPasskeys } from '@rolepay/web'
@@ -12,7 +12,11 @@ import { loadEnvironment } from './env.js'
 const log = (event: string, fields: Record<string, unknown> = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ...fields }))
 
 async function main() {
-  const config = parseServerConfig(loadEnvironment())
+  const env = loadEnvironment()
+  // Names only, never values: the PAYRUN_* names from before the rename still work but are deprecated.
+  const deprecated = deprecatedEnvNames(env)
+  if (deprecated.length > 0) log('deprecated_env', { names: deprecated, hint: 'rename PAYRUN_* to ROLEPAY_* in .env' })
+  const config = parseServerConfig(env)
   const { deps, kv, close } = await openRolepayAdapters(config.core)
   const rest = new FetchDiscordRest({ botToken: config.discord.botToken })
   // AI proposals read Discord through the bot's REST client; one log line per proposal (counts and cost, never text).
