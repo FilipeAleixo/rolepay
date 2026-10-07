@@ -65,7 +65,7 @@ These rules are enforced by `packages/core/test/architecture.test.ts`, not by me
 
 **Results, not throws.** Every expected failure is a value: `{ ok: false, error: { code: 'snake_case', ... } }`. Services throw only for the unexpected (a database or RPC outage), which the caller treats as "try again".
 
-**No orchestrator layer.** Larger codebases put multi-service flows in an orchestrator layer. Rolepay has four services and two real flows, so services read the repositories they need directly (a pay run reads communities, keys and payees) but each entity is written only by its owning service. `ProposalService` is the one service that calls others: it reads the key's remaining budget through `CommunityService` and turns a proposal into a run through `PayRunService.create` and `submit`, so runs are still written only by their own service. `PolicyService` and `SchedulerService` follow the same rule: they read what they need, make runs only through `PayRunService.create`, `submit`, `approve` and `execute`, read the key budget through `CommunityService`, and share one criteria runner (`services/criteriaRunner.ts`) with criteria mode, so a policy is evaluated by exactly the code a proposal is. Add an orchestrator layer the day a flow genuinely spans more services than that.
+**No orchestrator layer.** Larger codebases put multi-service flows in an orchestrator layer. Rolepay has four services and two real flows, so services read the repositories they need directly (a pay run reads communities, keys and payees; the weekly totals read which policy run made each run) but each entity is written only by its owning service. `ProposalService` is the one service that calls others: it reads the key's remaining budget through `CommunityService` and turns a proposal into a run through `PayRunService.create` and `submit`, so runs are still written only by their own service. `PolicyService` and `SchedulerService` follow the same rule: they read what they need, make runs only through `PayRunService.create`, `submit`, `approve` and `execute`, read the key budget through `CommunityService`, and share one criteria runner (`services/criteriaRunner.ts`) with criteria mode, so a policy is evaluated by exactly the code a proposal is. Add an orchestrator layer the day a flow genuinely spans more services than that.
 
 ## Domain model
 
@@ -274,6 +274,7 @@ All through `createRolepay(...)`; every method takes `guildId` and never returns
 | `audit.list({ guildId, types?, actor?, policyId?, runId?, since?, until?, before?, limit? })` | `{ events, next }` | newest first; `next` is the `before` cursor for the next page (limit 1 to 500) |
 | `audit.exportCsv({ guildId, ...filters })` | `{ filename, csv, count }` | oldest first, formulas defused |
 | `payRuns.list`, `payRuns.get`, `payRuns.exportCsv`, `communities.keyStatus`, `payees.list` | as before | runs, payees, treasury and key for the other pages |
+| `payRuns.paidByWeek({ guildId, weeks? })` | `{ token, weeks, since, total, policy, manual, runs }` | the last `weeks` (12 by default, at most 52) UTC weeks from Monday 00:00, the current one last and `partial`; `paid` runs only, by when they were paid, in the payout token (bigint micro-units); a run is a policy's when a PolicyRun links it (`RunRepository.listPaid`, then `PolicyRunRepository.getByRunId`), otherwise made by hand; an empty week stays empty |
 
 Error codes: `policy_not_found`, `not_permitted`, `community_not_found`, `policy_not_draft`, `version_mismatch`, `policy_blocked`, `creator_cannot_approve`, `invalid_veto_window`, `policy_not_approved`, `policy_archived`, `policy_not_active`, `policy_not_paused`, `concurrent_update`, `policy_run_not_found`, `not_scheduled`, `too_late`, `invalid_input`, and from compiling `ai_not_configured`, `ai_disabled`, `could_not_propose`, `criteria_unclear`, `criteria_invalid`, `cannot_read`. Hold codes on a PolicyRun: `over_budget`, `over_policy_cap`, `too_many_lines`, `no_active_key`, the key checks (`key_revoked`, `insufficient_limit`, ...), `policy_not_active`, `autopilot_off`, `policy_changed`, `approver_changed`, `creator_cannot_approve`, `cannot_read`.
 
@@ -300,7 +301,7 @@ const activity = new RestActivityReader(rest)                // Discord as AI pr
 const rolepay = createRolepay({ ...deps, activity, proposalLog, minVetoMinutes: config.policies.minVetoMinutes })
 const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
 const assets = prebuiltAssets(join(import.meta.dirname, 'rolepay.js')) ?? bundledAssets()   // dist/rolepay.js when built
-const dashboard = { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay), aiUsage: aiUsagePortFromCore(rolepay) }
+const dashboard = { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay), aiUsage: aiUsagePortFromCore(rolepay), payouts: payoutsPortFromCore(rolepay) }
 const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets, dashboard }
 const server = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web })
 ```
@@ -359,6 +360,8 @@ Layering is enforced by `packages/web/test/architecture.test.ts`: server code im
 
 Per community: Overview, Runs, Payees, Policies and the Audit log, read only for members, with actions for the approver (Treasurer) role. The AI spend is read only for everyone: the Overview's "AI this month" card (the estimated total, the calls, the average cost of a drafted proposal), the Audit log's "AI proposals" (the latest 50 that reached the model: who asked, the mode, the model, the latency, the cost, the outcome and the run it became) and, on a policy's version history, what compiling each version cost. It lives in `packages/web` because it shares the origin, the security headers (CSP, HSTS, no framing), the rate limits and the same-origin check with the claim and setup pages. It has no script at all (forms post and redirect back, `<details>` expands), so the CSP only adds its stylesheet's hash, and there is no bundle to grow.
 
+**At a glance.** The Overview leads with one panel: the bot key's budget this period as a bar, the spent part against the limit, the limit a hard end line (the trust model in one picture: the chain refuses any payment past it), with what is spent and left in the payout token, when the period resets and when the key expires; a revoked, expired, unauthorised or missing key is said in words and no bar is drawn. Beside it (below it on a phone), paid per week for the last 12 UTC weeks (Monday start, the current week labelled "so far"), a policy's runs apart from runs made by hand, with the 12-week total, a legend and "Show the numbers" (a table with every value). Both are inline SVG from pure builders (`views/charts.ts`): no script, no chart library, no style attribute (classes in `DASHBOARD_STYLE`), each an image whose label summarises it, with native tooltips per week. Sizes are percentages of the width rather than a scaled viewBox, and there is a wide and a narrow drawing of the weekly chart, one shown at a time by a media query, so text keeps its size on a phone. The budget reads the same key state as the Bot key card (no extra chain call); the weeks come through `PayoutsPort`.
+
 ```
 index.ts         dashboardRoutes: the routes below and the generic error page
 kit.ts           what routes share: DashboardDeps, the session store, cookies, the member cache, html and redirect, safeNext
@@ -370,7 +373,7 @@ discordOAuth.ts  FetchDiscordOAuth: code exchange with PKCE, /users/@me and /use
 members.ts       CachedGuildMembers: roles trusted a minute for pages and read fresh for actions; names cached ten minutes
 access.ts        communityAccess (who may see a page) and actionAccess (CSRF, fresh roles, approver role)
 routes/          auth (sign in, callback, sign out, home), community (overview, runs, payees), policies, audit
-views/           pure HTML builders: layout and stylesheet, formatting, one per page, a line diff for policy versions
+views/           pure HTML builders: layout and stylesheet, formatting, one per page, the Overview's charts (inline SVG), a line diff for policy versions
 ```
 
 **Sign-in with Discord.** OAuth2 authorization code with PKCE (S256) and state, scopes `identify guilds`, the client ID is the app ID and the secret is `ROLEPAY_DISCORD_CLIENT_SECRET` (unset: every page says sign-in is not configured). `/auth/discord` keeps the PKCE verifier and where to return under a hash of a fresh state for ten minutes and puts the state in an HttpOnly cookie. The callback requires the query's state to equal this browser's cookie (otherwise anyone could send a victim a callback link and sign them into the attacker's account), takes the pending sign-in once, exchanges the code with the verifier, reads the user and their guilds and revokes the token: Rolepay keeps no Discord token. It then mints a new session, never one the browser brought (no session fixation; a session the browser carried is ended), kept in the KeyValueStore under a SHA-256 of its random token for eight hours with its own CSRF token. `next` only returns to a `/dashboard` page on this origin. Sign out is a POST with the CSRF token and deletes the session on the server.
@@ -383,15 +386,16 @@ views/           pure HTML builders: layout and stylesheet, formatting, one per 
 
 ### The policy seam
 
-The Policies and Audit pages, the next scheduled runs on the Overview and the "made by a policy" part of a run (with its Veto button) read and act through two ports in `dashboard/policyPort.ts`; the AI spend is read through a third there, `AiUsagePort`. `packages/web` never imports core's policy services: the port's types stay plain (Dates, bigint micro-units, a JSON-safe filter, words written by code), and the pages are tested without the AI or Discord.
+The Policies and Audit pages, the next scheduled runs on the Overview and the "made by a policy" part of a run (with its Veto button) read and act through two ports in `dashboard/policyPort.ts`; the AI spend is read through a third there, `AiUsagePort`, and what was paid each week (a policy's runs apart from runs made by hand, which is policy knowledge) through a fourth, `PayoutsPort`. `packages/web` never imports core's policy services: the port's types stay plain (Dates, bigint micro-units, a JSON-safe filter, words written by code), and the pages are tested without the AI or Discord.
 
 | Port | Methods |
 | --- | --- |
 | `PolicyPort` | reads: `list`, `get`, `preview` (who it applies to now with metrics and reasons, near misses, the next run against the key's budget, why it would be held), `versions`, `upcoming`, `runOrigins` (the policy, version, period and veto state behind each run); actions, each with the `actor` (`{ id, roleIds }`, read fresh from Discord): `create` (compile once into a draft), `edit` (a new version), `approve(version)`, `discard(version)`, `pause`, `resume`, `archive`, `setMode(mode, vetoWindowMinutes)`, `veto(runId)` |
 | `AuditPort` | `eventTypes`, `events({ guildId, type?, actorId?, policyId?, beforeId?, limit })`, newest first |
 | `AiUsagePort` | `spend({ guildId })` (this month), `proposals({ guildId, limit })` (newest first), `compiles({ guildId, policyId })` (by version); money in micro-dollars, the model named as people say it, no one's words |
+| `PayoutsPort` | `paidByWeek({ guildId })`: the last 12 UTC weeks, oldest first, each with what a policy's runs and runs made by hand paid (bigint micro-units), the run count and whether it is the week in progress; null for a community Rolepay does not know. Absent: the Overview keeps the budget alone |
 
-**Wired in apps/server** (`src/policySeam.ts`): `policyPortFromCore(rolepay, { names })`, `auditPortFromCore(rolepay)` and `aiUsagePortFromCore(rolepay)`, passed by `main.ts` as `composeServer({ ..., web: { ..., dashboard: { policies, audit, aiUsage } } })`. Thin on purpose: core decides everything (the actor's roles, states, versions, the veto race) and the adapter maps shapes and writes words.
+**Wired in apps/server** (`src/policySeam.ts`): `policyPortFromCore(rolepay, { names })`, `auditPortFromCore(rolepay)`, `aiUsagePortFromCore(rolepay)` and `payoutsPortFromCore(rolepay)`, passed by `main.ts` as `composeServer({ ..., web: { ..., dashboard: { policies, audit, aiUsage, payouts } } })`. Thin on purpose: core decides everything (the actor's roles, states, versions, the veto race) and the adapter maps shapes and writes words.
 
 | Port method | Core |
 | --- | --- |
@@ -402,6 +406,7 @@ The Policies and Audit pages, the next scheduled runs on the Overview and the "m
 | `veto(runId)` | `policies.runFor`, then `policies.veto({ policyRunId })` |
 | `events` | `audit.list` (`beforeId` is the stream's `seq`; an unknown type or a malformed filter matches nothing); each event's summary is written from its codes, counts and amounts (`auditSummary`), never anyone's words. The dashboard's CSV pages through it and adds names |
 | `spend`, `proposals`, `compiles` (`aiUsagePortFromCore`) | `aiUsage.month`, `aiUsage.list` by purpose or policy; a version compiled twice (two edits racing) shows the newer row |
+| `paidByWeek` (`payoutsPortFromCore`) | `payRuns.paidByWeek({ weeks: 12 })`; an unknown community is null |
 
 Expected failures are results with snake_case codes. Core's state codes (`policy_not_draft`, `policy_not_active`, `policy_not_paused`, `policy_archived`, `not_scheduled`) arrive as `illegal_state`; a refusal while compiling (no model, AI off, the model declined, an unclear rule) as `could_not_compile` with the reason in words; the rest keep core's code (`not_permitted`, `version_mismatch`, `policy_blocked`, `creator_cannot_approve`, `invalid_veto_window`, `policy_not_approved`, `too_late`, ...), and the pages say each in words.
 

@@ -59,20 +59,20 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 ```bash
 pnpm install
 pnpm typecheck
-pnpm test            # 1,308 tests in 118 files, no network, no secrets
+pnpm test            # 1,342 tests in 120 files, no network, no secrets
 pnpm test:coverage   # what CI runs, with a threshold per package
 ```
 
-`pnpm test` runs 1,308 tests: core 664, discord 347, web 173, server 124. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
+`pnpm test` runs 1,342 tests: core 676, discord 347, web 194, server 125. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
 
 Coverage from `pnpm test:coverage`:
 
 | Package | Lines | Statements | Functions | Branches |
 | --- | --- | --- | --- | --- |
-| `packages/core` | 94.82% | 91.36% | 94.59% | 81.85% |
+| `packages/core` | 94.88% | 91.5% | 94.66% | 81.95% |
 | `packages/discord` | 96.52% | 93.29% | 96.79% | 83.14% |
-| `packages/web` | 83.86% | 80.9% | 80.22% | 75.24% |
-| `apps/server` | 85.3% | 84.77% | 84.14% | 84.22% |
+| `packages/web` | 85.08% | 82.24% | 81.58% | 77.07% |
+| `apps/server` | 85.49% | 85% | 84.43% | 84.39% |
 
 `packages/web` is lower because its browser code (`src/client/`, 44% of lines here) runs in the Playwright e2e, which these numbers do not count. Its server code is at 99% of lines.
 
