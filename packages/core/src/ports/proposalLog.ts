@@ -23,6 +23,9 @@ export type ProposalLogEntry = {
   unregistered: number
   model: string | null
   inputTokens: number | null
+  /** Prompt cache: input written to it (cold) and read from it (warm). Not part of inputTokens. */
+  cacheCreationInputTokens: number | null
+  cacheReadInputTokens: number | null
   outputTokens: number | null
   /** US dollars, as a decimal string (for example "0.0123"), estimated from the list price. */
   costUsd: string | null

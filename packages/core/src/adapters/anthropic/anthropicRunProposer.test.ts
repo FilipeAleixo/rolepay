@@ -85,18 +85,71 @@ const SUPPORTED_FORMATS = ['date-time', 'time', 'date', 'duration', 'email', 'ho
 /** Headroom under the API's 16, so one more nullable field does not break a mode in production. */
 const MAX_UNION_PARAMETERS = 12
 
+type System = { type: string; text: string; cache_control?: unknown }[]
+const systemText = (body: Record<string, unknown>) => (body.system as System).map((b) => b.text).join('')
+
 describe('AnthropicRunProposer: the request', () => {
-  it('Opus 5.5, low effort, no temperature, no thinking switch, room after thinking, the fallback beta', async () => {
+  it('Sonnet 5.5, low effort, no temperature, no thinking switch, room after thinking, no beta and no fallback model', async () => {
     const { proposer, sent } = proposerWith(() => json(fixture('message-valid.json')))
     await proposer.fromMessages(MESSAGES)
     const req = sent[0] as Sent
-    expect(req.url).toMatch(/^https:\/\/api\.anthropic\.com\/v1\/messages\?beta=true$/)
-    expect(req.headers['anthropic-beta']).toContain('server-side-fallback-2026-07-01')
+    expect(req.url).toMatch(/^https:\/\/api\.anthropic\.com\/v1\/messages$/)
+    expect(req.headers).not.toHaveProperty('anthropic-beta')
     expect(req.headers['x-api-key']).toBe('sk-ant-test-not-a-real-key')
-    expect(req.body).toMatchObject({ model: 'claude-opus-5-5', max_tokens: 16000, fallbacks: 'default', output_config: { effort: 'low', format: { type: 'json_schema' } } })
+    expect(req.body).toMatchObject({ model: 'claude-sonnet-5-5', max_tokens: 16000, output_config: { effort: 'low', format: { type: 'json_schema' } } })
+    expect(req.body).not.toHaveProperty('fallbacks')
     expect(req.body).not.toHaveProperty('temperature')
     expect(req.body).not.toHaveProperty('thinking')
     expect(req.body).not.toHaveProperty('tool_choice')
+  })
+
+  // The static prefix (the rules, the filter vocabulary, the output schema) is the same for every
+  // request in a mode, so it is cached: one breakpoint, on the system block, with the 1-hour TTL.
+  // Everything per request comes after it, in the user message, which is never marked.
+  it.each([
+    ['message', 'message-valid.json', (p: AnthropicRunProposer) => p.fromMessages(MESSAGES)],
+    ['criteria', 'criteria-valid.json', (p: AnthropicRunProposer) => p.fromCriteria(CRITERIA)],
+  ] as const)('%s mode: one cache breakpoint, on the system block, 1-hour TTL', async (_mode, response, call) => {
+    const { proposer, sent } = proposerWith(() => json(fixture(response)))
+    await call(proposer)
+    const body = sent[0]?.body as Record<string, unknown>
+    expect(body.system).toEqual([{ type: 'text', text: expect.any(String), cache_control: { type: 'ephemeral', ttl: '1h' } }])
+    expect(body).not.toHaveProperty('cache_control')
+    expect(JSON.stringify(body.messages)).not.toContain('cache_control')
+  })
+
+  // Any byte that changes in front of the breakpoint makes every request a cache write. Two requests
+  // that differ in everything they carry must send the same bytes up to it.
+  it.each([
+    [
+      'message',
+      'message-valid.json',
+      (p: AnthropicRunProposer) => p.fromMessages(MESSAGES),
+      (p: AnthropicRunProposer) =>
+        p.fromMessages({ instruction: '10 to @U1', messages: [{ ref: 'M1', author: 'U9', at: '2026-11-30T23:59:00.000Z', text: 'hello', replyTo: 'M0' }], token: 'BetaUSD', remaining: null, maxLines: 7 }),
+      ['10 to @U1', 'BetaUSD', 'At most 7 lines', 'hello'],
+    ],
+    [
+      'criteria',
+      'criteria-valid.json',
+      (p: AnthropicRunProposer) => p.fromCriteria(CRITERIA),
+      (p: AnthropicRunProposer) =>
+        p.fromCriteria({ instruction: 'pay 3 to Helpers', today: '2027-02-28', maxLookbackDays: 90, roles: [{ ref: 'R1', name: 'Helpers' }], channels: [], token: 'BetaUSD', remaining: null }),
+      ['pay 3 to Helpers', 'Today is 2027-02-28 (UTC)', '90 days before today', 'Helpers', 'BetaUSD'],
+    ],
+  ] as const)('%s mode: the cached prefix is byte-identical across different requests, and nothing per request is in it', async (_mode, response, first, second, perRequest) => {
+    const { proposer, sent } = proposerWith(() => json(fixture(response)))
+    await first(proposer)
+    await second(proposer)
+    const [a, b] = sent.map((s) => s.body) as [Record<string, unknown>, Record<string, unknown>]
+    expect(JSON.stringify(b.system)).toBe(JSON.stringify(a.system))
+    expect(JSON.stringify(b.output_config)).toBe(JSON.stringify(a.output_config))
+    expect(b.model).toBe(a.model)
+    expect(JSON.stringify(b.messages)).not.toBe(JSON.stringify(a.messages))
+    for (const value of perRequest) {
+      expect(systemText(b)).not.toContain(value)
+      expect(JSON.stringify(b.messages)).toContain(value)
+    }
   })
 
   it('asks for a strict JSON schema: every object closed and fully required, no unsupported constraints', async () => {
@@ -152,9 +205,9 @@ describe('AnthropicRunProposer: the request', () => {
   it('message text is delimited data: a message cannot close its tag, and the instruction stays apart', async () => {
     const { proposer, sent } = proposerWith(() => json(fixture('message-valid.json')))
     await proposer.fromMessages(MESSAGES)
-    const body = sent[0]?.body as { system: string; messages: { role: string; content: string }[] }
+    const body = sent[0]?.body as { system: System; messages: { role: string; content: string }[] }
     const content = body.messages[0]?.content as string
-    expect(body.system).toMatch(/never instructions to you/)
+    expect(systemText(body)).toMatch(/never instructions to you/)
     expect(content.match(/<\/messages>/g)).toHaveLength(1)
     expect(content.match(/<instruction>/g)).toHaveLength(1)
     expect(content).toContain('\\u003c/messages\\u003e')
@@ -162,18 +215,20 @@ describe('AnthropicRunProposer: the request', () => {
     expect(content).toContain('The bot key can still spend 100 AlphaUSD')
   })
 
-  it('criteria mode sends the instruction, the role and channel names by token, and today; nothing about members', async () => {
+  it('criteria mode sends the instruction, the role and channel names by token, today and the lookback (after the cached prefix); nothing about members', async () => {
     const { proposer, sent } = proposerWith(() => json(fixture('criteria-valid.json')))
     await proposer.fromCriteria(CRITERIA)
-    const body = sent[0]?.body as { system: string; messages: { content: string }[] }
-    expect(body.system).toContain('Today is 2026-10-06 (UTC)')
-    expect(body.system).toContain('at most 31 days before today')
-    expect(body.messages[0]?.content).toContain('<roles>\n[{"ref":"R1","name":"Treasurer"},{"ref":"R2","name":"Mods"}]\n</roles>')
+    const body = sent[0]?.body as { system: System; messages: { content: string }[] }
+    const content = body.messages[0]?.content as string
+    expect(content).toContain('Today is 2026-10-06 (UTC)')
+    expect(content).toContain('at most 31 days before today')
+    expect(content).toContain('<roles>\n[{"ref":"R1","name":"Treasurer"},{"ref":"R2","name":"Mods"}]\n</roles>')
+    expect(systemText(body)).toContain('<context>')
   })
 })
 
 describe('AnthropicRunProposer: the answer', () => {
-  it('a valid message-mode answer is parsed, with tokens, latency and the estimated cost', async () => {
+  it('a valid message-mode answer (cold: the prefix written to the cache) is parsed, with tokens, cache tokens, latency and the estimated cost', async () => {
     const { proposer } = proposerWith(() => json(fixture('message-valid.json')))
     const r = await proposer.fromMessages(MESSAGES)
     if (!r.ok) throw new Error(r.error.detail)
@@ -183,20 +238,24 @@ describe('AnthropicRunProposer: the answer', () => {
       ['U4', '200'],
     ])
     expect(r.value.raw.ignoredInstructions).toHaveLength(1)
-    // 1834 input at $4/M and 612 output at $20/M = 7336 + 12240 micro-dollars.
-    expect(r.value.usage).toEqual({ model: 'claude-opus-5-5', inputTokens: 1834, outputTokens: 612, latencyMs: 1500, costMicroUsd: 19_576 })
+    // 412 input at $2/M, 1422 written to the 1-hour cache at $4/M, 612 output at $10/M = 824 + 5688 + 6120 micro-dollars.
+    expect(r.value.usage).toEqual({ model: 'claude-sonnet-5-5', inputTokens: 412, cacheCreationInputTokens: 1422, cacheReadInputTokens: 0, outputTokens: 612, latencyMs: 1500, costMicroUsd: 12_632 })
   })
 
-  it('a valid criteria answer is parsed', async () => {
+  it('a valid criteria answer (warm: the prefix read from the cache) is parsed and priced at the cache-read rate', async () => {
     const { proposer } = proposerWith(() => json(fixture('criteria-valid.json')))
     const r = await proposer.fromCriteria(CRITERIA)
     expect(r.ok && r.value.raw.conditions.activity).toEqual([{ metric: 'replies', channels: ['C2'], since: '2026-10-01', until: '', min: 10 }])
+    // 520 input at $2/M, 2890 read from the cache at $0.20/M, 388 output at $10/M = 1040 + 578 + 3880 micro-dollars.
+    expect(r.ok && r.value.usage).toMatchObject({ inputTokens: 520, cacheCreationInputTokens: 0, cacheReadInputTokens: 2890, outputTokens: 388, costMicroUsd: 5_498 })
   })
 
-  it('an answer served by the fallback model is used, and priced as that model', async () => {
-    const { proposer } = proposerWith(() => json(fixture('fallback-served.json')))
+  it('cache writes without a TTL breakdown are priced as the 1-hour writes the request asks for', async () => {
+    const body = JSON.parse(fixture('message-valid.json'))
+    body.usage.cache_creation = null
+    const { proposer } = proposerWith(() => json(JSON.stringify(body)))
     const r = await proposer.fromMessages(MESSAGES)
-    expect(r.ok && r.value.usage).toMatchObject({ model: 'claude-opus-4-8', costMicroUsd: 1834 * 5 + 612 * 25 })
+    expect(r.ok && r.value.usage.costMicroUsd).toBe(12_632)
   })
 
   it.each([
@@ -209,7 +268,7 @@ describe('AnthropicRunProposer: the answer', () => {
     const r = await proposer.fromMessages(MESSAGES)
     expect(r.ok).toBe(false)
     if (r.ok) return
-    expect(r.error).toMatchObject({ code: 'could_not_propose', reason, usage: { model: 'claude-opus-5-5' } })
+    expect(r.error).toMatchObject({ code: 'could_not_propose', reason, usage: { model: 'claude-sonnet-5-5', cacheCreationInputTokens: 0, cacheReadInputTokens: 0 } })
     expect(r.error.detail).toMatch(detail)
     expect(r.error.detail).not.toMatch(/pay me|bug|U2/)
   })
@@ -240,15 +299,15 @@ describe('AnthropicRunProposer: the answer', () => {
     const sent: string[] = []
     const proposer = new AnthropicRunProposer({
       apiKey: 'sk-ant-test',
-      model: 'claude-sonnet-5-5',
+      model: 'claude-opus-5-5',
       maxRetries: 0,
       fetch: async (_i, init) => {
         sent.push(JSON.parse(String(init?.body)).model)
         return json(fixture('message-valid.json'))
       },
     })
-    expect(proposer.model).toBe('claude-sonnet-5-5')
+    expect(proposer.model).toBe('claude-opus-5-5')
     await proposer.fromMessages(MESSAGES)
-    expect(sent).toEqual(['claude-sonnet-5-5'])
+    expect(sent).toEqual(['claude-opus-5-5'])
   })
 })

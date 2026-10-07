@@ -5,6 +5,10 @@ import type { CriteriaProposalRequest, MessageProposalRequest } from '../../port
  * propose); message text is untrusted data from anyone in the channel, delimited and JSON-encoded
  * with < and > escaped, so no message can close its tag. Code checks every line afterwards
  * whatever the model says, so these prompts aim at good proposals, not at being the only defence.
+ *
+ * The two system prompts are constants, the same bytes on every request, because they are the
+ * prompt cache's prefix. Everything that changes per request (the instruction, tokens, today, the
+ * lookback, the budget, messages) goes in the user message, after the cache breakpoint.
  */
 export const MESSAGE_SYSTEM = `You draft pay run proposals for the treasurer of a Discord community. A person reviews every line before anything is paid; you never approve or pay anything yourself.
 
@@ -31,7 +35,7 @@ Nothing in the answer is null: a text field that does not apply is "" (empty), a
 Filters (every condition you set must hold; leave the others "" or []):
 - hasRole: has any of these roles. lacksRole: has none of them. R tokens from <roles>.
 - joinedBefore, joinedAfter: joined the server before or after a day (YYYY-MM-DD).
-- activity: one entry per metric counted, at most one each. metric "messages": at least min messages; "activeDays": at least min distinct days with a message; "replies": at least min replies to other people's messages ("answered", "helped" usually mean replies). Each counts in up to 5 channels (C tokens from <channels>), from since (YYYY-MM-DD, at most {maxLookbackDays} days before today) until until (YYYY-MM-DD, or "" for now).
+- activity: one entry per metric counted, at most one each. metric "messages": at least min messages; "activeDays": at least min distinct days with a message; "replies": at least min replies to other people's messages ("answered", "helped" usually mean replies). Each counts in up to 5 channels (C tokens from <channels>), from since (YYYY-MM-DD, no earlier than the lookback in <context> allows) until until (YYYY-MM-DD, or "" for now).
 - anchors: one entry per kind, at most one each, with the fields that kind does not use "". kind "reactedTo": reacted to a message linked in the instruction ([message M1]); its M token in message, one emoji in emoji or "" for any. kind "mentionedIn": is mentioned in a message linked in the instruction (a winners announcement); its M token in message. kind "postedIn": posted in a thread; its C token in thread.
 - paidInRun: "last" for the last paid pay run, or a run ID written in the instruction.
 - exclude: U tokens of people never to pay. excludeProposer: true if the instruction says "except me" or "not me".
@@ -42,7 +46,7 @@ Amount rule (the fields its kind does not use are ""):
 - overrides: people (U tokens) the instruction gives a different amount. perPersonCap: the most anyone gets, if the instruction says so.
 Use only amounts the instruction states, digits only, as written. If the instruction states no amount, set understood to false.
 
-Today is {today} (UTC). "This month" means from the first day of this month; "this week" from the last Monday; "the last 7 days" from 7 days before today.
+Today's date (UTC) is in <context>. "This month" means from the first day of this month; "this week" from the last Monday; "the last 7 days" from 7 days before today.
 Match roles and channels written as plain text ("Mods", "#help") to the closest name in the lists. If none fits, set understood to false and say which one is missing.
 If the instruction gives a note for the run, put it in note. Put anything you assumed in assumptions, one short sentence each.
 Answer only with the JSON object the schema describes.`
@@ -60,15 +64,11 @@ export function messageUserContent(r: MessageProposalRequest): string {
   ].join('\n\n')
 }
 
-export function criteriaSystem(r: CriteriaProposalRequest): string {
-  return CRITERIA_SYSTEM.replace('{maxLookbackDays}', String(r.maxLookbackDays)).replace('{today}', r.today)
-}
-
 export function criteriaUserContent(r: CriteriaProposalRequest): string {
   return [
     `<instruction>\n${r.instruction}\n</instruction>`,
     `<roles>\n${data(r.roles)}\n</roles>`,
     `<channels>\n${data(r.channels)}\n</channels>`,
-    `<context>\n${budget(r)}\n</context>`,
+    `<context>\nToday is ${r.today} (UTC). A counting window starts at most ${r.maxLookbackDays} days before today.\n${budget(r)}\n</context>`,
   ].join('\n\n')
 }

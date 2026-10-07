@@ -471,7 +471,7 @@ export class ProposalService {
     this.log({ proposalId: p.id, mode: p.mode, outcome: 'proposed', lines: p.lines.length, held: p.held.length, unregistered: p.unregistered.length, ...counts })
   }
 
-  private log(e: Omit<ProposalLogEntry, 'model' | 'inputTokens' | 'outputTokens' | 'costUsd' | 'latencyMs' | 'sourceMessages' | 'scannedMessages' | 'timings'> & {
+  private log(e: Omit<ProposalLogEntry, 'model' | 'inputTokens' | 'cacheCreationInputTokens' | 'cacheReadInputTokens' | 'outputTokens' | 'costUsd' | 'latencyMs' | 'sourceMessages' | 'scannedMessages' | 'timings'> & {
     sourceMessages?: number
     scannedMessages?: number
     usage?: ProposerUsage | null
@@ -484,6 +484,8 @@ export class ProposalService {
       ...rest,
       model: usage?.model ?? this.deps.proposer?.model ?? null,
       inputTokens: usage?.inputTokens ?? null,
+      cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
+      cacheReadInputTokens: usage?.cacheReadInputTokens ?? null,
       outputTokens: usage?.outputTokens ?? null,
       costUsd: usage?.costMicroUsd == null ? null : formatAmount(BigInt(usage.costMicroUsd)),
       latencyMs: usage?.latencyMs ?? null,

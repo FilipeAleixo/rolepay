@@ -5,7 +5,12 @@ import type { Result } from '../domain/result.js'
 /** What one model call cost. Logged per proposal; never any text. */
 export type ProposerUsage = {
   model: string
+  /** Input not served from or written to the prompt cache. The whole prompt is the three input counts together. */
   inputTokens: number
+  /** Input written to the prompt cache (the static prefix on a cold call). */
+  cacheCreationInputTokens: number
+  /** Input read from the prompt cache (the static prefix on a warm call). */
+  cacheReadInputTokens: number
   outputTokens: number
   latencyMs: number
   /** Estimated from the model's list price, in micro-dollars. null for a model Rolepay has no price for. */

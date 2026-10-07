@@ -26,7 +26,7 @@ You need: the Discord desktop app, a private test server where you are the owner
    ANTHROPIC_API_KEY=<Anthropic Console > API keys; optional, for AI proposals>
    ```
 
-   Without `ANTHROPIC_API_KEY` everything works except AI proposals, which then answer that AI is not configured. `ROLEPAY_AI_MODEL` picks the model (default `claude-opus-5-5`).
+   Without `ANTHROPIC_API_KEY` everything works except AI proposals, which then answer that AI is not configured. `ROLEPAY_AI_MODEL` picks the model (default `claude-sonnet-5-5`).
 
    The server ID: Discord, User Settings, Advanced, turn on Developer Mode; then right-click your test server and Copy Server ID. `PUBLIC_URL` comes from step 6; leave it for now. It is the origin only (no `/claim`), and passkeys are bound to its host.
 
@@ -79,7 +79,7 @@ Run these in a channel of the test server. Ephemeral means only the person who r
 18. **Criteria.** Give the second account the Mods role and have it reply to a few of your messages in a channel. Then `/rolepay propose instruction:pay 1 to every Mod who replied at least 2 times in #<channel> this week`. The proposal restates the criteria in plain words ("Registered payees who have @Mods and who replied to other people at least 2 times in #channel since ..."), what was scanned, and each match with its count.
 19. **Off again.** `/rolepay setup ai_proposals:false`: the commands now answer that AI proposals are off.
 
-The server logs one `proposal` line per attempt (mode, outcome, counts, model, tokens, estimated cost, latency), never message text.
+The server logs one `proposal` line per attempt (mode, outcome, counts, model, tokens with the prompt cache's writes and reads, estimated cost, latency), never message text.
 
 Optional: stop the server with Ctrl-C right after clicking Approve on a new run, start it again and wait up to 30 seconds. The recovery sweep finishes a run that was executing, updates its message in the channel and DMs the receipts (once); a run that was only approved shows a Retry button in `/rolepay status`. Either way it is paid at most once.
 

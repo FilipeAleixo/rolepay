@@ -4,12 +4,12 @@ import { deprecatedEnvNames, devShortcutsEnabled, parseConfig, withDeprecatedEnv
 const MASTER = 'a'.repeat(64)
 
 describe('parseConfig (operational settings from env)', () => {
-  it('AI proposals: no model without ANTHROPIC_API_KEY (blank counts as unset); Opus 5.5 by default', () => {
-    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER }).ai).toEqual({ apiKey: null, model: 'claude-opus-5-5', dailyCap: 50 })
+  it('AI proposals: no model without ANTHROPIC_API_KEY (blank counts as unset); Sonnet 5.5 by default', () => {
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER }).ai).toEqual({ apiKey: null, model: 'claude-sonnet-5-5', dailyCap: 50 })
     expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: '  ' }).ai.apiKey).toBeNull()
-    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: 'sk-ant-SECRET', ROLEPAY_AI_MODEL: 'claude-sonnet-5-5' }).ai).toEqual({
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: 'sk-ant-SECRET', ROLEPAY_AI_MODEL: 'claude-opus-5-5' }).ai).toEqual({
       apiKey: 'sk-ant-SECRET',
-      model: 'claude-sonnet-5-5',
+      model: 'claude-opus-5-5',
       dailyCap: 50,
     })
   })
@@ -88,8 +88,8 @@ describe('parseConfig (operational settings from env)', () => {
 
 describe('the deprecated PAYRUN_* names (from before the rename to Rolepay)', () => {
   it('are read as their ROLEPAY_* names, so an existing .env keeps working without edits', () => {
-    const c = parseConfig({ PAYRUN_MASTER_KEY: MASTER, PAYRUN_DB_PATH: './payrun.db', PAYRUN_AI_MODEL: 'claude-sonnet-5-5' })
-    expect(c).toMatchObject({ masterKey: MASTER, dbPath: './payrun.db', ai: { model: 'claude-sonnet-5-5' } })
+    const c = parseConfig({ PAYRUN_MASTER_KEY: MASTER, PAYRUN_DB_PATH: './payrun.db', PAYRUN_AI_MODEL: 'claude-opus-5-5' })
+    expect(c).toMatchObject({ masterKey: MASTER, dbPath: './payrun.db', ai: { model: 'claude-opus-5-5' } })
     expect(() => parseConfig({ PAYRUN_MASTER_KEY: MASTER, PAYRUN_NETWORK: 'mainnet' })).toThrow(/ROLEPAY_ALLOW_MAINNET/)
     expect(devShortcutsEnabled({ PAYRUN_DEV_SHORTCUTS: 'true' })).toBe(true)
   })
