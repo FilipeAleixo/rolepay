@@ -54,7 +54,7 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       const newer = f.botKey({
         address: '0x4444444444444444444444444444444444444442',
         createdAt: f.at(2),
-        policy: { ...f.botKey().policy, recipients: [f.ADDR.alice], feeToken: f.FEE_TOKEN, feeBudget: 1n },
+        policy: { ...f.botKey().policy, recipients: [f.ADDR.alice], feeToken: f.FEE_TOKEN, feeBudget: 1n, swapTokens: ['0x20c0000000000000000000000000000000000002'] },
       })
       const foreign = f.botKey({ address: '0x4444444444444444444444444444444444444443', communityId: f.OTHER_GUILD })
       for (const k of [older, newer, foreign]) await repo.saveBotKey(k)

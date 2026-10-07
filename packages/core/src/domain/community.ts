@@ -1,5 +1,12 @@
 import { z } from 'zod'
-import { NETWORK_NAMES, type NetworkName, TRANSFER_WITH_MEMO_SIGNATURE, VALID_BEFORE_SECONDS } from '../constants/tempo.js'
+import {
+  NETWORK_NAMES,
+  type NetworkName,
+  STABLECOIN_DEX_ADDRESS,
+  SWAP_EXACT_AMOUNT_OUT_SIGNATURE,
+  TRANSFER_WITH_MEMO_SIGNATURE,
+  VALID_BEFORE_SECONDS,
+} from '../constants/tempo.js'
 import { type Address, AddressSchema, DiscordIdSchema } from './ids.js'
 import type { Micros } from './money.js'
 import { type Result, err, ok } from './result.js'
@@ -110,6 +117,11 @@ export const KeyPolicySchema = z.object({
   recipients: z.array(AddressSchema).min(1).nullable(),
   feeToken: AddressSchema.nullable(),
   feeBudget: z.bigint().positive().nullable(),
+  /**
+   * Absent (the default): no swaps. Otherwise the preferred stablecoins this key may deliver: it may
+   * also swap on the DEX and send these tokens, each under its own limit (`preferredTokenGrants`).
+   */
+  swapTokens: z.array(AddressSchema).min(1).optional(),
 })
 export type KeyPolicy = z.infer<typeof KeyPolicySchema>
 
@@ -143,7 +155,31 @@ export function keyAuthorization(p: KeyPolicy): KeyAuthorization {
   const limits: KeyAuthorization['limits'] = [{ token: p.token, limit: p.limit, ...period }]
   if (p.feeToken && p.feeBudget) limits.push({ token: p.feeToken, limit: p.feeBudget, ...period })
   const scope = { address: p.token, selector: TRANSFER_WITH_MEMO_SIGNATURE }
-  return { expiry: p.expiresAt, limits, scopes: [p.recipients ? { ...scope, recipients: p.recipients } : scope] }
+  const swaps = preferredTokenGrants(p)
+  return { expiry: p.expiresAt, limits: [...limits, ...swaps.limits], scopes: [p.recipients ? { ...scope, recipients: p.recipients } : scope, ...swaps.scopes] }
+}
+
+/**
+ * What a key needs on top of `keyAuthorization` to pay people in their preferred stablecoin (only
+ * when the community turned it on, so `swapTokens` is set): exactly the DEX's exact-output swap, and
+ * transferWithMemo on each preferred token (the recipient allowlist, if any, applies to those too).
+ * Each preferred token gets a limit equal to the payout limit, with the same period. Tempo charges a
+ * swap's actual input to the limit of the token it sells, so every unit of payout token leaving the
+ * treasury, transferred or swapped, still counts against the payout limit; the preferred-token
+ * limits cap what the key can send of tokens the treasury may hold itself. Nothing for a key without
+ * swap tokens: its authorisation is exactly as before.
+ */
+export function preferredTokenGrants(p: KeyPolicy): Pick<KeyAuthorization, 'limits' | 'scopes'> {
+  if (!p.swapTokens?.length) return { limits: [], scopes: [] }
+  const period = p.periodSeconds === null ? {} : { period: p.periodSeconds }
+  const recipients = p.recipients ? { recipients: p.recipients } : {}
+  return {
+    limits: p.swapTokens.map((token) => ({ token, limit: p.limit, ...period })),
+    scopes: [
+      { address: STABLECOIN_DEX_ADDRESS, selector: SWAP_EXACT_AMOUNT_OUT_SIGNATURE },
+      ...p.swapTokens.map((token) => ({ address: token, selector: TRANSFER_WITH_MEMO_SIGNATURE, ...recipients })),
+    ],
+  }
 }
 
 /** The bot key as the chain sees it right now. Times are unix seconds of chain time. */
