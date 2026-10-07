@@ -213,19 +213,22 @@ export class PayRunService {
     const key = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
     if (!key) return err({ code: 'no_active_key' })
 
-    const state = await this.deps.chain.keyState({
-      account: community.treasuryAddress,
-      accessKey: key.address,
-      token: run.token,
-      feeToken: key.policy.feeToken,
-    })
+    // Independent reads, so at the same time: the key's state on chain and the head the attempt opens at.
+    const [state, head] = await Promise.all([
+      this.deps.chain.keyState({
+        account: community.treasuryAddress,
+        accessKey: key.address,
+        token: run.token,
+        feeToken: key.policy.feeToken,
+      }),
+      this.deps.chain.head(),
+    ])
     const check = checkKeyForRun(state, { total: run.total, needsFeeBudget: community.feeMode === 'fee_budget' })
     if (!check.ok) return check
     if (!key.sealedSecret) return err({ code: 'unseal_failed' })
     const secret = await this.deps.vault.open(key.sealedSecret, botKeyContext(community.id, key.address))
     if (!secret.ok) return secret
 
-    const head = await this.deps.chain.head()
     const validBefore = Math.floor(this.deps.clock.now().getTime() / 1000) + VALID_BEFORE_SECONDS
     const started = await this.save(run, { type: 'start_attempt', fromBlock: head.number, validBefore })
     if (!started.ok) return started

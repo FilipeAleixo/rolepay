@@ -253,6 +253,25 @@ describe('PayRunService: execution', () => {
     expect(w.chain.landedTxCount).toBe(1)
   })
 
+  it('reads the key state and the chain head at the same time (one round trip to the node, not two)', async () => {
+    const run = await approvedRun(w)
+    const keyState = w.chain.keyState.bind(w.chain)
+    const head = w.chain.head.bind(w.chain)
+    let inFlight = 0
+    let peak = 0
+    const slowRead = async <T>(read: () => Promise<T>): Promise<T> => {
+      inFlight++
+      peak = Math.max(peak, inFlight)
+      await new Promise((r) => setTimeout(r, 5))
+      inFlight--
+      return read()
+    }
+    w.chain.keyState = (input) => slowRead(() => keyState(input))
+    w.chain.head = () => slowRead(() => head())
+    expect(await w.svc.execute({ guildId: GUILD, runId: run.id })).toMatchObject({ ok: true, value: { status: 'paid' } })
+    expect(peak).toBe(2)
+  })
+
   it('checks the key first: a revoked key fails fast and leaves the run approved', async () => {
     const run = await approvedRun(w)
     await w.communitySvc.revokeBotKey({ guildId: GUILD, root: w.chain.rootSigner(TREASURY) })
