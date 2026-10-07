@@ -67,6 +67,39 @@ test('a recipient creates a passkey on the claim page, and a returning one signs
   expect(await auth.credentials()).toHaveLength(1)
 })
 
+test('after the server forgets a passkey (its database reset), the browser that still remembers it can create a new one', async ({ page }) => {
+  const guildId = snowflake()
+  const dev = privateKeyToAddress(generatePrivateKey()).toLowerCase()
+  const registered = await server.rolepay.communities.register({ guildId, name: 'E2E reset guild', treasuryAddress: dev, payoutToken: TOKEN, feeMode: 'sponsor' })
+  expect(registered.ok).toBe(true)
+  const auth = await virtualAuthenticator(page)
+
+  const first = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000001' })
+  if (!first.ok) throw new Error(first.error.code)
+  await page.goto(`${server.url}/claim/${first.value.token}`)
+  await page.getByRole('button', { name: 'Create my passkey' }).click()
+  await expect(page.getByRole('heading', { name: 'You will be paid here' })).toBeVisible()
+  const address = (await page.locator('#address').textContent())?.trim() as string
+
+  // The server forgets the credential, as a database reset does; the browser's Accounts SDK store
+  // still remembers the account under the same passkey name ("Rolepay: E2E reset guild").
+  const credentials = (await auth.credentials()) as { credentialId: string }[]
+  for (const c of credentials) await server.kv.delete(`webauthn:credential:${c.credentialId.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`)
+
+  // Asked for a new passkey under that name, the SDK first signs in with the remembered one, which
+  // the server no longer knows ("Unknown credential"); the page forgets it and registers a new one.
+  const second = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000002' })
+  if (!second.ok) throw new Error(second.error.code)
+  await page.goto(`${server.url}/claim/${second.value.token}`)
+  await page.getByRole('button', { name: 'Create my passkey' }).click()
+  await expect(page.getByRole('heading', { name: 'You will be paid here' })).toBeVisible()
+  const fresh = (await page.locator('#address').textContent())?.trim() as string
+  expect(fresh).toMatch(/^0x[0-9a-f]{40}$/)
+  expect(fresh).not.toBe(address)
+  expect(await auth.credentials()).toHaveLength(2)
+  expect(await server.rolepay.payees.get({ guildId, discordUserId: '200000000000000002' })).toMatchObject({ ok: true, value: { address: fresh } })
+})
+
 test('a treasurer creates the treasury with a passkey, authorises the bot key with it, the bot pays, and the passkey revokes it', async ({ page }) => {
   const guildId = snowflake()
   await virtualAuthenticator(page)
