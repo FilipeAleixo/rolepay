@@ -1,6 +1,6 @@
 // The treasurer setup page: the community account (passkey as root), funding, and the bot
 // key's authorisation and revocation, signed with the passkey.
-import { $, busy, explainPasskeyError, fill, formatMicros, get, post, shortAddress, show, status } from './dom.js'
+import { $, busy, displayMicros, explainPasskeyError, fill, get, post, shortAddress, show, status } from './dom.js'
 import { treasuryFeeToken } from './fees.js'
 import { type KeyForm, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
 import { passkeys } from './passkey.js'
@@ -105,11 +105,11 @@ export function startSetup(config: SetupConfig) {
     }
     if (!s.isTreasurer || !s.community) return
     void balanceOf(chain, s.community.payoutToken, s.community.treasury)
-      .then((b) => fill('balance', formatMicros(b.toString())))
+      .then((b) => fill('balance', displayMicros(b.toString())))
       .catch(() => fill('balance', 'unknown'))
     if (config.feeMode === 'fee_budget' && config.feeToken) {
       void balanceOf(chain, config.feeToken, s.community.treasury)
-        .then((b) => fill('fee-balance', formatMicros(b.toString())))
+        .then((b) => fill('fee-balance', displayMicros(b.toString())))
         .catch(() => fill('fee-balance', 'unknown'))
     }
     fill('key-status', keyText(s.key))
@@ -129,7 +129,7 @@ export function startSetup(config: SetupConfig) {
       ...live.map((k) => {
         const row = document.createElement('p')
         const label = document.createElement('span')
-        const left = `${formatMicros(k.chain.remaining)} of ${formatMicros(k.policy.limit)} ${config.tokenLabel} left, expires ${date(k.chain.expiry)}`
+        const left = `${displayMicros(k.chain.remaining)} of ${displayMicros(k.policy.limit)} ${config.tokenLabel} left, expires ${date(k.chain.expiry)}`
         label.textContent = `${k.status === 'active' ? 'Bot key' : 'Old bot key, still live'} ${shortAddress(k.address)}: ${left}. `
         const button = document.createElement('button')
         button.type = 'button'
@@ -150,7 +150,7 @@ export function startSetup(config: SetupConfig) {
     if (k.chain.status === 'expired') return `The bot key ${shortAddress(k.address)} has expired. Authorise a new one.`
     if (k.chain.status !== 'active') return `The bot key ${shortAddress(k.address)} is not authorised on chain yet.`
     const resets = k.chain.periodEnd ? `, resets ${date(k.chain.periodEnd)}` : ''
-    return `Bot key ${shortAddress(k.address)} is active: ${formatMicros(k.chain.remaining)} of ${formatMicros(k.policy.limit)} ${t} left${resets}. Expires ${date(k.chain.expiry)}.`
+    return `Bot key ${shortAddress(k.address)} is active: ${displayMicros(k.chain.remaining)} of ${displayMicros(k.policy.limit)} ${t} left${resets}. Expires ${date(k.chain.expiry)}.`
   }
 
   /** The passkey account that is the treasury, signing in if needed. */

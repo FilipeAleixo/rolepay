@@ -135,7 +135,7 @@ describe('the 3-second rule: a slow handler is acknowledged in time', () => {
     await a.rolepay.communities.setAiProposals({ guildId: GUILD, enabled: true, actorRoleIds: [TREASURER_ROLE] })
     slow(a.rolepay.communities, 'get')
     const target = wireMessage({ channelId: CHANNEL, authorId: TREASURER, at: new Date(), content: `Winners: <@${ALICE}>`, mentions: [ALICE] })
-    const { d, ms } = await timed(a.dispatch, messageCommand(SCOPE, 'Propose pay run', target, treasurer, 'tok-form'))
+    const { d, ms } = await timed(a.dispatch, messageCommand(SCOPE, 'Draft pay run with AI', target, treasurer, 'tok-form'))
     expect(ms).toBeLessThan(SLOW_MS / 2)
     expect(body(d)).toEqual({ type: 5, data: { flags: 64 } })
     expect(a.rest.lastEdit('tok-form')?.content).toMatch(/took too long/)

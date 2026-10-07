@@ -30,6 +30,9 @@ swap_size_mb = 512
   # Fly's proxy sets Fly-Client-IP; the per-client rate limits key on it.
   ROLEPAY_CLIENT_IP_HEADER = "Fly-Client-IP"
   ROLEPAY_AI_DAILY_CAP = "50"
+  # The policy scheduler ticks every 10 seconds here (30 by default), so an autopilot run with a
+  # one-minute veto window pays within seconds of it ending.
+  ROLEPAY_SCHEDULER_INTERVAL_SECONDS = "10"
 
 # The SQLite file (runs, payees, passkeys, sealed bot keys) lives on this 1 GB volume.
 [mounts]

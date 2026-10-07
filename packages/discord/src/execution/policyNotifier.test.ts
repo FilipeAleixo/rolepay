@@ -1,12 +1,18 @@
 import type { Schedule } from '@rolepay/core'
 import { emptyCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
-import { text } from '../../test/app.js'
 import { ALICE, BOB, CHANNEL, GUILD, MODS_ROLE, TOKEN, TREASURER, TREASURER_ROLE, TREASURY } from '../../test/fixtures.js'
 import { harness } from '../../test/harness.js'
 import { MemoryRunNotices } from '../testing/fakeDiscordRest.js'
 import { wireMessage } from '../testing/messages.js'
+import { CONFIG, text } from '../../test/app.js'
+import { RestMemberDirectory } from '../adapters/restMemberDirectory.js'
+import { createDispatcher } from '../app/router.js'
+import { MemoryPendingSources } from '../testing/fakeDiscordRest.js'
+import { buttonClick, slashCommand } from '../testing/interactions.js'
 import { createPolicyNotifier } from './policyNotifier.js'
+import { createRecoveryNotifier } from './recoveryNotifier.js'
+import { createRunExecutor } from './runExecutor.js'
 
 const HELP = '700000000000000002'
 const asTreasurer = { guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE] }
@@ -78,11 +84,62 @@ describe('createPolicyNotifier: telling the channel what the scheduler did', () 
     const edit = w.rest.channelEdits.at(-1)
     expect(edit?.messageId).toBe(post?.messageId)
     expect(text(edit?.message)).toContain('"title":"Paid"')
-    expect(text(edit?.message)).toContain(`Approved by <@${TREASURER}>`)
+    // Autopilot approved it, not a person: the status says so and who approved the rule.
+    expect(text(edit?.message)).toMatch(new RegExp(`Paid on autopilot after the veto window <t:\\d+:R>; no veto\\. Policy approved by <@${TREASURER}> \\(version 1\\)\\.`))
+    expect(text(edit?.message)).not.toContain('Approved by')
     expect(w.rest.dms.map((d) => d.userId).sort()).toEqual([ALICE, BOB])
     await w.notifier.announce(released.events)
     expect(w.rest.dms).toHaveLength(2)
     expect(w.chain.balance(TOKEN, TREASURY)).toBeLessThan(1000_000_000n)
+  })
+
+  it('released on autopilot, confirmed later by the recovery sweep; /rolepay status and a Retry say autopilot too, never "Approved by"', async () => {
+    const w = await world({ autopilot: true })
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    await w.sleep(3600 * 1000)
+    // The transaction lands but the node's answer is lost: released, still confirming.
+    w.chain.faults.nextBroadcast = 'land_then_lose_response'
+    const released = await w.rolepay.scheduler.tick()
+    await w.notifier.announce(released.events)
+    expect(text(w.rest.channelEdits.at(-1)?.message)).toContain('Released on autopilot after the veto window; no veto. Paying…')
+    const runId = released.events[0]?.run?.id as string
+
+    const recover = createRecoveryNotifier({ rolepay: w.rolepay, rest: w.rest, notices: w.notices, network: 'moderato' })
+    await recover(await w.rolepay.payRuns.recoverInFlight())
+    const paid = text(w.rest.channelEdits.at(-1)?.message)
+    expect(paid).toContain('"title":"Paid"')
+    expect(paid).toMatch(new RegExp(`Paid on autopilot after the veto window <t:\\d+:R>; no veto\\. Policy approved by <@${TREASURER}> \\(version 1\\)\\.`))
+    expect(paid).not.toContain('Approved by')
+
+    const app = createDispatcher({ rolepay: w.rolepay, rest: w.rest, queue: w.queue, members: new RestMemberDirectory(w.rest), pendingSources: new MemoryPendingSources(), clock: w.clock, config: CONFIG })
+    const status = await app(slashCommand({ guildId: GUILD, channelId: CHANNEL }, 'rolepay', 'status', { run: runId }, { userId: TREASURER, roles: [TREASURER_ROLE] }))
+    expect(status.kind === 'respond' && text(status.body)).toContain('Paid on autopilot after the veto window')
+    expect(status.kind === 'respond' && text(status.body)).not.toContain('Approved by')
+  })
+
+  it('a run autopilot released whose payment failed: Retry and the job that pays it keep the autopilot wording', async () => {
+    const w = await world({ autopilot: true })
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    await w.sleep(3600 * 1000)
+    // The network refuses the transaction: released, failed, safe to retry.
+    w.chain.faults.nextBroadcast = 'reject_but_keep_pending'
+    const released = await w.rolepay.scheduler.tick()
+    const runId = released.events[0]?.run?.id as string
+    expect((await w.rolepay.payRuns.get({ guildId: GUILD, runId })).ok).toBe(true)
+    await w.sleep(300 * 1000)
+    await w.chain.mine()
+    const app = createDispatcher({ rolepay: w.rolepay, rest: w.rest, queue: w.queue, members: new RestMemberDirectory(w.rest), pendingSources: new MemoryPendingSources(), clock: w.clock, config: CONFIG })
+    const retried = await app(buttonClick({ guildId: GUILD, channelId: CHANNEL }, `rolepay:retry:${runId}`, { userId: TREASURER, roles: [TREASURER_ROLE] }, 'tok-retry'))
+    expect(retried.kind === 'respond' && text(retried.body)).toContain('Released on autopilot after the veto window; no veto. Paying…')
+    const job = w.queue.jobs.at(-1)
+    if (!job) throw new Error('no job')
+    await createRunExecutor({ rolepay: w.rolepay, rest: w.rest, notices: w.notices, network: 'moderato', now: () => w.clock.now(), sleep: w.sleep })(job)
+    const shown = text(w.rest.lastEdit('tok-retry'))
+    expect(shown).toContain('"title":"Paid"')
+    expect(shown).toContain('Paid on autopilot after the veto window')
+    expect(shown).not.toContain('Approved by')
   })
 
   it('a run vetoed elsewhere (on the web dashboard) is announced as cancelled: its message says who vetoed it and loses the Veto button', async () => {

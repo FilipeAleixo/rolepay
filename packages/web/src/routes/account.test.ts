@@ -32,6 +32,11 @@ describe("the payee's account page (/account)", () => {
     expect(res.headers.get('content-security-policy')).toMatch(/connect-src 'self' https:\/\/rpc\.tempo\.xyz;/)
   })
 
+  it('next to the explorer link: where the explorer shows the balances and the payments received', async () => {
+    const html = await (await webHarness().send('/account')).text()
+    expect(html).toMatch(/<a data-field="explorer"[^>]*>explorer<\/a><\/p>\s*<p class="muted">On the explorer, balances are under Holdings, and payments received under Transfers\.<\/p>/)
+  })
+
   it('on testnet: the faucet tokens, the sponsor pays the fee', async () => {
     const res = await webHarness().send('/account')
     const config = await pageConfig(res.clone())

@@ -1,4 +1,4 @@
-import type { Failure, NetworkName, Run, RunLine } from '@rolepay/core'
+import type { Failure, NetworkName, PolicyRun, Run, RunLine } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
 import { type RunAction, encodeCustomId, encodeVetoButton } from '../components/customId.js'
 import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention, shortAddress, txUrl } from './format.js'
@@ -30,6 +30,25 @@ export type RunViewContext = {
    * `vetoedBy` once vetoed; `stopped` when autopilot did not approve it (it waits for a person).
    */
   autopilot?: { policyRunId: string; executeAfter: Date; vetoedBy?: string | null; stopped?: string }
+  /**
+   * Autopilot approved this run after its veto window (`releasedOnAutopilot`): nobody approved this
+   * run itself, so the status says so, and names who approved the policy version that made it.
+   */
+  released?: AutopilotRelease
+}
+
+/** Who approved the policy version that made a run autopilot released (null: not known any more). */
+export type AutopilotRelease = { version: number; policyApprovedBy: string | null }
+
+/**
+ * Whether autopilot approved this run, rather than a person: its policy run was released, and the
+ * run was approved once the veto window was over. A person who approved it during the window (Rolepay
+ * then paid it at release), or after autopilot stopped, approved it themselves: "Approved by" stays.
+ */
+export function releasedOnAutopilot(run: Run, pr: PolicyRun, policyApprovedBy: string | null): AutopilotRelease | undefined {
+  const autopilot = pr.mode === 'autopilot' && pr.status === 'released' && pr.vetoedAt === null && pr.executeAfter !== null
+  if (!autopilot || !run.approvedAt || !pr.executeAfter || run.approvedAt < pr.executeAfter) return undefined
+  return { version: pr.policyVersion, policyApprovedBy }
 }
 
 /**
@@ -122,7 +141,11 @@ export function explainFailure(failure: Failure, opts: { showDetail?: boolean } 
 
 function header(run: Run, ctx: RunViewContext): { title: string; color: number; status: string } {
   const approvedBy = run.approvedBy ? mention(run.approvedBy) : 'the treasurer'
-  if (ctx.paying && run.status !== 'paid') return { title: 'Approved, paying…', color: COLORS.working, status: `Approved by ${approvedBy}. Paying…` }
+  const released = ctx.released
+  /** Who approved this run: a person, or autopilot after the window (then who approved the rule). */
+  const approval = released ? RELEASED : `Approved by ${approvedBy}.`
+  const policyApproval = released ? policyApprovalText(released, run.approvedBy) : ''
+  if (ctx.paying && run.status !== 'paid') return { title: 'Approved, paying…', color: COLORS.working, status: `${approval} Paying…` }
   const auto = ctx.autopilot
   if (auto && !auto.stopped && run.status === 'pending_approval') {
     const at = unix(auto.executeAfter)
@@ -140,13 +163,14 @@ function header(run: Run, ctx: RunViewContext): { title: string; color: number; 
       }
     case 'approved':
       return ctx.problem
-        ? { title: 'Approved, not paid yet', color: COLORS.failed, status: `Approved by ${approvedBy}.` }
-        : { title: 'Approved, paying…', color: COLORS.working, status: `Approved by ${approvedBy}. Paying…` }
+        ? { title: 'Approved, not paid yet', color: COLORS.failed, status: released ? `${approval} ${policyApproval}` : approval }
+        : { title: 'Approved, paying…', color: COLORS.working, status: `${approval} Paying…` }
     case 'executing':
-      return { title: 'Approved, paying…', color: COLORS.working, status: `Approved by ${approvedBy}. Paying…` }
+      return { title: 'Approved, paying…', color: COLORS.working, status: `${approval} Paying…` }
     case 'paid': {
       const when = run.paidAt ? ` ${relativeTime(run.paidAt)}` : ''
       const tx = run.paidTxHash ? `\n${txUrl(ctx.network, run.paidTxHash)}` : ''
+      if (released) return { title: 'Paid', color: COLORS.paid, status: `Paid on autopilot after the veto window${when}; no veto. ${policyApproval}${tx}` }
       return { title: 'Paid', color: COLORS.paid, status: `Paid in one transaction${when}. Approved by ${approvedBy}.${tx}` }
     }
     case 'failed':
@@ -154,6 +178,14 @@ function header(run: Run, ctx: RunViewContext): { title: string; color: number; 
     case 'cancelled':
       return { title: 'Cancelled', color: COLORS.muted, status: `Cancelled by ${run.cancelledBy ? mention(run.cancelledBy) : 'an admin'}.` }
   }
+}
+
+const RELEASED = 'Released on autopilot after the veto window; no veto.'
+
+/** "Policy approved by @A (version 2)." and, when someone else switched autopilot on (the run is approved in their name), who. */
+function policyApprovalText(r: AutopilotRelease, autopilotBy: string | null): string {
+  const policy = r.policyApprovedBy ? `Policy approved by ${mention(r.policyApprovedBy)} (version ${r.version}).` : `Policy version ${r.version}.`
+  return autopilotBy && autopilotBy !== r.policyApprovedBy ? `${policy} Autopilot switched on by ${mention(autopilotBy)}.` : policy
 }
 
 function buttonsFor(run: Run, ctx: RunViewContext): Button[] {

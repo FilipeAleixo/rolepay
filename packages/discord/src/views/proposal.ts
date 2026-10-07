@@ -15,7 +15,7 @@ import {
   usdText,
 } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message, type Modal, TextInputStyle } from '../api.js'
-import { encodeProposalId, encodeProposalModalId } from '../components/customId.js'
+import { type ProposalAction, encodeProposalId, encodeProposalModalId } from '../components/customId.js'
 import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'
 
 /**
@@ -200,11 +200,27 @@ function fields(p: Proposal): NonNullable<Embed['fields']> {
     p.suspicious.map((s) => `[A message](${messageLink(p.communityId, s.channelId, s.messageId)}) by ${mention(s.authorId)}: ${escapeMarkdown(s.summary)}`),
   )
   list('Assumptions', p.assumptions.map((a) => `• ${escapeMarkdown(a)}`))
-  list('Check before creating', p.problems.map((x) => `${blockingProblems({ problems: [x] }).length ? '⛔' : '⚠️'} ${PROBLEMS[x]}`))
+  // With only self-sourced lines the description says what to do instead of "Edit adds people".
+  const problems = onlySelfSourced(p) ? p.problems.filter((x) => x !== 'no_lines') : p.problems
+  list('Check before creating', problems.map((x) => `${blockingProblems({ problems: [x] }).length ? '⛔' : '⚠️'} ${PROBLEMS[x]}`))
   return f.slice(0, 25)
 }
 
 export type ProposalViewContext = { approverRoleId: string | null }
+
+/**
+ * Message mode where everyone named is left out only because the message behind their line is
+ * their own. Usually an instruction about activity ("everyone who wrote here today"): criteria mode
+ * counts who wrote from the history itself, so there is no source to trust.
+ */
+export const onlySelfSourced = (p: Proposal) =>
+  p.mode === 'messages' && p.lines.length === 0 && p.unregistered.length === 0 && p.held.length > 0 && p.held.every((h) => h.holds.includes('self_sourced'))
+
+const SELF_SOURCED_ONLY = [
+  'Nobody to pay: each person named wrote the message behind their own line, and Rolepay never pays anyone on the strength of their own message.',
+  'If this instruction pays people for writing in the channel, that is a rule about activity: run `/rolepay propose` without `source`, or press Count who wrote, and Rolepay counts who wrote, itself.',
+  'To pay the author of one message, right-click it and use Apps > Pay the author.',
+]
 
 /** Shown at once while a proposal is drafted (reading Discord and the model take a few seconds), then replaced by it. */
 export const DRAFTING = {
@@ -249,7 +265,7 @@ export function proposalMessage(p: Proposal, ctx: ProposalViewContext): Message 
   const embed: Embed = {
     title,
     color: blockingProblems(p).length ? COLORS.failed : COLORS.pending,
-    description: clip([head, '', ...(lines.length ? lines : ['Nobody to pay.']), '', expires].join('\n'), DESCRIPTION_MAX),
+    description: clip([head, '', ...(lines.length ? lines : onlySelfSourced(p) ? SELF_SOURCED_ONLY : ['Nobody to pay.']), '', expires].join('\n'), DESCRIPTION_MAX),
     fields: fs,
     footer: { text: footer },
   }
@@ -258,14 +274,15 @@ export function proposalMessage(p: Proposal, ctx: ProposalViewContext): Message 
 
 function proposalButtons(p: Proposal): ActionRow[] {
   const blocked = blockingProblems(p).length > 0 || p.lines.length === 0
-  const b = (action: 'create' | 'edit' | 'discard', label: string, style: 1 | 2 | 3 | 4, disabled = false): Button => ({
+  const b = (action: ProposalAction, label: string, style: 1 | 2 | 3 | 4, disabled = false): Button => ({
     type: ComponentType.Button,
     style,
     label,
     custom_id: encodeProposalId(action, p.id),
     ...(disabled ? { disabled: true } : {}),
   })
-  return [{ type: ComponentType.ActionRow, components: [b('create', 'Create pay run', ButtonStyle.Success, blocked), b('edit', 'Edit', ButtonStyle.Secondary), b('discard', 'Discard', ButtonStyle.Danger)] }]
+  const countInstead = onlySelfSourced(p) && p.source ? [b('criteria', 'Count who wrote', ButtonStyle.Primary)] : []
+  return [{ type: ComponentType.ActionRow, components: [b('create', 'Create pay run', ButtonStyle.Success, blocked), b('edit', 'Edit', ButtonStyle.Secondary), b('discard', 'Discard', ButtonStyle.Danger), ...countInstead] }]
 }
 
 /** The ephemeral proposal after Create: where the run is now. */
@@ -288,12 +305,17 @@ export function proposalDiscardedMessage(p: Proposal): Message {
   return { embeds: [{ title: 'Proposal discarded', color: COLORS.muted, description: 'Nothing was created.', footer: { text: `Proposal ${p.id}` } }], components: [], allowed_mentions: NO_PINGS }
 }
 
-/** The form "Propose pay run" opens on a message: what to pay. */
+/** What the AI form says before anyone types: what Rolepay does with the message, and that nothing is paid yet. */
+export const DRAFT_EXPLAINED =
+  'Rolepay reads this message and drafts lines for the people it names (for example a winners announcement). Nothing is paid until the Treasurer approves.'
+
+/** The form "Draft pay run with AI" opens on a message: what it does, then what to pay. */
 export function instructionModal(messageId: string): Modal {
   return {
     custom_id: encodeProposalModalId('instruct', messageId),
-    title: 'Propose pay run',
+    title: 'Draft pay run with AI',
     components: [
+      { type: ComponentType.TextDisplay, content: DRAFT_EXPLAINED },
       {
         type: ComponentType.ActionRow,
         components: [

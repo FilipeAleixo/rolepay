@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { type CommandHandler, parseOptions, replyError } from '../app/handlers.js'
+import { autopilotReleaseOf } from '../app/runContext.js'
 import { runMessage } from '../views/run.js'
 import { statusMessage } from '../views/status.js'
 import { requireOperator } from './guards.js'
@@ -26,7 +27,13 @@ export const statusCommand: CommandHandler = async ({ options, ctx }, { rolepay,
       kind: 'reply',
       ephemeral: true,
       // Only the caller sees this reply, so it may carry the node's own error text.
-      message: runMessage(run.value, { network: config.network, approverRoleId: guard.community.approverRoleId, showDetail: true, ...(problem ? { problem } : {}) }),
+      message: runMessage(run.value, {
+        network: config.network,
+        approverRoleId: guard.community.approverRoleId,
+        showDetail: true,
+        ...(await autopilotReleaseOf(rolepay, run.value)),
+        ...(problem ? { problem } : {}),
+      }),
     }
   }
 

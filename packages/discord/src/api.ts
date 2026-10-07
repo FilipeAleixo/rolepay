@@ -22,7 +22,7 @@ export const MessageFlags = { Ephemeral: 1 << 6 } as const
 
 export const OptionType = { SubCommand: 1, SubCommandGroup: 2, String: 3, Integer: 4, Boolean: 5, User: 6, Channel: 7, Role: 8 } as const
 
-export const ComponentType = { ActionRow: 1, Button: 2, TextInput: 4, Label: 18 } as const
+export const ComponentType = { ActionRow: 1, Button: 2, TextInput: 4, TextDisplay: 10, Label: 18 } as const
 export const TextInputStyle = { Short: 1, Paragraph: 2 } as const
 
 /** Channel types Rolepay reads from (text, announcement, threads) or lists (forum). */
@@ -60,8 +60,11 @@ export type TextInput = {
   placeholder?: string
 }
 
+/** Markdown text shown in a modal above its inputs (Discord's Text Display component). */
+export type TextDisplay = { type: typeof ComponentType.TextDisplay; content: string }
+
 /** A modal (a form Discord shows): the response to a command or a button, never to a modal. */
-export type Modal = { custom_id: string; title: string; components: { type: typeof ComponentType.ActionRow; components: [TextInput] }[] }
+export type Modal = { custom_id: string; title: string; components: ({ type: typeof ComponentType.ActionRow; components: [TextInput] } | TextDisplay)[] }
 
 /** A file sent alongside a message (an attachment). */
 export type FileUpload = { name: string; contentType: string; data: string }

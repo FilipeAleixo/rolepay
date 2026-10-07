@@ -41,12 +41,12 @@ const demo = (a: Awaited<ReturnType<typeof ready>>) => {
 }
 const proposalIdIn = (v: unknown) => /proposal:create:([A-Za-z0-9_]+)/.exec(text(v))?.[1] as string
 
-describe('Apps > Propose pay run (the message command)', () => {
+describe('Apps > Draft pay run with AI (the message command)', () => {
   it('asks for the instruction in a modal, then proposes from the message: only the caller sees it', async () => {
     const a = await ready()
     demo(a)
-    const opened = await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
-    expect(body(opened)).toMatchObject({ type: 9, data: { custom_id: `proposal-modal:instruct:${WINNERS.id}`, title: 'Propose pay run' } })
+    const opened = await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
+    expect(body(opened)).toMatchObject({ type: 9, data: { custom_id: `proposal-modal:instruct:${WINNERS.id}`, title: 'Draft pay run with AI' } })
 
     const submitted = await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each, the indexer one 200' }, treasurer, { token: 'tok-instruct' }))
     // At once, only for the caller: what is happening; the proposal then replaces it.
@@ -60,9 +60,29 @@ describe('Apps > Propose pay run (the message command)', () => {
     expect(JSON.stringify(a.proposer.requests)).not.toMatch(/\d{17,20}/)
   })
 
+  it('the form says plainly what happens before anyone types: Rolepay reads the message and drafts, the Treasurer approves', async () => {
+    const a = await ready()
+    const opened = await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
+    const components = (body(opened).data?.components ?? []) as { type: number; content?: string; components?: { custom_id: string; label: string }[] }[]
+    expect(components[0]).toEqual({
+      type: 10,
+      content: 'Rolepay reads this message and drafts lines for the people it names (for example a winners announcement). Nothing is paid until the Treasurer approves.',
+    })
+    expect(components[1]?.components?.map((c) => [c.custom_id, c.label])).toEqual([['instruction', 'What should this run pay?']])
+  })
+
+  it('the old name ("Propose pay run", from before the rename) still opens the same form until Discord drops it', async () => {
+    const a = await ready()
+    demo(a)
+    const opened = await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    expect(body(opened)).toMatchObject({ type: 9, data: { custom_id: `proposal-modal:instruct:${WINNERS.id}`, title: 'Draft pay run with AI' } })
+    await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each, the indexer one 200' }, treasurer, { token: 'tok-old' }))
+    expect(text(a.rest.lastEdit('tok-old'))).toContain('300 AlphaUSD for 3 people')
+  })
+
   it('the form expires: a second submit (or one 15 minutes later) finds nothing', async () => {
     const a = await ready()
-    await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
     await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each' }, treasurer))
     const again = await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each' }, treasurer))
     expect(isEphemeral(again) && body(again).data?.content).toMatch(/expired/)
@@ -70,33 +90,33 @@ describe('Apps > Propose pay run (the message command)', () => {
 
   it('only the approver or proposer role; and AI must be on and configured', async () => {
     const off = await ready({ ai: false })
-    const d1 = await off.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    const d1 = await off.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
     expect(body(d1).data?.content).toMatch(/ai_proposals:true/)
 
     const a = await ready()
-    const d2 = await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, { userId: ALICE, roles: [MODS_ROLE], manageGuild: true }))
+    const d2 = await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, { userId: ALICE, roles: [MODS_ROLE], manageGuild: true }))
     expect(isEphemeral(d2) && body(d2).data?.content).toMatch(new RegExp(`Only members with <@&${TREASURER_ROLE}> or <@&${PROPOSERS}>`))
-    const d3 = await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, { userId: ALICE, roles: [PROPOSERS] }))
+    const d3 = await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, { userId: ALICE, roles: [PROPOSERS] }))
     expect(body(d3).type).toBe(9)
     // The modal is checked again: a role taken away in between is refused.
     const d4 = await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each' }, { userId: ALICE, roles: [] }))
     expect(body(d4).data?.content).toMatch(/Only members/)
 
     const none = await ready({ proposer: null })
-    const d5 = await none.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    const d5 = await none.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
     expect(body(d5).data?.content).toMatch(/no Anthropic API key/)
   })
 
   it('a message without text is refused before the modal', async () => {
     const a = await ready()
-    const d = await a.send(messageCommand(SCOPE, 'Propose pay run', { ...WINNERS, content: '' }, treasurer))
+    const d = await a.send(messageCommand(SCOPE, 'Draft pay run with AI', { ...WINNERS, content: '' }, treasurer))
     expect(isEphemeral(d) && body(d).data?.content).toMatch(/no text/)
   })
 
   it('the model failing is a clear message, not an error', async () => {
     const a = await ready()
     a.proposer.onMessages = () => ({ code: 'could_not_propose', reason: 'unavailable', detail: 'HTTP 529', usage: null })
-    await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
     await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each' }, treasurer, { token: 'tok-x' }))
     expect(text(a.rest.lastEdit('tok-x'))).toMatch(/not reachable right now/)
     expect(a.errors).toEqual([])
@@ -105,7 +125,7 @@ describe('Apps > Propose pay run (the message command)', () => {
   it('the server\'s daily cap on AI proposals says so, and points to /rolepay new', async () => {
     const a = await ready()
     a.proposer.onMessages = () => ({ code: 'could_not_propose', reason: 'daily_cap', detail: 'daily cap of 50 model calls reached', usage: null })
-    await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
     await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each' }, treasurer, { token: 'tok-x' }))
     expect(text(a.rest.lastEdit('tok-x'))).toMatch(/AI proposals for today.*midnight UTC.*\/rolepay new/s)
     expect(a.errors).toEqual([])
@@ -146,6 +166,61 @@ describe('/rolepay propose', () => {
     expect(shown).toContain(`13 messages in <#${HELP}>`)
   })
 
+  it('"everyone who wrote here today" from the channel: the bot is never in it, and the proposal points to counting who wrote, which one button does', async () => {
+    const a = await ready()
+    const BOT = '500000000000000777'
+    const own = wireMessage({ channelId: CHANNEL, authorId: ALICE, at: ago(30), content: 'gm, shipped the indexer fix' })
+    const botPost = wireMessage({ channelId: CHANNEL, authorId: BOT, at: ago(20), content: 'Pay run awaiting approval', bot: true })
+    a.rest.addChannelMessages(own, botPost)
+    // The model pays each writer for their own message: Alice (U1, M1) and the bot (U2, M2).
+    a.proposer.onMessages = () => ({
+      lines: [
+        { user: 'U1', amount: '2', amountFrom: 'instruction', reason: 'wrote in the channel today', sources: ['M1'] },
+        { user: 'U2', amount: '2', amountFrom: 'instruction', reason: 'wrote in the channel today', sources: ['M2'] },
+      ],
+      splitTotal: null,
+      note: null,
+      unresolved: [],
+      assumptions: [],
+      ignoredInstructions: [],
+    })
+    const instruction = '2 each to everyone who wrote in this channel today'
+    await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction, source: CHANNEL, since: '24h' }, treasurer, 'tok-self'))
+    const shown = text(a.rest.lastEdit('tok-self'))
+    expect(shown).not.toContain(BOT)
+    expect(shown).toContain(`<@${ALICE}> 2 AlphaUSD: their own message is the only source.`)
+    expect(shown).toContain('that is a rule about activity: run `/rolepay propose` without `source`')
+    const id = /proposal:criteria:([A-Za-z0-9_]+)/.exec(shown)?.[1] as string
+    expect(id).toBeTruthy()
+
+    // Count who wrote: the same instruction, asked again in criteria mode with the channel named.
+    a.rest.channels.set(GUILD, [{ id: CHANNEL, name: 'general', type: 0 }])
+    a.proposer.onCriteria = () =>
+      emptyCriteria({ amount: { kind: 'flat', amount: '2', per: '', cap: '', total: '', splitBy: '' } }, { activity: [{ metric: 'messages', channels: ['C1'], since: '2026-10-06', until: '', min: 1 }] })
+    const d = await a.send(buttonClick(SCOPE, `proposal:criteria:${id}`, treasurer, 'tok-count'))
+    expect(body(d)).toEqual({ type: 4, data: { content: 'Drafting a proposal…', flags: 64 } })
+    const asked = a.proposer.requests.at(-1)
+    expect(asked?.mode).toBe('criteria')
+    expect(asked?.request.instruction).toBe(`${instruction} (in #C1)`)
+    const counted = text(a.rest.lastEdit('tok-count'))
+    expect(counted).toContain(`<@${ALICE}>  2 AlphaUSD · 1 message`)
+    expect(counted).not.toContain(BOT)
+  })
+
+  it('Count who wrote checks the role and that AI is on, like proposing', async () => {
+    const a = await ready()
+    a.rest.addChannelMessages(wireMessage({ channelId: CHANNEL, authorId: ALICE, at: ago(30), content: 'gm' }))
+    a.proposer.onMessages = () => ({ lines: [{ user: 'U1', amount: '2', amountFrom: 'instruction', reason: 'wrote', sources: ['M1'] }], splitTotal: null, note: null, unresolved: [], assumptions: [], ignoredInstructions: [] })
+    await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: '2 each to everyone who wrote', source: CHANNEL }, treasurer, 'tok-s'))
+    const id = /proposal:criteria:([A-Za-z0-9_]+)/.exec(text(a.rest.lastEdit('tok-s')))?.[1] as string
+    const refused = await a.send(buttonClick(SCOPE, `proposal:criteria:${id}`, { userId: ALICE, roles: [MODS_ROLE], manageGuild: true }))
+    expect(isEphemeral(refused) && body(refused).data?.content).toMatch(/Only members with/)
+    await a.rolepay.communities.setAiProposals({ guildId: GUILD, enabled: false, actorRoleIds: [TREASURER_ROLE] })
+    const off = await a.send(buttonClick(SCOPE, `proposal:criteria:${id}`, treasurer))
+    expect(body(off).data?.content).toMatch(/ai_proposals:true/)
+    expect(a.proposer.requests.filter((r) => r.mode === 'criteria')).toEqual([])
+  })
+
   it('since goes with source, and is checked', async () => {
     const a = await ready()
     expect(body(await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'x', since: '7d' }, treasurer))).data?.content).toMatch(/goes with `source`/)
@@ -175,7 +250,7 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
   async function proposed() {
     const a = await ready()
     demo(a)
-    await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
     await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each, the indexer one 200, note: October bounties' }, treasurer, { token: 'tok-i' }))
     return { a, id: proposalIdIn(a.rest.lastEdit('tok-i')) }
   }
@@ -204,7 +279,7 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
   it('the cost footer is on the proposal only the caller sees (through an Edit too), never on the run posted for the channel', async () => {
     const a = await ready()
     demo(a)
-    await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    await a.send(messageCommand(SCOPE, 'Draft pay run with AI', WINNERS, treasurer))
     const submitted = await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each, the indexer one 200' }, treasurer, { token: 'tok-cost' }))
     expect(isEphemeral(submitted)).toBe(true)
     // The fake model: 7 ms, 10,800 micro-dollars.

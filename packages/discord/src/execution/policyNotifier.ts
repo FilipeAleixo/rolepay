@@ -2,7 +2,7 @@ import { type NetworkName, type Policy, type PolicyRun, type Rolepay, type Run, 
 import type { Message } from '../api.js'
 import type { DiscordRest, PolicyAnnouncer, RunNotices } from '../ports.js'
 import { explainHold, policyRunNoticeMessage } from '../views/policy.js'
-import { type RunViewContext, runMessage } from '../views/run.js'
+import { type RunViewContext, releasedOnAutopilot, runMessage } from '../views/run.js'
 import { sendReceipts } from './receipts.js'
 
 export type PolicyNotifierDeps = {
@@ -73,7 +73,9 @@ export function createPolicyNotifier(deps: PolicyNotifierDeps): PolicyAnnouncer 
         if (e.run.status === 'paid' && (await deps.notices.claimReceipts(e.run.id))) receipts = { sent: await sendReceipts(deps, e.run), total: e.run.lines.length }
         else if (e.run.status === 'paid') return
         if (!channelId) return
-        return update(channelId, e.run, runMessage(e.run, { ...ctx, ...(receipts ? { receipts } : {}), ...(e.run.status === 'executing' ? { stillConfirming: true } : {}) }))
+        // Autopilot approved it, nobody approved this run: say so, with who approved the rule (the release checked the version).
+        const released = releasedOnAutopilot(e.run, pr, e.policy.version === pr.policyVersion ? e.policy.approvedBy : null)
+        return update(channelId, e.run, runMessage(e.run, { ...ctx, ...(released ? { released } : {}), ...(receipts ? { receipts } : {}), ...(e.run.status === 'executing' ? { stillConfirming: true } : {}) }))
       }
       case 'held': {
         if (!channelId) return

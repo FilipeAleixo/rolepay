@@ -37,6 +37,18 @@ describe('the treasurer setup page', () => {
     })
   })
 
+  it('next to the explorer link: where the explorer shows the balance and the deposits (its Transactions tab looks empty after the faucet)', async () => {
+    const h = webHarness()
+    const html = await (await h.send(`/setup/${await setupLink(h)}`)).text()
+    expect(html).toMatch(/<a data-field="explorer"[^>]*>explorer<\/a><\/p>\s*<p class="muted">On the explorer, balances are under Holdings, and the faucet's deposits under Transfers\.<\/p>/)
+    // Mainnet has no faucet: the deposits are whatever was sent in.
+    const main = webHarness({ mainnet: true })
+    const mainHtml = await (await main.send(`/setup/${await setupLink(main, { payoutToken: MAINNET_TOKENS.usdc_e, feeMode: 'fee_budget', feeToken: MAINNET_TOKENS.path_usd })}`)).text()
+    expect(mainHtml).toContain('<p class="muted">On the explorer, balances are under Holdings, and deposits under Transfers.</p>')
+    expect(mainHtml).not.toContain('faucet&#39;s deposits')
+    expect(mainHtml).not.toContain("faucet's deposits")
+  })
+
   it('on mainnet: no faucet, no sponsor, and in fee budget mode the funding step asks for the fee token too, with its balance', async () => {
     const h = webHarness({ mainnet: true })
     const token = await setupLink(h, { payoutToken: MAINNET_TOKENS.usdc_e, feeMode: 'fee_budget', feeToken: MAINNET_TOKENS.path_usd })

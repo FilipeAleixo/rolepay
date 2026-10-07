@@ -91,6 +91,15 @@ describe('keyBudget: what the bot may still spend, or why it may spend nothing',
     expect(t).toContain('Nothing left until the period resets')
   })
 
+  it('large budgets read with thousands grouped: "999,995 AlphaUSD", in the words and in the bar\'s label', () => {
+    const big = key({ limit: 1_000_000n * M, state: { remaining: 999_995n * M } })
+    const t = text(keyBudget(ok(big)))
+    expect(t).toMatch(/Spent this period 5 AlphaUSD/)
+    expect(t).toMatch(/Left 999,995 AlphaUSD/)
+    expect(t).toMatch(/Limit 1,000,000 AlphaUSD/)
+    expect(budgetBar({ spent: 5n * M, limit: 1_000_000n * M, token: TOKEN })).toContain('aria-label="Bot key budget: 5 of 1,000,000 AlphaUSD spent, 999,995 AlphaUSD left.')
+  })
+
   it('a one-time limit: no reset, only the expiry', () => {
     const t = text(keyBudget(ok(key({ periodSeconds: null, state: { periodEnd: null } }))))
     expect(t).toMatch(/^Bot key budget Spent 62 AlphaUSD/)
@@ -158,7 +167,7 @@ describe('weeksChart: paid per week, a policy run apart from a run made by hand'
   it('compacts large scale ticks and keeps money exact in the labels', () => {
     const svg = weeksChart(weeks([[12_345_678_901n, 1n]]), 'wide')
     expect(svg).toMatch(/>20K<\/text>/)
-    expect(svg).toContain('12345.678902 AlphaUSD')
+    expect(svg).toContain('12,345.678902 AlphaUSD')
   })
 
   it('escapes the token symbol', () => {

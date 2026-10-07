@@ -20,7 +20,7 @@ pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut (ROLEPAY_DEV_SHORT
 
 1. **Layers (enforced by `packages/core/test/architecture.test.ts`).** `domain/` is pure (zod and constants only, no IO). `ports/` are interfaces. `services/` import only domain, ports and constants, and are the only public interface. `adapters/` implement ports and never import services. Callers use `@rolepay/core` and, in composition roots only, `@rolepay/core/adapters`. Never import core internals from another package.
 2. **TDD.** Write the failing test, watch it fail for the right reason, write the minimum to pass, refactor. For a test that passes on first run (an integration test of existing behaviour), mutate the code once to prove it can fail.
-3. **Money is bigint micro-units (6 decimals).** Parse with `parseAmount`, print with `formatAmount`. No floats, no `parseFloat`, no `toFixed`. Store as decimal text.
+3. **Money is bigint micro-units (6 decimals).** Parse with `parseAmount`, print with `formatAmount` (anything read back: CSV, memos, JSON, form fields) or `displayAmount` (for people: embeds and pages, thousands grouped as "999,995"). No floats, no `parseFloat`, no `toFixed`. Store as decimal text.
 4. **Expected failures are results**, `{ ok: false, error: { code } }` with snake_case codes. Throw only for the unexpected.
 5. **Zod schemas in `domain/` are the source of truth** for shapes; repositories re-validate every row they read.
 6. **Never pay twice.** Do not weaken the compare-and-set on run versions, persisting the signed tx before broadcast, the validBefore deadline, or the memo check before a retry. See "Never pay twice" in the architecture doc.

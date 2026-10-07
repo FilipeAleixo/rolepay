@@ -28,7 +28,7 @@ export function aiText(c: Pick<Community, 'aiProposals' | 'approverRoleId' | 'pr
   if (!configured) return 'Not available on this Rolepay server (no Anthropic API key is configured).'
   if (!c.aiProposals) return `Off. A member with the approver role turns them on with \`/rolepay setup ai_proposals:true\`.\n${privacy}`
   const who = c.approverRoleId ? `${roleMention(c.approverRoleId)}${c.proposerRoleId ? ` and ${roleMention(c.proposerRoleId)}` : ''}` : 'Nobody (no approver role)'
-  return `On. ${who} can propose: right-click a message > Apps > Propose pay run, or \`/rolepay propose\`. A proposal is a draft: the run it creates still needs approval.\n${privacy}`
+  return `On. ${who} can propose: \`/rolepay propose\`, or right-click a message > Apps > Draft pay run with AI. A proposal is a draft: the run it creates still needs approval.\n${privacy}`
 }
 
 const approverText = (roleId: string | null, separate: boolean | undefined, unset: string) =>

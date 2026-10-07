@@ -81,7 +81,7 @@ describe('parseInteraction', () => {
     expect(r.ok && r.value.kind === 'command' && r.value.ctx).toMatchObject({ guildId: null, caller: { userId: '200000000000000001', roles: [], permissions: 0n } })
   })
 
-  it('reads a message command (Apps > Propose pay run) with its target message, text included', () => {
+  it('reads a message command (Apps > Draft pay run with AI) with its target message, text included', () => {
     const target = {
       id: '810000000000000001',
       channel_id: '700000000000000001',
@@ -97,10 +97,10 @@ describe('parseInteraction', () => {
       guild_id: '1094309218049937418',
       channel_id: '700000000000000001',
       member,
-      data: { id: '900000000000000002', name: 'Propose pay run', type: 3, target_id: target.id, resolved: { messages: { [target.id]: target } } },
+      data: { id: '900000000000000002', name: 'Draft pay run with AI', type: 3, target_id: target.id, resolved: { messages: { [target.id]: target } } },
     })
     expect(r.ok && r.value.kind === 'message_command' && r.value).toMatchObject({
-      command: 'Propose pay run',
+      command: 'Draft pay run with AI',
       target: {
         id: '810000000000000001',
         channelId: '700000000000000001',
@@ -112,6 +112,18 @@ describe('parseInteraction', () => {
         replyTo: { messageId: '810000000000000000', authorId: '200000000000000002' },
       },
     })
+  })
+
+  it('reads a user command (Apps > Pay with Rolepay) with its target user and whether it is a bot; a missing target is refused', () => {
+    const data = (users: Record<string, unknown>) => ({ id: '900000000000000003', name: 'Pay with Rolepay', type: 2, target_id: '200000000000000001', resolved: { users, members: {} } })
+    const at = (d: unknown) => parseInteraction({ ...base, type: 2, guild_id: '1094309218049937418', member, data: d })
+    expect(at(data({ '200000000000000001': { id: '200000000000000001', username: 'ana' } }))).toMatchObject({
+      ok: true,
+      value: { kind: 'user_command', command: 'Pay with Rolepay', target: { userId: '200000000000000001', isBot: false } },
+    })
+    expect(at(data({ '200000000000000001': { id: '200000000000000001', username: 'rolepay', bot: true } }))).toMatchObject({ ok: true, value: { target: { isBot: true } } })
+    expect(at(data({}))).toMatchObject({ ok: false, error: { code: 'unsupported_interaction' } })
+    expect(at(data({ '200000000000000001': { id: '200000000000000009' } }))).toMatchObject({ ok: false })
   })
 
   it('keeps the caller\'s permissions in a channel picked in an option', () => {
@@ -126,7 +138,7 @@ describe('parseInteraction', () => {
   })
 
   it('a message command whose target is missing is refused', () => {
-    const r = parseInteraction({ ...base, type: 2, guild_id: '1094309218049937418', member, data: { name: 'Propose pay run', type: 3, target_id: '810000000000000001', resolved: { messages: {} } } })
+    const r = parseInteraction({ ...base, type: 2, guild_id: '1094309218049937418', member, data: { name: 'Draft pay run with AI', type: 3, target_id: '810000000000000001', resolved: { messages: {} } } })
     expect(r).toMatchObject({ ok: false, error: { code: 'unsupported_interaction' } })
   })
 

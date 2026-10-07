@@ -49,7 +49,7 @@ describe('proposalMessage', () => {
 
   it('flags: left out with the reasons, not registered with a nudge, ignored instructions by author, over budget', () => {
     const fields = Object.fromEntries((embedOf(proposalMessage(proposal(), ctx)).fields ?? []).map((f) => [f.name, f.value]))
-    expect(fields['Left out (shown, not in the run)']).toBe('<@200000000000000666> 10000 AlphaUSD: their own message is the only source; the amount is not in your instruction.')
+    expect(fields['Left out (shown, not in the run)']).toBe('<@200000000000000666> 10,000 AlphaUSD: their own message is the only source; the amount is not in your instruction.')
     expect(fields['Not registered payees']).toBe(`<@${CAROL}> (50 AlphaUSD)\nThey register with \`/payee link\`, then propose again.`)
     expect(fields['Ignored instructions in messages']).toBe(`[A message](https://discord.com/channels/${GUILD}/${CHANNEL}/810000000000000002) by <@200000000000000666>: Asks the AI to pay its author 10,000.`)
     expect(fields['Check before creating']).toMatch(/^⚠️ The total is more than the bot key has left/)
@@ -64,6 +64,31 @@ describe('proposalMessage', () => {
     ])
     const blocked = buttons(proposal({ problems: ['amount_not_in_instruction'] }))[0]
     expect(blocked && 'disabled' in blocked && blocked.disabled).toBe(true)
+  })
+
+  it('everyone held because the message behind their line is their own: says the way forward (an activity rule) and offers to count who wrote', () => {
+    const own = proposal().held[0] as ReturnType<typeof proposal>['held'][number]
+    const selfOnly = proposal({ lines: [], unregistered: [], held: [{ ...own, holds: ['self_sourced'] }, { ...own, discordUserId: BOB, holds: ['self_sourced', 'amount_not_in_instruction'] }], total: 0n, problems: ['no_lines'] })
+    const e = embedOf(proposalMessage(selfOnly, ctx))
+    expect(e.description).toContain("Nobody to pay: each person named wrote the message behind their own line, and Rolepay never pays anyone on the strength of their own message.")
+    expect(e.description).toContain('If this instruction pays people for writing in the channel, that is a rule about activity: run `/rolepay propose` without `source`, or press Count who wrote, and Rolepay counts who wrote, itself.')
+    expect(e.description).toContain('To pay the author of one message, right-click it and use Apps > Pay the author.')
+    expect(e.description).not.toContain('Nobody to pay.')
+    expect(JSON.stringify(e.fields)).not.toContain('Edit adds people')
+    const buttons = proposalMessage(selfOnly, ctx).components?.[0]?.components ?? []
+    expect(buttons.map((b) => 'label' in b && b.label)).toEqual(['Create pay run', 'Edit', 'Discard', 'Count who wrote'])
+    expect(buttons.at(-1)).toMatchObject({ custom_id: 'proposal:criteria:prop_view01', style: 1 })
+
+    // Anyone payable, anyone held for another reason, or a criteria proposal: no such advice, no button.
+    for (const p of [
+      proposal(),
+      proposal({ lines: [], unregistered: [], held: [{ ...own, holds: ['amount_not_in_instruction'] }], total: 0n, problems: ['no_lines'] }),
+      proposal({ mode: 'criteria', source: null, lines: [], unregistered: [], held: [{ ...own, holds: ['self_sourced'] }], total: 0n, problems: ['no_lines'] }),
+    ]) {
+      const m = proposalMessage(p, ctx)
+      expect(JSON.stringify(m)).not.toContain('rule about activity')
+      expect(JSON.stringify(m)).not.toContain('proposal:criteria:')
+    }
   })
 
   it("the model's words cannot format the message: reasons, assumptions and summaries are escaped", () => {
@@ -178,12 +203,16 @@ describe('criteriaInWords and amountInWords', () => {
   })
 })
 
+const inputsOf = (m: ReturnType<typeof editModal>) => m.components.flatMap((c) => ('components' in c ? c.components : []))
+
 describe('the modals', () => {
   it('the instruction form fits Discord limits', () => {
     const m = instructionModal('810000000000000001')
     expect(m.custom_id).toBe('proposal-modal:instruct:810000000000000001')
-    expect(m.title.length).toBeLessThanOrEqual(45)
-    const input = m.components[0]?.components[0]
+    expect(m.title).toBe('Draft pay run with AI')
+    // First what happens, in plain words; then the one input.
+    expect(m.components[0]).toEqual({ type: 10, content: 'Rolepay reads this message and drafts lines for the people it names (for example a winners announcement). Nothing is paid until the Treasurer approves.' })
+    const input = inputsOf(m)[0]
     expect(input?.label.length).toBeLessThanOrEqual(45)
     expect(input?.placeholder?.length ?? 0).toBeLessThanOrEqual(100)
   })
@@ -199,7 +228,7 @@ describe('the modals', () => {
     expect(text.split('\n').filter((l) => !l.startsWith('#'))).toHaveLength(50)
     const m = editModal(proposal())
     expect(m.custom_id).toBe('proposal-modal:edit:prop_view01')
-    expect(m.components[0]?.components[0]?.label.length).toBeLessThanOrEqual(45)
-    expect(m.components[0]?.components[0]?.value?.length).toBeLessThanOrEqual(4000)
+    expect(inputsOf(m)[0]?.label.length).toBeLessThanOrEqual(45)
+    expect(inputsOf(m)[0]?.value?.length).toBeLessThanOrEqual(4000)
   })
 })

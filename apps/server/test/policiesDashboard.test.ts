@@ -184,6 +184,9 @@ describe('standing policies across Discord and the dashboard', () => {
     expect([ANA, RUI].map((u) => s.chain.balance(TOKEN, ADDR[u] as string))).toEqual([usd('2'), usd('5')])
     expect(s.rest.dms.map((d) => d.userId).sort()).toEqual([ANA, RUI])
     expect(text(s.rest.channelEdits.at(-1)?.message)).toContain('"title":"Paid"')
+    // Nobody approved this run: autopilot paid it after the window, under the policy a treasurer approved.
+    expect(text(s.rest.channelEdits.at(-1)?.message)).toContain('Paid on autopilot after the veto window')
+    expect(text(s.rest.channelEdits.at(-1)?.message)).not.toContain('Approved by')
     const secondRunId = released.events[0]?.run?.id as string
 
     // 7. The audit log shows every step, in order, and exports it.

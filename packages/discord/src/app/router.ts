@@ -1,6 +1,7 @@
 import { ResponseType } from '../api.js'
 import { exportCommand } from '../commands/export.js'
 import { newRunCommand } from '../commands/newRun.js'
+import { PAY_AUTHOR_COMMAND, PAY_MEMBER_COMMAND, payAuthorCommand, payMemberCommand, payModalSubmit } from '../commands/payDirect.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
 import {
   policyChoices,
@@ -13,7 +14,7 @@ import {
   policyShowCommand,
 } from '../commands/policy.js'
 import { proposeCommand } from '../commands/propose.js'
-import { PROPOSE_MESSAGE_COMMAND, proposeFromMessageCommand } from '../commands/proposeFromMessage.js'
+import { PROPOSE_MESSAGE_COMMAND, PROPOSE_MESSAGE_COMMAND_BEFORE, proposeFromMessageCommand } from '../commands/proposeFromMessage.js'
 import { runChoices } from '../commands/runChoices.js'
 import { setupCommand } from '../commands/setup.js'
 import { statusCommand } from '../commands/status.js'
@@ -23,18 +24,19 @@ import {
   type ProposalModal,
   type RunAction,
   decodeCustomId,
+  decodePayModalId,
   decodePolicyButton,
   decodeProposalId,
   decodeProposalModalId,
   decodeVetoButton,
 } from '../components/customId.js'
 import { approvePolicyButton, discardPolicyButton, vetoButton } from '../components/policyButtons.js'
-import { createProposalRunButton, discardProposalButton, editProposalButton } from '../components/proposalButtons.js'
+import { createProposalRunButton, criteriaProposalButton, discardProposalButton, editProposalButton } from '../components/proposalButtons.js'
 import { editModalSubmit, instructionModalSubmit } from '../components/proposalModals.js'
 import { approveButton, cancelButton, retryButton } from '../components/runButtons.js'
 import type { Dispatch, InteractionLabel } from '../http/handler.js'
 import type { DiscordAppDeps } from './deps.js'
-import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext, MessageCommandHandler, ModalHandler, PolicyButtonHandler, ProposalButtonHandler } from './handlers.js'
+import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext, MessageCommandHandler, ModalHandler, PolicyButtonHandler, ProposalButtonHandler, UserCommandHandler } from './handlers.js'
 import { type ParsedInteraction, parseInteraction } from './interaction.js'
 import { type Outcome, ephemeralReply, renderLate, renderOutcome } from './outcome.js'
 
@@ -57,7 +59,17 @@ const COMMANDS: Record<string, CommandHandler> = {
 }
 
 /** Right-click commands on a message, by their registered name. Kept in step with COMMAND_DEFINITIONS by a test. */
-const MESSAGE_COMMANDS: Record<string, MessageCommandHandler> = { [PROPOSE_MESSAGE_COMMAND]: proposeFromMessageCommand }
+const MESSAGE_COMMANDS: Record<string, MessageCommandHandler> = {
+  [PROPOSE_MESSAGE_COMMAND]: proposeFromMessageCommand,
+  [PAY_AUTHOR_COMMAND]: payAuthorCommand,
+}
+
+/**
+ * Message commands under a name they had before a rename, still answered. `pnpm register-commands`
+ * overwrites the whole list (a bulk PUT), which deletes the old command, but a client that has not
+ * refreshed its list (or a copy registered in another scope, global or one server) can still send it.
+ */
+const RENAMED: Record<string, MessageCommandHandler> = { [PROPOSE_MESSAGE_COMMAND_BEFORE]: proposeFromMessageCommand }
 
 const AUTOCOMPLETE: Record<string, AutocompleteHandler> = {
   'rolepay status': runChoices,
@@ -70,12 +82,22 @@ const AUTOCOMPLETE: Record<string, AutocompleteHandler> = {
 }
 
 const BUTTONS: Record<RunAction, ButtonHandler> = { approve: approveButton, cancel: cancelButton, retry: retryButton }
-const PROPOSAL_BUTTONS: Record<ProposalAction, ProposalButtonHandler> = { create: createProposalRunButton, edit: editProposalButton, discard: discardProposalButton }
+const PROPOSAL_BUTTONS: Record<ProposalAction, ProposalButtonHandler> = {
+  create: createProposalRunButton,
+  edit: editProposalButton,
+  discard: discardProposalButton,
+  criteria: criteriaProposalButton,
+}
 const MODALS: Record<ProposalModal, ModalHandler> = { instruct: instructionModalSubmit, edit: editModalSubmit }
 const POLICY_BUTTONS: Record<PolicyAction, PolicyButtonHandler> = { approve: approvePolicyButton, discard: discardPolicyButton }
 
 export const ROUTED_COMMANDS = Object.keys(COMMANDS)
+/** Right-click commands on a member, by their registered name. Kept in step with COMMAND_DEFINITIONS by a test. */
+const USER_COMMANDS: Record<string, UserCommandHandler> = { [PAY_MEMBER_COMMAND]: payMemberCommand }
+
 export const ROUTED_MESSAGE_COMMANDS = Object.keys(MESSAGE_COMMANDS)
+export const ROUTED_USER_COMMANDS = Object.keys(USER_COMMANDS)
+export const RENAMED_MESSAGE_COMMANDS = Object.keys(RENAMED)
 
 const GENERIC_FAILURE = 'Something went wrong on our side. Nothing was paid by this action; try again in a moment.'
 const NO_CHOICES: Outcome = { kind: 'choices', choices: [] }
@@ -135,6 +157,7 @@ function labelOf(i: Exclude<ParsedInteraction, { kind: 'ping' }>): InteractionLa
     case 'autocomplete':
       return { kind: i.kind, name: i.sub ? `${i.command} ${i.sub}` : i.command }
     case 'message_command':
+    case 'user_command':
       return { kind: i.kind, name: i.command }
     case 'component':
     case 'modal':
@@ -169,10 +192,15 @@ async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: Disc
       return ephemeralReply('Sorry, I do not know that button. It may be from an older version.')
     }
     case 'message_command': {
-      const handler = MESSAGE_COMMANDS[i.command]
+      const handler = MESSAGE_COMMANDS[i.command] ?? RENAMED[i.command]
+      return handler ? handler({ target: i.target, ctx }, deps) : ephemeralReply('Sorry, I do not know that command.')
+    }
+    case 'user_command': {
+      const handler = Object.hasOwn(USER_COMMANDS, i.command) ? USER_COMMANDS[i.command] : undefined
       return handler ? handler({ target: i.target, ctx }, deps) : ephemeralReply('Sorry, I do not know that command.')
     }
     case 'modal': {
+      if (decodePayModalId(i.customId)) return payModalSubmit({ id: i.customId, fields: i.fields, messageId: i.messageId, ctx }, deps)
       const modal = decodeProposalModalId(i.customId)
       return modal ? MODALS[modal.modal]({ id: modal.id, fields: i.fields, messageId: i.messageId, ctx }, deps) : ephemeralReply('Sorry, I do not know that form. It may be from an older version.')
     }

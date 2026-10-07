@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatAmount, parseAmount, sumAmounts } from './money.js'
+import { displayAmount, formatAmount, parseAmount, sumAmounts } from './money.js'
 
 describe('parseAmount (decimal string to bigint micro-units, 6 decimals)', () => {
   it.each([
@@ -54,6 +54,43 @@ describe('formatAmount (bigint micro-units to decimal string)', () => {
 
   it('refuses negative amounts', () => {
     expect(() => formatAmount(-1n)).toThrow(RangeError)
+  })
+})
+
+describe('displayAmount (money for people to read: thousands grouped with commas)', () => {
+  it.each([
+    [999_995_000_000n, '999,995'],
+    [1_000_000_000n, '1,000'],
+    [999_000_000n, '999'],
+    [1_234_567_890_000n, '1,234,567.89'],
+    [12_500_000n, '12.5'],
+    [1_000_000_000_001n, '1,000,000.000001'],
+    [1n, '0.000001'],
+    [0n, '0'],
+    // The largest a line can hold in a stored run, and far beyond: grouping never loses a digit.
+    [999_999_999_999_999n, '999,999,999.999999'],
+    [10n ** 30n + 5n, '1,000,000,000,000,000,000,000,000.000005'],
+  ])('shows %s as %s', (input, expected) => {
+    expect(displayAmount(input)).toBe(expected)
+  })
+
+  it('keeps up to 6 decimals trimmed, as formatAmount does, and only groups the whole part', () => {
+    for (const m of [1n, 10n, 1_500_000n, 1_234_567_123_456n, 7_000_001n]) {
+      const [whole, frac] = formatAmount(m).split('.')
+      expect(displayAmount(m)).toBe(`${BigInt(whole as string).toLocaleString('en-US')}${frac ? `.${frac}` : ''}`)
+    }
+  })
+
+  it('refuses negative amounts, like formatAmount', () => {
+    expect(() => displayAmount(-1n)).toThrow(RangeError)
+  })
+
+  it('leaves formatAmount as it was: no separators, so parsing, CSV and memos read it back', () => {
+    expect(formatAmount(999_995_000_000n)).toBe('999995')
+    expect(formatAmount(1_234_567_890_000n, { fixed: true })).toBe('1234567.890000')
+    expect(parseAmount(formatAmount(999_995_000_000n))).toEqual({ ok: true, value: 999_995_000_000n })
+    // The display form is for reading only: the strict parser refuses it.
+    expect(parseAmount(displayAmount(999_995_000_000n))).toEqual({ ok: false, error: { code: 'malformed' } })
   })
 })
 

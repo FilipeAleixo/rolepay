@@ -1,7 +1,7 @@
 // The payee's account page: sign in with the passkey the claim page made, see what arrived, and
 // send it on. The passkey signs in the browser and the transfer goes straight to Tempo: the
 // server serves this page and the passkey ceremony, nothing else.
-import { $, busy, explainPasskeyError, fill, formatMicros, show, status } from './dom.js'
+import { $, busy, displayMicros, explainPasskeyError, fill, formatMicros, show, status } from './dom.js'
 import { passkeys } from './passkey.js'
 import { checkSend, maxSendable } from './send.js'
 import { type ChainConfig, balanceOf, sendToken } from './tempo.js'
@@ -55,7 +55,7 @@ export function startAccount(config: AccountConfig) {
         .map((r) => {
           const p = document.createElement('p')
           const strong = document.createElement('strong')
-          strong.textContent = r.balance === null ? 'unknown' : formatMicros(r.balance.toString())
+          strong.textContent = r.balance === null ? 'unknown' : displayMicros(r.balance.toString())
           p.append(strong, ` ${r.t.label}`)
           return p
         }),
@@ -70,7 +70,7 @@ export function startAccount(config: AccountConfig) {
     if (!input('to') && !input('amount')) return fill('send-says', '')
     if (!balances.has(selected())) return fill('send-says', 'Reading your balance...')
     const c = checked()
-    fill('send-says', c.ok ? `You will send ${formatMicros(c.value.amount.toString())} ${label(selected())} to ${c.value.to}.` : `Check the form: ${c.error}.`)
+    fill('send-says', c.ok ? `You will send ${displayMicros(c.value.amount.toString())} ${label(selected())} to ${c.value.to}.` : `Check the form: ${c.error}.`)
   }
 
   async function send() {
@@ -80,7 +80,7 @@ export function startAccount(config: AccountConfig) {
     const c = checked()
     if (!c.ok) return status(`Nothing was sent: ${c.error}.`, 'bad')
     const token = selected()
-    const what = `${formatMicros(c.value.amount.toString())} ${label(token)} to ${c.value.to}`
+    const what = `${displayMicros(c.value.amount.toString())} ${label(token)} to ${c.value.to}`
     if (!window.confirm(`Send ${what}? A transfer cannot be undone.`)) return
     let account = keys.account()
     if (!account || account.address.toLowerCase() !== address) {

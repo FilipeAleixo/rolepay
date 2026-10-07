@@ -35,6 +35,7 @@ export function accountPage(c: AccountPageConfig): string {
 <section data-step="account" hidden>
   <h2>Balance</h2>
   <p>Account: <code data-field="address"></code> <a data-field="explorer" href="#" target="_blank" rel="noreferrer">explorer</a></p>
+  <p class="muted">On the explorer, balances are under Holdings, and payments received under Transfers.</p>
   <div id="balances"></div>
 </section>
 <section data-step="send" hidden>

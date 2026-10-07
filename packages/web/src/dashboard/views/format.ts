@@ -1,4 +1,4 @@
-import { type RunStatus, TOKEN_SYMBOLS, formatAmount } from '@rolepay/core'
+import { type RunStatus, TOKEN_SYMBOLS, displayAmount } from '@rolepay/core'
 import { esc } from '../../views/page.js'
 
 /** Display helpers shared by the dashboard views. Everything a person or Discord wrote goes through `esc`. */
@@ -9,8 +9,8 @@ export type Names = ReadonlyMap<string, string>
 
 export const tokenLabel = (token: string) => TOKEN_SYMBOLS[token.toLowerCase()] ?? `${token.slice(0, 6)}...${token.slice(-4)}`
 
-/** "12.5 AlphaUSD". Money is bigint micro-units throughout. */
-export const money = (amount: bigint, token: string) => `${formatAmount(amount)} ${esc(tokenLabel(token))}`
+/** "12.5 AlphaUSD", "999,995 AlphaUSD" (thousands grouped, for reading; the CSV keeps plain digits). Money is bigint micro-units throughout. */
+export const money = (amount: bigint, token: string) => `${displayAmount(amount)} ${esc(tokenLabel(token))}`
 
 const pad = (n: number) => String(n).padStart(2, '0')
 

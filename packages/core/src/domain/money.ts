@@ -32,6 +32,17 @@ export function formatAmount(micros: Micros, opts: { fixed?: boolean } = {}): st
   return trimmed ? `${whole}.${trimmed}` : `${whole}`
 }
 
+/**
+ * Money for people to read: formatAmount with the whole part grouped by commas ("999,995",
+ * "1,234,567.89"), up to 6 decimals trimmed. Only for display (Discord embeds, the dashboard, the
+ * web pages): parseAmount refuses it, so CSV, memos, JSON and anything machine-read use formatAmount.
+ */
+export function displayAmount(micros: Micros): string {
+  const [whole, frac] = formatAmount(micros).split('.') as [string, string | undefined]
+  const grouped = whole.replace(/\B(?=(\d{3})+$)/g, ',')
+  return frac ? `${grouped}.${frac}` : grouped
+}
+
 export function sumAmounts(amounts: readonly Micros[]): Micros {
   return amounts.reduce((a, b) => a + b, 0n)
 }

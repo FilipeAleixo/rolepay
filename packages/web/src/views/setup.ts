@@ -65,6 +65,7 @@ export function setupPage(c: SetupPageConfig): string {
   <p>Send ${token} on Tempo to this address, from another Tempo account or through a bridge that delivers on Tempo. Never send from a network or exchange that does not support Tempo.</p>
   <p><code data-field="treasury"></code></p>
   <p>Balance: <strong data-field="balance">...</strong> ${token} <a data-field="explorer" href="#" target="_blank" rel="noreferrer">explorer</a></p>
+  <p class="muted">On the explorer, balances are under Holdings, and ${c.testnet ? "the faucet's deposits" : 'deposits'} under Transfers.</p>
   ${feeFunding}
   ${c.testnet ? '<button id="faucet" type="button" class="secondary">Get testnet funds</button>' : ''}
 </section>

@@ -198,12 +198,16 @@ export function resolveMessageProposal(
   const unresolved: Unresolved[] = raw.unresolved.map((u) => ({ text: clean(u.text, 200), why: clean(u.why, 300) }))
   const candidates: (ProposalLine & { holds: HoldReason[]; split: boolean; rawAmount: Micros | null })[] = []
   const seen = new Set<string>()
+  // Bots and webhooks are never paid, so they are never in a proposal at all (not even as left out).
+  // Their messages still back lines like anyone's: a bounty bot announces the winners.
+  const bots = new Set(Object.values(ctx.map.messages).flatMap((m) => (m.authorIsBot ? [m.authorId] : [])))
   for (const line of raw.lines) {
     const userId = own(ctx.map.users, line.user.trim().replace(/^@/, ''))
     if (!userId) {
       unresolved.push({ text: clean(line.reason || line.user, 200), why: 'The AI named someone who is not in the messages.' })
       continue
     }
+    if (bots.has(userId)) continue
     const sources = [...new Map(line.sources.map(messageOf).filter((m) => m !== undefined).map((m) => [m.messageId, m])).values()].slice(0, 5)
     const holds: HoldReason[] = []
     const flags: LineFlag[] = []

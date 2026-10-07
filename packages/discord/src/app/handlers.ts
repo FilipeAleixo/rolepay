@@ -2,7 +2,7 @@ import type { SourceMessage } from '@rolepay/core'
 import type { z } from 'zod'
 import { explainError } from '../views/errors.js'
 import type { DiscordAppDeps } from './deps.js'
-import type { InteractionContext, OptionValue, ResolvedChannel } from './interaction.js'
+import type { InteractionContext, OptionValue, ResolvedChannel, TargetUser } from './interaction.js'
 import { type Outcome, ephemeralReply } from './outcome.js'
 
 /** Handlers only ever run inside a server. */
@@ -19,6 +19,8 @@ export type PolicyButtonHandler = (input: { policyId: string; version: number; m
 export type VetoButtonHandler = (input: { policyRunId: string; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
 /** A right-click command on a message: the message arrives with the interaction. */
 export type MessageCommandHandler = (input: { target: SourceMessage; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
+/** A right-click command on a member: the user arrives with the interaction. */
+export type UserCommandHandler = (input: { target: TargetUser; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
 /** A submitted modal: `id` is what its custom_id carries, `fields` its text inputs. */
 export type ModalHandler = (input: { id: string; fields: Record<string, string>; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
 

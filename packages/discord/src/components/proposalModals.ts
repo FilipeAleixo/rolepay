@@ -6,7 +6,7 @@ import { explainProposalError } from '../views/errors.js'
 import { DRAFTING, proposalMessage } from '../views/proposal.js'
 
 /**
- * The instruction for a "Propose pay run" message command. The target message was kept when the
+ * The instruction for a "Draft pay run with AI" message command. The target message was kept when the
  * command opened this modal; the AI reads it (as untrusted data) and the proposal comes back
  * only for the caller. Deferred: the model takes longer than 3 seconds.
  */
@@ -14,7 +14,7 @@ export const instructionModalSubmit: ModalHandler = async ({ id: messageId, fiel
   const guard = await requireProposer(ctx, rolepay, { ai: true })
   if (!guard.ok) return guard.reply
   const target = await pendingSources.take({ userId: ctx.caller.userId, messageId })
-  if (!target) return ephemeralReply('That form expired. Right-click the message again and use Apps > Propose pay run.')
+  if (!target) return ephemeralReply('That form expired. Right-click the message again and use Apps > Draft pay run with AI.')
   const community = guard.community
   const instruction = (fields.instruction ?? '').trim()
   return {

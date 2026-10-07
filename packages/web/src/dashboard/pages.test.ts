@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GUILD, MEMBER, ROLE, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
+import { GUILD, MEMBER, ROLE, TOKEN, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
 
 const ALICE = { id: '200000000000000011', address: '0x1111111111111111111111111111111111111111' }
 const BOB = { id: '200000000000000012', address: '0x2222222222222222222222222222222222222222' }
@@ -171,6 +171,25 @@ describe('Runs', () => {
   })
 })
 
+describe('money on the dashboard reads with thousands grouped', () => {
+  it('the treasury balance, a run\'s total and its lines: "999,995 AlphaUSD", while the CSV stays plain digits', async () => {
+    const h = await seeded()
+    await h.activeKey(usd('2000'))
+    h.chain.fund(TOKEN, TREASURY, usd('998995')) // 1,000 from the harness: 999,995 in all
+    const run = await h.run([[ALICE.id, '1500'], [BOB.id, '0.5']], { pay: false })
+    const { browser } = await h.signIn(identity(MEMBER))
+    const overview = text(await (await browser.get(`/dashboard/${GUILD}`)).text())
+    expect(overview).toContain('999,995 AlphaUSD')
+    expect(overview).not.toMatch(/\b999995\b/)
+    const detail = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
+    expect(detail).toContain('1,500 AlphaUSD')
+    expect(detail).toContain('1,500.5 AlphaUSD')
+    const csv = await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}/csv`)).text()
+    expect(csv).toContain('1500.000000')
+    expect(csv).not.toContain('1,500')
+  })
+})
+
 describe('Run detail', () => {
   it('shows lines with people, addresses, amounts and memos, the transaction link, who made and approved it, and a status timeline', async () => {
     const h = await seeded()
@@ -224,6 +243,40 @@ describe('Run detail', () => {
     expect(t).toContain('week of 2026-10-05')
     expect(t).toMatch(/Vetoed by Tess/)
     expect(t).toContain('2026-10-06 09:30 UTC')
+  })
+
+  it('a run autopilot paid after its veto window: nobody approved this run, so it never reads "Approved by"; a propose-mode one keeps it', async () => {
+    const h = await seeded()
+    await h.activeKey()
+    const run = await h.run([[ALICE.id, '10']])
+    const approvedAt = run.approvedAt as Date
+    h.policies.seed(GUILD, { id: 'pol_9', name: 'Weekly helpers', instruction: '10 each', version: 3, mode: 'autopilot', approvedBy: MEMBER.id, approvedAt: new Date(approvedAt.getTime() - 86_400_000) })
+    const origin = {
+      policyId: 'pol_9',
+      policyRunId: 'prun_9',
+      policyName: 'Weekly helpers',
+      version: 3,
+      period: 'week of 2026-10-05',
+      mode: 'autopilot' as const,
+      scheduledFor: new Date(approvedAt.getTime() - 3_600_000),
+      executesAt: new Date(approvedAt.getTime() - 1000),
+      vetoedBy: null,
+      vetoedAt: null,
+      executedAt: approvedAt,
+      vetoable: false,
+    }
+    h.policies.linkRun(GUILD, run.id, origin)
+    const { browser } = await h.signIn(identity(MEMBER))
+    const t = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
+    expect(t).toContain('Released on autopilot after the veto window; no veto. Policy approved by Felix (version 3); autopilot switched on by Tess.')
+    expect(t).toMatch(/Approver\s*Autopilot, after the veto window/)
+    expect(t).not.toMatch(/Approved by/)
+
+    // The same run approved by a person (propose mode): "Approved by" stays.
+    h.policies.linkRun(GUILD, run.id, { ...origin, mode: 'propose', executesAt: null, executedAt: null })
+    const manual = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
+    expect(manual).toMatch(/Approved by Tess/)
+    expect(manual).not.toContain('on autopilot after the veto window')
   })
 
   it('a failed run shows why', async () => {

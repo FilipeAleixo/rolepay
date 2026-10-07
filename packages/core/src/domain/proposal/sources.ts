@@ -21,10 +21,13 @@ export type SourceMessage = z.infer<typeof SourceMessageSchema>
 /** A message as the model sees it: tokens instead of IDs, oldest first. */
 export type PseudonymizedMessage = { ref: string; author: string; at: string; text: string; replyTo: string | null }
 
-/** How tokens map back to Discord, kept in code (never sent). `text` is the original, for checks in code. */
+/**
+ * How tokens map back to Discord, kept in code (never sent). `text` is the original, for checks in
+ * code; `authorIsBot`, so a bot (or webhook) can back a line but never be paid.
+ */
 export type MessageTokenMap = {
   users: Record<string, string>
-  messages: Record<string, { messageId: string; channelId: string; authorId: string; text: string }>
+  messages: Record<string, { messageId: string; channelId: string; authorId: string; authorIsBot: boolean; text: string }>
 }
 
 const USER_MENTION = /<@!?(\d{17,20})>/g
@@ -73,7 +76,7 @@ export function pseudonymizeMessages(input: { instruction: string; messages: rea
     const author = token(m.authorId)
     for (const id of [...m.content.matchAll(USER_MENTION)].map((x) => x[1] as string)) token(id)
     for (const id of m.mentionIds) token(id)
-    messages[ref] = { messageId: m.id, channelId: m.channelId, authorId: m.authorId, text: m.content }
+    messages[ref] = { messageId: m.id, channelId: m.channelId, authorId: m.authorId, authorIsBot: m.authorIsBot, text: m.content }
     return {
       ref,
       author,
