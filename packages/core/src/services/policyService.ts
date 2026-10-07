@@ -573,6 +573,8 @@ export class PolicyService {
         unregistered: 0,
         model: usage?.model ?? proposer.model,
         inputTokens: usage?.inputTokens ?? null,
+        cacheCreationInputTokens: usage?.cacheCreationInputTokens ?? null,
+        cacheReadInputTokens: usage?.cacheReadInputTokens ?? null,
         outputTokens: usage?.outputTokens ?? null,
         costUsd: usage?.costMicroUsd == null ? null : formatAmount(BigInt(usage.costMicroUsd)),
         latencyMs: usage?.latencyMs ?? null,
