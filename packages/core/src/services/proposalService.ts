@@ -178,6 +178,7 @@ export class ProposalService {
       assumptions: resolved.assumptions,
       suspicious: resolved.suspicious,
       remaining,
+      drafted: draftedBy(answer.value.usage),
       ...assembled,
     })
     await this.deps.proposals.save(proposal)
@@ -259,6 +260,7 @@ export class ProposalService {
       ].slice(0, 10),
       suspicious: [],
       remaining,
+      drafted: draftedBy(answer.value.usage),
       ...assembled,
     })
     await this.deps.proposals.save(proposal)
@@ -457,6 +459,9 @@ export class ProposalService {
     })
   }
 }
+
+/** The footer's facts about the call: never more than the model, the time and the cost. */
+const draftedBy = (u: ProposerUsage): Proposal['drafted'] => ({ model: u.model, latencyMs: u.latencyMs, costMicroUsd: u.costMicroUsd === null ? null : BigInt(u.costMicroUsd) })
 
 /** The model call behind an answer; null when the model was not called (the server's daily cap). */
 function called(who: Actor, answer: Proposed<unknown>): ModelCall | null {

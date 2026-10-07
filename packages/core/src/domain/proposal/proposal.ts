@@ -136,6 +136,14 @@ export const ProposalSchema = z.object({
   /** What the bot key had left when the proposal was made. null = no active key. */
   remaining: z.bigint().nonnegative().nullable(),
   problems: z.array(ProblemSchema),
+  /**
+   * How the AI drafted it, for the footer only the proposer sees: the model, the call's latency and
+   * the estimated cost in micro-dollars. null without a usage, and on records saved before it existed.
+   */
+  drafted: z
+    .object({ model: z.string().min(1).max(100), latencyMs: z.number().int().nonnegative(), costMicroUsd: z.bigint().nonnegative().nullable() })
+    .nullable()
+    .default(null),
   status: z.enum(PROPOSAL_STATUSES),
   runId: RunIdSchema.nullable(),
   editedBy: DiscordIdSchema.nullable(),

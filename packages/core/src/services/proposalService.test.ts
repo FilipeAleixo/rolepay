@@ -684,6 +684,21 @@ describe('ProposalService: the ai_usage record (one row per model call, never an
     ])
   })
 
+  it('the proposal carries how it was drafted (the model, its latency, the cost) for the proposer\'s footer, in both modes, through an edit', async () => {
+    const w = await world()
+    demoAnswer(w)
+    const r = await fromMessage(w)
+    if (!r.ok) throw new Error(r.error.code)
+    expect(r.value.drafted).toEqual({ model: 'fake-proposer', latencyMs: 7, costMicroUsd: 10_800n })
+    const edited = await w.proposals.edit({ ...asTreasurer, proposalId: r.value.id, lines: [{ discordUserId: ANA, amount: usd(5) }] })
+    expect(edited.ok && edited.value.drafted).toEqual({ model: 'fake-proposer', latencyMs: 7, costMicroUsd: 10_800n })
+    w.proposer.usage = { ...w.proposer.usage, costMicroUsd: null }
+    w.activity.channels = [{ id: HELP, name: 'help', kind: 'text' }]
+    w.proposer.onCriteria = () => emptyCriteria({ amount: { kind: 'flat', amount: '5', per: '', cap: '', total: '', splitBy: '' } })
+    const c = await w.proposals.proposeFromCriteria({ ...asTreasurer, instruction: 'pay 5 to every registered payee' })
+    expect(c.ok && c.value.drafted).toEqual({ model: 'fake-proposer', latencyMs: 7, costMicroUsd: null })
+  })
+
   it('nothing is stored when the model was not called: refused before it, past the daily cap, or a read that failed first', async () => {
     const w = await world()
     await fromMessage(w, { actor: DAVE, actorRoleIds: [MODS] })

@@ -229,6 +229,7 @@ describe('editProposal (the treasurer types the lines)', () => {
     total: usd(50),
     remaining: usd(100),
     problems: ['amount_not_in_instruction'],
+    drafted: null,
     status: 'open',
     runId: null,
     editedBy: null,

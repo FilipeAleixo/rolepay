@@ -1,7 +1,8 @@
 import type { Criteria } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
-import { ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER_ROLE, proposal } from '../../test/fixtures.js'
-import { amountInWords, criteriaInWords, editModal, editText, instructionModal, proposalMessage } from './proposal.js'
+import { ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER_ROLE, paid, pending, proposal } from '../../test/fixtures.js'
+import { amountInWords, criteriaInWords, editModal, editText, instructionModal, proposalCreatedMessage, proposalDiscardedMessage, proposalMessage } from './proposal.js'
+import { receiptDm, runMessage } from './run.js'
 
 const ctx = { approverRoleId: TREASURER_ROLE }
 const embedOf = (m: ReturnType<typeof proposalMessage>) => m.embeds?.[0] ?? {}
@@ -10,6 +11,26 @@ const size = (m: ReturnType<typeof proposalMessage>) => {
   const e = embedOf(m)
   return (e.title?.length ?? 0) + (e.description?.length ?? 0) + (e.footer?.text.length ?? 0) + (e.fields ?? []).reduce((s, f) => s + f.name.length + f.value.length, 0)
 }
+
+describe('the cost footer (only on the proposal, which only the proposer sees)', () => {
+  const footerOf = (p: ReturnType<typeof proposal>) => embedOf(proposalMessage(p, ctx)).footer?.text ?? ''
+
+  it('says which model drafted it, how long the call took and what it cost', () => {
+    expect(footerOf(proposal())).toBe('Proposal prop_view01. A draft: nothing is paid until a member with the approver role approves the run.\nDrafted by Sonnet 5.5 · 2.1 s · $0.004')
+    expect(footerOf(proposal({ drafted: { model: 'claude-opus-5-5', latencyMs: 8_600, costMicroUsd: 18_000n } }))).toMatch(/\nDrafted by Opus 5\.5 · 8\.6 s · \$0\.018$/)
+    expect(footerOf(proposal({ drafted: { model: 'claude-sonnet-5-5', latencyMs: 2_100, costMicroUsd: 300n } }))).toMatch(/· <\$0\.001$/)
+  })
+
+  it('leaves out a cost it does not know, and the whole line for a proposal saved before it existed', () => {
+    expect(footerOf(proposal({ drafted: { model: 'claude-sonnet-5-5', latencyMs: 2_100, costMicroUsd: null } }))).toMatch(/\nDrafted by Sonnet 5\.5 · 2\.1 s$/)
+    expect(footerOf(proposal({ drafted: null }))).not.toContain('Drafted by')
+  })
+
+  it('never reaches what others see: the run posted for approval, the receipts, the created or discarded notes', () => {
+    const others = [proposalCreatedMessage(proposal(), pending(), ctx), proposalDiscardedMessage(proposal()), runMessage(pending(), { network: 'moderato', approverRoleId: TREASURER_ROLE }), receiptDm(paid(), paid().lines[0] as ReturnType<typeof paid>['lines'][number], { network: 'moderato', communityName: 'Mods' })]
+    for (const m of others) expect(JSON.stringify(m)).not.toMatch(/Drafted by|Sonnet|\$0\./)
+  })
+})
 
 describe('proposalMessage', () => {
   it('one line per person with amount, reason and a link to the source; the total against the bot key', () => {

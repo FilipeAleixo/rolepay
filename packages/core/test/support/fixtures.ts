@@ -158,6 +158,7 @@ export function proposal(over: Partial<Proposal> = {}): Proposal {
     total: 20_000_000n,
     remaining: 100_000_000n,
     problems: [],
+    drafted: { model: 'claude-sonnet-5-5', latencyMs: 2100, costMicroUsd: 3_869n },
     status: 'open',
     runId: null,
     editedBy: null,

@@ -201,6 +201,24 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
     expect(await a.rolepay.payRuns.list({ guildId: GUILD })).toHaveLength(1)
   })
 
+  it('the cost footer is on the proposal only the caller sees (through an Edit too), never on the run posted for the channel', async () => {
+    const a = await ready()
+    demo(a)
+    await a.send(messageCommand(SCOPE, 'Propose pay run', WINNERS, treasurer))
+    const submitted = await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${WINNERS.id}`, { instruction: '50 each, the indexer one 200' }, treasurer, { token: 'tok-cost' }))
+    expect(isEphemeral(submitted)).toBe(true)
+    // The fake model: 7 ms, 10,800 micro-dollars.
+    expect(text(a.rest.lastEdit('tok-cost'))).toContain('Drafted by fake-proposer · <0.1 s · $0.011')
+    const id = proposalIdIn(a.rest.lastEdit('tok-cost'))
+    const edited = await a.send(modalSubmit(SCOPE, `proposal-modal:edit:${id}`, { lines: `<@${ALICE}>=75` }, treasurer, { messageId: '810000000000000078' }))
+    expect(text(body(edited))).toContain('Drafted by fake-proposer')
+    const created = await a.send(buttonClick(SCOPE, `proposal:create:${id}`, treasurer))
+    expect(text(body(created))).not.toContain('Drafted by')
+    const review = a.rest.followUps.at(-1)?.message
+    expect(text(review)).toContain('Pay run awaiting approval')
+    expect(text(review)).not.toMatch(/Drafted by|fake-proposer|\$0\.011/)
+  })
+
   it('Edit opens the lines as text; the submitted lines replace them in place', async () => {
     const { a, id } = await proposed()
     const opened = await a.send(buttonClick(SCOPE, `proposal:edit:${id}`, treasurer))

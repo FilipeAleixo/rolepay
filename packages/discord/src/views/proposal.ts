@@ -10,6 +10,9 @@ import {
   type Run,
   blockingProblems,
   formatAmount,
+  modelLabel,
+  secondsText,
+  usdText,
 } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message, type Modal, TextInputStyle } from '../api.js'
 import { encodeProposalId, encodeProposalModalId } from '../components/customId.js'
@@ -209,10 +212,21 @@ export const DRAFTING = {
   criteria: 'Drafting a proposal…',
 } as const
 
+/**
+ * "Drafted by Sonnet 5.5 · 2.1 s · $0.004": what the model call cost. Only on the proposal, which is
+ * ephemeral (the proposer alone sees it); never on the run, its review or the receipts.
+ */
+function draftedLine(p: Proposal): string | null {
+  const d = p.drafted
+  if (!d) return null
+  return [`Drafted by ${modelLabel(d.model)}`, secondsText(d.latencyMs), ...(d.costMicroUsd === null ? [] : [usdText(d.costMicroUsd)])].join(' · ')
+}
+
 export function proposalMessage(p: Proposal, ctx: ProposalViewContext): Message {
   const title = p.editedBy ? 'Pay run proposal (edited)' : 'Pay run proposal'
   const head = header(p).join('\n')
-  const footer = `Proposal ${p.id}. A draft: nothing is paid until a member with the approver role approves the run.`
+  const drafted = draftedLine(p)
+  const footer = `Proposal ${p.id}. A draft: nothing is paid until a member with the approver role approves the run.${drafted ? `\n${clip(drafted, 200)}` : ''}`
   const expires = `Expires ${relativeTime(p.expiresAt)}.${ctx.approverRoleId ? ` Create posts the run for ${roleMention(ctx.approverRoleId)} to approve.` : ''}`
   // The lines get whatever room the header, the expiry line, the fields and the footer leave,
   // and at least 1,000 characters: the fields shrink first (Discord refuses an embed over 6,000).

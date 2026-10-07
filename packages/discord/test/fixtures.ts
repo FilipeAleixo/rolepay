@@ -79,6 +79,7 @@ export function proposal(over: Partial<Proposal> = {}): Proposal {
     total: 250_000_000n,
     remaining: 100_000_000n,
     problems: ['over_budget'],
+    drafted: { model: 'claude-sonnet-5-5', latencyMs: 2100, costMicroUsd: 4_000n },
     status: 'open',
     runId: null,
     editedBy: null,
