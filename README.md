@@ -16,7 +16,7 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 ### What to look at in 3 minutes
 
 1. **The demo video:** **[TO FILL: VIDEO_URL]**
-2. **Get paid on the testnet demo** (about two minutes): join the demo server, **[TO FILL: DISCORD_INVITE_URL. With it, one line on what gets a judge paid (for example a message in #bounties) and who approves the run and when. If the demo bot can be added to other servers, its invite link too, for the treasurer side.]** Then follow [Try it](#try-it).
+2. **Get paid on the testnet demo, with nobody online** (about two minutes of your time, paid at the next daily run): join the demo server, **[TO FILL: DISCORD_INVITE_URL. If the demo bot can be added to other servers, its invite link too, for the treasurer side.]** Run `/payee link`, create your passkey and react ✅ to the welcome post in #start-here. A standing policy pays 1 test AlphaUSD to every new payee who did, every day at 18:00 UTC, on autopilot within the bot key's on-chain limit, with a DM receipt. The steps are in [Try it](#try-it).
 3. **A pay run on Tempo mainnet,** from the pilot in [`apps/server/MAINNET.md`](apps/server/MAINNET.md): **[TO FILL: MAINNET_TX_URL, the pay run's transaction on explore.tempo.xyz]**
 4. **The chain refusing an over-limit batch with Rolepay's own checks skipped:** [the reverted transaction on Moderato](https://explore.testnet.tempo.xyz/tx/0xa29ba08c3162e427cea7008f5fcf902f439eef6c84da27458cc659cf8c0c8ee0), sent by [`protocolLimit.chain.test.ts`](packages/core/test/protocolLimit.chain.test.ts).
 5. **What can go wrong, and what stops it:** [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
@@ -48,7 +48,7 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 - Cost: a proposal costs about $0.003 to $0.004 on Sonnet 5.5 with the prompt cache warm (measured live, October 2026). Every model call is stored without any text, the proposer sees what theirs cost, and the dashboard shows the month's AI spend: [`domain/aiUsage.ts`](packages/core/src/domain/aiUsage.ts), [`services/aiUsageService.ts`](packages/core/src/services/aiUsageService.ts)
 
 **Standing policies, with no AI at runtime.** The model compiles the rule once, a human approves it, code runs it, the chain caps it.
-- Tests: [`services/schedulerService.test.ts`](packages/core/src/services/schedulerService.test.ts) (no AI at runtime, veto timing, crashes at each step), [`test/policies.sqlite.integration.test.ts`](packages/core/test/policies.sqlite.integration.test.ts) (two instances, one run per period), [`test/policiesDashboard.test.ts`](apps/server/test/policiesDashboard.test.ts), [`test/policy.chain.test.ts`](packages/core/test/policy.chain.test.ts) (an autopilot payout on Moderato)
+- Tests: [`services/schedulerService.test.ts`](packages/core/src/services/schedulerService.test.ts) (no AI at runtime, veto timing, crashes at each step), [`test/policies.sqlite.integration.test.ts`](packages/core/test/policies.sqlite.integration.test.ts) (two instances, one run per period), [`test/policiesDashboard.test.ts`](apps/server/test/policiesDashboard.test.ts), [`test/judgeDemo.test.ts`](apps/server/test/judgeDemo.test.ts) (the judge demo: a daily run pays each new payee once, with nobody online), [`test/policy.chain.test.ts`](packages/core/test/policy.chain.test.ts) (an autopilot payout on Moderato)
 
 **A web dashboard with no script.** Discord sign-in with PKCE (S256) and state, session tokens stored hashed, a CSRF token on every form, and the member's roles read fresh from Discord for every action.
 - Code: [`dashboard/sessions.ts`](packages/web/src/dashboard/sessions.ts), [`dashboard/routes/auth.ts`](packages/web/src/dashboard/routes/auth.ts), [`dashboard/access.ts`](packages/web/src/dashboard/access.ts)
@@ -59,20 +59,20 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 ```bash
 pnpm install
 pnpm typecheck
-pnpm test            # 1,342 tests in 120 files, no network, no secrets
+pnpm test            # 1,380 tests in 121 files, no network, no secrets
 pnpm test:coverage   # what CI runs, with a threshold per package
 ```
 
-`pnpm test` runs 1,342 tests: core 676, discord 347, web 194, server 125. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
+`pnpm test` runs 1,380 tests: core 699, discord 356, web 197, server 128. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
 
 Coverage from `pnpm test:coverage`:
 
 | Package | Lines | Statements | Functions | Branches |
 | --- | --- | --- | --- | --- |
-| `packages/core` | 94.88% | 91.5% | 94.66% | 81.95% |
-| `packages/discord` | 96.52% | 93.29% | 96.79% | 83.14% |
-| `packages/web` | 85.08% | 82.24% | 81.58% | 77.07% |
-| `apps/server` | 85.49% | 85% | 84.43% | 84.39% |
+| `packages/core` | 94.97% | 91.68% | 94.91% | 82.65% |
+| `packages/discord` | 96.59% | 93.3% | 96.82% | 83.37% |
+| `packages/web` | 85.12% | 82.3% | 81.62% | 77.33% |
+| `apps/server` | 85.6% | 85.15% | 84.43% | 84.85% |
 
 `packages/web` is lower because its browser code (`src/client/`, 44% of lines here) runs in the Playwright e2e, which these numbers do not count. Its server code is at 99% of lines.
 
@@ -97,12 +97,13 @@ The threat model, with every threat, its mitigation, the code or test, and what 
 
 A demo runs on Tempo's Moderato testnet at <https://demo.rolepay.app>: test dollars only, nothing real moves. The invite to its Discord server is under [For judges](#for-judges).
 
-In about two minutes, as a recipient:
+About two minutes of your time, as a recipient, with nobody else online:
 
-1. Join the demo Discord server and run `/payee link`. Only you see the reply.
+1. Join the demo Discord server and run `/payee link` in #start-here. Only you see the reply.
 2. Open the link and press **Create my passkey**, then confirm with your fingerprint or face. That is your Tempo account: no wallet, no seed phrase, nothing to install, no gas.
-3. Get included in a pay run, as the note with the invite says. The treasurer can draft the run with AI from the channel (right-click a message, Apps > Propose pay run) and approves it with one click.
-4. You get a DM receipt with your amount, and the transaction on Tempo's explorer shows everyone paid in one batch, each line with its memo.
+3. React ✅ to the welcome post in #start-here.
+4. Wait for the next daily run, at 18:00 UTC. A standing policy, "1 AlphaUSD to every registered payee who reacted ✅ to the welcome post and has never been paid", was written once with AI and approved by the treasurer; now code runs it with no AI and nobody online. The run is posted in #payouts with a one-minute veto window, then paid in one batched transaction, capped by the bot key's on-chain limit. You are paid once: after that you no longer match "never paid".
+5. You get a DM receipt with your amount and the transaction link, if your privacy settings for the demo server allow direct messages from server members (the payment lands either way). The transaction on Tempo's explorer shows everyone paid in one batch, each line with its memo.
 
 The treasurer side, in your own Discord server: run your own Rolepay with [`apps/server/README.md`](apps/server/README.md) (a Discord application, a tunnel and `pnpm dev`, about 20 minutes). Then `/rolepay setup approver_role:@Treasurer`, create the treasury with a passkey, get testnet funds, authorise the bot key, `/rolepay new`, and Approve.
 
@@ -135,7 +136,7 @@ AI writes the rule once. Humans approve it. Code runs it. The chain caps it.
 
 - **Write it once.** A treasurer types a rule such as "every Monday: 1 per answered question in #help, max 50 a week each, for Mods" with `/rolepay policy new`. The model compiles it once into a filter and an amount rule.
 - **See who it applies to before approving.** Rolepay shows who it matches right now, with each person's count, why they match and the amount. Only the approver role activates it, and any edit needs a new approval.
-- **No AI at runtime.** On schedule, code alone runs the rule over the week since the last run. In propose mode each run waits for the usual one-tap approval. On autopilot it is posted with "pays at 18:00 unless vetoed" and a Veto button, then pays within the bot key's on-chain limit.
+- **No AI at runtime.** On schedule, code alone runs the rule over the week since the last run. On the testnet demo a policy can also run daily (a demo control, impossible on mainnet): that is how judges get paid with nobody online. In propose mode each run waits for the usual one-tap approval. On autopilot it is posted with "pays at 18:00 unless vetoed" and a Veto button, then pays within the bot key's on-chain limit.
 - **Held whole, never paid in part.** A run over the key's budget or the policy's cap is held and explained. Every step goes to an audit log, and one run per period holds across restarts and a second server on the same database.
 
 ## Repository
