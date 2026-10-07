@@ -18,10 +18,10 @@ export type DashboardOverrides = {
   /** Default: the bot's REST client. */
   members?: GuildMembers
   /**
-   * THE POLICY SEAM. Absent: the Policies and Audit pages say they are not available. Once core's
-   * policy services are on this branch, main.ts passes thin adapters over them here:
-   * `policies: policyPortFromCore(rolepay)` and `audit: auditPortFromCore(rolepay)` (see
-   * docs/ARCHITECTURE.md, "The policy seam"). Tests pass `InMemoryPolicies` from `@rolepay/web/testing`.
+   * THE POLICY SEAM. main.ts passes the adapters over core's policy services and audit stream
+   * (`policyPortFromCore(rolepay)`, `auditPortFromCore(rolepay)` in policySeam.ts; see
+   * docs/ARCHITECTURE.md, "The policy seam"). Absent: the Policies and Audit pages say they are
+   * not available. Page tests may pass `InMemoryPolicies` from `@rolepay/web/testing` instead.
    */
   policies?: PolicyPort
   audit?: AuditPort

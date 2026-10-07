@@ -9,6 +9,7 @@ import { FakeDiscordRest, createTestSigner } from '@rolepay/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
 import { parseServerConfig } from '../src/config.js'
 import { type ServerDeps, composeServer } from '../src/compose.js'
+import { auditPortFromCore, policyPortFromCore } from '../src/policySeam.js'
 
 export const GUILD = '1094309218049937418'
 export const TREASURY = '0x9999999999999999999999999999999999999999'
@@ -26,6 +27,7 @@ type SharedState = { rolepay: Rolepay; chain: FakePayoutChain; clock: ManualCloc
  * process would (a fresh Discord connection and queue). `sleep`: replace the job's waits.
  * `devShortcuts: false`: the production default (no `treasury:` or `new_key` in Discord).
  * `demoControls: true`: `/rolepay policy run_now` and one-minute veto windows (off by default, as in production).
+ * `policySeam: true`: the dashboard's Policies and Audit pages over core's services, as main.ts wires them.
  * `env`: more settings, as the environment would give them.
  */
 export async function testServer(
@@ -34,6 +36,7 @@ export async function testServer(
     sleep?: (ms: number) => Promise<void>
     devShortcuts?: boolean
     demoControls?: boolean
+    policySeam?: boolean
     env?: Record<string, string>
     dashboard?: ServerDeps['web']['dashboard']
   } = {},
@@ -57,6 +60,7 @@ export async function testServer(
   // A restarted process gets a fresh Discord connection; the AI proposals read through it.
   const rest = new FakeDiscordRest()
   const proposer = opts.from?.proposer ?? new FakeRunProposer()
+  const activity = new RestActivityReader(rest)
   const rolepay =
     opts.from?.rolepay ??
     createRolepay({
@@ -67,14 +71,16 @@ export async function testServer(
       clock,
       network: 'moderato',
       proposer,
-      activity: new RestActivityReader(rest),
+      activity,
       proposalLog: (entry) => logs.push({ event: 'proposal', fields: entry }),
       minVetoMinutes: config.policies.minVetoMinutes,
     })
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
+  const seam = opts.policySeam ? { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay) } : {}
+  const dashboard = opts.dashboard || opts.policySeam ? { ...seam, ...opts.dashboard } : undefined
   const server = composeServer({
-    web: { sessions, assets: staticAssets({ 'rolepay.js': '' }), ...(opts.dashboard ? { dashboard: opts.dashboard } : {}) },
+    web: { sessions, assets: staticAssets({ 'rolepay.js': '' }), ...(dashboard ? { dashboard } : {}) },
     config,
     rolepay,
     rest,
