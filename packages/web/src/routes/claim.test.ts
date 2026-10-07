@@ -42,7 +42,7 @@ describe('the recipient claim page', () => {
     const token = await claimLink(h)
     const res = await h.post(`/claim/${token}`, { address: OTHER_PASSKEY }, PASSKEY)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true, address: PASSKEY, communityName: 'Mods guild' })
+    expect(await res.json()).toEqual({ ok: true, address: PASSKEY, communityName: 'Mods guild', preferredToken: null })
     expect(await h.rolepay.payees.get({ guildId: GUILD, discordUserId: ALICE })).toMatchObject({ ok: true, value: { address: PASSKEY } })
   })
 

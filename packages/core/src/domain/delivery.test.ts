@@ -5,6 +5,7 @@ import {
   type SwapLeg,
   checkSwapQuotes,
   checkSwapScope,
+  keyLacksSwapScope,
   lineSwapFor,
   maxSwapInput,
   payoutSpendCap,
@@ -50,6 +51,16 @@ describe('the preferred-token allowlist (a fixed list per network)', () => {
   it('a payee chooses from the payout token (the default) and the swap tokens', () => {
     expect(preferenceChoices(community())).toEqual([ALPHA, BETA, THETA])
     expect(preferenceChoices(community({ feeMode: 'fee_budget', feeToken: THETA }))).toEqual([ALPHA, BETA])
+  })
+})
+
+describe('keyLacksSwapScope: whether runs with swaps would be held until the treasurer authorises a new key', () => {
+  it('only with preferred tokens on, and a key (or none) that cannot deliver every swap token', () => {
+    expect(keyLacksSwapScope(community({ preferredTokens: false }), null)).toBe(false)
+    expect(keyLacksSwapScope(community(), null)).toBe(true)
+    expect(keyLacksSwapScope(community(), { swapTokens: undefined })).toBe(true)
+    expect(keyLacksSwapScope(community(), { swapTokens: [BETA] })).toBe(true)
+    expect(keyLacksSwapScope(community(), { swapTokens: [BETA, THETA] })).toBe(false)
   })
 })
 

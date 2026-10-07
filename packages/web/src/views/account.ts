@@ -13,9 +13,10 @@ export type AccountPageConfig = {
 }
 
 /**
- * The payee's own account: sign in with the passkey the claim page made, see what arrived, and
- * send it on (to their own wallet, an exchange or a bridge on Tempo). The browser signs and sends
- * straight to Tempo; this server never takes an address or an amount from the page.
+ * The payee's own account: sign in with the passkey the claim page made, see what arrived, send it
+ * on (to their own wallet, an exchange or a bridge on Tempo), and choose the stablecoin each
+ * community pays them in. The browser signs and sends straight to Tempo; this server never takes an
+ * address or an amount from the page (the choice is stored for the passkey session's own address).
  */
 export function accountPage(c: AccountPageConfig): string {
   const options = c.tokens.map((t) => `<option value="${esc(t.address)}">${esc(t.label)}</option>`).join('')
@@ -36,6 +37,12 @@ export function accountPage(c: AccountPageConfig): string {
   <h2>Balance</h2>
   <p>Account: <code data-field="address"></code> <a data-field="explorer" href="#" target="_blank" rel="noreferrer">explorer</a></p>
   <div id="balances"></div>
+</section>
+<section data-step="payouts" hidden>
+  <h2>How you are paid</h2>
+  <p class="muted">Choose the USD stablecoin each community pays you in. When it is not the community's own, Rolepay buys it for you on Tempo's stablecoin exchange, in the same transaction that pays you.</p>
+  <div id="payouts"></div>
+  <button id="payouts-signin" type="button" class="secondary" hidden>Sign in to choose</button>
 </section>
 <section data-step="send" hidden>
   <h2>Send</h2>

@@ -16,7 +16,7 @@ import {
   keyAuthorization,
   toBotKeyView,
 } from '../domain/community.js'
-import { swapTokensFor } from '../domain/delivery.js'
+import { keyLacksSwapScope, swapTokensFor } from '../domain/delivery.js'
 import type { Hex } from '../domain/hex.js'
 import { type Address, AddressSchema, DiscordIdSchema } from '../domain/ids.js'
 import { type Result, err, ok } from '../domain/result.js'
@@ -231,9 +231,7 @@ export class CommunityService {
     const updated: Community = { ...community, preferredTokens: input.enabled, updatedAt: this.deps.clock.now() }
     await this.deps.communities.update(updated)
     const active = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
-    const granted = active?.policy.swapTokens ?? []
-    const keyNeedsSwapScope = input.enabled && swapTokensFor(updated).some((t) => !granted.includes(t))
-    return ok({ community: updated, keyNeedsSwapScope })
+    return ok({ community: updated, keyNeedsSwapScope: keyLacksSwapScope(updated, active?.policy ?? null) })
   }
 
   /**

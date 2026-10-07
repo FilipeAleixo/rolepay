@@ -62,10 +62,11 @@ function contentSecurityPolicy(config: WebConfig): string {
   ].join('; ')
 }
 
-const RATE_LIMITED_PREFIXES = /^\/(webauthn|claim|setup|dashboard)\//
+const RATE_LIMITED_PREFIXES = /^\/(webauthn|claim|setup|dashboard|account)\//
 
 /**
- * Which budget a request takes from: the public POSTs (passkeys, claim, setup, dashboard actions),
+ * Which budget a request takes from: the public POSTs (passkeys, claim, setup, dashboard actions, a
+ * payee's choice of stablecoin),
  * and every request of the Discord sign-in (each one writes a record or calls Discord), never
  * the dashboard's pages.
  */
@@ -149,7 +150,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
   app.route('/', landingRoutes({ testnet, discordAppId: config.discordAppId }))
   app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))
-  app.route('/', accountRoutes({ config, testnet }))
+  app.route('/', accountRoutes({ config, testnet, payees: deps.rolepay.payees, sessions: deps.sessions }))
   app.route('/', setupRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))
   if (deps.dashboard) app.route('/', dashboardRoutes({ ...deps.dashboard, rolepay: deps.rolepay, clock: deps.clock, config, testnet }))
   return app

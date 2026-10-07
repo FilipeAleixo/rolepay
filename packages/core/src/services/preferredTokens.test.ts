@@ -301,6 +301,11 @@ describe("PayeeService: a payee's choice", () => {
     expect(await w.payees.registrations({ address: '0x7777777777777777777777777777777777777777' })).toEqual([])
   })
 
+  it('the options a page shows for one community: its payout token, the choices, and whether it is on', async () => {
+    expect(await w.payees.preferenceOptions({ guildId: GUILD })).toEqual({ ok: true, value: { payoutToken: ALPHA, choices: [ALPHA, BETA, THETA], enabled: true } })
+    expect(await w.payees.preferenceOptions({ guildId: OTHER_GUILD })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+  })
+
   it('a new registration through a link keeps the stablecoin they chose', async () => {
     const link = await w.payees.issueLink({ guildId: GUILD, discordUserId: ANA })
     if (!link.ok) throw new Error(link.error.code)

@@ -156,6 +156,13 @@ export class PayeeService {
     return ok(await Promise.all(mine.map((p) => this.savePreference(p, chosen.value))))
   }
 
+  /** For a page about one community (the claim page): its payout token, what a payee may choose, and whether preferred stablecoins are on. */
+  async preferenceOptions(input: { guildId: string }): Promise<Result<{ payoutToken: Address; choices: Address[]; enabled: boolean }, { code: 'community_not_found' }>> {
+    const c = await this.deps.communities.get(input.guildId)
+    if (!c) return err({ code: 'community_not_found' })
+    return ok({ payoutToken: c.payoutToken, choices: preferenceChoices(c), enabled: c.preferredTokens })
+  }
+
   /** Every community that pays this address (from a verified passkey session), with its choices: see PayeeRegistration. */
   async registrations(input: { address: string }): Promise<PayeeRegistration[]> {
     const address = AddressSchema.safeParse(input.address)

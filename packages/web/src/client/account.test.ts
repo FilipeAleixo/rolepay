@@ -30,6 +30,8 @@ class El {
   value = ''
   textContent = ''
   href = ''
+  id = ''
+  htmlFor = ''
   className = ''
   disabled = false
   children: (El | string)[] = []
@@ -66,13 +68,15 @@ let steps: Record<string, El>
 let confirmAnswer = true
 const flush = () => new Promise((r) => setTimeout(r, 0))
 
-function page(sponsorUrl: string | null) {
-  ids = Object.fromEntries(['signin', 'send', 'max', 'token', 'amount', 'to', 'send-form', 'balances', 'status'].map((k) => [k, new El()]))
+function page(sponsorUrl: string | null, extra: string[] = []) {
+  ids = Object.fromEntries(['signin', 'send', 'max', 'token', 'amount', 'to', 'send-form', 'balances', 'status', ...extra].map((k) => [k, new El()]))
   ;(ids.token as El).value = ALPHA
   fields = { address: new El(), explorer: new El(), 'send-says': new El() }
-  steps = { signin: new El(), account: new El(), send: new El() }
+  steps = { signin: new El(), account: new El(), send: new El(), payouts: new El() }
   ;(steps.account as El).hidden = true
   ;(steps.send as El).hidden = true
+  ;(steps.payouts as El).hidden = true
+  if (ids['payouts-signin']) ids['payouts-signin'].hidden = true
   vi.stubGlobal('document', {
     querySelector: (s: string) => (s.startsWith('#') ? (ids[s.slice(1)] ?? null) : null),
     querySelectorAll: (s: string) => {
@@ -193,5 +197,29 @@ describe('the account page (browser code)', () => {
     type('to', TO)
     type('amount', '1')
     expect((fields['send-says'] as El).textContent).toBe('Reading your balance...')
+  })
+
+  it('shows which stablecoin each community pays in, once the server has a passkey session; without one, a button to sign in first', async () => {
+    let session = false
+    const payouts = [
+      {
+        guildId: '1094309218049937418',
+        communityName: 'Mods guild',
+        payoutToken: { address: ALPHA, label: 'AlphaUSD' },
+        preferredToken: null,
+        enabled: true,
+        choices: [{ address: ALPHA, label: 'AlphaUSD' }],
+      },
+    ]
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify(session ? { ok: true, payouts } : { ok: false, error: { code: 'no_passkey_session' } })))
+    page(null, ['payouts', 'payouts-signin'])
+    await vi.waitFor(() => expect((ids['payouts-signin'] as El).hidden).toBe(false))
+    expect((steps.payouts as El).hidden).toBe(false)
+    expect((ids.payouts as El).children).toHaveLength(0)
+    session = true
+    ;(ids['payouts-signin'] as El).fire('click')
+    await vi.waitFor(() => expect((ids.payouts as El).children).toHaveLength(3))
+    expect((ids['payouts-signin'] as El).hidden).toBe(true)
+    expect((ids.payouts as El).text).toContain('Mods guild pays you in AlphaUSD.')
   })
 })

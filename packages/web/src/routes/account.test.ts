@@ -36,7 +36,7 @@ describe("the payee's account page (/account)", () => {
     const res = await webHarness().send('/account')
     const config = await pageConfig(res.clone())
     expect(config).toMatchObject({ network: 'moderato', testnet: true, sponsorUrl: 'https://sponsor.moderato.tempo.xyz' })
-    expect((config.tokens as { address: string }[]).map((t) => t.address)).toEqual([TESTNET_TOKENS.alpha_usd, TESTNET_TOKENS.path_usd, TESTNET_TOKENS.beta_usd])
+    expect((config.tokens as { address: string }[]).map((t) => t.address)).toEqual([TESTNET_TOKENS.alpha_usd, TESTNET_TOKENS.path_usd, TESTNET_TOKENS.beta_usd, TESTNET_TOKENS.theta_usd])
     expect(await res.text()).toMatch(/network fee is paid by the sponsor/)
   })
 

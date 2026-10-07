@@ -31,6 +31,8 @@ code{word-break:break-all;background:rgba(255,255,255,.05);border-radius:6px;pad
 button{margin:.3rem .5rem .3rem 0}
 label{display:block;margin:.9rem 0 .4rem;font:500 12.5px/1.4 var(--sans);color:var(--soft)}
 input:not([type=radio]):not([type=checkbox]),select{width:100%}
+label.check{display:flex;gap:.65rem;align-items:flex-start;margin:.6rem 0;font:400 14px/1.5 var(--sans);color:var(--fg)}
+#payouts p{margin:.9rem 0 .2rem}
 .row{display:flex;gap:0 .9rem;flex-wrap:wrap}.row>div{flex:1 1 10rem}
 form>button:last-of-type{margin-top:.75rem}
 #status{margin:1rem 0 0;font-size:14px}

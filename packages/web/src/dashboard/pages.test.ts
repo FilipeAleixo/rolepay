@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GUILD, MEMBER, ROLE, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
+import { GUILD, MEMBER, ROLE, TOKEN, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
 
 const ALICE = { id: '200000000000000011', address: '0x1111111111111111111111111111111111111111' }
 const BOB = { id: '200000000000000012', address: '0x2222222222222222222222222222222222222222' }
@@ -237,6 +237,24 @@ describe('Run detail', () => {
     const t = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
     expect(t).toMatch(/Failed/)
     expect(t).toMatch(/rejected/)
+  })
+
+  it('a line paid in the payee\'s preferred stablecoin reads "10 AlphaUSD -> 10 BetaUSD (swapped)", and the CSV has its delivered token', async () => {
+    const BETA = '0x20c0000000000000000000000000000000000002'
+    const h = await seeded()
+    await h.rolepay.communities.setPreferredTokens({ guildId: GUILD, enabled: true })
+    await h.activeKey()
+    await h.rolepay.payees.setPreferredToken({ guildId: GUILD, discordUserId: ALICE.id, token: BETA })
+    h.chain.setSwapRoute(TOKEN, BETA, { inPerOutBps: 9_954, liquidity: usd('1000') })
+    const run = await h.run([[ALICE.id, '10'], [BOB.id, '2.5']])
+    const { browser } = await h.signIn(identity(MEMBER))
+    const t = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
+    expect(t).toContain('10 AlphaUSD → 10 BetaUSD (swapped)')
+    expect(t).not.toContain('2.5 AlphaUSD →')
+    const csv = (await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}/csv`)).text()).split('\r\n')
+    expect(csv[0]).toMatch(/,delivered_token$/)
+    expect(csv[1]).toMatch(new RegExp(`,${BETA}$`))
+    expect(csv[2]).toMatch(new RegExp(`,${TOKEN}$`))
   })
 
   it("another community's run, or an unknown one, is not found", async () => {

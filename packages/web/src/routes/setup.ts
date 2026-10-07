@@ -1,4 +1,15 @@
-import { AddressSchema, type Clock, type Community, type KeyStatusView, type Rolepay, TOKEN_SYMBOLS, formatAmount, parseAmount } from '@rolepay/core'
+import {
+  AddressSchema,
+  type Clock,
+  type Community,
+  type KeyStatusView,
+  type Rolepay,
+  TOKEN_SYMBOLS,
+  formatAmount,
+  keyLacksSwapScope,
+  parseAmount,
+  swapTokensFor,
+} from '@rolepay/core'
 import { type Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { WebConfig } from '../config.js'
@@ -27,6 +38,9 @@ const KeyPolicyBody = z.object({
 
 /** confirm and revoked name the key they are about: the one this browser just signed for. */
 const KeyRefBody = z.object({ keyAddress: AddressSchema })
+
+/** Pay each person in the stablecoin they prefer: on or off. */
+const PreferredTokensBody = z.object({ enabled: z.boolean() })
 
 type Treasurer = { community: Community; session: PasskeySession }
 
@@ -78,6 +92,12 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     const payoutToken = community?.payoutToken ?? settings.payoutToken
     const guildName = community?.name ?? settings.name ?? 'your Discord server'
     const d = config.botKeyDefaults
+    // The stablecoins the key may swap into when the treasurer turns preferred stablecoins on: the
+    // page adds them to the authorisation it builds itself, never taking them from the server's answer.
+    const swapTokens = swapTokensFor({ network: config.network, payoutToken, feeToken: feeMode === 'fee_budget' ? feeToken : null }).map((address) => ({
+      address,
+      label: label(address) as string,
+    }))
     return c.html(
       setupPage({
         page: 'setup',
@@ -94,6 +114,7 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
         feeMode,
         feeToken,
         feeTokenLabel: label(feeToken),
+        swapTokens,
         passkeyName: `Rolepay treasury: ${guildName}`,
         defaults: {
           limit: formatAmount(d.limit),
@@ -115,8 +136,17 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     return jsonResponse(200, {
       ok: true,
       community: community
-        ? { treasury: community.treasuryAddress, payoutToken: community.payoutToken, feeMode: community.feeMode, feeToken: community.feeToken, name: community.name }
+        ? {
+            treasury: community.treasuryAddress,
+            payoutToken: community.payoutToken,
+            feeMode: community.feeMode,
+            feeToken: community.feeToken,
+            name: community.name,
+            preferredTokens: community.preferredTokens,
+          }
         : null,
+      // Preferred stablecoins are on but the active key cannot swap: runs with swaps wait for a new key.
+      keyNeedsSwapScope: Boolean(community && keyLacksSwapScope(community, status?.ok && status.value.key.status === 'active' ? status.value.key.policy : null)),
       // The key that matters (the active one, never hidden by a pending one), and every key not
       // yet revoked: the page offers to revoke each one that is live on chain.
       key: status?.ok ? keyJson(status.value) : null,
@@ -165,6 +195,20 @@ export function setupRoutes(deps: SetupRoutesDeps): Hono {
     })
     if (!provisioned.ok) return failure(400, provisioned.error)
     return jsonResponse(200, { ok: true, keyAddress: provisioned.value.keyAddress, treasury: provisioned.value.account, authorization: provisioned.value.authorization })
+  })
+
+  /**
+   * Pay each person in the stablecoin they prefer, on or off: the treasury passkey only. Turning it on
+   * changes nothing on chain: the next key the page authorises includes the swap scope.
+   */
+  app.post('/setup/:token/preferred-tokens', async (c) => {
+    const t = await treasurer(c)
+    if (!t.ok) return t.response
+    const body = PreferredTokensBody.safeParse(await c.req.json().catch(() => null))
+    if (!body.success) return failure(400, { code: 'invalid_input', issues: ['enabled: true or false'] })
+    const set = await rolepay.communities.setPreferredTokens({ guildId: t.value.community.id, enabled: body.data.enabled })
+    if (!set.ok) return failure(404, set.error)
+    return jsonResponse(200, { ok: true, preferredTokens: set.value.community.preferredTokens, keyNeedsSwapScope: set.value.keyNeedsSwapScope })
   })
 
   const keyRef = async (c: Context) => {

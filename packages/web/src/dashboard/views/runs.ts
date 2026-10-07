@@ -109,7 +109,19 @@ export function runBody(d: {
   const lines = table(
     'Lines',
     ['#', 'Person', 'Paid to', 'Amount', 'Memo'],
-    run.lines.map((l) => row([String(l.line), person(l.payeeDiscordId, names), addressLink(explorer, l.address), money(l.amount, run.token), `<code class="small" title="${esc(l.memo)}">${esc(shortHex(l.memo))}</code>`], { numeric: [0, 3] })),
+    run.lines.map((l) =>
+      row(
+        [
+          String(l.line),
+          person(l.payeeDiscordId, names),
+          addressLink(explorer, l.address),
+          // A line paid in the payee's preferred stablecoin: bought on the exchange in the same transaction.
+          l.swap ? `${money(l.amount, run.token)} → ${money(l.amount, l.swap.token)} (swapped)` : money(l.amount, run.token),
+          `<code class="small" title="${esc(l.memo)}">${esc(shortHex(l.memo))}</code>`,
+        ],
+        { numeric: [0, 3] },
+      ),
+    ),
     { numeric: [0, 3] },
   )
   const steps = timeline(run, origin, names, explorer)

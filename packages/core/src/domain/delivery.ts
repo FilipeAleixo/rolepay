@@ -28,6 +28,17 @@ export function swapTokensFor(c: Pick<Community, 'network' | 'payoutToken' | 'fe
   return PREFERRED_TOKENS[c.network].filter((t) => !same(t, c.payoutToken) && !same(t, c.feeToken))
 }
 
+/**
+ * Whether the community pays in preferred stablecoins while its key (`null`: no active key) was
+ * authorised without the swap scope for every swap token: runs with swaps are then held
+ * (`swap_not_authorized`) until the treasurer authorises a new key on the setup page.
+ */
+export function keyLacksSwapScope(c: Pick<Community, 'network' | 'payoutToken' | 'feeToken' | 'preferredTokens'>, key: { swapTokens?: Address[] | undefined } | null): boolean {
+  if (!c.preferredTokens) return false
+  const granted = key?.swapTokens ?? []
+  return swapTokensFor(c).some((t) => !granted.some((g) => same(g, t)))
+}
+
 /** What a payee may choose from: the payout token (the default, "no preference") and the swap tokens. */
 export function preferenceChoices(c: Pick<Community, 'network' | 'payoutToken' | 'feeToken'>): Address[] {
   return [c.payoutToken, ...swapTokensFor(c)]

@@ -163,3 +163,57 @@ describe('the setup page signs what the treasurer entered, never numbers the ser
     )
   })
 })
+
+describe('with preferred stablecoins on, the page adds the swap scope itself, in the order core builds it', () => {
+  const NOW = 1_800_000_000
+  const DAY = 86_400
+  const BETA = '0x20c0000000000000000000000000000000000002'
+  const THETA = '0x20c0000000000000000000000000000000000003'
+  const DEX = '0xdec0000000000000000000000000000000000000'
+  const form = { limit: '25', periodDays: '7', validityDays: '14', feeBudget: '1' }
+  const page = { payoutToken: TOKEN, feeToken: FEE_TOKEN, swapTokens: [BETA, THETA] }
+  const built = () => {
+    const b = buildAuthorization(form, page, NOW)
+    if (!b.ok) throw new Error(b.error)
+    return b.value
+  }
+
+  it('limits: the payout token, the fee budget, then each preferred token at the payout limit; calls: transferWithMemo on the payout token, the exact-output swap, transferWithMemo on each preferred token', () => {
+    expect(built()).toEqual({
+      expiry: NOW + 14 * DAY,
+      limits: [
+        { token: TOKEN, limit: '25000000', period: 7 * DAY },
+        { token: FEE_TOKEN, limit: '1000000', period: 7 * DAY },
+        { token: BETA, limit: '25000000', period: 7 * DAY },
+        { token: THETA, limit: '25000000', period: 7 * DAY },
+      ],
+      scopes: [
+        { address: TOKEN, selector: 'transferWithMemo(address,uint256,bytes32)' },
+        { address: DEX, selector: 'swapExactAmountOut(address,address,uint128,uint128)' },
+        { address: BETA, selector: 'transferWithMemo(address,uint256,bytes32)' },
+        { address: THETA, selector: 'transferWithMemo(address,uint256,bytes32)' },
+      ],
+    })
+    expect(buildAuthorization(form, { ...page, swapTokens: null }, NOW)).toEqual(buildAuthorization(form, { payoutToken: TOKEN, feeToken: FEE_TOKEN }, NOW))
+    expect(buildAuthorization(form, { ...page, swapTokens: [] }, NOW)).toEqual(buildAuthorization(form, { payoutToken: TOKEN, feeToken: FEE_TOKEN }, NOW))
+  })
+
+  it('refuses a server answer that widens it: a bigger preferred-token limit, another DEX call, any call on the DEX', () => {
+    const b = built()
+    const tampered = [
+      { ...b, limits: b.limits.map((l) => (l.token === BETA ? { ...l, limit: '99000000' } : l)) },
+      { ...b, scopes: [...b.scopes, { address: DEX, selector: 'swapExactAmountIn(address,address,uint128,uint128)' }] },
+      { ...b, scopes: b.scopes.map((s) => (s.address === DEX ? { address: DEX, selector: 'withdraw(address,uint128)' } : s)) },
+    ]
+    for (const t of tampered) expect(authorizationMismatch(b, t as never)).toEqual(expect.any(String))
+  })
+
+  it('describes the swap scope in plain words', () => {
+    const labels: Record<string, string> = { [TOKEN]: 'AlphaUSD', [FEE_TOKEN]: 'pathUSD', [BETA]: 'BetaUSD', [THETA]: 'ThetaUSD', [DEX]: 'the stablecoin exchange' }
+    expect(describeAuthorization(built(), { label: (t) => labels[t] ?? t, date: () => 'then' })).toBe(
+      `Up to 25 AlphaUSD every 7 days, plus up to 1 pathUSD every 7 days for fees, plus up to 25 BetaUSD and up to 25 ThetaUSD every 7 days to pay people who chose them. ` +
+        `Only transferWithMemo on AlphaUSD (${TOKEN}), to anyone. Only swapExactAmountOut on the stablecoin exchange (${DEX}), buying exactly what a run pays out. ` +
+        `Only transferWithMemo on BetaUSD (${BETA}), to anyone. Only transferWithMemo on ThetaUSD (${THETA}), to anyone. Expires then.`,
+    )
+  })
+})
