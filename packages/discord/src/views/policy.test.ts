@@ -65,6 +65,7 @@ const preview = (over: Partial<PolicyPreview> = {}): PolicyPreview => ({
   ],
   nearMisses: [{ userId: BOB, condition: 'repliesIn', count: 2, min: 3, text: '2 replies (at least 3)' }],
   total: 50_000_000n,
+  spend: 50_000_000n,
   remaining: null,
   budgetKey: 'bot',
   problems: ['amount_not_in_instruction', 'over_budget', 'something_new'],
@@ -116,6 +117,13 @@ describe('policyMessage', () => {
     expect(m).toContain('The AI assumed')
     expect(m).toContain('policy:approve:pol_view01:2')
     expect(m).toContain('First run after approval')
+  })
+
+  it('a preview over the key budget only once its swaps count at their most says so', () => {
+    const bot = text(policyMessage(policy(), { ...ctx, preview: preview({ problems: ['swaps_over_budget'], remaining: 50_000_000n }) }))
+    expect(bot).toContain('With its swaps into preferred stablecoins counted at their most, more than the bot key has left: the run would be held whole, never paid in part.')
+    const own = text(policyMessage(policy(), { ...ctx, preview: preview({ problems: ['swaps_over_policy_budget'], remaining: 50_000_000n, budgetKey: 'policy' }) }))
+    expect(own).toContain("With its swaps into preferred stablecoins counted at their most, more than this policy's own key has left: the run would be held whole, never paid in part.")
   })
 
   it('a daily policy (the testnet demo) says its schedule in plain words', () => {
@@ -219,6 +227,13 @@ describe('explainHold and explainPolicyError: every code in plain words', () => 
       "The run would pay 20 AlphaUSD, more than this policy's own key has left (5 AlphaUSD). Held whole: nothing was paid, and the chain would refuse it anyway. A treasurer raises this policy's budget on the treasury page (`/rolepay policy show`), or it waits for the key's next period.",
     )
     expect(say('policy_key_inactive')).toContain('never falls back to the bot key')
+    // Within the budget, but not once the swaps into preferred stablecoins count at their most: `total` is that most.
+    expect(say('swaps_over_budget')).toBe(
+      "With its swaps into the stablecoins people prefer counted at their most, the run could take 20 AlphaUSD from the bot key, which has 5 AlphaUSD left. Held whole: nothing was paid. Raise the key's limit on the setup page, or wait for its next period.",
+    )
+    expect(say('swaps_over_policy_budget')).toBe(
+      "With its swaps into the stablecoins people prefer counted at their most, the run could take 20 AlphaUSD from this policy's own key, which has 5 AlphaUSD left. Held whole: nothing was paid. A treasurer raises this policy's budget on the treasury page (`/rolepay policy show`), or it waits for the key's next period.",
+    )
     expect(say('mystery')).toBe('Held (mystery). Nothing was paid.')
     expect(explainHold({ code: 'over_budget', total: null, limit: null }, { token: TOKEN })).toContain('?')
   })

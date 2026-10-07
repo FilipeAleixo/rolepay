@@ -99,13 +99,19 @@ export type PolicyPreview = {
   matches: PolicyMatch[]
   nearMisses: { userId: string; condition: string; count: number; min: number; text: string }[]
   total: Micros
+  /**
+   * The most the run would take from that key's limit: the total, with each line paid in a preferred
+   * stablecoin at its maximum swap input (`payoutSpendCap`). Equal to `total` when nobody is swapped.
+   */
+  spend: Micros
   /** What the key that pays this policy has left now; null = that key cannot pay (no active key). */
   remaining: Micros | null
   /** Whose key `remaining` is: the policy's own (`policy`), or the bot key, shared with every other run (`bot`). */
   budgetKey: 'bot' | 'policy'
   /**
    * amount_not_in_instruction, scan_truncated, too_many_lines, over_policy_cap, no_active_key,
-   * over_budget; with its own key, policy_key_inactive and over_policy_budget instead of the last two.
+   * over_budget, swaps_over_budget; with its own key, policy_key_inactive, over_policy_budget and
+   * swaps_over_policy_budget instead of the last three.
    */
   problems: string[]
   rule: string[]
@@ -480,6 +486,7 @@ export class PolicyService {
     const budget = await this.deps.policyKeys.budget({ guildId: p.communityId, policyId: p.id })
     const remaining = budget.remaining
     const e = ev.value
+    const spend = await this.deps.payRuns.spendCap({ guildId: p.communityId, lines: e.lines })
     return ok({
       policyId: p.id,
       version: p.version,
@@ -488,12 +495,13 @@ export class PolicyService {
       matches: e.matches,
       nearMisses: e.nearMisses,
       total: e.total,
+      spend,
       remaining,
       budgetKey: budget.key,
       problems: [
         ...(p.compiled.amountsInInstruction ? [] : ['amount_not_in_instruction']),
         ...e.problems,
-        ...runGuards({ lines: e.lines.length, total: e.total, caps: p.caps, remaining, key: budget.key }).map((h) => h.code),
+        ...runGuards({ lines: e.lines.length, total: e.total, spend, caps: p.caps, remaining, key: budget.key }).map((h) => h.code),
       ],
       rule: describeRule(p.compiled, { schedule: p.schedule, caps: p.caps, guildId: p.communityId }),
       scans: e.scans,

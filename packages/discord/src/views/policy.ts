@@ -68,6 +68,10 @@ export function explainHold(hold: Pick<Hold, 'code' | 'total' | 'limit'>, ctx: {
       return 'There is no active bot key, so nothing can be paid. Held: nothing was paid. Authorise a key on the setup page.'
     case 'over_policy_budget':
       return `The run would pay ${m(hold.total)}, more than this policy's own key has left (${m(hold.limit)}). Held whole: nothing was paid, and the chain would refuse it anyway. A treasurer raises this policy's budget on the treasury page (\`/rolepay policy show\`), or it waits for the key's next period.`
+    case 'swaps_over_budget':
+      return `With its swaps into the stablecoins people prefer counted at their most, the run could take ${m(hold.total)} from the bot key, which has ${m(hold.limit)} left. Held whole: nothing was paid. Raise the key's limit on the setup page, or wait for its next period.`
+    case 'swaps_over_policy_budget':
+      return `With its swaps into the stablecoins people prefer counted at their most, the run could take ${m(hold.total)} from this policy's own key, which has ${m(hold.limit)} left. Held whole: nothing was paid. A treasurer raises this policy's budget on the treasury page (\`/rolepay policy show\`), or it waits for the key's next period.`
     case 'policy_key_inactive':
       return "This policy's own key cannot pay (revoked or expired), and a policy with its own key never falls back to the bot key. Held: nothing was paid. A treasurer gives it a new budget on the treasury page (`/rolepay policy show`)."
     case 'key_revoked':
@@ -100,6 +104,8 @@ const PROBLEM_WORDS: Record<string, string> = {
   no_active_key: 'No active bot key: the run would be held.',
   over_budget: 'More than the bot key has left: the run would be held whole, never paid in part.',
   over_policy_budget: "More than this policy's own key has left: the run would be held whole, never paid in part (the chain would refuse it anyway).",
+  swaps_over_budget: 'With its swaps into preferred stablecoins counted at their most, more than the bot key has left: the run would be held whole, never paid in part.',
+  swaps_over_policy_budget: "With its swaps into preferred stablecoins counted at their most, more than this policy's own key has left: the run would be held whole, never paid in part.",
   policy_key_inactive: "This policy's own key cannot pay (revoked or expired): the run would be held. It never falls back to the bot key.",
 }
 

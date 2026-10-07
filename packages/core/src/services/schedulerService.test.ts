@@ -135,6 +135,34 @@ describe('SchedulerService: guardrails (held whole and explained, never paid in 
     expect(await typesSince(w, 'policy.approved')).toEqual(['policy_run.held'])
   })
 
+  it("a run just under the bot key's remaining budget, but over it once a swap into a preferred stablecoin counts at its maximum, is held at generation as swaps_over_budget; no run is created", async () => {
+    const w = await policyWorld({ limit: 1000 })
+    const p = await w.active()
+    // Preferred stablecoins on, and a bot key authorised after the switch (with the swap scope): 64.1 a period.
+    await w.rolepay.communities.setPreferredTokens({ guildId: GUILD, enabled: true })
+    await w.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd(64.1), periodSeconds: 30 * DAY, expiresAt: w.chain.time + 60 * DAY })
+    expect((await w.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: w.chain.rootSigner(TREASURY) })).ok).toBe(true)
+    await w.rolepay.payees.setPreferredToken({ guildId: GUILD, discordUserId: ANA, token: '0x20c0000000000000000000000000000000000002' })
+    // Ana 12 (in BetaUSD, at most 12.12), Rui 2, Big 50: 64 to pay, up to 64.12 from the key.
+    const preview = await w.rolepay.policies.preview({ guildId: GUILD, policyId: p.id })
+    expect(preview).toMatchObject({ ok: true, value: { total: usd(64), spend: usd(64.12), remaining: usd(64.1), budgetKey: 'bot' } })
+    expect(preview.ok && preview.value.problems).toContain('swaps_over_budget')
+    w.travelTo(MONDAY)
+    const [e] = (await w.rolepay.scheduler.tick()).events
+    expect(e).toMatchObject({ kind: 'generated', run: null, policyRun: { status: 'held', runId: null, hold: { code: 'swaps_over_budget', total: usd(64.12), limit: usd(64.1) }, total: usd(64) } })
+    expect(await w.repos.runs.listByCommunity(GUILD)).toEqual([])
+  })
+
+  it('with preferred stablecoins off, the same run is made: the guard counts the total, as before', async () => {
+    const w = await policyWorld({ limit: 64.1 })
+    const p = await w.active()
+    await w.rolepay.payees.setPreferredToken({ guildId: GUILD, discordUserId: ANA, token: '0x20c0000000000000000000000000000000000002' })
+    expect(await w.rolepay.policies.preview({ guildId: GUILD, policyId: p.id })).toMatchObject({ ok: true, value: { total: usd(64), spend: usd(64), problems: [] } })
+    w.travelTo(MONDAY)
+    const [e] = (await w.rolepay.scheduler.tick()).events
+    expect(e).toMatchObject({ kind: 'generated', policyRun: { status: 'proposed', hold: null } })
+  })
+
   it('over the policy cap per run, too many people, no active key, or nobody matching', async () => {
     const capped = await policyWorld()
     await capped.active({ caps: { perRun: usd(60) } })

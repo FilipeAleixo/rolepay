@@ -200,7 +200,9 @@ export class SchedulerService {
       await this.event(empty, 'policy_run.empty', actor, { unregistered: snapshot.unregistered.length })
       return { kind: 'generated', policy, policyRun: empty, run: null }
     }
-    const guard = runGuards({ lines: ev.value.lines.length, total: ev.value.total, caps: policy.caps, remaining, key: budget.key })[0]
+    // Held against the most the run can take from that key: a line paid in a preferred stablecoin at its maximum swap input.
+    const spend = await this.deps.payRuns.spendCap({ guildId: policy.communityId, lines: ev.value.lines })
+    const guard = runGuards({ lines: ev.value.lines.length, total: ev.value.total, spend, caps: policy.caps, remaining, key: budget.key })[0]
     if (guard) return hold(guard, snapshot)
     const created = await this.deps.payRuns.create(
       { guildId: policy.communityId, createdBy: author, note: policy.compiled.note ?? policy.name, lines: ev.value.lines.map((l) => ({ discordUserId: l.discordUserId, amount: l.amount })) },

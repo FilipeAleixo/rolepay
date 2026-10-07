@@ -294,6 +294,19 @@ describe("a policy's own key and preferred stablecoins (each payee in the stable
     expect(await keyLeft(w, await botKey(w))).toBe(usd(1000))
   })
 
+  it("generation: a run under the policy key's budget but over it with the swap at its maximum (64 to pay, up to 64.12, 64.1 left) is held whole as swaps_over_policy_budget; no pay run is made", async () => {
+    const { w, p } = await preferring({ limit: 64.1 })
+    const preview = await w.rolepay.policies.preview({ guildId: GUILD, policyId: p.id })
+    expect(preview).toMatchObject({ ok: true, value: { total: usd(64), spend: usd(64.12), remaining: usd(64.1), budgetKey: 'policy' } })
+    expect(preview.ok && preview.value.problems).toContain('swaps_over_policy_budget')
+    w.travelTo(MONDAY)
+    const { events } = await w.rolepay.scheduler.tick()
+    expect(events).toHaveLength(1)
+    expect(events[0]?.policyRun).toMatchObject({ status: 'held', hold: { code: 'swaps_over_policy_budget', total: usd(64.12), limit: usd(64.1) }, runId: null, total: usd(64), remaining: usd(64.1) })
+    expect(events[0]?.run).toBeNull()
+    expect(await w.repos.runs.listByCommunity(GUILD)).toEqual([])
+  })
+
   it('a policy key authorised before the switch cannot swap: the run is held with swap_not_authorized, as the bot key would be, never signed and never handed to the bot key', async () => {
     const { w, p, own } = await preferring({ keyFirst: true })
     const run = await proposedRun(w, p.id)

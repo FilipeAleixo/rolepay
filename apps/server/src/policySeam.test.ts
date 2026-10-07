@@ -183,6 +183,40 @@ describe('policyPortFromCore: who it applies to, when it cannot be worked out', 
     expect(p.value.held).toContain('There is no active bot key')
   })
 
+  it("over the key's budget only once a swap into a preferred stablecoin counts at its maximum: the dashboard says so, with both numbers", async () => {
+    const w = await world()
+    const created = await w.rolepay.policies.create({ ...asTreasurer, name: 'Swapped', instruction: RULE, schedule: toCoreSchedule(MONDAY) })
+    if (!created.ok) throw new Error(created.error.code)
+    const activity = w.activity as FakeActivityReader
+    activity.setMember('200000000000000011', { roleIds: ['400000000000000002'], joinedAt: null })
+    for (let i = 0; i < 3; i++) {
+      activity.addMessages({
+        id: String(810000000000000200n + BigInt(i)),
+        channelId: '700000000000000002',
+        authorId: '200000000000000011',
+        authorIsBot: false,
+        content: '',
+        mentionIds: [],
+        at: new Date(w.clock.now().getTime() - (i + 1) * 60_000),
+        replyTo: { messageId: '810000000000000000', authorId: '200000000000000090' },
+      })
+    }
+    const link = await w.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: '200000000000000011' })
+    if (!link.ok) throw new Error(link.error.code)
+    await w.rolepay.payees.register({ token: link.value.token, address: '0x1111111111111111111111111111111111111111' })
+    // Preferred stablecoins on, the payee in BetaUSD, and a key with the swap scope: 3.01 left for 3 to pay, up to 3.03.
+    await w.rolepay.communities.setPreferredTokens({ guildId: GUILD, enabled: true })
+    await w.rolepay.payees.setPreferredToken({ guildId: GUILD, discordUserId: '200000000000000011', token: '0x20c0000000000000000000000000000000000002' })
+    await w.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd('3.01'), periodSeconds: 7 * 86_400, expiresAt: w.chain.time + 30 * 86_400 })
+    expect((await w.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: w.chain.rootSigner(TREASURY) })).ok).toBe(true)
+    const p = await w.port.preview({ guildId: GUILD, policyId: created.value.id })
+    if (!p.ok) throw new Error(p.error.code)
+    expect(p.value.total).toBe(usd('3'))
+    expect(p.value.held).toBe(
+      'The run pays 3 AlphaUSD, but with its swaps into the stablecoins people prefer counted at their most it could take 3.03 AlphaUSD, more than the bot key has left (3.01 AlphaUSD): it would be held, not partly paid.',
+    )
+  })
+
   it('never paid, on the dashboard: the rule in words, and why each person matches', async () => {
     const w = await world({ demoControls: true })
     const START = '700000000000000010'
@@ -303,6 +337,12 @@ describe('auditSummary: every event in plain words, from codes, counts and amoun
     expect(say('policy_key.revoked', { key: '0x6666666666666666666666666666666666666666' })).toBe("The treasury passkey revoked the policy's own key on chain: the policy pays nothing until it gets a new one.")
     expect(say('policy_run.held', { code: 'over_policy_budget', total: '40', limit: '30' })).toBe("Held the run whole: more than the policy's own key has left (40 AlphaUSD against 30 AlphaUSD).")
     expect(say('policy_run.held', { code: 'policy_key_inactive', total: '5', limit: null })).toBe("Held the run whole: the policy's own key cannot pay (revoked or expired) (5 AlphaUSD).")
+    expect(say('policy_run.held', { code: 'swaps_over_policy_budget', total: '64.12', limit: '64.1' })).toBe(
+      "Held the run whole: with its swaps into preferred stablecoins at their most, more than the policy's own key has left (64.12 AlphaUSD against 64.1 AlphaUSD).",
+    )
+    expect(say('policy_run.held', { code: 'swaps_over_budget', total: '3.03', limit: '3.01' })).toBe(
+      'Held the run whole: with its swaps into preferred stablecoins at their most, more than the bot key has left (3.03 AlphaUSD against 3.01 AlphaUSD).',
+    )
   })
 
   it('pay run events', () => {

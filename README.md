@@ -105,6 +105,7 @@ Where the limit refusal is tested:
 | A standing policy's run over the key's budget, held whole | [`services/schedulerService.test.ts`](packages/core/src/services/schedulerService.test.ts) |
 | The chain, a policy's own key over its own limit while the bot key has plenty, with Rolepay's checks skipped | [`test/policyKey.chain.test.ts`](packages/core/test/policyKey.chain.test.ts): reverts whole on Moderato, [transaction](https://explore.testnet.tempo.xyz/tx/0x14cd43914bd1c365f937dfeec3f2194a9f99fbcd36b635a7998b3a4451f4a00b) |
 | A policy's run over its own key's budget, held whole (`over_policy_budget`), the bot key never used for it | [`services/policyKeyExecution.test.ts`](packages/core/src/services/policyKeyExecution.test.ts) |
+| A policy's run within the key's budget but over it once its swaps into preferred stablecoins count at their maximum, held whole when it is made (`swaps_over_budget`, `swaps_over_policy_budget`) | [`services/schedulerService.test.ts`](packages/core/src/services/schedulerService.test.ts), [`services/policyKeyExecution.test.ts`](packages/core/src/services/policyKeyExecution.test.ts) |
 
 The threat model, with every threat, its mitigation, the code or test, and what is left: [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 

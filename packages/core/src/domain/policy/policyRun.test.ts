@@ -117,6 +117,19 @@ describe('PolicyRun: the guards that hold a run whole', () => {
     expect(runGuards({ lines: 1, total: 30n, caps, remaining: 30n, key: 'policy' })).toEqual([])
     expect(runGuards({ lines: 1, total: 40n, caps, remaining: 30n, key: 'bot' })).toEqual([{ code: 'over_budget', total: 40n, limit: 30n }])
   })
+
+  it('with swaps into preferred stablecoins, the key budget is held against the most the run can take (`spend`), in its own words when only the swaps push it over', () => {
+    const none = { perRun: null, perPerson: null }
+    expect(runGuards({ lines: 3, total: 64n, spend: 65n, caps: none, remaining: 64n, key: 'policy' })).toEqual([{ code: 'swaps_over_policy_budget', total: 65n, limit: 64n }])
+    expect(runGuards({ lines: 3, total: 64n, spend: 65n, caps: none, remaining: 64n })).toEqual([{ code: 'swaps_over_budget', total: 65n, limit: 64n }])
+    // Over without the swaps: the usual code, with the total.
+    expect(runGuards({ lines: 3, total: 70n, spend: 71n, caps: none, remaining: 64n, key: 'policy' })).toEqual([{ code: 'over_policy_budget', total: 70n, limit: 64n }])
+    // Exactly the budget, swaps included, is fine; no `spend` means the total (no swaps).
+    expect(runGuards({ lines: 3, total: 63n, spend: 64n, caps: none, remaining: 64n, key: 'policy' })).toEqual([])
+    expect(runGuards({ lines: 3, total: 64n, caps: none, remaining: 64n })).toEqual([])
+    // The policy's cap per run is about what people receive: the swaps do not count against it.
+    expect(runGuards({ lines: 3, total: 100n, spend: 101n, caps: { perRun: 100n, perPerson: null }, remaining: 500n })).toEqual([])
+  })
 })
 
 describe('policyKeyHold: a pre-flight refusal at release, as the hold it becomes', () => {

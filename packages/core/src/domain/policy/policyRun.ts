@@ -36,7 +36,9 @@ export const PolicyRunUnregisteredSchema = z.object({ discordUserId: DiscordIdSc
  * Why Rolepay stopped instead of paying, with the numbers when there are some (`total` against
  * `limit`). Codes: over_budget, no_active_key, over_policy_cap, too_many_lines, the key checks
  * (key_revoked, insufficient_limit, ...), over_policy_budget and policy_key_inactive (a policy
- * with its own key: that key's budget, or that key cannot pay), policy_not_active, autopilot_off,
+ * with its own key: that key's budget, or that key cannot pay), swaps_over_budget and
+ * swaps_over_policy_budget (within the budget, but not once swaps into preferred stablecoins count
+ * at their maximum input; `total` is then that most), policy_not_active, autopilot_off,
  * approver_changed, and any refusal from approving the run (creator_cannot_approve, ...).
  */
 export const HoldSchema = z.object({ code: z.string().regex(/^[a-z_]{1,40}$/), total: z.bigint().nonnegative().nullable(), limit: z.bigint().nonnegative().nullable() })
@@ -87,15 +89,22 @@ export type PolicyRun = z.infer<typeof PolicyRunSchema>
  * scheduler holds a run on the first (whole, never in part); a preview lists them all.
  * `key`: whose budget `remaining` is. A policy with its own key (`policy`) is held against that
  * key alone, as `policy_key_inactive` or `over_policy_budget`; the bot key's codes are unchanged.
+ * `spend`: the most the run can take from that key's limit (`payoutSpendCap`: a line paid in a
+ * preferred stablecoin at its maximum swap input), the total by default. The key's budget is held
+ * against it, so a run the pre-flight would refuse is held when it is made; when only the swaps push
+ * it over, the code says so (`swaps_over_budget`, `swaps_over_policy_budget`). The policy's cap per
+ * run is about what people receive, so it stays on the total.
  */
-export function runGuards(input: { lines: number; total: Micros; caps: PolicyCaps; remaining: Micros | null; key?: 'bot' | 'policy' }): Hold[] {
+export function runGuards(input: { lines: number; total: Micros; spend?: Micros; caps: PolicyCaps; remaining: Micros | null; key?: 'bot' | 'policy' }): Hold[] {
   const { total } = input
+  const spend = input.spend ?? total
   const own = input.key === 'policy'
   const out: Hold[] = []
   if (input.lines > MAX_LINES_PER_RUN) out.push({ code: 'too_many_lines', total, limit: null })
   if (input.caps.perRun !== null && total > input.caps.perRun) out.push({ code: 'over_policy_cap', total, limit: input.caps.perRun })
   if (input.remaining === null) out.push({ code: own ? 'policy_key_inactive' : 'no_active_key', total, limit: null })
   else if (total > input.remaining) out.push({ code: own ? 'over_policy_budget' : 'over_budget', total, limit: input.remaining })
+  else if (spend > input.remaining) out.push({ code: own ? 'swaps_over_policy_budget' : 'swaps_over_budget', total: spend, limit: input.remaining })
   return out
 }
 

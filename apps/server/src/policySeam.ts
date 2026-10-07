@@ -157,7 +157,7 @@ function bindingCap(p: Policy): Micros | null {
 }
 
 /** Why the next run would be held (whole, never in part), from the preview's problems. */
-function heldWords(problems: readonly string[], d: { total: Micros; remaining: Micros | null; caps: PolicyCaps }, money: (m: Micros) => string): string | null {
+function heldWords(problems: readonly string[], d: { total: Micros; spend: Micros; remaining: Micros | null; caps: PolicyCaps }, money: (m: Micros) => string): string | null {
   const words = problems.flatMap((code) => {
     switch (code) {
       case 'too_many_lines':
@@ -172,6 +172,13 @@ function heldWords(problems: readonly string[], d: { total: Micros; remaining: M
         return ["This policy's own key cannot pay (revoked or expired): it would be held until a treasurer gives it a new budget on the treasury page. It never falls back to the bot key."]
       case 'over_policy_budget':
         return d.remaining === null ? [] : [`The run (${money(d.total)}) is more than this policy's own key has left (${money(d.remaining)}): it would be held, not partly paid. The chain would refuse it anyway.`]
+      case 'swaps_over_budget':
+      case 'swaps_over_policy_budget': {
+        const key = code === 'swaps_over_budget' ? 'the bot key' : "this policy's own key"
+        return d.remaining === null
+          ? []
+          : [`The run pays ${money(d.total)}, but with its swaps into the stablecoins people prefer counted at their most it could take ${money(d.spend)}, more than ${key} has left (${money(d.remaining)}): it would be held, not partly paid.`]
+      }
       default:
         return []
     }
@@ -310,7 +317,7 @@ export function policyPortFromCore(rolepay: Rolepay, opts: { names?: NameSource 
         total: v.total,
         remainingBudget: v.remaining,
         budgetKey: v.budgetKey,
-        held: heldWords(v.problems, { total: v.total, remaining: v.remaining, caps: p.caps }, n.money),
+        held: heldWords(v.problems, { total: v.total, spend: v.spend, remaining: v.remaining, caps: p.caps }, n.money),
       }
       return ok(preview)
     },
@@ -406,6 +413,8 @@ const HOLD_WORDS: Record<string, string> = {
   key_expired: 'the bot key has expired',
   insufficient_limit: 'more than the bot key has left',
   over_policy_budget: "more than the policy's own key has left",
+  swaps_over_budget: 'with its swaps into preferred stablecoins at their most, more than the bot key has left',
+  swaps_over_policy_budget: "with its swaps into preferred stablecoins at their most, more than the policy's own key has left",
   policy_key_inactive: "the policy's own key cannot pay (revoked or expired)",
   policy_not_active: 'the policy is not active',
   autopilot_off: 'autopilot was switched off',

@@ -5,6 +5,7 @@ import { type BotKey, type Community, type KeyCheckError, botKeyContext, checkKe
 import { runToCsv } from '../domain/csv.js'
 import { type SwapCheckError, checkSwapQuotes, checkSwapScope, lineSwapFor, payoutSpendCap, swapLegs } from '../domain/delivery.js'
 import { type Address, DiscordIdSchema } from '../domain/ids.js'
+import { type Micros, sumAmounts } from '../domain/money.js'
 import { type PaidByWeek, firstWeekStart, paidByWeek } from '../domain/paidByWeek.js'
 import { type PolicyKeyCheckError, type PolicySwapCheckError, policyKeyContext, policyKeyError, policySigner } from '../domain/policy/policyKey.js'
 import { type MatchResult, matchTransfers, runTokens } from '../domain/reconcile.js'
@@ -129,7 +130,6 @@ export class PayRunService {
     const resolved = await Promise.all(lines.map(async (l) => ({ ...l, payee: await this.deps.payees.get(guildId, l.discordUserId) })))
     const missing = [...new Set(resolved.filter((l) => !l.payee).map((l) => l.discordUserId))]
     if (missing.length) return err({ code: 'unregistered_payees', discordUserIds: missing })
-    const capBps = this.deps.swapMaxSlippageBps ?? SWAP_SLIPPAGE.defaultBps
     const run = newRun({
       id: opts.runId ?? this.deps.ids.runId(),
       communityId: guildId,
@@ -141,7 +141,7 @@ export class PayRunService {
         payeeDiscordId: l.discordUserId,
         address: l.payee?.address ?? '',
         amount: l.amount,
-        swap: l.payee ? lineSwapFor(community, l.payee, l.amount, capBps) : null,
+        swap: l.payee ? this.lineSwap(community, l.payee, l.amount) : null,
       })),
       now: this.deps.clock.now(),
     })
@@ -149,6 +149,27 @@ export class PayRunService {
     await this.deps.runs.insert(run.value)
     await this.deps.audit?.run(run.value, 'run.created', createdBy)
     return run
+  }
+
+  /**
+   * At most what a run of these lines, made now, could take from the payout limit
+   * (`payoutSpendCap`): each line at its amount, a line for a payee who prefers another stablecoin at
+   * its maximum swap input, fixed exactly as `create` would fix it. The scheduler and the preview hold
+   * a policy's run against this, so a run whose swaps would take it past the key's remaining limit is
+   * held when it is made instead of refused at execution. Someone not registered counts at their
+   * amount (`create` refuses the run anyway).
+   */
+  async spendCap(input: { guildId: string; lines: readonly { discordUserId: string; amount: Micros }[] }): Promise<Micros> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community?.preferredTokens) return sumAmounts(input.lines.map((l) => l.amount))
+    const lines = await Promise.all(
+      input.lines.map(async (l) => {
+        const payee = await this.deps.payees.get(input.guildId, l.discordUserId)
+        const swap = payee ? this.lineSwap(community, payee, l.amount) : null
+        return swap ? { amount: l.amount, swap } : { amount: l.amount }
+      }),
+    )
+    return payoutSpendCap(lines)
   }
 
   submit(input: RunRef & { actor: string }) {
@@ -355,6 +376,11 @@ export class PayRunService {
   }
 
   // ---- internals -------------------------------------------------------------
+
+  /** How a line pays this payee (`lineSwapFor`), with this server's slippage cap: null in the run's token. */
+  private lineSwap(community: Community, payee: { preferredToken: Address | null }, amount: Micros) {
+    return lineSwapFor(community, payee, amount, this.deps.swapMaxSlippageBps ?? SWAP_SLIPPAGE.defaultBps)
+  }
 
   /**
    * The key that signs this run's next attempt. A run a policy made (its PolicyRun links it) is
