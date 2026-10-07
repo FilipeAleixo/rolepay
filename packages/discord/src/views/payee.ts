@@ -10,6 +10,7 @@ export function payeeLinkMessage(input: { url: string; expiresAt: Date; current:
     `It works once and expires ${relativeTime(input.expiresAt)}. Do not share it: whoever opens it first decides where your pay goes.`,
   ]
   if (input.current) lines.push(`You are registered at ${shortAddress(input.current.address)} now. Using this link replaces that address.`)
+  lines.push('To be paid in another USD stablecoin, choose it with /payee prefer.')
   return {
     content: lines.join('\n'),
     components: /^https?:\/\//.test(input.url)
