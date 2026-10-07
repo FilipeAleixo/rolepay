@@ -68,11 +68,15 @@ export function startAccount(config: AccountConfig) {
   /** What the form would send, in plain words, as it is typed. */
   function describe() {
     if (!input('to') && !input('amount')) return fill('send-says', '')
+    if (!balances.has(selected())) return fill('send-says', 'Reading your balance...')
     const c = checked()
     fill('send-says', c.ok ? `You will send ${formatMicros(c.value.amount.toString())} ${label(selected())} to ${c.value.to}.` : `Check the form: ${c.error}.`)
   }
 
   async function send() {
+    if (!address) return status('Sign in with your passkey first.', 'bad')
+    // The balance that counts is the one right now (and the page may not have read it yet).
+    balances.set(selected(), await balanceOf(chain, selected(), address))
     const c = checked()
     if (!c.ok) return status(`Nothing was sent: ${c.error}.`, 'bad')
     const token = selected()

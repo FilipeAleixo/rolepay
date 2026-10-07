@@ -16,7 +16,8 @@ import { parseServerConfig } from '../src/config.js'
 
 export const NET = NETWORKS.moderato
 
-export async function startServer(port: number) {
+/** `env` adds settings, for example `ROLEPAY_SPONSOR_URL: 'none'` to rehearse mainnet's unsponsored path on Moderato. */
+export async function startServer(port: number, env: Record<string, string> = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'rolepay-e2e-'))
   const config = parseServerConfig({
     ROLEPAY_NETWORK: 'moderato',
@@ -26,6 +27,7 @@ export async function startServer(port: number) {
     DISCORD_PUBLIC_KEY: 'cd'.repeat(32),
     DISCORD_BOT_TOKEN: 'fake-bot-token',
     PUBLIC_URL: `http://localhost:${port}`,
+    ...env,
   })
   const testnet = createTestnetTools({ rpcUrl: config.core.rpcUrl })
   if ((await testnet.chainId()) !== 42431) throw new Error('e2e refuses any chain but Moderato')
