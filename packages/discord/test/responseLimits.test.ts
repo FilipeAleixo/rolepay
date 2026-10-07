@@ -5,7 +5,7 @@
 import { MAX_LINES_PER_RUN, MAX_NOTE_LENGTH, type Run, newRun } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { createDispatcher } from '../src/app/router.js'
-import { buttonClick, messageCommand, modalSubmit, slashCommand } from '../src/testing/interactions.js'
+import { buttonClick, messageCommand, modalSubmit, slashCommand, userCommand } from '../src/testing/interactions.js'
 import { wireMessage } from '../src/testing/messages.js'
 import { explainError } from '../src/views/errors.js'
 import { editModal, instructionModal, proposalCreatedMessage, proposalDiscardedMessage, proposalMessage } from '../src/views/proposal.js'
@@ -192,6 +192,16 @@ describe('a direct payment (Apps > Pay the author): the form, the review it post
     expect(responseProblems(body(sent))).toEqual([])
     const refused = await a.send(modalSubmit(SCOPE, formId, { amount: 'lots', note: '' }, treasurer))
     expect(responseProblems(body(refused))).toEqual([])
+    // Apps > Pay with Rolepay on a member: the same form without the link.
+    const member = await a.send(userCommand(SCOPE, 'Pay with Rolepay', { id: '29999999999999999999' }, treasurer))
+    expect(responseProblems(body(member))).toEqual([])
+    await a.registerPayee('29999999999999999999', '0x5555555555555555555555555555555555555555')
+    const memberForm = await a.send(userCommand(SCOPE, 'Pay with Rolepay', { id: '29999999999999999999' }, treasurer))
+    expect(body(memberForm).type).toBe(9)
+    expect(responseProblems(body(memberForm))).toEqual([])
+    const paid = await a.send(modalSubmit(SCOPE, String(body(memberForm).data?.custom_id), { amount: '1', note: 'n'.repeat(200) }, treasurer))
+    expect(body(paid).type).toBe(4)
+    expect(responseProblems(body(paid))).toEqual([])
   })
 })
 

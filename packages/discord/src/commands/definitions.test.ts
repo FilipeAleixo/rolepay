@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OptionType, Permission } from '../api.js'
-import { RENAMED_MESSAGE_COMMANDS, ROUTED_COMMANDS, ROUTED_MESSAGE_COMMANDS } from '../app/router.js'
+import { RENAMED_MESSAGE_COMMANDS, ROUTED_COMMANDS, ROUTED_MESSAGE_COMMANDS, ROUTED_USER_COMMANDS } from '../app/router.js'
 import { COMMAND_DEFINITIONS, commandDefinitions } from './definitions.js'
 
 type Def = { name: string; description: string; type?: number; required?: boolean; options?: Def[]; default_member_permissions?: string; contexts?: number[] }
@@ -8,6 +8,8 @@ const all = COMMAND_DEFINITIONS as Def[]
 /** Slash commands (type 1); message commands (type 3) have a display name and no description. */
 const defs = all.filter((c) => c.type === 1)
 const messageCommands = all.filter((c) => c.type === 3)
+/** User commands (type 2): Apps on a member. */
+const userCommands = all.filter((c) => c.type === 2)
 
 describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
   const subcommandsOf = (d: Def[]) =>
@@ -106,6 +108,24 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
       expect(c.default_member_permissions).toBe(String(Permission.ManageGuild))
       expect(c.contexts).toEqual([0])
     }
+  })
+
+  it('the user command (Apps on a member) "Pay with Rolepay" is registered and routed, hidden from members by default, server only', () => {
+    expect(userCommands.map((c) => c.name)).toEqual(['Pay with Rolepay'])
+    expect(userCommands.map((c) => c.name)).toEqual([...ROUTED_USER_COMMANDS])
+    for (const c of userCommands) {
+      expect(c).not.toHaveProperty('description')
+      expect(c.default_member_permissions).toBe(String(Permission.ManageGuild))
+      expect(c.contexts).toEqual([0])
+    }
+  })
+
+  it('every right-click command name fits the 32 characters Discord allows (they may have spaces and capitals)', () => {
+    const contextMenu = all.filter((c) => c.type === 2 || c.type === 3)
+    expect(contextMenu.map((c) => c.name).sort()).toEqual(['Draft pay run with AI', 'Pay the author', 'Pay with Rolepay'])
+    for (const c of contextMenu) expect([c.name, c.name.length >= 1 && c.name.length <= 32]).toEqual([c.name, true])
+    // Every type is one of Discord's three: chat input, user, message.
+    expect(new Set(all.map((c) => c.type))).toEqual(new Set([1, 2, 3]))
   })
 
   it('/rolepay propose takes an instruction, and optionally a channel or thread to read and how far back', () => {

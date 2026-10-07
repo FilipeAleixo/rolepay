@@ -16,6 +16,9 @@ export type InteractionContext = {
 
 export type OptionValue = string | number | boolean
 
+/** The member a user command targeted. */
+export type TargetUser = { userId: string; isBot: boolean }
+
 /** A channel picked in a command option, with the caller's own permissions in it (Discord computes them). */
 export type ResolvedChannel = { permissions: bigint | null }
 
@@ -26,6 +29,8 @@ export type ParsedInteraction =
   | { kind: 'component'; customId: string; messageId: string | null; ctx: InteractionContext }
   /** A right-click command on a message (Apps > ...): the message arrives in the interaction, text included, with no intent. */
   | { kind: 'message_command'; command: string; target: SourceMessage; ctx: InteractionContext }
+  /** A right-click command on a member (Apps > ...): the user arrives in the interaction, with whether they are a bot. */
+  | { kind: 'user_command'; command: string; target: TargetUser; ctx: InteractionContext }
   /** A modal's form, by text input custom_id. `messageId` is the message whose button opened it, if any. */
   | { kind: 'modal'; customId: string; fields: Record<string, string>; messageId: string | null; ctx: InteractionContext }
 
@@ -64,6 +69,12 @@ const MessageCommandDataSchema = z.object({
   target_id: DiscordIdSchema,
   resolved: z.object({ messages: z.record(z.string(), z.unknown()) }),
 })
+const UserCommandDataSchema = z.object({
+  name: z.string(),
+  type: z.literal(CommandType.User),
+  target_id: DiscordIdSchema,
+  resolved: z.object({ users: z.record(z.string(), z.object({ id: DiscordIdSchema, bot: z.boolean().optional() })) }),
+})
 type ModalField = { type: number; custom_id?: string; value?: string; component?: ModalField; components?: ModalField[] }
 const ModalFieldSchema: z.ZodType<ModalField> = z.lazy(() =>
   z.object({
@@ -77,7 +88,7 @@ const ModalFieldSchema: z.ZodType<ModalField> = z.lazy(() =>
 
 const InteractionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal(InteractionType.Ping) }),
-  z.object({ type: z.literal(InteractionType.ApplicationCommand), ...common, data: z.union([MessageCommandDataSchema, CommandDataSchema]) }),
+  z.object({ type: z.literal(InteractionType.ApplicationCommand), ...common, data: z.union([MessageCommandDataSchema, UserCommandDataSchema, CommandDataSchema]) }),
   z.object({ type: z.literal(InteractionType.Autocomplete), ...common, data: CommandDataSchema }),
   z.object({
     type: z.literal(InteractionType.MessageComponent),
@@ -125,6 +136,11 @@ export function parseInteraction(body: unknown): Result<ParsedInteraction, { cod
   }
   if (i.type === InteractionType.MessageComponent) return ok({ kind: 'component', customId: i.data.custom_id, messageId: i.message?.id ?? null, ctx })
   if (i.type === InteractionType.ModalSubmit) return ok({ kind: 'modal', customId: i.data.custom_id, fields: modalFields(i.data.components), messageId: i.message?.id ?? null, ctx })
+  if ('target_id' in i.data && i.data.type === CommandType.User) {
+    const user = Object.hasOwn(i.data.resolved.users, i.data.target_id) ? i.data.resolved.users[i.data.target_id] : undefined
+    if (!user || user.id !== i.data.target_id) return err({ code: 'unsupported_interaction', detail: 'the target user is missing' })
+    return ok({ kind: 'user_command', command: i.data.name, target: { userId: user.id, isBot: user.bot === true }, ctx })
+  }
   if ('target_id' in i.data) {
     const target = DiscordMessageSchema.safeParse(i.data.resolved.messages[i.data.target_id])
     if (!target.success) return err({ code: 'unsupported_interaction', detail: 'the target message is missing or malformed' })

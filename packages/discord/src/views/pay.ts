@@ -4,9 +4,10 @@ import { type PayTarget, encodePayModalId } from '../components/customId.js'
 import { mention, tokenLabel } from './format.js'
 
 /**
- * A direct payment to one person (Apps > Pay the author on a message): a form for the amount and
- * a note, then a one-line run that goes to the Treasurer like any other. The link to the message
- * is kept in the run's note (the run has no other place for it), so the form's note leaves room for it.
+ * A direct payment to one person (Apps > Pay the author on a message, Apps > Pay with Rolepay on a
+ * member): a form for the amount and a note, then a one-line run that goes to the Treasurer like any
+ * other. The link to a message is kept in the run's note (the run has no other place for it), so the
+ * form's note leaves room for it.
  */
 
 /** What the note becomes on the run: what was typed, then the link to the message it pays for. */
@@ -16,10 +17,12 @@ export const noteWithLink = (typed: string, link: string, max = MAX_NOTE_LENGTH)
   return note ? `${note} (${link})` : link
 }
 
-export function payModal(target: PayTarget, ctx: { token: string; link: string }): Modal {
+/** `link`: the message an author is paid for (Pay the author); none for a member. */
+export function payModal(target: PayTarget, ctx: { token: string; link?: string }): Modal {
+  const link = ctx.link
   return {
     custom_id: encodePayModalId(target),
-    title: 'Pay the author of this message',
+    title: link ? 'Pay the author of this message' : 'Pay this member',
     components: [
       {
         type: ComponentType.ActionRow,
@@ -35,9 +38,9 @@ export function payModal(target: PayTarget, ctx: { token: string; link: string }
             custom_id: 'note',
             label: 'Note (on the receipt and in the CSV)',
             style: TextInputStyle.Short,
-            max_length: MAX_NOTE_LENGTH - ` (${ctx.link})`.length,
+            max_length: link ? MAX_NOTE_LENGTH - ` (${link})`.length : MAX_NOTE_LENGTH,
             required: false,
-            value: 'For this message',
+            ...(link ? { value: 'For this message' } : { placeholder: 'What this payment is for' }),
           },
         ],
       },
@@ -47,6 +50,7 @@ export function payModal(target: PayTarget, ctx: { token: string; link: string }
 
 export const PAY_REFUSED = {
   bot: 'That message was written by a bot or a webhook, and Rolepay pays people. Pick a message a member wrote.',
+  botMember: 'That is a bot, and Rolepay pays people. Pick a member.',
   self: 'This server requires a separate approver (`separate_approver`), so you cannot create a run that pays you. Ask another member with Manage Server or the approver role to pay you.',
   unregistered: (userId: string) =>
     `${mention(userId)} is not a registered payee yet, so Rolepay cannot pay them. They run \`/payee link\` first to register the account they are paid at, then you can pay them.`,

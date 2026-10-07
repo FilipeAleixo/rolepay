@@ -82,18 +82,20 @@ export function decodePolicyButton(customId: string): { action: PolicyAction; po
 
 /**
  * The amount form of a direct payment: `pay-modal:author:<userId>:<channelId>:<messageId>` (Apps >
- * Pay the author: the message's author, and where the message is). The second part names the form
- * for the log, never an ID. Everything it carries is checked again when the form is sent.
+ * Pay the author: the message's author, and where the message is) or `pay-modal:member:<userId>`
+ * (Apps > Pay with Rolepay on a member). The second part names the form for the log, never an ID.
+ * Everything it carries is checked again when the form is sent.
  */
-export type PayTarget = { kind: 'author'; userId: string; channelId: string; messageId: string }
+export type PayTarget = { kind: 'author'; userId: string; channelId: string; messageId: string } | { kind: 'member'; userId: string }
 
 const SNOWFLAKE = /^\d{17,20}$/
 
-export const encodePayModalId = (t: PayTarget) => `pay-modal:author:${t.userId}:${t.channelId}:${t.messageId}`
+export const encodePayModalId = (t: PayTarget) => (t.kind === 'author' ? `pay-modal:author:${t.userId}:${t.channelId}:${t.messageId}` : `pay-modal:member:${t.userId}`)
 
 export function decodePayModalId(customId: string): PayTarget | null {
   const [prefix, kind, userId = '', ...rest] = customId.split(':')
   if (prefix !== 'pay-modal' || !SNOWFLAKE.test(userId)) return null
+  if (kind === 'member' && rest.length === 0) return { kind, userId }
   const [channelId = '', messageId = ''] = rest
   if (kind === 'author' && rest.length === 2 && SNOWFLAKE.test(channelId) && SNOWFLAKE.test(messageId)) return { kind, userId, channelId, messageId }
   return null

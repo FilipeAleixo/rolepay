@@ -114,6 +114,18 @@ describe('parseInteraction', () => {
     })
   })
 
+  it('reads a user command (Apps > Pay with Rolepay) with its target user and whether it is a bot; a missing target is refused', () => {
+    const data = (users: Record<string, unknown>) => ({ id: '900000000000000003', name: 'Pay with Rolepay', type: 2, target_id: '200000000000000001', resolved: { users, members: {} } })
+    const at = (d: unknown) => parseInteraction({ ...base, type: 2, guild_id: '1094309218049937418', member, data: d })
+    expect(at(data({ '200000000000000001': { id: '200000000000000001', username: 'ana' } }))).toMatchObject({
+      ok: true,
+      value: { kind: 'user_command', command: 'Pay with Rolepay', target: { userId: '200000000000000001', isBot: false } },
+    })
+    expect(at(data({ '200000000000000001': { id: '200000000000000001', username: 'rolepay', bot: true } }))).toMatchObject({ ok: true, value: { target: { isBot: true } } })
+    expect(at(data({}))).toMatchObject({ ok: false, error: { code: 'unsupported_interaction' } })
+    expect(at(data({ '200000000000000001': { id: '200000000000000009' } }))).toMatchObject({ ok: false })
+  })
+
   it('keeps the caller\'s permissions in a channel picked in an option', () => {
     const r = parseInteraction({
       ...base,

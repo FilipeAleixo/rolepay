@@ -99,6 +99,20 @@ export function messageCommand(scope: InteractionScope, name: string, target: Wi
   }
 }
 
+/** A right-click command on a member (type 2, Apps > ...): Discord sends the target user (and member) in `resolved`. */
+export function userCommand(scope: InteractionScope, name: string, target: { id: string; bot?: boolean }, who: Who, token = `tok-usercmd-${seq + 1}`) {
+  const user = { id: target.id, username: `user${target.id.slice(-3)}`, ...(target.bot ? { bot: true } : {}) }
+  return {
+    id: nextId(),
+    application_id: scope.applicationId ?? APP,
+    type: 2,
+    token,
+    ...(scope.guildId ? { guild_id: scope.guildId, member: member(who) } : { user: { id: who.userId, username: 'dm' } }),
+    ...(scope.channelId ? { channel_id: scope.channelId } : {}),
+    data: { id: '900000000000000003', name, type: 2, target_id: target.id, resolved: { users: { [target.id]: user }, members: { [target.id]: { roles: [] } } } },
+  }
+}
+
 /** A submitted modal (type 5), its text inputs in action rows. `messageId`: the message whose button opened it. */
 export function modalSubmit(scope: InteractionScope, customId: string, fields: Record<string, string>, who: Who, opts: { messageId?: string; token?: string } = {}) {
   return {

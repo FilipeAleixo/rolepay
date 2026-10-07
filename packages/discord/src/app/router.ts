@@ -1,7 +1,7 @@
 import { ResponseType } from '../api.js'
 import { exportCommand } from '../commands/export.js'
 import { newRunCommand } from '../commands/newRun.js'
-import { PAY_AUTHOR_COMMAND, payAuthorCommand, payModalSubmit } from '../commands/payDirect.js'
+import { PAY_AUTHOR_COMMAND, PAY_MEMBER_COMMAND, payAuthorCommand, payMemberCommand, payModalSubmit } from '../commands/payDirect.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
 import {
   policyChoices,
@@ -36,7 +36,7 @@ import { editModalSubmit, instructionModalSubmit } from '../components/proposalM
 import { approveButton, cancelButton, retryButton } from '../components/runButtons.js'
 import type { Dispatch, InteractionLabel } from '../http/handler.js'
 import type { DiscordAppDeps } from './deps.js'
-import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext, MessageCommandHandler, ModalHandler, PolicyButtonHandler, ProposalButtonHandler } from './handlers.js'
+import type { AutocompleteHandler, ButtonHandler, CommandHandler, GuildContext, MessageCommandHandler, ModalHandler, PolicyButtonHandler, ProposalButtonHandler, UserCommandHandler } from './handlers.js'
 import { type ParsedInteraction, parseInteraction } from './interaction.js'
 import { type Outcome, ephemeralReply, renderLate, renderOutcome } from './outcome.js'
 
@@ -92,7 +92,11 @@ const MODALS: Record<ProposalModal, ModalHandler> = { instruct: instructionModal
 const POLICY_BUTTONS: Record<PolicyAction, PolicyButtonHandler> = { approve: approvePolicyButton, discard: discardPolicyButton }
 
 export const ROUTED_COMMANDS = Object.keys(COMMANDS)
+/** Right-click commands on a member, by their registered name. Kept in step with COMMAND_DEFINITIONS by a test. */
+const USER_COMMANDS: Record<string, UserCommandHandler> = { [PAY_MEMBER_COMMAND]: payMemberCommand }
+
 export const ROUTED_MESSAGE_COMMANDS = Object.keys(MESSAGE_COMMANDS)
+export const ROUTED_USER_COMMANDS = Object.keys(USER_COMMANDS)
 export const RENAMED_MESSAGE_COMMANDS = Object.keys(RENAMED)
 
 const GENERIC_FAILURE = 'Something went wrong on our side. Nothing was paid by this action; try again in a moment.'
@@ -153,6 +157,7 @@ function labelOf(i: Exclude<ParsedInteraction, { kind: 'ping' }>): InteractionLa
     case 'autocomplete':
       return { kind: i.kind, name: i.sub ? `${i.command} ${i.sub}` : i.command }
     case 'message_command':
+    case 'user_command':
       return { kind: i.kind, name: i.command }
     case 'component':
     case 'modal':
@@ -188,6 +193,10 @@ async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: Disc
     }
     case 'message_command': {
       const handler = MESSAGE_COMMANDS[i.command] ?? RENAMED[i.command]
+      return handler ? handler({ target: i.target, ctx }, deps) : ephemeralReply('Sorry, I do not know that command.')
+    }
+    case 'user_command': {
+      const handler = Object.hasOwn(USER_COMMANDS, i.command) ? USER_COMMANDS[i.command] : undefined
       return handler ? handler({ target: i.target, ctx }, deps) : ephemeralReply('Sorry, I do not know that command.')
     }
     case 'modal': {

@@ -1,6 +1,6 @@
 import { MAX_NOTE_LENGTH, POLICY_LIMITS, PROPOSAL_LIMITS, WEEKDAYS } from '@rolepay/core'
 import { ChannelType, CommandType, OptionType, Permission } from '../api.js'
-import { PAY_AUTHOR_COMMAND } from './payDirect.js'
+import { PAY_AUTHOR_COMMAND, PAY_MEMBER_COMMAND } from './payDirect.js'
 import { PROPOSE_MESSAGE_COMMAND } from './proposeFromMessage.js'
 
 /** Guild-installed, usable only inside servers (not in DMs). */
@@ -186,6 +186,13 @@ export const commandDefinitions = (opts: { devShortcuts: boolean; demoControls: 
     // Right-click a message > Apps > Pay the author: a one-line run for whoever wrote it.
     name: PAY_AUTHOR_COMMAND,
     type: CommandType.Message,
+    ...GUILD_ONLY,
+    default_member_permissions: String(Permission.ManageGuild),
+  },
+  {
+    // Right-click a member > Apps > Pay with Rolepay: a one-line run for them.
+    name: PAY_MEMBER_COMMAND,
+    type: CommandType.User,
     ...GUILD_ONLY,
     default_member_permissions: String(Permission.ManageGuild),
   },

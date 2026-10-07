@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { SCOPE, appHarness, body, isEphemeral, text } from '../../test/app.js'
 import { ADMIN, ALICE, CAROL, CHANNEL, GUILD, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
 import { usd } from '../../test/harness.js'
-import { buttonClick, messageCommand, modalSubmit } from '../testing/interactions.js'
+import { buttonClick, messageCommand, modalSubmit, userCommand } from '../testing/interactions.js'
 import { wireMessage } from '../testing/messages.js'
 
 const treasurer = { userId: TREASURER, roles: [TREASURER_ROLE] }
@@ -142,6 +142,66 @@ describe('Apps > Pay the author (a message command)', () => {
     expect(await said('0')).toBe('The amount must be more than 0.')
     expect(await said('1.0000001')).toBe('"1.0000001" has more than 6 decimals.')
     expect(await said('-5')).toMatch(/is not an amount/)
+    expect(await latestRun(a)).toBeUndefined()
+  })
+})
+
+describe('Apps > Pay with Rolepay (a user command, on a member)', () => {
+  const memberForm = `pay-modal:member:${ALICE}`
+
+  it('the same form (amount and an empty note), then a one-line run for that member, posted for the Treasurer', async () => {
+    const a = await ready()
+    const opened = await a.send(userCommand(SCOPE, 'Pay with Rolepay', { id: ALICE }, treasurer))
+    expect(body(opened)).toMatchObject({ type: 9, data: { custom_id: memberForm, title: 'Pay this member' } })
+    expect(inputs(opened)).toEqual({
+      amount: expect.objectContaining({ label: 'Amount in AlphaUSD', required: true }),
+      note: expect.objectContaining({ label: 'Note (on the receipt and in the CSV)', required: false, max_length: 200 }),
+    })
+    expect(inputs(opened).note).not.toHaveProperty('value')
+
+    const sent = await a.send(modalSubmit(SCOPE, memberForm, { amount: '40', note: 'Moderation, October' }, treasurer))
+    expect(isEphemeral(sent)).toBe(false)
+    expect(text(body(sent))).toContain('Pay run awaiting approval')
+    expect(text(body(sent))).toContain(`<@${ALICE}>  40 AlphaUSD`)
+    const r = await latestRun(a)
+    expect(r && { status: r.status, createdBy: r.createdBy, note: r.note, lines: r.lines.map((l) => [l.payeeDiscordId, l.amount]) }).toEqual({
+      status: 'pending_approval',
+      createdBy: TREASURER,
+      note: 'Moderation, October',
+      lines: [[ALICE, usd('40')]],
+    })
+    a.clock.advance(1)
+    await a.send(modalSubmit(SCOPE, memberForm, { amount: '1', note: '' }, treasurer))
+    expect((await latestRun(a))?.note).toBeNull()
+  })
+
+  it('the same rules: who may create runs, a bot, someone not registered, yourself with a separate approver, an amount that is not one', async () => {
+    const a = await ready()
+    const refusedTo = async (interaction: unknown) => {
+      const d = await a.send(interaction)
+      expect(isEphemeral(d)).toBe(true)
+      return body(d).data?.content
+    }
+    expect(await refusedTo(userCommand(SCOPE, 'Pay with Rolepay', { id: ALICE }, { userId: CAROL }))).toMatch(/Manage Server or the approver role/)
+    expect(await refusedTo(modalSubmit(SCOPE, memberForm, { amount: '5', note: '' }, { userId: CAROL }))).toMatch(/Manage Server or the approver role/)
+    expect(await refusedTo(userCommand(SCOPE, 'Pay with Rolepay', { id: BOT, bot: true }, treasurer))).toBe('That is a bot, and Rolepay pays people. Pick a member.')
+    expect(await refusedTo(userCommand(SCOPE, 'Pay with Rolepay', { id: DAVE }, treasurer))).toMatch(new RegExp(`^<@${DAVE}> is not a registered payee yet.*\`/payee link\``))
+    expect(await refusedTo(modalSubmit(SCOPE, memberForm, { amount: 'ten', note: '' }, treasurer))).toMatch(/"ten" is not an amount/)
+
+    await a.registerPayee(TREASURER, '0x4444444444444444444444444444444444444444')
+    expect(body(await a.send(userCommand(SCOPE, 'Pay with Rolepay', { id: TREASURER }, treasurer))).type).toBe(9)
+    await a.rolepay.communities.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [TREASURER_ROLE] })
+    expect(await refusedTo(userCommand(SCOPE, 'Pay with Rolepay', { id: TREASURER }, treasurer))).toMatch(/requires a separate approver/)
+    expect(await refusedTo(modalSubmit(SCOPE, `pay-modal:member:${TREASURER}`, { amount: '5', note: '' }, treasurer))).toMatch(/requires a separate approver/)
+    expect(await latestRun(a)).toBeUndefined()
+  })
+
+  it('a form ID that does not decode is refused, never guessed at', async () => {
+    const a = await ready()
+    for (const id of ['pay-modal:member:alice', `pay-modal:author:${ALICE}`, `pay-modal:member:${ALICE}:${CHANNEL}`]) {
+      const d = await a.send(modalSubmit(SCOPE, id, { amount: '5', note: '' }, treasurer))
+      expect(isEphemeral(d) && body(d).data?.content).toMatch(/do not know that form/)
+    }
     expect(await latestRun(a)).toBeUndefined()
   })
 })
