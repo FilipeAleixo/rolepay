@@ -128,9 +128,9 @@ Send to the treasury address, **on Tempo**:
 
 Ways onto Tempo ([getting funds](https://tempo.xyz/developers/docs/guide/getting-funds)):
 
-- **Relay** (<https://relay.link>): from USDC on Base, Arbitrum, Ethereum, Optimism and others; destination chain Tempo, token USDC (it arrives as USDC.e) and, in a second bridge, PathUSD; set the recipient to the treasury address. Relay's API lists USDC.e, PathUSD, OUSD and USDT0 as bridgeable to Tempo (checked 2026-10-07: `curl -s https://api.relay.link/chains`).
+- **Relay** (<https://relay.link>): from USDC on Base, Arbitrum, Ethereum, Optimism and others; destination chain Tempo, token USDC (Relay's name for USDC.e, the same address) and, in a second bridge, PathUSD; set the recipient to the treasury address. Relay's API lists USDC.e, pathUSD, OUSD and USDT0 as bridgeable to Tempo (checked 2026-10-07: `curl -s https://api.relay.link/chains`).
 - **Stargate** (<https://stargate.finance>): USDC to USDC.e on Tempo, with no Stargate fee on the Ethereum route (other routes have one). USDC.e only.
-- **Tempo Wallet** (<https://wallet.tempo.xyz>, a passkey wallet): add funds by card on-ramp or bridge, then send to the treasury.
+- **Tempo Wallet** (<https://wallet.tempo.xyz>, Tempo's passkey wallet): add funds with a fiat on-ramp or a bridge, then send to the treasury.
 - Also listed by Tempo: Across, Squid, Bungee, Chainlink CCIP.
 
 Send a dollar first and check it arrives. Never send from an exchange or a network that does not support Tempo. The treasury page shows both balances (Balance in USDC.e, Fee balance in pathUSD).
@@ -181,7 +181,7 @@ Logs and state: `fly logs -a rolepay-app`, `fly status -a rolepay-app`, `fly ssh
 
 ## Risks accepted for the pilot
 
-- **The setup page's code comes from the bot server.** The page builds what the passkey signs from the form and refuses to sign if the server's copy differs, but a fully compromised server could serve different JavaScript and ask the passkey to sign something else. Accepted for a small pilot because the loss is bounded by the treasury (US$20 to 50); on the roadmap: serve the setup page as an immutable bundle from a separate static origin the bot server cannot change.
+- **The setup page's code comes from the bot server.** The page builds what the passkey signs from the form and refuses to sign if the server's copy differs, but a fully compromised server could serve different JavaScript and ask the passkey to sign something else. Accepted for a small pilot because the loss is bounded by the treasury (US$20 to 50); on the roadmap: serve the setup page as an immutable bundle from a separate static origin the bot server cannot change. The same holds for the account page and a payee's passkey (bounded by what they were paid), and the same fix covers it.
 - **The treasury passkey is the only key to the treasury.** Use a synced passkey; keep the treasury small.
 - **The database holds the passkeys' public keys** (a returning sign-in needs them) and the sealed bot key. Fly snapshots the volume daily; a lost database means re-authorising a key, and a browser that has forgotten the treasury account could not sign until the public key is recovered. Keep using the browser you set up with.
 - **One machine in one region** (`iad`); a deploy or a crash means about 20 seconds without answers, and the recovery sweep finishes anything in flight.
