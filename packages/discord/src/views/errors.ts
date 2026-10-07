@@ -1,5 +1,7 @@
 import { type Community, MAX_LINES_PER_RUN, PROPOSAL_LIMITS } from '@rolepay/core'
-import { escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'
+import { escapeMarkdown, mention, money, relativeTime, roleMention, tokenLabel } from './format.js'
+
+const tokenList = (tokens: unknown) => (Array.isArray(tokens) ? tokens.map((t) => tokenLabel(String(t))).join(' and ') : '?')
 
 export const AI_NOT_CONFIGURED = 'AI proposals are not set up on this Rolepay server: it has no Anthropic API key. Create the run with `/rolepay new` instead.'
 export const AI_OFF = 'AI proposals are off in this server. A member with the approver role turns them on with `/rolepay setup ai_proposals:true`.'
@@ -119,6 +121,20 @@ export function explainError(error: CodedError, ctx: { token?: string } = {}): s
       return 'The bot key could not be unsealed on this server. Check ROLEPAY_MASTER_KEY.'
     case 'already_registered':
       return 'This server is already registered.'
+    case 'payee_not_found':
+      return 'You are not registered to be paid in this server yet. Run /payee link first.'
+    case 'token_not_allowed': {
+      const choices = ((error.choices as string[] | undefined) ?? []).map(tokenLabel)
+      return `This server cannot pay in that token. Choose one of: ${choices.join(', ')}.`
+    }
+    case 'swap_not_authorized':
+      return `The bot key was authorised before preferred stablecoins were turned on, so it cannot swap into ${tokenList(error.tokens)}. The treasurer authorises a new key on the setup page (\`/rolepay setup\`), then Retry.`
+    case 'swap_no_route':
+      return `Tempo's stablecoin exchange cannot buy ${tokenList([error.token])} right now (no pair, or not enough liquidity). Nothing was signed. Retry later, or ask the people who chose it to pick another stablecoin.`
+    case 'swap_over_cap':
+      return `Buying ${tokenList([error.token])} now would cost ${amount(error.quoted)}, more than the ${amount(error.max)} this run allows for it. Nothing was signed. Retry when the price is back.`
+    case 'swap_limit_low':
+      return `The bot key has ${typeof error.remaining === 'bigint' ? money(error.remaining, String(error.token)) : '?'} of its ${tokenList([error.token])} limit left this period, and this run delivers ${typeof error.needed === 'bigint' ? money(error.needed, String(error.token)) : '?'}. Nothing was signed.`
     default:
       return `Something went wrong (${error.code}). Try again in a moment.`
   }

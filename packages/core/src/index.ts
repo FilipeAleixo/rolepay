@@ -49,7 +49,21 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
   })
   const audit = new AuditTrail({ log: r.audit, policyRuns: r.policyRuns, clock, ...(deps.onAuditError ? { onError: deps.onAuditError } : {}) })
   const policyKeys = new PolicyKeyService({ communities: r.communities, policies: r.policies, policyKeys: r.policyKeys, chain, vault, clock, audit, communityService: communities })
-  const payRuns = new PayRunService({ runs: r.runs, payees: r.payees, communities: r.communities, policyRuns: r.policyRuns, policyKeys: r.policyKeys, chain, vault, ids, clock, network, audit, leases: deps.leases ?? null })
+  const payRuns = new PayRunService({
+    runs: r.runs,
+    payees: r.payees,
+    communities: r.communities,
+    policyRuns: r.policyRuns,
+    policyKeys: r.policyKeys,
+    chain,
+    vault,
+    ids,
+    clock,
+    network,
+    audit,
+    leases: deps.leases ?? null,
+    ...(deps.swapMaxSlippageBps !== undefined ? { swapMaxSlippageBps: deps.swapMaxSlippageBps } : {}),
+  })
   const policies = new PolicyService({
     communities: r.communities,
     payees: r.payees,

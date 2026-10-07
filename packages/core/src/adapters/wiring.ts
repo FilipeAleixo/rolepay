@@ -36,6 +36,7 @@ export async function openRolepayAdapters(
         ? new DailyCappedProposer(new AnthropicRunProposer({ apiKey: config.ai.apiKey, model: config.ai.model }), { cap: config.ai.dailyCap, kv: db.kv, clock })
         : null,
       leases: new KvRunLeases(db.kv),
+      swapMaxSlippageBps: config.swapMaxSlippageBps,
     },
     /** Same database: passkey credentials and sessions, delivery markers. */
     kv: db.kv,

@@ -1,4 +1,4 @@
-import type { PayeeService } from '@rolepay/core'
+import { type PayeeService, TOKEN_SYMBOLS } from '@rolepay/core'
 import { Hono } from 'hono'
 import { failure, jsonResponse, linkStatus } from '../json.js'
 import type { PasskeySessions } from '../ports.js'
@@ -20,9 +20,23 @@ export function claimRoutes(deps: ClaimRoutesDeps): Hono {
     const link = await deps.payees.describeLink({ token })
     if (!link.ok) return c.html(linkErrorPage(link.error.code, '/payee link', deps.testnet), linkStatus(link.error.code) as 404)
     const communityName = link.value.communityName ?? 'your Discord server'
+    // The stablecoins they may choose to be paid in, set after the passkey registers (/account/preference).
+    const options = await deps.payees.preferenceOptions({ guildId: link.value.guildId })
+    const label = (address: string) => ({ address, label: TOKEN_SYMBOLS[address.toLowerCase()] ?? address })
     return c.html(
       claimPage(
-        { page: 'claim', token, communityName, passkeyName: `Rolepay: ${communityName}`, network: deps.network, explorerUrl: deps.explorerUrl },
+        {
+          page: 'claim',
+          token,
+          communityName,
+          passkeyName: `Rolepay: ${communityName}`,
+          network: deps.network,
+          explorerUrl: deps.explorerUrl,
+          guildId: link.value.guildId,
+          payoutLabel: options.ok ? label(options.value.payoutToken).label : null,
+          preferredTokens: options.ok && options.value.enabled,
+          choices: options.ok ? options.value.choices.map(label) : [],
+        },
         deps.testnet,
       ),
     )
@@ -35,7 +49,12 @@ export function claimRoutes(deps: ClaimRoutesDeps): Hono {
     const link = await deps.payees.describeLink({ token })
     const registered = await deps.payees.register({ token, address: session.address })
     if (!registered.ok) return failure(registered.error.code === 'invalid_input' ? 400 : linkStatus(registered.error.code), registered.error)
-    return jsonResponse(200, { ok: true, address: registered.value.address, communityName: link.ok ? (link.value.communityName ?? null) : null })
+    return jsonResponse(200, {
+      ok: true,
+      address: registered.value.address,
+      communityName: link.ok ? (link.value.communityName ?? null) : null,
+      preferredToken: registered.value.preferredToken,
+    })
   })
 
   return app

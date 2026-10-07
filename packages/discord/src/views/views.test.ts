@@ -264,7 +264,7 @@ describe('run notes are shown as text, never as Discord markdown (L6)', () => {
   it('on the run message, in the receipt DM, and in the status list', () => {
     escaped(runMessage(r, ctx).embeds?.[0]?.description ?? '')
     escaped(receiptDm(r, r.lines[0] as (typeof r.lines)[number], { ...ctx, communityName: 'Test guild' }).embeds?.[0]?.description ?? '')
-    const community = { id: GUILD, name: 'g', network: 'moderato', treasuryAddress: TOKEN, payoutToken: TOKEN, feeMode: 'sponsor', feeToken: null, approverRoleId: null, requireSeparateApprover: false, aiProposals: false, proposerRoleId: null, createdAt: T0, updatedAt: T0 } as const
+    const community = { id: GUILD, name: 'g', network: 'moderato', treasuryAddress: TOKEN, payoutToken: TOKEN, feeMode: 'sponsor', feeToken: null, approverRoleId: null, requireSeparateApprover: false, aiProposals: false, proposerRoleId: null, preferredTokens: false, createdAt: T0, updatedAt: T0 } as const
     const recent = statusMessage({ community, runs: [r], key: null }).embeds?.[0]?.fields?.find((f) => f.name === 'Recent runs')?.value ?? ''
     expect(recent).toContain('Claim your bonus')
     escaped(recent)
@@ -272,6 +272,39 @@ describe('run notes are shown as text, never as Discord markdown (L6)', () => {
 
   it('autocomplete choices are plain text, so the summary there stays unescaped', () => {
     expect(runSummary(r)).toContain(phishing)
+  })
+})
+
+describe('a line paid in the payee\'s preferred stablecoin', () => {
+  const BETA = '0x20c0000000000000000000000000000000000002'
+  const swapped = <R extends ReturnType<typeof pending>>(r: R): R => ({ ...r, lines: r.lines.map((l) => (l.line === 1 ? { ...l, swap: { token: BETA as `0x${string}`, maxIn: 1_515_000n } } : l)) })
+
+  it('the review embed shows "5 AlphaUSD -> 5 BetaUSD (swapped)" on that line and says what the swaps may cost at most', () => {
+    const m = runMessage(swapped(pending()), ctx)
+    const description = m.embeds?.[0]?.description ?? ''
+    expect(description).toContain(`<@${ALICE}>  1.5 AlphaUSD → 1.5 BetaUSD (swapped)`)
+    expect(description).toContain(`<@${BOB}>  25 AlphaUSD  ·`)
+    const swaps = m.embeds?.[0]?.fields?.find((f) => f.name === 'Swaps')?.value
+    expect(swaps).toContain('1 line is paid in another stablecoin')
+    expect(swaps).toContain('at most 1.515 AlphaUSD')
+    expect(runMessage(pending(), ctx).embeds?.[0]?.fields?.find((f) => f.name === 'Swaps')).toBeUndefined()
+  })
+
+  it('the receipt DM says what they received: the stablecoin they chose, swapped from the payout token', () => {
+    const r = swapped(paid())
+    const dm = receiptDm(r, r.lines[0] as (typeof r.lines)[number], { network: 'moderato', communityName: 'Mods' })
+    expect(dm.embeds?.[0]?.title).toBe('You were paid 1.5 BetaUSD')
+    expect(text(dm)).toContain('swapped from AlphaUSD')
+    const plain = receiptDm(r, r.lines[1] as (typeof r.lines)[number], { network: 'moderato', communityName: 'Mods' })
+    expect(plain.embeds?.[0]?.title).toBe('You were paid 25 AlphaUSD')
+    expect(text(plain)).not.toContain('swapped')
+  })
+
+  it('the pre-flight holds explain themselves, saying nothing was signed', () => {
+    expect(explainError({ code: 'swap_no_route', token: BETA })).toMatch(/BetaUSD.*Nothing was signed/)
+    expect(explainError({ code: 'swap_over_cap', token: BETA, quoted: 5_100_000n, max: 5_050_000n }, { token: TOKEN })).toContain('5.1 AlphaUSD, more than the 5.05 AlphaUSD')
+    expect(explainError({ code: 'swap_limit_low', token: BETA, remaining: 1_000_000n, needed: 2_000_000n })).toContain('1 BetaUSD')
+    expect(explainError({ code: 'swap_not_authorized', tokens: [BETA] })).toMatch(/new key/)
   })
 })
 

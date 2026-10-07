@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { SWAP_SLIPPAGE } from '../constants/limits.js'
 import { NETWORKS, NETWORK_NAMES, type NetworkName } from '../constants/tempo.js'
 
 /** Operational settings, from the environment. Fixed facts live in constants/. */
@@ -21,6 +22,8 @@ const EnvSchema = z.object({
   ROLEPAY_AI_MODEL: z.string().regex(/^[a-z0-9][a-z0-9.-]{1,63}$/, 'must be a model ID such as claude-sonnet-5-5').default('claude-sonnet-5-5'),
   /** At most this many model calls per UTC day, across every community on this server, so a public server cannot run up the bill. */
   ROLEPAY_AI_DAILY_CAP: z.coerce.number().int().positive().default(50),
+  /** A line paid in a preferred stablecoin may spend at most this many basis points of the payout token over its amount (100 = 1%). */
+  ROLEPAY_SWAP_MAX_SLIPPAGE_BPS: z.coerce.number().int().min(0).max(SWAP_SLIPPAGE.maxBps).default(SWAP_SLIPPAGE.defaultBps),
 })
 
 const TestnetFlagsSchema = EnvSchema.pick({ ROLEPAY_NETWORK: true, ROLEPAY_DEV_SHORTCUTS: true, ROLEPAY_DEMO_CONTROLS: true })
@@ -50,6 +53,8 @@ export type RolepayConfig = {
   demoControls: boolean
   /** AI-proposed pay runs: the Anthropic API key (null = AI off on this server), the model and the cap on model calls per UTC day. */
   ai: { apiKey: string | null; model: string; dailyCap: number }
+  /** Paying people in their preferred stablecoin: the most a swapped line may spend over its amount, in basis points of the payout token. */
+  swapMaxSlippageBps: number
 }
 
 export class ConfigError extends Error {
@@ -133,5 +138,6 @@ export function parseConfig(raw: Record<string, string | undefined>): RolepayCon
     devShortcuts: devShortcutsEnabled(env),
     demoControls: demoControlsEnabled(env),
     ai: { apiKey: e.ANTHROPIC_API_KEY ?? null, model: e.ROLEPAY_AI_MODEL, dailyCap: e.ROLEPAY_AI_DAILY_CAP },
+    swapMaxSlippageBps: e.ROLEPAY_SWAP_MAX_SLIPPAGE_BPS,
   }
 }

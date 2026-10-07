@@ -58,4 +58,6 @@ export type RolepayDeps = {
   onAuditError?: (error: unknown) => void
   /** One worker per pay run at a time, across processes (`KvRunLeases` in production). */
   leases?: RunLeases
+  /** A line paid in a preferred stablecoin may spend at most this many basis points over its amount (default 100, 1%). */
+  swapMaxSlippageBps?: number
 }

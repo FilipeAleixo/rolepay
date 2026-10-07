@@ -30,6 +30,7 @@ export function repositoryContracts(name: string, make: RepoFactory) {
         requireSeparateApprover: true,
         aiProposals: true,
         proposerRoleId: '400000000000000003',
+        preferredTokens: true,
       })
       expect(await repo.insert(c)).toEqual({ ok: true, value: undefined })
       expect(await repo.get(f.GUILD)).toEqual(c)
@@ -53,7 +54,7 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       const newer = f.botKey({
         address: '0x4444444444444444444444444444444444444442',
         createdAt: f.at(2),
-        policy: { ...f.botKey().policy, recipients: [f.ADDR.alice], feeToken: f.FEE_TOKEN, feeBudget: 1n },
+        policy: { ...f.botKey().policy, recipients: [f.ADDR.alice], feeToken: f.FEE_TOKEN, feeBudget: 1n, swapTokens: ['0x20c0000000000000000000000000000000000002'] },
       })
       const foreign = f.botKey({ address: '0x4444444444444444444444444444444444444443', communityId: f.OTHER_GUILD })
       for (const k of [older, newer, foreign]) await repo.saveBotKey(k)
@@ -100,6 +101,28 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       expect((await repo.list(f.GUILD)).map((p) => p.discordUserId).sort()).toEqual([f.ALICE, f.BOB])
     })
 
+    it("round-trips a payee's preferred stablecoin, changes it in place, and clears it back to the payout token", async () => {
+      const BETA = '0x20c0000000000000000000000000000000000002'
+      await repo.upsert(f.payee())
+      expect((await repo.get(f.GUILD, f.ALICE))?.preferredToken).toBeNull()
+      await repo.upsert(f.payee({ preferredToken: BETA, updatedAt: f.at(3) }))
+      expect(await repo.get(f.GUILD, f.ALICE)).toEqual(f.payee({ preferredToken: BETA, updatedAt: f.at(3) }))
+      await repo.upsert(f.payee({ preferredToken: null, updatedAt: f.at(4) }))
+      expect(await repo.get(f.GUILD, f.ALICE)).toEqual(f.payee({ preferredToken: null, updatedAt: f.at(4) }))
+    })
+
+    it('lists every registration of an address, across communities (the account page), and nothing else', async () => {
+      await repo.upsert(f.payee())
+      await repo.upsert(f.payee({ communityId: f.OTHER_GUILD }))
+      await repo.upsert(f.payee({ discordUserId: f.BOB, address: f.ADDR.bob }))
+      const mine = await repo.listByAddress(f.ADDR.alice)
+      expect(mine.map((p) => [p.communityId, p.discordUserId]).sort()).toEqual([
+        [f.GUILD, f.ALICE],
+        [f.OTHER_GUILD, f.ALICE],
+      ])
+      expect(await repo.listByAddress(f.ADDR.carol)).toEqual([])
+    })
+
     it('consumes a link token exactly once', async () => {
       await repo.insertLinkToken(f.linkToken())
       expect(await repo.getLinkToken('fp_1')).toEqual(f.linkToken())
@@ -135,6 +158,15 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       expect(await repo.update({ ...r, version: 1 })).toBe('updated')
       expect(await repo.get(r.id)).toEqual({ ...r, version: 1 })
       expect(await repo.get('run_missing')).toBeNull()
+    })
+
+    it('round-trips a line paid in a preferred stablecoin (its swap: the token delivered and the most it may spend) exactly', async () => {
+      const BETA = '0x20c0000000000000000000000000000000000002'
+      const plain = f.run({ id: 'run_swapped01' })
+      const r = { ...plain, lines: plain.lines.map((l) => (l.line === 2 ? { ...l, swap: { token: BETA as `0x${string}`, maxIn: 2_020_000n } } : l)) }
+      await repo.insert(r)
+      expect(await repo.get(r.id)).toEqual(r)
+      expect((await repo.get(r.id))?.lines[0]).not.toHaveProperty('swap')
     })
 
     it('compare-and-sets on version: a stale writer gets conflict and changes nothing', async () => {

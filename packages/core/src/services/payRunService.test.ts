@@ -61,7 +61,7 @@ async function world(opts: { limit?: bigint; fund?: bigint } = {}) {
     [ALICE, ADDR.alice],
     [BOB, ADDR.bob],
   ] as const) {
-    await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address, registeredAt: now, updatedAt: now })
+    await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address, preferredToken: null, registeredAt: now, updatedAt: now })
   }
   return { clock, chain, repos, runs, communitySvc, svc: makeService(), makeService }
 }

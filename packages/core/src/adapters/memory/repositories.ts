@@ -76,6 +76,9 @@ export class MemoryPayeeRepository implements PayeeRepository {
   async list(communityId: string) {
     return [...this.payees.values()].filter((p) => p.communityId === communityId).map(copy)
   }
+  async listByAddress(address: string) {
+    return [...this.payees.values()].filter((p) => p.address === address.toLowerCase()).map(copy)
+  }
   async insertLinkToken(t: LinkToken) {
     this.tokens.set(t.tokenHash, copy(t))
   }

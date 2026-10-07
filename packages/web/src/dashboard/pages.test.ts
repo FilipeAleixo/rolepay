@@ -292,6 +292,24 @@ describe('Run detail', () => {
     expect(t).toMatch(/rejected/)
   })
 
+  it('a line paid in the payee\'s preferred stablecoin reads "10 AlphaUSD -> 10 BetaUSD (swapped)", and the CSV has its delivered token', async () => {
+    const BETA = '0x20c0000000000000000000000000000000000002'
+    const h = await seeded()
+    await h.rolepay.communities.setPreferredTokens({ guildId: GUILD, enabled: true })
+    await h.activeKey()
+    await h.rolepay.payees.setPreferredToken({ guildId: GUILD, discordUserId: ALICE.id, token: BETA })
+    h.chain.setSwapRoute(TOKEN, BETA, { inPerOutBps: 9_954, liquidity: usd('1000') })
+    const run = await h.run([[ALICE.id, '10'], [BOB.id, '2.5']])
+    const { browser } = await h.signIn(identity(MEMBER))
+    const t = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
+    expect(t).toContain('10 AlphaUSD → 10 BetaUSD (swapped)')
+    expect(t).not.toContain('2.5 AlphaUSD →')
+    const csv = (await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}/csv`)).text()).split('\r\n')
+    expect(csv[0]).toMatch(/,delivered_token$/)
+    expect(csv[1]).toMatch(new RegExp(`,${BETA}$`))
+    expect(csv[2]).toMatch(new RegExp(`,${TOKEN}$`))
+  })
+
   it("another community's run, or an unknown one, is not found", async () => {
     const h = await seeded()
     const { browser } = await h.signIn(identity(MEMBER))

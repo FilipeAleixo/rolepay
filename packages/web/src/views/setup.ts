@@ -16,6 +16,8 @@ export type SetupPageConfig = {
   feeMode: 'sponsor' | 'fee_budget'
   feeToken: string | null
   feeTokenLabel: string | null
+  /** The stablecoins the key may swap into and deliver when preferred stablecoins are on (the payout and fee tokens left out). */
+  swapTokens: { address: string; label: string }[]
   passkeyName: string
   defaults: { limit: string; periodDays: number; validityDays: number; feeBudget: string }
 }
@@ -72,6 +74,7 @@ export function setupPage(c: SetupPageConfig): string {
 <section data-step="key" hidden>
   <h2>3. What the bot may spend</h2>
   <p data-field="key-status" class="muted"></p>
+  ${preferredTokensBox(c)}
   <form id="key-form">
     <div class="row">
       <div><label for="limit">Spend limit (${token})</label><input id="limit" inputmode="decimal" value="${esc(c.defaults.limit)}"></div>
@@ -92,4 +95,20 @@ export function setupPage(c: SetupPageConfig): string {
 <p id="status" role="status" aria-live="polite"></p>
 <noscript><p>This page needs JavaScript for the passkey.</p></noscript>`,
   })
+}
+
+/**
+ * The switch for paying each person in the stablecoin they prefer (off by default). Turning it on
+ * changes no key: the next authorisation this page builds includes the swap scope, and the page says
+ * when the current key lacks it.
+ */
+function preferredTokensBox(c: SetupPageConfig): string {
+  if (c.swapTokens.length === 0) return ''
+  const token = esc(c.tokenLabel)
+  const list = c.swapTokens.map((t) => esc(t.label)).join(' or ')
+  return `<div id="preferred-tokens-box">
+    <label class="check"><input type="checkbox" id="preferred-tokens"> Pay each person in the stablecoin they prefer</label>
+    <p class="muted">A payee may choose ${list} instead of ${token} (with /payee prefer in Discord, or on their account page). Each run then buys their choice with ${token} on Tempo's stablecoin exchange, in the same transaction, spending at most a small cap over each amount (1% by default); if it cannot, the run waits and nobody is paid. The bot key also needs the exchange's exact-output swap and transferWithMemo on ${list}, each limited like ${token}: authorise a new key below after turning this on.</p>
+    <p data-field="preferred-status" class="muted"></p>
+  </div>`
 }

@@ -16,6 +16,7 @@ import {
   keyAuthorization,
   toBotKeyView,
 } from '../domain/community.js'
+import { keyLacksSwapScope, swapTokensFor } from '../domain/delivery.js'
 import type { Hex } from '../domain/hex.js'
 import { type Address, AddressSchema, DiscordIdSchema } from '../domain/ids.js'
 import { type Result, err, ok } from '../domain/result.js'
@@ -217,6 +218,23 @@ export class CommunityService {
   }
 
   /**
+   * Pay each person in the stablecoin they prefer, on or off (off by default). Called by the setup
+   * page, which has already checked that the caller holds the treasury's passkey session. Runs made
+   * while it is on swap on the DEX for people who chose another stablecoin; turning it off pays
+   * everyone in the payout token again. `keyNeedsSwapScope` says when the active key was authorised
+   * without the swap scope: runs with swaps are then held until the treasurer authorises a new key,
+   * whose authorisation includes it (`provisionBotKey`).
+   */
+  async setPreferredTokens(input: { guildId: string; enabled: boolean }): Promise<Result<{ community: Community; keyNeedsSwapScope: boolean }, NotFound>> {
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    const updated: Community = { ...community, preferredTokens: input.enabled, updatedAt: this.deps.clock.now() }
+    await this.deps.communities.update(updated)
+    const active = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
+    return ok({ community: updated, keyNeedsSwapScope: keyLacksSwapScope(updated, active?.policy ?? null) })
+  }
+
+  /**
    * A short-lived link to the treasurer's setup page. The settings register the community
    * when the treasurer binds the treasury there (it has no address until then).
    */
@@ -314,6 +332,7 @@ export class CommunityService {
         recipients: p.recipients,
         feeToken: community.feeMode === 'fee_budget' ? community.feeToken : null,
         feeBudget: community.feeMode === 'fee_budget' ? p.feeBudget : null,
+        ...preferredTokenPolicy(community),
       },
       createdAt: now,
       authorizedAt: null,
@@ -460,3 +479,9 @@ export class CommunityService {
 }
 
 export type ConfirmError = { code: 'no_pending_key' } | { code: 'key_not_authorized_on_chain' }
+
+/** The swap scope a new key carries: only when the community pays people in their preferred stablecoin (`preferredTokenGrants`). */
+function preferredTokenPolicy(community: Community): { swapTokens?: Address[] } {
+  const tokens = community.preferredTokens ? swapTokensFor(community) : []
+  return tokens.length ? { swapTokens: tokens } : {}
+}

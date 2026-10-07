@@ -29,6 +29,8 @@ export interface PayeeRepository {
   /** Upsert by (communityId, discordUserId). */
   upsert(payee: Payee): Promise<void>
   list(communityId: string): Promise<Payee[]>
+  /** Every registration of this address, across communities (a payee's account page). */
+  listByAddress(address: string): Promise<Payee[]>
   insertLinkToken(token: LinkToken): Promise<void>
   getLinkToken(tokenHash: string): Promise<LinkToken | null>
   /** Compare-and-set: true only for the one call that consumed an unconsumed token. */

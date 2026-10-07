@@ -146,6 +146,10 @@ describe('the web app', () => {
     // The overall budget for the passkey endpoints is spent (claim has its own), whatever the client claims to be.
     expect((await from('5.5.5.5')).status).toBe(429)
     expect((await app.request('https://pay.example.org/claim/nope')).status).toBe(404)
+    // A payee's choice of stablecoin (POST /account/preference) has a budget of its own.
+    expect((await from('6.6.6.6', '/account/preference')).status).not.toBe(429)
+    expect((await from('6.6.6.6', '/account/preference')).status).not.toBe(429)
+    expect((await from('6.6.6.6', '/account/preference')).status).toBe(429)
   })
 
   it('rate limits the Discord sign-in (GETs too: each one writes a record or calls Discord) and dashboard actions, never dashboard pages', async () => {

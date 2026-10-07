@@ -40,7 +40,7 @@ describe('runToCsv', () => {
     const csv = runToCsv(paidRun('October mods'), { explorerTxUrl })
     const rows = csv.split('\r\n')
     expect(rows[0]).toBe(
-      'run_id,line,discord_user_id,address,amount,token,memo,status,tx_hash,explorer_url,paid_at,approved_by,note',
+      'run_id,line,discord_user_id,address,amount,token,memo,status,tx_hash,explorer_url,paid_at,approved_by,note,delivered_token',
     )
     expect(rows[1]).toBe(
       [
@@ -57,6 +57,7 @@ describe('runToCsv', () => {
         '2026-10-06T12:05:00.000Z',
         '300000000000000001',
         'October mods',
+        '0x20c0000000000000000000000000000000000001',
       ].join(','),
     )
     expect(rows[2]?.split(',')[4]).toBe('0.000001')
@@ -70,6 +71,16 @@ describe('runToCsv', () => {
     const csv = runToCsv(r.value, { explorerTxUrl })
     expect(csv.split('\r\n')[1]?.split(',')[4]).toBe('999995.000000')
     expect(csv).not.toContain('999,995')
+  })
+
+  it('adds the delivered token last: the payout token, or the stablecoin a swapped line delivered (the existing columns stay as they were)', () => {
+    const run = paidRun(null)
+    const swapped = { ...run, lines: run.lines.map((l) => (l.line === 2 ? { ...l, swap: { token: '0x20c0000000000000000000000000000000000002' as const, maxIn: 2n } } : l)) }
+    const rows = runToCsv(swapped, { explorerTxUrl }).split('\r\n').map((r) => r.split(','))
+    expect(rows[1]?.[5]).toBe('0x20c0000000000000000000000000000000000001')
+    expect(rows[1]?.[13]).toBe('0x20c0000000000000000000000000000000000001')
+    expect(rows[2]?.[5]).toBe('0x20c0000000000000000000000000000000000001')
+    expect(rows[2]?.[13]).toBe('0x20c0000000000000000000000000000000000002')
   })
 
   it('leaves chain columns empty for an unpaid run', () => {

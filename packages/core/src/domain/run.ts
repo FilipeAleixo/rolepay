@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { MAX_LINES_PER_RUN, MAX_NOTE_LENGTH } from '../constants/limits.js'
 import type { Hex } from './hex.js'
+import { LineSwapSchema } from './delivery.js'
 import { AddressSchema, DiscordIdSchema, RunIdSchema, TxHashSchema } from './ids.js'
 import { encodeMemo } from './memo.js'
 import { sumAmounts } from './money.js'
@@ -23,13 +24,22 @@ const NOT_RETRYABLE: ReadonlySet<FailureReason> = new Set(['partial_match', 'tra
 const HexDataSchema = z.string().regex(/^0x([0-9a-fA-F]{2})*$/).transform((s) => s as Hex)
 const MemoSchema = z.string().regex(/^0x[0-9a-f]{64}$/).transform((s) => s as Hex)
 
-export const RunLineSchema = z.object({
-  line: z.number().int().min(1),
-  payeeDiscordId: DiscordIdSchema,
-  address: AddressSchema,
-  amount: z.bigint().positive(),
-  memo: MemoSchema,
-})
+export const RunLineSchema = z
+  .object({
+    line: z.number().int().min(1),
+    payeeDiscordId: DiscordIdSchema,
+    address: AddressSchema,
+    amount: z.bigint().positive(),
+    memo: MemoSchema,
+    /**
+     * Absent: paid in the run's token. Present: the payee prefers another stablecoin, which the batch
+     * buys on the DEX (exactly `amount` of `swap.token`, for at most `swap.maxIn` of the run's token)
+     * and delivers with the same transferWithMemo and memo. Fixed when the run is created, so the
+     * approver sees what will be paid and reconciliation knows which token to look in.
+     */
+    swap: LineSwapSchema.optional(),
+  })
+  .refine((l) => !l.swap || l.swap.maxIn >= l.amount, { message: 'a swap may not spend less than the amount it delivers', path: ['swap', 'maxIn'] })
 export type RunLine = z.infer<typeof RunLineSchema>
 
 /**
@@ -81,6 +91,7 @@ export const RunSchema = z.object({
   /** Incremented on every transition; repositories compare-and-set on it. */
   version: z.number().int().min(0),
 })
+  .refine((r) => r.lines.every((l) => !l.swap || l.swap.token !== r.token), { message: 'a line cannot swap into the run token itself', path: ['lines'] })
 export type Run = z.infer<typeof RunSchema>
 
 export type NewRunInput = {
@@ -89,7 +100,7 @@ export type NewRunInput = {
   token: string
   note: string | null
   createdBy: string
-  lines: { payeeDiscordId: string; address: string; amount: bigint }[]
+  lines: { payeeDiscordId: string; address: string; amount: bigint; swap?: { token: string; maxIn: bigint } | null }[]
   now: Date
 }
 
@@ -114,7 +125,7 @@ export function newRun(input: NewRunInput): Result<Run, NewRunError> {
     token: input.token,
     note: input.note,
     status: 'draft',
-    lines: input.lines.map((l, i) => ({ ...l, line: i + 1, memo: encodeMemo(input.id, i + 1) })),
+    lines: input.lines.map(({ swap, ...l }, i) => ({ ...l, line: i + 1, memo: encodeMemo(input.id, i + 1), ...(swap ? { swap } : {}) })),
     total: sumAmounts(input.lines.map((l) => l.amount)),
     createdBy: input.createdBy,
     createdAt: input.now,

@@ -226,3 +226,79 @@ test('a treasurer creates the treasury with a passkey, authorises the bot key wi
   await expect(page.locator('#status')).toContainText('The bot key is active')
   expect(await prompts()).toEqual({ create: 0, get: 2 })
 })
+
+test('a treasurer turns on preferred stablecoins: the passkey signs a key with the swap scope in one prompt, and the bot pays a payee in BetaUSD', async ({ page }) => {
+  const BETA = '0x20c0000000000000000000000000000000000002'
+  const THETA = '0x20c0000000000000000000000000000000000003'
+  const DEX = '0xdec0000000000000000000000000000000000000'
+  const guildId = snowflake()
+  await virtualAuthenticator(page)
+  const prompts = await passkeyPrompts(page)
+  const link = await server.rolepay.communities.issueSetupLink({
+    guildId,
+    discordUserId: TREASURER,
+    settings: { name: 'E2E preferred guild', payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: ROLE },
+  })
+  if (!link.ok) throw new Error(link.error.code)
+  await page.goto(`${server.url}/setup/${link.value.token}`)
+  await page.getByRole('button', { name: 'Create the treasury passkey' }).click()
+  await expect(page.locator('#status')).toHaveText('Signed in as the treasury.')
+  await page.getByRole('button', { name: 'Get testnet funds' }).click()
+  await expect(page.locator('#status')).toHaveText('Testnet funds arrived.')
+  const community = await server.rolepay.communities.get(guildId)
+  if (!community.ok) throw new Error('not registered')
+  const treasury = community.value.treasuryAddress
+
+  // Off by default: the page would sign exactly the old authorisation.
+  await expect(page.locator('[data-field="preferred-status"]')).toHaveText('Off: everyone is paid in AlphaUSD.')
+  await expect(page.locator('[data-field="key-signs"]')).not.toContainText('swapExactAmountOut')
+  // On: no prompt (nothing changes on chain), and the authorisation the page builds gains the swap scope.
+  await page.getByLabel('Pay each person in the stablecoin they prefer').check()
+  await expect(page.locator('#status')).toHaveText('Preferred stablecoins are on. Authorise a new bot key below so it can swap.')
+  await expect(page.locator('[data-field="preferred-status"]')).toContainText('the current bot key cannot swap')
+  expect(await prompts()).toEqual({ create: 1, get: 0 })
+  await page.locator('#limit').fill('5')
+  await page.locator('#periodDays').fill('1')
+  await page.locator('#validityDays').fill('2')
+  await expect(page.locator('[data-field="key-signs"]')).toContainText("Only swapExactAmountOut on Tempo's stablecoin exchange")
+  await expect(page.locator('[data-field="key-signs"]')).toContainText('plus up to 5 BetaUSD and up to 5 ThetaUSD every day to pay people who chose them')
+  await page.getByRole('button', { name: 'Authorise the bot key with my passkey' }).click()
+  await expect(page.locator('#status')).toContainText('The bot key is active')
+  // One prompt for the key, the swap scope included (counts are per page load: the treasury passkey, then this signature).
+  expect(await prompts()).toEqual({ create: 1, get: 1 })
+  await expect(page.locator('[data-field="preferred-status"]')).toContainText('On: people who chose another stablecoin get it')
+
+  // The scope on chain: transferWithMemo on AlphaUSD, the exact-output swap, transferWithMemo on BetaUSD and ThetaUSD.
+  const status = await server.rolepay.communities.keyStatus({ guildId })
+  if (!status.ok) throw new Error(status.error.code)
+  const [, scopes] = (await createPublicClient({ transport: http(NET.rpcUrl) }).readContract({
+    address: Addresses.accountKeychain,
+    abi: Abis.accountKeychain,
+    functionName: 'getAllowedCalls',
+    args: [treasury as `0x${string}`, status.value.key.address as `0x${string}`],
+  })) as readonly [boolean, readonly { target: string; selectorRules: readonly { selector: string }[] }[]]
+  expect(scopes.map((s) => [s.target.toLowerCase(), s.selectorRules.map((r) => r.selector)])).toEqual([
+    [TOKEN, [toFunctionSelector('transferWithMemo(address,uint256,bytes32)')]],
+    [DEX, [toFunctionSelector('swapExactAmountOut(address,address,uint128,uint128)')]],
+    [BETA, [toFunctionSelector('transferWithMemo(address,uint256,bytes32)')]],
+    [THETA, [toFunctionSelector('transferWithMemo(address,uint256,bytes32)')]],
+  ])
+
+  // A payee who chose BetaUSD is paid in it, in one transaction from the passkey treasury.
+  const payee = privateKeyToAddress(generatePrivateKey()).toLowerCase()
+  const claim = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000004' })
+  if (!claim.ok) throw new Error(claim.error.code)
+  await server.rolepay.payees.register({ token: claim.value.token, address: payee })
+  await server.rolepay.payees.setPreferredToken({ guildId, discordUserId: '200000000000000004', token: BETA })
+  const run = await server.rolepay.payRuns.create({ guildId, createdBy: TREASURER, note: 'e2e preferred', lines: [{ discordUserId: '200000000000000004', amount: 1_000_000n }] })
+  if (!run.ok) throw new Error(JSON.stringify(run.error))
+  const ref = { guildId, runId: run.value.id }
+  await server.rolepay.payRuns.submit({ ...ref, actor: TREASURER })
+  await server.rolepay.payRuns.approve({ ...ref, actor: TREASURER, actorCanApprove: true })
+  const paid = await server.rolepay.payRuns.execute(ref)
+  if (!paid.ok) throw new Error(JSON.stringify(paid.error, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)))
+  expect(paid.value.status).toBe('paid')
+  expect(await server.testnet.balance(BETA, payee)).toBe(1_000_000n)
+  expect(await server.testnet.balance(TOKEN, payee)).toBe(0n)
+  console.log(`paid in BetaUSD from the passkey treasury: ${NET.explorerUrl}/tx/${paid.value.run.paidTxHash}`)
+})

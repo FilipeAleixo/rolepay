@@ -19,6 +19,15 @@ describe('parseConfig (operational settings from env)', () => {
     for (const bad of ['0', '-1', '2.5', 'many']) expect(() => parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_AI_DAILY_CAP: bad })).toThrow(/ROLEPAY_AI_DAILY_CAP/)
   })
 
+  it('a swapped line may spend at most ROLEPAY_SWAP_MAX_SLIPPAGE_BPS over its amount (default 100, 1%; 0 to 500)', () => {
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER }).swapMaxSlippageBps).toBe(100)
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_SWAP_MAX_SLIPPAGE_BPS: '25' }).swapMaxSlippageBps).toBe(25)
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_SWAP_MAX_SLIPPAGE_BPS: '0' }).swapMaxSlippageBps).toBe(0)
+    for (const bad of ['501', '-1', '2.5', 'one percent']) {
+      expect(() => parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_SWAP_MAX_SLIPPAGE_BPS: bad })).toThrow(/ROLEPAY_SWAP_MAX_SLIPPAGE_BPS/)
+    }
+  })
+
   it('refuses a malformed model name without echoing the key', () => {
     try {
       parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ANTHROPIC_API_KEY: 'sk-ant-SECRET', ROLEPAY_AI_MODEL: 'opus please' })

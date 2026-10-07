@@ -1,12 +1,13 @@
 import { z } from 'zod'
-import { MAX_NOTE_LENGTH } from '../constants/limits.js'
+import { MAX_NOTE_LENGTH, SWAP_SLIPPAGE } from '../constants/limits.js'
 import { NETWORKS, type NetworkName, VALID_BEFORE_MARGIN_SECONDS, VALID_BEFORE_SECONDS } from '../constants/tempo.js'
 import { type BotKey, type Community, type KeyCheckError, botKeyContext, checkKeyForRun } from '../domain/community.js'
 import { runToCsv } from '../domain/csv.js'
+import { type SwapCheckError, checkSwapQuotes, checkSwapScope, lineSwapFor, payoutSpendCap, swapLegs } from '../domain/delivery.js'
 import { type Address, DiscordIdSchema } from '../domain/ids.js'
 import { type PaidByWeek, firstWeekStart, paidByWeek } from '../domain/paidByWeek.js'
 import { type PolicyKeyCheckError, policyKeyContext, policyKeyError, policySigner } from '../domain/policy/policyKey.js'
-import { type MatchResult, matchTransfers } from '../domain/reconcile.js'
+import { type MatchResult, matchTransfers, runTokens } from '../domain/reconcile.js'
 import { type Result, err, ok } from '../domain/result.js'
 import { type Failure, type NewRunError, type Run, type RunEvent, type RunStatus, currentAttempt, newRun, transition } from '../domain/run.js'
 import type { Clock } from '../ports/clock.js'
@@ -40,6 +41,12 @@ export type PayRunServiceDeps = {
    * broadcast and race to record it.
    */
   leases?: RunLeases | null
+  /**
+   * A line paid in a payee's preferred stablecoin may spend at most its amount plus this many basis
+   * points of the payout token (ROLEPAY_SWAP_MAX_SLIPPAGE_BPS, 100 = 1% by default). Fixed on the line
+   * when the run is created, so the approver sees it and every attempt signs the same maximum.
+   */
+  swapMaxSlippageBps?: number
 }
 
 /**
@@ -85,6 +92,7 @@ export type ExecuteError =
   | { code: 'unseal_failed' }
   | { code: 'not_retryable' }
   | ChainShowsPayments
+  | SwapCheckError
 
 /** A failed run's memos are on chain: Rolepay records what the chain shows and sends nothing. */
 export type ChainShowsPayments = { code: 'chain_shows_payments'; detail: 'all_paid' | 'partial' | 'mismatch' }
@@ -119,13 +127,20 @@ export class PayRunService {
     const resolved = await Promise.all(lines.map(async (l) => ({ ...l, payee: await this.deps.payees.get(guildId, l.discordUserId) })))
     const missing = [...new Set(resolved.filter((l) => !l.payee).map((l) => l.discordUserId))]
     if (missing.length) return err({ code: 'unregistered_payees', discordUserIds: missing })
+    const capBps = this.deps.swapMaxSlippageBps ?? SWAP_SLIPPAGE.defaultBps
     const run = newRun({
       id: opts.runId ?? this.deps.ids.runId(),
       communityId: guildId,
       token: community.payoutToken,
       note: note || null,
       createdBy,
-      lines: resolved.map((l) => ({ payeeDiscordId: l.discordUserId, address: l.payee?.address ?? '', amount: l.amount })),
+      // Each payee in the stablecoin they prefer, when the community has that on: fixed here, on the line.
+      lines: resolved.map((l) => ({
+        payeeDiscordId: l.discordUserId,
+        address: l.payee?.address ?? '',
+        amount: l.amount,
+        swap: l.payee ? lineSwapFor(community, l.payee, l.amount, capBps) : null,
+      })),
       now: this.deps.clock.now(),
     })
     if (!run.ok) return run
@@ -265,8 +280,12 @@ export class PayRunService {
       }),
       this.deps.chain.head(),
     ])
-    const check = checkKeyForRun(state, { total: run.total, needsFeeBudget: community.feeMode === 'fee_budget' })
+    // A swapped line counts at its maximum input: the most the run can take from the payout limit.
+    // Both checks are on the key that signs this attempt (a policy's own key or the bot key).
+    const check = checkKeyForRun(state, { total: payoutSpendCap(run.lines), needsFeeBudget: community.feeMode === 'fee_budget' })
     if (!check.ok) return scope === 'policy' ? err(policyKeyError(check.error)) : check
+    const swaps = await this.swapPreflight(run, community, key)
+    if (!swaps.ok) return swaps
     if (!key.sealedSecret) return err({ code: 'unseal_failed' })
     const secret = await this.deps.vault.open(key.sealedSecret, vaultContext)
     if (!secret.ok) return secret
@@ -279,7 +298,7 @@ export class PayRunService {
       account: community.treasuryAddress,
       accessKeySecret: secret.value,
       token: run.token,
-      transfers: run.lines.map((l) => ({ to: l.address, amount: l.amount, memo: l.memo })),
+      transfers: run.lines.map((l) => ({ to: l.address, amount: l.amount, memo: l.memo, ...(l.swap ? { swap: l.swap } : {}) })),
       validBefore,
       fee: feePayment(community, key),
     })
@@ -412,17 +431,37 @@ export class PayRunService {
     return { kind: 'settled', match: await this.matchOnChain(run, community, head.number) }
   }
 
-  /** The run's memo transfers from its first attempt up to `toBlock` (a head the caller read). */
+  /**
+   * The run's memo transfers from its first attempt up to `toBlock` (a head the caller read), in every
+   * token its lines are delivered in (the payout token, and any preferred stablecoin a line swaps into).
+   */
   private async matchOnChain(run: Run, community: Community, toBlock: bigint): Promise<MatchResult> {
     const fromBlock = run.attempts[0]?.fromBlock ?? 0n
-    const transfers = await this.deps.chain.findMemoTransfers({
-      token: run.token,
-      from: community.treasuryAddress,
-      memos: run.lines.map((l) => l.memo),
-      fromBlock,
-      toBlock,
-    })
-    return matchTransfers(run, community.treasuryAddress, transfers)
+    const memos = run.lines.map((l) => l.memo)
+    const found = await Promise.all(
+      runTokens(run).map((token) => this.deps.chain.findMemoTransfers({ token, from: community.treasuryAddress, memos, fromBlock, toBlock })),
+    )
+    return matchTransfers(run, community.treasuryAddress, found.flat())
+  }
+
+  /**
+   * Before signing a run with lines in preferred stablecoins: the key must have been authorised to
+   * deliver them, the DEX must quote each swap within its maximum (read only), and the key's limit in
+   * each preferred token must cover what the run delivers in it. Any problem holds the run whole with
+   * the reason; nothing is signed. The chain enforces each swap's maximum anyway (the batch reverts).
+   */
+  private async swapPreflight(run: Run, community: Community, key: BotKey): Promise<Result<void, SwapCheckError>> {
+    const legs = swapLegs(run.lines)
+    if (legs.length === 0) return ok(undefined)
+    const scope = checkSwapScope(legs, key.policy.swapTokens)
+    if (!scope.ok) return scope
+    const [quotes, remaining] = await Promise.all([
+      Promise.all(legs.map((l) => this.deps.chain.quoteSwap({ tokenIn: run.token, tokenOut: l.token, amountOut: l.amountOut }))),
+      Promise.all(
+        legs.map(async (l) => (await this.deps.chain.keyState({ account: community.treasuryAddress, accessKey: key.address, token: l.token, feeToken: null })).remaining),
+      ),
+    ])
+    return checkSwapQuotes(legs, quotes, remaining)
   }
 
   private applyMatch(run: Run, match: Exclude<MatchResult, { kind: 'none' }>) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { TRANSFER_WITH_MEMO_SIGNATURE } from '../constants/tempo.js'
-import { type KeyPolicy, type KeyState, canPropose, checkKeyForRun, keyAuthorization } from './community.js'
+import { STABLECOIN_DEX_ADDRESS, SWAP_EXACT_AMOUNT_OUT_SIGNATURE, TRANSFER_WITH_MEMO_SIGNATURE } from '../constants/tempo.js'
+import { type KeyPolicy, type KeyState, canPropose, checkKeyForRun, keyAuthorization, preferredTokenGrants } from './community.js'
 
 const TOKEN = '0x20c0000000000000000000000000000000000001'
 const FEE_TOKEN = '0x20c0000000000000000000000000000000000000'
@@ -60,6 +60,44 @@ describe('keyAuthorization (what the root key signs)', () => {
 
   it('omits period for a one-time limit', () => {
     expect(keyAuthorization({ ...policy, periodSeconds: null }).limits).toEqual([{ token: TOKEN, limit: 10_000_000n }])
+  })
+})
+
+describe('preferredTokenGrants (the swap scope, only when the community pays people in their preferred stablecoin)', () => {
+  const BETA = '0x20c0000000000000000000000000000000000002'
+  const THETA = '0x20c0000000000000000000000000000000000003'
+
+  it('grants nothing without swap tokens: the authorisation is exactly as before', () => {
+    expect(preferredTokenGrants(policy)).toEqual({ limits: [], scopes: [] })
+    expect(keyAuthorization(policy)).toEqual(keyAuthorization({ ...policy, swapTokens: undefined }))
+  })
+
+  it('exactly the DEX exact-output swap, plus transferWithMemo on each preferred token, each token capped at the payout limit with the same period', () => {
+    expect(preferredTokenGrants({ ...policy, swapTokens: [BETA, THETA] })).toEqual({
+      limits: [
+        { token: BETA, limit: 10_000_000n, period: 2_592_000 },
+        { token: THETA, limit: 10_000_000n, period: 2_592_000 },
+      ],
+      scopes: [
+        { address: STABLECOIN_DEX_ADDRESS, selector: SWAP_EXACT_AMOUNT_OUT_SIGNATURE },
+        { address: BETA, selector: TRANSFER_WITH_MEMO_SIGNATURE },
+        { address: THETA, selector: TRANSFER_WITH_MEMO_SIGNATURE },
+      ],
+    })
+  })
+
+  it('keyAuthorization appends them after the payout limit and the fee budget, the recipient allowlist applying to every transfer', () => {
+    const a = keyAuthorization({ ...policy, periodSeconds: null, recipients: [R1], feeToken: FEE_TOKEN, feeBudget: 500_000n, swapTokens: [BETA] })
+    expect(a.limits).toEqual([
+      { token: TOKEN, limit: 10_000_000n },
+      { token: FEE_TOKEN, limit: 500_000n },
+      { token: BETA, limit: 10_000_000n },
+    ])
+    expect(a.scopes).toEqual([
+      { address: TOKEN, selector: TRANSFER_WITH_MEMO_SIGNATURE, recipients: [R1] },
+      { address: STABLECOIN_DEX_ADDRESS, selector: SWAP_EXACT_AMOUNT_OUT_SIGNATURE },
+      { address: BETA, selector: TRANSFER_WITH_MEMO_SIGNATURE, recipients: [R1] },
+    ])
   })
 })
 

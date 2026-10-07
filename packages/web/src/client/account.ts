@@ -3,6 +3,7 @@
 // server serves this page and the passkey ceremony, nothing else.
 import { $, busy, displayMicros, explainPasskeyError, fill, formatMicros, show, status } from './dom.js'
 import { passkeys } from './passkey.js'
+import { loadPayouts, renderPayouts } from './payouts.js'
 import { checkSend, maxSendable } from './send.js'
 import { type ChainConfig, balanceOf, sendToken } from './tempo.js'
 
@@ -35,7 +36,22 @@ export function startAccount(config: AccountConfig) {
     show('[data-step="signin"]', false)
     show('[data-step="account"]', true)
     show('[data-step="send"]', true)
+    void payouts().catch(() => {})
     await refresh()
+  }
+
+  /**
+   * Which stablecoin each community pays this account in. It needs the server's passkey session; a
+   * browser that only remembers the account (no session) gets a button to sign in first.
+   */
+  async function payouts() {
+    const box = $('#payouts')
+    if (!box) return
+    show('[data-step="payouts"]', true)
+    const list = await loadPayouts()
+    const signin = $<HTMLButtonElement>('#payouts-signin')
+    if (signin) signin.hidden = list !== null
+    if (list) renderPayouts(box, list, status)
   }
 
   /** Every known token's balance; the ones held are listed (the usual payout token always). Built with the DOM, never HTML strings. */
@@ -103,6 +119,15 @@ export function startAccount(config: AccountConfig) {
     action(async () => {
       status('Waiting for your passkey...')
       await open(await keys.signIn())
+      status('')
+    }),
+  )
+  $('#payouts-signin')?.addEventListener(
+    'click',
+    action(async () => {
+      status('Waiting for your passkey...')
+      await keys.signIn()
+      await payouts()
       status('')
     }),
   )

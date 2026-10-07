@@ -78,10 +78,18 @@ const DAY = 86_400
 const MAX_DAYS = 366
 /** The only call the bot key may make (core's TRANSFER_WITH_MEMO_SIGNATURE). */
 export const TRANSFER_WITH_MEMO = 'transferWithMemo(address,uint256,bytes32)'
+/** With preferred stablecoins on, the one DEX call the key may make too (core's SWAP_EXACT_AMOUNT_OUT_SIGNATURE). */
+export const SWAP_EXACT_AMOUNT_OUT = 'swapExactAmountOut(address,address,uint128,uint128)'
+/** Tempo's stablecoin exchange, lowercase like every address the page compares. */
+export const STABLECOIN_DEX = Addresses.stablecoinDex.toLowerCase()
 
 export type KeyForm = { limit: string; periodDays: string; validityDays: string; feeBudget?: string }
-/** From the page config: the payout token, and the fee token in fee budget mode (null when sponsored). */
-export type KeyPage = { payoutToken: string; feeToken: string | null }
+/**
+ * From the page config: the payout token, and the fee token in fee budget mode (null when sponsored).
+ * `swapTokens`: with preferred stablecoins on, the tokens the key may swap into and deliver (from the
+ * page config, as core's swapTokensFor lists them); absent, null or empty when they are off.
+ */
+export type KeyPage = { payoutToken: string; feeToken: string | null; swapTokens?: readonly string[] | null }
 type Built = { ok: true; value: WireAuthorization } | { ok: false; error: string }
 
 /** A plain positive decimal amount with at most 6 decimals, to micro-units, without floats. null otherwise. */
@@ -116,7 +124,15 @@ export function buildAuthorization(form: KeyForm, page: KeyPage, nowSeconds: num
     if (fee === null) return { ok: false, error: 'the fee budget must be an amount, for example 1' }
     limits.push({ token: page.feeToken, limit: fee.toString(), ...every })
   }
-  return { ok: true, value: { expiry: nowSeconds + validity * DAY, limits, scopes: [{ address: page.payoutToken, selector: TRANSFER_WITH_MEMO }] } }
+  const scopes: WireAuthorization['scopes'] = [{ address: page.payoutToken, selector: TRANSFER_WITH_MEMO }]
+  // Preferred stablecoins (core's preferredTokenGrants): the exact-output swap, and transferWithMemo on
+  // each token, each limited like the payout token, appended in the same order core appends them.
+  const swaps = page.swapTokens ?? []
+  if (swaps.length) {
+    limits.push(...swaps.map((token) => ({ token, limit: limit.toString(), ...every })))
+    scopes.push({ address: STABLECOIN_DEX, selector: SWAP_EXACT_AMOUNT_OUT }, ...swaps.map((address) => ({ address, selector: TRANSFER_WITH_MEMO })))
+  }
+  return { ok: true, value: { expiry: nowSeconds + validity * DAY, limits, scopes } }
 }
 
 const lc = (s: string) => s.toLowerCase()
@@ -148,10 +164,17 @@ export function describeAuthorization(a: WireAuthorization, f: { label: (token: 
     const frac = (v % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '')
     return frac ? `${v / 1_000_000n}.${frac}` : `${v / 1_000_000n}`
   }
-  const [spend, fee] = a.limits
+  // The first limit is the payout token's; a limit on a token the key may not call is the fee budget;
+  // the others are the preferred stablecoins the key may deliver.
+  const [spend, ...rest] = a.limits
+  const callable = (token: string) => a.scopes.some((s) => s.address.toLowerCase() === token.toLowerCase())
+  const fees = rest.filter((l) => !callable(l.token))
+  const swaps = rest.filter((l) => callable(l.token))
   const parts = [spend ? `Up to ${amount(spend.limit)} ${f.label(spend.token)} ${every(spend.period)}` : 'No spending at all']
-  if (fee) parts.push(`plus up to ${amount(fee.limit)} ${f.label(fee.token)} ${every(fee.period)} for fees`)
+  for (const fee of fees) parts.push(`plus up to ${amount(fee.limit)} ${f.label(fee.token)} ${every(fee.period)} for fees`)
+  if (swaps.length) parts.push(`plus ${swaps.map((l) => `up to ${amount(l.limit)} ${f.label(l.token)}`).join(' and ')} ${every(swaps[0]?.period)} to pay people who chose them`)
   const calls = a.scopes.map((s) => {
+    if (s.selector === SWAP_EXACT_AMOUNT_OUT) return `Only swapExactAmountOut on ${f.label(s.address)} (${s.address}), buying exactly what a run pays out`
     const name = s.selector === TRANSFER_WITH_MEMO ? 'transferWithMemo' : s.selector
     const to = s.recipients?.length ? `only to ${s.recipients.join(', ')}` : 'to anyone'
     return `Only ${name} on ${f.label(s.address)} (${s.address}), ${to}`

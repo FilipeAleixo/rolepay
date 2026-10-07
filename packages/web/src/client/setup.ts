@@ -2,7 +2,7 @@
 // key's authorisation and revocation, signed with the passkey.
 import { $, busy, displayMicros, explainPasskeyError, fill, get, post, shortAddress, show, status } from './dom.js'
 import { treasuryFeeToken } from './fees.js'
-import { type KeyForm, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
+import { type KeyForm, STABLECOIN_DEX, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
 import { passkeys } from './passkey.js'
 import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, faucet, revokeAccessKey } from './tempo.js'
 
@@ -21,6 +21,8 @@ export type SetupConfig = {
   feeMode: 'sponsor' | 'fee_budget'
   feeToken: string | null
   feeTokenLabel: string | null
+  /** The stablecoins the key may swap into and deliver when preferred stablecoins are on. */
+  swapTokens: { address: string; label: string }[]
   passkeyName: string
   defaults: { limit: string; periodDays: number; validityDays: number; feeBudget: string }
 }
@@ -32,7 +34,9 @@ type KeyView = {
   chain: { status: 'active' | 'revoked' | 'expired' | 'not_authorized'; remaining: string; expiry: number; periodEnd: number | null }
 }
 type State = {
-  community: { treasury: string; payoutToken: string; feeMode: string; feeToken: string | null } | null
+  community: { treasury: string; payoutToken: string; feeMode: string; feeToken: string | null; preferredTokens: boolean } | null
+  /** Preferred stablecoins are on but the active key was authorised without the swap scope. */
+  keyNeedsSwapScope: boolean
   key: KeyView | null
   /** Every key not yet revoked; the ones live on chain are listed with a Revoke button each. */
   keys: KeyView[]
@@ -71,6 +75,7 @@ export function startSetup(config: SetupConfig) {
   const chain: ChainConfig = { rpcUrl: config.rpcUrl, sponsorUrl: config.sponsorUrl, testnet: config.testnet, feeToken: config.feeToken ?? config.payoutToken }
   let state: State | null = null
   const fixed = ['#create', '#signin', '#signin-bound', '#faucet', '#authorize'].map((s) => $<HTMLButtonElement>(s))
+  const preferred = $<HTMLInputElement>('#preferred-tokens')
   /** The page's buttons right now: the fixed ones and one Revoke per live key. */
   const buttons = () => [...fixed, ...document.querySelectorAll<HTMLButtonElement>('#live-keys button')]
   const action = (work: () => Promise<void>) => () => busy(buttons(), work, explainPasskeyError)()
@@ -113,6 +118,9 @@ export function startSetup(config: SetupConfig) {
         .catch(() => fill('fee-balance', 'unknown'))
     }
     fill('key-status', keyText(s.key))
+    if (preferred) preferred.checked = s.community.preferredTokens
+    fill('preferred-status', preferredText(s))
+    showSigns()
     fill('key-prompts', holdsTreasury(s.community.treasury) ? PROMPTS_ONCE : PROMPTS_TWICE)
     const live = liveKeys(s)
     fill('key-replaces', live.length ? `The same transaction revokes ${live.length === 1 ? 'the current key' : `all ${live.length} live keys`}, so no old key stays spendable.` : '')
@@ -151,6 +159,27 @@ export function startSetup(config: SetupConfig) {
     if (k.chain.status !== 'active') return `The bot key ${shortAddress(k.address)} is not authorised on chain yet.`
     const resets = k.chain.periodEnd ? `, resets ${date(k.chain.periodEnd)}` : ''
     return `Bot key ${shortAddress(k.address)} is active: ${displayMicros(k.chain.remaining)} of ${displayMicros(k.policy.limit)} ${t} left${resets}. Expires ${date(k.chain.expiry)}.`
+  }
+
+  /** Where preferred stablecoins stand, and whether the key must be replaced for them. */
+  function preferredText(s: State): string {
+    if (!s.community?.preferredTokens) return `Off: everyone is paid in ${config.tokenLabel}.`
+    if (s.keyNeedsSwapScope) return 'On, but the current bot key cannot swap: authorise a new key below. Until then, runs that pay someone in another stablecoin wait, and nothing is sent.'
+    return 'On: people who chose another stablecoin get it, bought in the same transaction that pays them.'
+  }
+
+  async function setPreferred(enabled: boolean) {
+    await treasuryAccount()
+    const r = await post<{ preferredTokens: boolean; keyNeedsSwapScope: boolean }>(`${base}/preferred-tokens`, { enabled })
+    if (!r.ok) {
+      if (preferred) preferred.checked = !enabled
+      return status(explain(r.error), 'bad')
+    }
+    await refresh()
+    status(
+      r.keyNeedsSwapScope ? 'Preferred stablecoins are on. Authorise a new bot key below so it can swap.' : `Preferred stablecoins are ${r.preferredTokens ? 'on' : 'off'}.`,
+      'ok',
+    )
   }
 
   /** The passkey account that is the treasury, signing in if needed. */
@@ -197,21 +226,36 @@ export function startSetup(config: SetupConfig) {
     validityDays: input('validityDays'),
     ...(config.feeMode === 'fee_budget' ? { feeBudget: input('feeBudget') } : {}),
   })
-  /** What this page signs comes from the form and the page config, never from the server (H4). */
-  const keyPage = { payoutToken: config.payoutToken, feeToken: config.feeMode === 'fee_budget' ? config.feeToken : null }
+  /**
+   * What this page signs comes from the form and the page config, never from the server (H4). With
+   * preferred stablecoins on (the switch above the form), it adds the swap scope for the page
+   * config's swap tokens.
+   */
+  const keyPage = () => ({
+    payoutToken: config.payoutToken,
+    feeToken: config.feeMode === 'fee_budget' ? config.feeToken : null,
+    swapTokens: state?.community?.preferredTokens ? config.swapTokens.map((t) => t.address) : null,
+  })
   const labels = {
-    label: (token: string) => (token.toLowerCase() === config.payoutToken.toLowerCase() ? config.tokenLabel : token.toLowerCase() === config.feeToken?.toLowerCase() ? (config.feeTokenLabel ?? token) : token),
+    label: (token: string) =>
+      token.toLowerCase() === config.payoutToken.toLowerCase()
+        ? config.tokenLabel
+        : token.toLowerCase() === config.feeToken?.toLowerCase()
+          ? (config.feeTokenLabel ?? token)
+          : token.toLowerCase() === STABLECOIN_DEX
+            ? "Tempo's stablecoin exchange"
+            : (config.swapTokens.find((t) => t.address.toLowerCase() === token.toLowerCase())?.label ?? token),
     date,
   }
   const nowSeconds = () => Math.floor(Date.now() / 1000)
   /** The exact values the passkey will sign, in plain words, kept up to date as the form changes. */
   function showSigns() {
-    const built = buildAuthorization(form(), keyPage, nowSeconds())
+    const built = buildAuthorization(form(), keyPage(), nowSeconds())
     fill('key-signs', built.ok ? `You will sign: ${describeAuthorization(built.value, labels)}` : `Check the form: ${built.error}.`)
   }
 
   async function authorize() {
-    const built = buildAuthorization(form(), keyPage, nowSeconds())
+    const built = buildAuthorization(form(), keyPage(), nowSeconds())
     if (!built.ok) return status(`Nothing was signed: ${built.error}.`, 'bad')
     const mine = built.value
     const account = await treasuryAccount()
@@ -262,6 +306,7 @@ export function startSetup(config: SetupConfig) {
   signin?.addEventListener('click', action(() => bind(() => keys.signIn())))
   signinBound?.addEventListener('click', action(() => bind(() => keys.signIn())))
   faucetButton?.addEventListener('click', action(fund))
+  preferred?.addEventListener('change', () => void action(() => setPreferred(preferred.checked))())
   $('#key-form')?.addEventListener('input', showSigns)
   showSigns()
   $('#key-form')?.addEventListener('submit', (e) => {

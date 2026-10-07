@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { encodeMemo } from './memo.js'
-import { type MemoTransfer, matchTransfers } from './reconcile.js'
+import { type MemoTransfer, matchTransfers, runTokens } from './reconcile.js'
 import { type Run, newRun } from './run.js'
 
 const TREASURY = '0x9999999999999999999999999999999999999999'
@@ -74,6 +74,27 @@ describe('matchTransfers (is this run paid, according to the chain?)', () => {
   it('compares addresses case-insensitively (RPC logs come back checksummed)', () => {
     const upper = transfer(1, { from: TREASURY.toUpperCase().replace('0X', '0x') as MemoTransfer['from'] })
     expect(matchTransfers(run(), TREASURY, [upper, transfer(2)])).toMatchObject({ kind: 'all_paid' })
+  })
+
+  describe('a line paid in the payee\'s preferred stablecoin', () => {
+    const swapped = (): Run => {
+      const r = run()
+      return { ...r, lines: r.lines.map((l) => (l.line === 2 ? { ...l, swap: { token: OTHER_TOKEN, maxIn: 2_020_000n } } : l)) }
+    }
+
+    it('all_paid: found by its memo, as a transfer from the treasury in the token it delivers', () => {
+      expect(matchTransfers(swapped(), TREASURY, [transfer(1), transfer(2, { token: OTHER_TOKEN })])).toEqual({ kind: 'all_paid', txHash: TX1, blockNumber: 50n })
+      expect(runTokens(swapped())).toEqual([TOKEN, OTHER_TOKEN])
+      expect(runTokens(run())).toEqual([TOKEN])
+    })
+
+    it('mismatch: its memo paid in the run token instead (money moved, but not as the run said)', () => {
+      expect(matchTransfers(swapped(), TREASURY, [transfer(1), transfer(2)])).toMatchObject({ kind: 'mismatch', detail: expect.stringContaining('line 2') })
+    })
+
+    it('a plain line paid in the other token is a mismatch too; the swap itself emits no memo and is never counted', () => {
+      expect(matchTransfers(swapped(), TREASURY, [transfer(1, { token: OTHER_TOKEN }), transfer(2, { token: OTHER_TOKEN })])).toMatchObject({ kind: 'mismatch' })
+    })
   })
 
   it('reports the latest block when lines landed in different txs', () => {

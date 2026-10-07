@@ -1,4 +1,4 @@
-import { MAX_NOTE_LENGTH, POLICY_LIMITS, PROPOSAL_LIMITS, WEEKDAYS } from '@rolepay/core'
+import { MAX_NOTE_LENGTH, type NetworkName, POLICY_LIMITS, PREFERRED_TOKENS, PROPOSAL_LIMITS, TOKEN_SYMBOLS, WEEKDAYS } from '@rolepay/core'
 import { ChannelType, CommandType, OptionType, Permission } from '../api.js'
 import { PAY_AUTHOR_COMMAND, PAY_MEMBER_COMMAND } from './payDirect.js'
 import { PROPOSE_MESSAGE_COMMAND } from './proposeFromMessage.js'
@@ -94,13 +94,36 @@ const policyGroup = (opts: { demoControls: boolean }) => ({
 })
 
 /**
+ * /payee prefer: the USD stablecoin a payee wants to be paid in, from the network's fixed list
+ * (`PREFERRED_TOKENS`), or the server's payout token. The value is the token's address; core checks
+ * it again against what the community can deliver.
+ */
+const payeePrefer = (network: NetworkName) => ({
+  type: OptionType.SubCommand,
+  name: 'prefer',
+  description: 'Choose the USD stablecoin you are paid in (swapped for you on Tempo, when the server allows it)',
+  options: [
+    {
+      type: OptionType.String,
+      name: 'token',
+      description: 'The stablecoin you want to receive',
+      required: true,
+      choices: [
+        { name: "The server's payout token (the default)", value: 'default' },
+        ...PREFERRED_TOKENS[network].map((t) => ({ name: TOKEN_SYMBOLS[t] ?? t, value: t })),
+      ],
+    },
+  ],
+})
+
+/**
  * The slash commands, as JSON for `PUT /applications/{id}/commands`. /rolepay is visible
  * to Manage Server by default (admins can grant it to the Treasurer role in Server
  * Settings > Integrations); the handlers re-check permissions regardless. The dev shortcut
  * options exist only when `devShortcuts` is on, and `run_now` and `veto_minutes` only when
  * `demoControls` is on (the handlers refuse them otherwise anyway).
  */
-export const commandDefinitions = (opts: { devShortcuts: boolean; demoControls: boolean }) => [
+export const commandDefinitions = (opts: { devShortcuts: boolean; demoControls: boolean; network?: NetworkName }) => [
   {
     name: 'rolepay',
     description: 'Pay the people who run this server, in one stablecoin transaction',
@@ -204,7 +227,10 @@ export const commandDefinitions = (opts: { devShortcuts: boolean; demoControls: 
     description: 'Get paid by this server',
     type: 1,
     ...GUILD_ONLY,
-    options: [{ type: OptionType.SubCommand, name: 'link', description: 'Get your one-time link to register the account you are paid at' }],
+    options: [
+      { type: OptionType.SubCommand, name: 'link', description: 'Get your one-time link to register the account you are paid at' },
+      payeePrefer(opts.network ?? 'moderato'),
+    ],
   },
 ]
 

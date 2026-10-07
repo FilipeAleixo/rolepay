@@ -29,6 +29,7 @@ export const TESTNET_TOKENS = {
   path_usd: '0x20c0000000000000000000000000000000000000',
   alpha_usd: '0x20c0000000000000000000000000000000000001',
   beta_usd: '0x20c0000000000000000000000000000000000002',
+  theta_usd: '0x20c0000000000000000000000000000000000003',
 } as const
 
 /**
@@ -49,6 +50,7 @@ export const TOKEN_SYMBOLS: Readonly<Record<string, string>> = {
   [TESTNET_TOKENS.path_usd]: 'pathUSD',
   [TESTNET_TOKENS.alpha_usd]: 'AlphaUSD',
   [TESTNET_TOKENS.beta_usd]: 'BetaUSD',
+  [TESTNET_TOKENS.theta_usd]: 'ThetaUSD',
   [MAINNET_TOKENS.usdc_e]: 'USDC.e',
   [MAINNET_TOKENS.ousd]: 'OUSD',
   [MAINNET_TOKENS.usdt0]: 'USDT0',
@@ -56,9 +58,33 @@ export const TOKEN_SYMBOLS: Readonly<Record<string, string>> = {
 
 /** The tokens a payee's account page shows (and can send) on each network, the usual payout token first. */
 export const KNOWN_TOKENS: Readonly<Record<NetworkName, readonly string[]>> = {
-  moderato: [TESTNET_TOKENS.alpha_usd, TESTNET_TOKENS.path_usd, TESTNET_TOKENS.beta_usd],
+  moderato: [TESTNET_TOKENS.alpha_usd, TESTNET_TOKENS.path_usd, TESTNET_TOKENS.beta_usd, TESTNET_TOKENS.theta_usd],
   mainnet: [MAINNET_TOKENS.usdc_e, MAINNET_TOKENS.path_usd, MAINNET_TOKENS.ousd, MAINNET_TOKENS.usdt0],
 }
+
+/**
+ * The USD stablecoins a payee may choose to be paid in, per network: TIP-20 tokens whose quote
+ * token is pathUSD, so Tempo's stablecoin DEX routes between any two of them (through pathUSD,
+ * at most two hops). pathUSD itself is left out: it is the fee token. Checked on Moderato on
+ * 2026-10-07 with read-only quotes: every pair of AlphaUSD, BetaUSD and ThetaUSD routes, and
+ * 100,000,000 of BetaUSD bought with AlphaUSD still quotes. Mainnet routing was not checked from
+ * here; a pair that does not route holds the run with `swap_no_route` before anything is signed.
+ */
+export const PREFERRED_TOKENS: Readonly<Record<NetworkName, readonly `0x${string}`[]>> = {
+  moderato: [TESTNET_TOKENS.alpha_usd, TESTNET_TOKENS.beta_usd, TESTNET_TOKENS.theta_usd],
+  mainnet: [MAINNET_TOKENS.usdc_e, MAINNET_TOKENS.ousd, MAINNET_TOKENS.usdt0],
+}
+
+/** Tempo's enshrined stablecoin DEX (a precompile, the same address on every network). */
+export const STABLECOIN_DEX_ADDRESS = '0xdec0000000000000000000000000000000000000'
+
+/**
+ * The one DEX call the bot key may make when a community pays people in their preferred
+ * stablecoin: buy exactly `amountOut` of `tokenOut`, spending at most `maxAmountIn` of `tokenIn`.
+ * The DEX has no swap to a recipient: the output lands in the treasury, and a `transferWithMemo`
+ * in the same batch delivers it.
+ */
+export const SWAP_EXACT_AMOUNT_OUT_SIGNATURE = 'swapExactAmountOut(address,address,uint128,uint128)'
 
 /** Account Keychain precompile. Lowercase: the docs' mixed-case form fails viem's checksum check. */
 export const KEYCHAIN_ADDRESS = '0xaaaaaaaa00000000000000000000000000000000'

@@ -24,6 +24,7 @@ describe('/payee link', () => {
     expect(described).toMatchObject({ ok: true, value: { guildId: GUILD, discordUserId: ALICE } })
     expect(text(body(d))).toMatch(/<t:\d+:R>/) // when it expires
     expect(text(body(d))).toMatch(/once/)
+    expect(text(body(d))).toContain('/payee prefer') // where to choose the stablecoin they are paid in
   })
 
   it('tells an already registered payee which address they are paid at', async () => {

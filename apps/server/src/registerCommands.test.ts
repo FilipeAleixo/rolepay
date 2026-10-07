@@ -57,6 +57,18 @@ describe('registerCommands', () => {
     expect(mainnet.calls).toHaveLength(0)
   })
 
+  it("offers /payee prefer the network's own stablecoins: Moderato's by default, mainnet's on a mainnet server", async () => {
+    const testnet = fakeFetch()
+    await registerCommands(env, testnet.fetch)
+    expect(JSON.stringify(JSON.parse(testnet.calls[0]?.body ?? ''))).toMatch(/BetaUSD/)
+    const mainnet = fakeFetch()
+    await registerCommands({ ...env, ROLEPAY_NETWORK: 'mainnet' }, mainnet.fetch)
+    const body = JSON.parse(mainnet.calls[0]?.body ?? '')
+    expect(body).toEqual(commandDefinitions({ devShortcuts: false, demoControls: false, network: 'mainnet' }))
+    expect(JSON.stringify(body)).toMatch(/USDC\.e/)
+    expect(JSON.stringify(body)).not.toMatch(/BetaUSD/)
+  })
+
   it('names missing variables and reports Discord errors without the token', async () => {
     expect(await registerCommands({}, fakeFetch().fetch)).toEqual({ ok: false, error: { code: 'missing_env', detail: 'DISCORD_APP_ID, DISCORD_BOT_TOKEN' } })
     const r = await registerCommands(env, fakeFetch(401).fetch)

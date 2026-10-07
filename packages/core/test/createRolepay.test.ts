@@ -49,4 +49,19 @@ describe('createRolepay', () => {
     expect(await rolepay.payRuns.execute({ guildId: GUILD, runId: run.value.id })).toMatchObject({ ok: true, value: { status: 'paid' } })
     expect(chain.balance(TOKEN, `0x${'2'.repeat(40)}`)).toBe(usd('2.5'))
   })
+
+  it('passes the configured slippage cap to pay runs: a line in a preferred stablecoin may spend at most that much over its amount', async () => {
+    const BETA = '0x20c0000000000000000000000000000000000002'
+    const clock = new ManualClock()
+    const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
+    const rolepay = createRolepay({ chain, repositories: createMemoryRepositories(), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato', swapMaxSlippageBps: 30 })
+    await rolepay.communities.register({ guildId: GUILD, name: 'Mods', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
+    await rolepay.communities.setPreferredTokens({ guildId: GUILD, enabled: true })
+    const link = await rolepay.payees.issueLink({ guildId: GUILD, discordUserId: MODS[0] as string })
+    if (!link.ok) throw new Error(link.error.code)
+    await rolepay.payees.register({ token: link.value.token, address: `0x${'1'.repeat(40)}` })
+    await rolepay.payees.setPreferredToken({ guildId: GUILD, discordUserId: MODS[0] as string, token: BETA })
+    const run = await rolepay.payRuns.create({ guildId: GUILD, createdBy: MODS[0] as string, note: null, lines: [{ discordUserId: MODS[0] as string, amount: usd('10') }] })
+    expect(run.ok && run.value.lines[0]?.swap).toEqual({ token: BETA, maxIn: usd('10.03') })
+  })
 })

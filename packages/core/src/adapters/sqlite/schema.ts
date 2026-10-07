@@ -19,6 +19,8 @@ export interface CommunitiesTable {
   /** 0 or 1. */
   ai_proposals: number
   proposer_role_id: string | null
+  /** 0 or 1. */
+  preferred_tokens: number
   created_at: string
   updated_at: string
 }
@@ -52,6 +54,8 @@ export interface PayeesTable {
   community_id: string
   discord_user_id: string
   address: string
+  /** null = the community's payout token. */
+  preferred_token: string | null
   registered_at: string
   updated_at: string
 }
@@ -95,6 +99,9 @@ export interface RunLinesTable {
   address: string
   amount: string
   memo: string
+  /** Both null for a line paid in the run's token; both set for a line delivered by a DEX swap. */
+  swap_token: string | null
+  swap_max_in: string | null
 }
 
 export interface KvTable {

@@ -8,6 +8,13 @@ export type ClaimPageConfig = {
   passkeyName: string
   network: string
   explorerUrl: string
+  /** The community, for the payee's choice of stablecoin once registered (`/account/preference`). */
+  guildId: string
+  payoutLabel: string | null
+  /** Whether the community pays people in their preferred stablecoin yet (they may choose either way). */
+  preferredTokens: boolean
+  /** What they may choose: the payout token first. */
+  choices: { address: string; label: string }[]
 }
 
 /** The recipient's page: create (or sign in with) a passkey, and that account is where they get paid. */
@@ -29,10 +36,26 @@ export function claimPage(config: ClaimPageConfig, testnet: boolean): string {
   <h2>You will be paid here</h2>
   <p><code id="address"></code></p>
   <p>Nothing to install. Payments from ${name} arrive in this account, and Discord sends you a receipt each time. You can close this page.</p>
+  ${preferenceSection(config)}
   <p>To see your balance or send your money on, sign in to <a href="/account">your Rolepay account</a> with the same passkey.</p>
   <p class="muted"><a id="explorer" href="#" target="_blank" rel="noreferrer">See the account on the explorer</a></p>
 </section>
 <p id="status" role="status" aria-live="polite"></p>
 <noscript><p>This page needs JavaScript to create your passkey.</p></noscript>`,
   })
+}
+
+/** The stablecoin they want to be paid in, chosen once they are registered (the client fills and posts it). */
+function preferenceSection(c: ClaimPageConfig): string {
+  if (c.choices.length < 2) return ''
+  const payout = esc(c.payoutLabel ?? 'its payout token')
+  const options = c.choices.map((t, i) => `<option value="${esc(t.address)}">${esc(t.label)}${i === 0 ? ' (the default)' : ''}</option>`).join('')
+  const when = c.preferredTokens
+    ? `${esc(c.communityName)} pays in ${payout}; another USD stablecoin is bought for you on Tempo's stablecoin exchange in the same transaction.`
+    : `${esc(c.communityName)} pays everyone in ${payout} for now; your choice applies once its treasurer turns on preferred stablecoins.`
+  return `<div id="preference">
+    <label for="preferred-token">Paid in</label>
+    <select id="preferred-token">${options}</select>
+    <p class="muted">${when}</p>
+  </div>`
 }

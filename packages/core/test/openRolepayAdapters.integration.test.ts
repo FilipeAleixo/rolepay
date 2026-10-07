@@ -15,6 +15,7 @@ describe('openRolepayAdapters', () => {
     const { deps, kv, close } = await openRolepayAdapters(config)
     expect(deps.chain).toBeInstanceOf(TempoPayoutChain)
     expect(deps.network).toBe('moderato')
+    expect(deps.swapMaxSlippageBps).toBe(100)
     const rolepay = createRolepay(deps)
     const r = await rolepay.communities.register({
       guildId: '1094309218049937418',

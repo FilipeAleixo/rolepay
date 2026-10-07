@@ -3,6 +3,7 @@ import { exportCommand } from '../commands/export.js'
 import { newRunCommand } from '../commands/newRun.js'
 import { PAY_AUTHOR_COMMAND, PAY_MEMBER_COMMAND, payAuthorCommand, payMemberCommand, payModalSubmit } from '../commands/payDirect.js'
 import { payeeLinkCommand } from '../commands/payeeLink.js'
+import { payeePreferCommand } from '../commands/payeePrefer.js'
 import {
   policyChoices,
   policyListCommand,
@@ -56,6 +57,7 @@ const COMMANDS: Record<string, CommandHandler> = {
   /** Demo control; registered only with ROLEPAY_DEMO_CONTROLS on Moderato, refused otherwise. */
   'rolepay policy run_now': policyRunNowCommand,
   'payee link': payeeLinkCommand,
+  'payee prefer': payeePreferCommand,
 }
 
 /** Right-click commands on a message, by their registered name. Kept in step with COMMAND_DEFINITIONS by a test. */

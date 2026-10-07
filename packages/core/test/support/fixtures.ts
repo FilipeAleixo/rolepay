@@ -39,6 +39,7 @@ export function community(over: Partial<Community> = {}): Community {
     requireSeparateApprover: false,
     aiProposals: false,
     proposerRoleId: null,
+    preferredTokens: false,
     createdAt: T0,
     updatedAt: T0,
     ...over,
@@ -90,7 +91,7 @@ export function setupLink(over: Partial<SetupLink> = {}): SetupLink {
 }
 
 export function payee(over: Partial<Payee> = {}): Payee {
-  return { communityId: GUILD, discordUserId: ALICE, address: ADDR.alice, registeredAt: T0, updatedAt: T0, ...over }
+  return { communityId: GUILD, discordUserId: ALICE, address: ADDR.alice, preferredToken: null, registeredAt: T0, updatedAt: T0, ...over }
 }
 
 export function linkToken(over: Partial<LinkToken> = {}): LinkToken {
