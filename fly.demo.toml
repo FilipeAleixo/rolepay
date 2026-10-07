@@ -1,0 +1,60 @@
+# Fly.io: the Rolepay TESTNET demo for judges, https://demo.rolepay.app (Moderato, chain 42431).
+# Deploy: fly deploy -c fly.demo.toml. Setup, secrets, DNS and logs: apps/server/README.md, "Deploying".
+#
+# Secrets (fly secrets, never here): ROLEPAY_MASTER_KEY (its own, never the local one), DISCORD_APP_ID,
+# DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN, and optionally ANTHROPIC_API_KEY.
+
+app = "rolepay-demo"
+primary_region = "cdg"
+# The server drains payments in flight on SIGTERM (up to 10 s) before closing the database.
+kill_signal = "SIGTERM"
+kill_timeout = "20s"
+# Absorbs the memory peak of the first client bundle build (see [[vm]]).
+swap_size_mb = 512
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ROLEPAY_NETWORK = "moderato"
+  ROLEPAY_DEV_SHORTCUTS = "false"
+  PUBLIC_URL = "https://demo.rolepay.app"
+  # Passkeys made here bind to the demo host only, never to the mainnet app.
+  ROLEPAY_RP_ID = "demo.rolepay.app"
+  HOST = "0.0.0.0"
+  PORT = "8787"
+  ROLEPAY_DB_PATH = "/data/rolepay.db"
+  # Fly's proxy sets Fly-Client-IP; the per-client rate limits key on it.
+  ROLEPAY_CLIENT_IP_HEADER = "Fly-Client-IP"
+  ROLEPAY_AI_DAILY_CAP = "50"
+
+# The SQLite file (runs, payees, passkeys, sealed bot keys) lives on this 1 GB volume.
+[mounts]
+  source = "rolepay_demo_data"
+  destination = "/data"
+
+# Always on: Discord interactions must be answered within 3 seconds, so no cold starts.
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+# Node with tsx about 170 MB, plus about 180 MB for esbuild while it builds the client bundle on the
+# first page request (it stays resident). Swap absorbs the peak.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
