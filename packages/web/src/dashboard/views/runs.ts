@@ -1,6 +1,6 @@
 import { RUN_STATUSES, type Run, type RunStatus } from '@rolepay/core'
 import type { PolicySummary, RunOrigin } from '../policyPort.js'
-import { type Names, RUN_STATUS_LABELS, addressLink, esc, money, person, pill, row, runPill, table, txLink, when } from './format.js'
+import { type Names, RUN_STATUS_LABELS, addressLink, esc, money, person, pill, row, runPill, shortHex, table, txLink, when } from './format.js'
 import { RUN_COLUMNS, runRows } from './overview.js'
 
 export type RunFilters = { status: RunStatus | null; policy: string | null; page: number }
@@ -86,7 +86,7 @@ export function runBody(d: { guildId: string; run: Run; origin: RunOrigin | unde
   const lines = table(
     'Lines',
     ['#', 'Person', 'Paid to', 'Amount', 'Memo'],
-    run.lines.map((l) => row([String(l.line), person(l.payeeDiscordId, names), addressLink(explorer, l.address), money(l.amount, run.token), `<code class="small">${esc(l.memo)}</code>`], { numeric: [0, 3] })),
+    run.lines.map((l) => row([String(l.line), person(l.payeeDiscordId, names), addressLink(explorer, l.address), money(l.amount, run.token), `<code class="small" title="${esc(l.memo)}">${esc(shortHex(l.memo))}</code>`], { numeric: [0, 3] })),
     { numeric: [0, 3] },
   )
   const steps = timeline(run, origin, names, explorer)

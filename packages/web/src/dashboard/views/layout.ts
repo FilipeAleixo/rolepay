@@ -42,6 +42,7 @@ dl.facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
 .small{font-size:.85rem}
 code,pre{font:.85rem/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 code{overflow-wrap:anywhere}
+td code{white-space:nowrap;overflow-wrap:normal}
 pre{background:var(--code);border-radius:8px;padding:.75rem;overflow:auto;max-height:28rem;margin:.5rem 0 0}
 blockquote{margin:0;padding:.25rem 0 .25rem 1rem;border-left:3px solid var(--line);white-space:pre-wrap;overflow-wrap:anywhere}
 .table-wrap{overflow-x:auto}
@@ -58,6 +59,9 @@ label{display:block;font-weight:600;font-size:.85rem;margin:0 0 .25rem}
 input,select,textarea{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:.45rem .6rem;max-width:100%}
 textarea{width:100%;min-height:7rem}
 .field{margin:0 0 .9rem}
+fieldset{border:1px solid var(--line);border-radius:8px;padding:.6rem 1rem .9rem;margin:1rem 0 .75rem}
+legend{font-weight:600;padding:0 .3rem}
+fieldset label{font-weight:400;font-size:.95rem;margin:.35rem 0}
 .row{display:flex;flex-wrap:wrap;gap:.75rem}
 button,.button{font:inherit;font-weight:600;display:inline-block;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);padding:.45rem .9rem;cursor:pointer;text-decoration:none;line-height:1.4}
 .secondary{background:transparent;color:var(--accent)}

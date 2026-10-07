@@ -14,7 +14,7 @@ export function scheduleWords(s: PolicySchedule): string {
 
 const STATUS: Record<PolicySummary['status'], [string, string]> = { draft: ['Draft', 'warn'], active: ['Active', 'ok'], paused: ['Paused', ''], archived: ['Archived', ''] }
 export const statusPill = (s: PolicySummary['status']) => pill(...STATUS[s])
-export const modePill = (m: PolicySummary['mode']) => (m === 'autopilot' ? pill('Autopilot', 'info') : pill('Needs approval'))
+export const modePill = (m: PolicySummary['mode']) => (m === 'autopilot' ? pill('Autopilot', 'info') : pill('Propose'))
 
 const METRIC_WORDS: Record<string, [string, string]> = { messages: ['message', 'messages'], activeDays: ['active day', 'active days'], replies: ['reply', 'replies'] }
 /** { replies: 12, activeDays: 4 } -> "12 replies, 4 active days". */

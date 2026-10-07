@@ -23,7 +23,7 @@ describe('Policies list', () => {
     expect(t).toContain('Weekly helpers')
     expect(t).toContain('Every Monday at 18:00 (UTC)')
     expect(t).toContain('Monthly on day 1 at 09:00 (Europe/Lisbon)')
-    expect(t).toMatch(/Needs approval/)
+    expect(t).toMatch(/Propose/)
     expect(t).toMatch(/Autopilot/)
     expect(t).toMatch(/Active/)
     expect(t).toMatch(/Paused/)
