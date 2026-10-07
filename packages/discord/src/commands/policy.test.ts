@@ -189,6 +189,49 @@ describe('the preview buttons', () => {
   })
 })
 
+describe('the policy option typed by name instead of picked from autocomplete', () => {
+  it('an exact name, in any case, resolves to the one policy with it, for mode, show, pause, resume and run_now', async () => {
+    const a = await ready()
+    const { policyId } = await newPolicy(a, { name: 'Test policy' })
+    await a.send(buttonClick(SCOPE, `policy:approve:${policyId}:1`, treasurer))
+    const mode = await a.send(slashCommand(SCOPE, 'rolepay', 'policy mode', { policy: 'test POLICY', mode: 'autopilot', veto_minutes: 5 }, treasurer))
+    expect(isEphemeral(mode)).toBe(false)
+    expect(text(body(mode).data)).toContain('Autopilot is on')
+    expect(text(body(await a.send(slashCommand(SCOPE, 'rolepay', 'policy pause', { policy: ' Test policy ' }, treasurer))).data)).toContain(`paused by <@${TREASURER}>`)
+    expect(text(body(await a.send(slashCommand(SCOPE, 'rolepay', 'policy resume', { policy: 'test policy' }, treasurer))).data)).toContain(`resumed by <@${TREASURER}>`)
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy show', { policy: 'Test Policy' }, treasurer, 'tok-show-name'))
+    expect(text(a.rest.lastEdit('tok-show-name'))).toContain(`Policy ${policyId}`)
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: 'TEST POLICY' }, treasurer, 'tok-now-name'))
+    expect(text(a.rest.lastEdit('tok-now-name'))).toContain('posted')
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && [p.value.status, p.value.mode, p.value.vetoWindowMinutes]).toEqual(['active', 'autopilot', 5])
+    // The ID that autocomplete fills in still works as before.
+    expect(text(body(await a.send(slashCommand(SCOPE, 'rolepay', 'policy pause', { policy: policyId }, treasurer))).data)).toContain('paused by')
+  })
+
+  it('a name two policies share lists both (archived ones do not count); no match says where to find them; nothing changes', async () => {
+    const a = await ready()
+    const one = await newPolicy(a, { name: 'Test policy' })
+    const two = await newPolicy(a, { name: 'test policy' })
+    await a.send(buttonClick(SCOPE, `policy:approve:${one.policyId}:1`, treasurer))
+    const ambiguous = await a.send(slashCommand(SCOPE, 'rolepay', 'policy pause', { policy: 'Test policy' }, treasurer))
+    expect(isEphemeral(ambiguous)).toBe(true)
+    const said = body(ambiguous).data?.content as string
+    expect(said).toContain('More than one policy here is called')
+    expect(said).toContain(`\`${one.policyId}\` (active)`)
+    expect(said).toContain(`\`${two.policyId}\` (draft)`)
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId: one.policyId })
+    expect(p.ok && p.value.status).toBe('active')
+    // Once one of them is archived, the name is the other's alone.
+    await a.send(buttonClick(SCOPE, `policy:discard:${two.policyId}:1`, treasurer))
+    expect(text(body(await a.send(slashCommand(SCOPE, 'rolepay', 'policy pause', { policy: 'test policy' }, treasurer))).data)).toContain('paused by')
+    for (const sub of ['policy mode', 'policy show', 'policy pause', 'policy resume', 'policy run_now']) {
+      const d = await a.send(slashCommand(SCOPE, 'rolepay', sub, { policy: 'No such policy', mode: 'propose' }, treasurer))
+      expect([sub, isEphemeral(d), body(d).data?.content]).toEqual([sub, true, 'There is no policy with that ID in this server. `/rolepay policy list` shows them.'])
+    }
+  })
+})
+
 describe('/rolepay policy list, show, pause, resume, mode', () => {
   it('list and show answer only the caller; show reads who it applies to right now', async () => {
     const a = await ready()

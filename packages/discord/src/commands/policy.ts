@@ -5,7 +5,7 @@ import { type AutocompleteHandler, type CommandHandler, type GuildContext, parse
 import { type DeferredResult, type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canOperate, holdsApproverRole } from '../app/permissions.js'
 import { explainPolicyError } from '../views/errors.js'
-import { roleMention } from '../views/format.js'
+import { escapeMarkdown, roleMention } from '../views/format.js'
 import { policyChangedMessage, policyListMessage, policyMessage } from '../views/policy.js'
 import { requireProposer } from './guards.js'
 
@@ -29,7 +29,8 @@ const NewOptions = z.object({
   max_per_run: amount.optional(),
   max_per_person: amount.optional(),
 })
-const PolicyOption = z.object({ policy: z.string().trim().min(1).max(40) })
+/** A policy's ID (what autocomplete fills in) or its name typed by hand, so as long as a name may be. */
+const PolicyOption = z.object({ policy: z.string().trim().min(1).max(POLICY_LIMITS.maxNameLength) })
 const ModeOptions = PolicyOption.extend({
   mode: z.enum(['propose', 'autopilot']),
   veto_hours: z.number().int().min(1).max(POLICY_LIMITS.maxVetoMinutes / 60).optional(),
@@ -59,6 +60,26 @@ export async function requirePolicyApprover(ctx: GuildContext, rolepay: Rolepay)
 }
 
 const actorOf = (ctx: GuildContext) => ({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles })
+
+/**
+ * The `policy` option names a policy by its ID (picked from autocomplete) or by its name typed by
+ * hand: an exact, case-insensitive match on the name of exactly one policy here that is not
+ * archived. A name several share is answered with them; no match, as for an unknown ID.
+ */
+async function resolvePolicy(rolepay: Rolepay, guildId: string, typed: string): Promise<{ ok: true; policyId: string } | { ok: false; reply: Outcome }> {
+  if ((await rolepay.policies.get({ guildId, policyId: typed })).ok) return { ok: true, policyId: typed }
+  const name = typed.trim().toLowerCase()
+  const named = (await rolepay.policies.list({ guildId })).map((s) => s.policy).filter((p) => p.status !== 'archived' && p.name.trim().toLowerCase() === name)
+  const only = named[0]
+  if (named.length === 1 && only) return { ok: true, policyId: only.id }
+  if (named.length === 0) return { ok: false, reply: ephemeralReply(explainPolicyError({ code: 'policy_not_found' })) }
+  const listed = named.slice(0, 10).map((p) => `\`${p.id}\` (${p.status})`)
+  const more = named.length > listed.length ? `, and ${named.length - listed.length} more` : ''
+  return {
+    ok: false,
+    reply: ephemeralReply(`More than one policy here is called **${escapeMarkdown(only?.name ?? typed)}**: ${listed.join(', ')}${more}. Pick one from the suggestions, or type its ID.`),
+  }
+}
 const view = (c: Community) => ({ token: c.payoutToken, approverRoleId: c.approverRoleId })
 
 /**
@@ -119,12 +140,14 @@ export const policyShowCommand: CommandHandler = async ({ options, ctx }, { role
   if (!guard.ok) return guard.reply
   const parsed = parseOptions(PolicyOption, options)
   if (!parsed.ok) return parsed.reply
+  const found = await resolvePolicy(rolepay, ctx.guildId, parsed.value.policy)
+  if (!found.ok) return found.reply
   const community = guard.community
   return {
     kind: 'defer',
     ephemeral: true,
     work: async (): Promise<DeferredResult> => {
-      const detail = await rolepay.policies.detail({ guildId: ctx.guildId, policyId: parsed.value.policy })
+      const detail = await rolepay.policies.detail({ guildId: ctx.guildId, policyId: found.policyId })
       if (!detail.ok) return { ok: false, message: { content: explainPolicyError(detail.error) } }
       const p = detail.value.policy
       if (p.status === 'archived') return { ok: true, message: policyMessage(p, view(community)) }
@@ -144,7 +167,9 @@ const governance =
     if (!guard.ok) return guard.reply
     const parsed = parseOptions(PolicyOption, options)
     if (!parsed.ok) return parsed.reply
-    const input = { ...actorOf(ctx), policyId: parsed.value.policy }
+    const found = await resolvePolicy(rolepay, ctx.guildId, parsed.value.policy)
+    if (!found.ok) return found.reply
+    const input = { ...actorOf(ctx), policyId: found.policyId }
     const r = change === 'paused' ? await rolepay.policies.pause(input) : await rolepay.policies.resume(input)
     if (!r.ok) return ephemeralReply(explainPolicyError(r.error, { community: guard.community }))
     return { kind: 'reply', ephemeral: false, message: policyChangedMessage(r.value, change, ctx.caller.userId, view(guard.community)) }
@@ -162,8 +187,10 @@ export const policyModeCommand: CommandHandler = async ({ options, ctx }, { role
   if (!parsed.ok) return parsed.reply
   const o = parsed.value
   if (o.veto_minutes !== undefined && !demoControlsOn(config)) return ephemeralReply(DEMO_ONLY('`veto_minutes`'))
+  const found = await resolvePolicy(rolepay, ctx.guildId, o.policy)
+  if (!found.ok) return found.reply
   const minutes = o.veto_minutes ?? (o.veto_hours === undefined ? undefined : o.veto_hours * 60)
-  const r = await rolepay.policies.setMode({ ...actorOf(ctx), policyId: o.policy, mode: o.mode, ...(minutes === undefined ? {} : { vetoWindowMinutes: minutes }) })
+  const r = await rolepay.policies.setMode({ ...actorOf(ctx), policyId: found.policyId, mode: o.mode, ...(minutes === undefined ? {} : { vetoWindowMinutes: minutes }) })
   if (!r.ok) return ephemeralReply(explainPolicyError(r.error, { community: guard.community }))
   return { kind: 'reply', ephemeral: false, message: policyChangedMessage(r.value, 'mode', ctx.caller.userId, view(guard.community)) }
 }
@@ -179,11 +206,13 @@ export const policyRunNowCommand: CommandHandler = async ({ options, ctx }, { ro
   if (!guard.ok) return guard.reply
   const parsed = parseOptions(PolicyOption, options)
   if (!parsed.ok) return parsed.reply
+  const found = await resolvePolicy(rolepay, ctx.guildId, parsed.value.policy)
+  if (!found.ok) return found.reply
   return {
     kind: 'defer',
     ephemeral: true,
     work: async (): Promise<DeferredResult> => {
-      const r = await rolepay.scheduler.runNow({ ...actorOf(ctx), policyId: parsed.value.policy })
+      const r = await rolepay.scheduler.runNow({ ...actorOf(ctx), policyId: found.policyId })
       if (!r.ok) return { ok: false, message: { content: explainPolicyError(r.error, { community: guard.community }) } }
       await announcer?.announce([r.value])
       const { policy, policyRun } = r.value
