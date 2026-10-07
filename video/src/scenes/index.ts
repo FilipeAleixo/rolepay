@@ -5,6 +5,7 @@ import { END_CARD_FRAMES, EndCard } from './EndCard'
 import { FOUR_BEATS_FRAMES, FourBeats } from './FourBeats'
 import { NEVER_PAY_TWICE_FRAMES, NeverPayTwice } from './NeverPayTwice'
 import { NUMBERS_FRAMES, Numbers } from './Numbers'
+import { OWN_BUDGETS_FRAMES, OwnBudgets } from './OwnBudgets'
 import { PROBLEM_FRAMES, Problem } from './Problem'
 import { TITLE_FRAMES, Title } from './Title'
 import { TRUST_MODEL_FRAMES, TrustModel } from './TrustModel'
@@ -15,6 +16,7 @@ export const SCENES = {
   title: { id: 'Title', component: Title, frames: TITLE_FRAMES },
   problem: { id: 'Problem', component: Problem, frames: PROBLEM_FRAMES },
   trustModel: { id: 'TrustModel', component: TrustModel, frames: TRUST_MODEL_FRAMES },
+  ownBudgets: { id: 'OwnBudgets', component: OwnBudgets, frames: OWN_BUDGETS_FRAMES },
   fourBeats: { id: 'FourBeats', component: FourBeats, frames: FOUR_BEATS_FRAMES },
   aiProposal: { id: 'AiProposal', component: AiProposal, frames: AI_PROPOSAL_FRAMES },
   neverPayTwice: { id: 'NeverPayTwice', component: NeverPayTwice, frames: NEVER_PAY_TWICE_FRAMES },

@@ -129,6 +129,34 @@ export const VaultIcon: React.FC<IconProps> = (p) => (
   </Icon>
 )
 
+/** Two opposite arrows: a swap on the stablecoin exchange. */
+export const SwapIcon: React.FC<IconProps> = (p) => (
+  <Icon {...p}>
+    <path d="M4 8.4h14.6" />
+    <path d="M15 4.8l3.6 3.6-3.6 3.6" />
+    <path d="M20 15.6H5.4" />
+    <path d="M9 12l-3.6 3.6L9 19.2" />
+  </Icon>
+)
+
+/** An arrow into a tray: money arriving at a deposit address. */
+export const DepositIcon: React.FC<IconProps> = (p) => (
+  <Icon {...p}>
+    <path d="M12 3.6v9.6" />
+    <path d="M8.2 9.6 12 13.4l3.8-3.8" />
+    <path d="M4 13.6v4.4c0 .8.6 1.4 1.4 1.4h13.2c.8 0 1.4-.6 1.4-1.4v-4.4" />
+  </Icon>
+)
+
+/** A short stack of coins: a funder. */
+export const CoinsIcon: React.FC<IconProps> = (p) => (
+  <Icon {...p}>
+    <ellipse cx="12" cy="6.8" rx="6.6" ry="2.6" />
+    <path d="M5.4 6.8v5c0 1.4 3 2.6 6.6 2.6s6.6-1.2 6.6-2.6v-5" />
+    <path d="M5.4 11.8v5c0 1.4 3 2.6 6.6 2.6s6.6-1.2 6.6-2.6v-5" />
+  </Icon>
+)
+
 export const NoGasIcon: React.FC<IconProps> = (p) => (
   <Icon {...p}>
     <path d="M12 3.6c2.8 3.4 5.2 6.4 5.2 9.6a5.2 5.2 0 0 1-10.4 0c0-3.2 2.4-6.2 5.2-9.6Z" />
