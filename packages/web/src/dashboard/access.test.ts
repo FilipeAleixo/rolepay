@@ -19,6 +19,24 @@ describe('dashboard security headers and errors', () => {
     expect(await res.text()).not.toMatch(/<script/)
   })
 
+  it('pages use Referrer-Policy same-origin: under no-referrer a browser sends "Origin: null" on its own form posts, which the same-origin check refuses; nothing goes to other sites either way', async () => {
+    const h = dashboardHarness()
+    await h.community()
+    const { browser } = await h.signIn(identity(MEMBER))
+    for (const path of ['/dashboard', `/dashboard/${GUILD}`, `/dashboard/${GUILD}/runs`]) expect((await browser.get(path)).headers.get('referrer-policy'), path).toBe('same-origin')
+    expect((await browser.get('/auth/discord')).headers.get('referrer-policy')).toBe('same-origin')
+    // The claim and setup pages keep no-referrer.
+    expect((await browser.get('/claim/nope')).headers.get('referrer-policy')).toBe('no-referrer')
+    // A post a page elsewhere made (Origin null, cross-site) is still refused.
+    const csrf = await browser.csrf()
+    const forged = await browser.request('/auth/logout', {
+      method: 'POST',
+      body: new URLSearchParams({ csrf }).toString(),
+      headers: { 'content-type': 'application/x-www-form-urlencoded', origin: 'null', 'sec-fetch-site': 'cross-site' },
+    })
+    expect(forged.status).toBe(403)
+  })
+
   it('an unexpected failure shows a generic page and reports the error to the server, never to the page', async () => {
     const h = dashboardHarness()
     await h.community()

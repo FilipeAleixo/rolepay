@@ -45,14 +45,21 @@ export function dashboardKit(ctx: DashboardContext) {
   }
 }
 
+/**
+ * Dashboard responses use Referrer-Policy `same-origin`, not the site-wide `no-referrer`: under
+ * `no-referrer` a browser sends `Origin: null` on a form post, and the same-origin check (CSRF)
+ * would refuse the dashboard's own forms. `same-origin` still sends nothing to any other site.
+ */
+const REFERRER = { 'referrer-policy': 'same-origin' }
+
 export const html = (body: string, status = 200, cookies: string[] = []) => {
-  const headers = new Headers({ 'content-type': 'text/html; charset=utf-8' })
+  const headers = new Headers({ 'content-type': 'text/html; charset=utf-8', ...REFERRER })
   for (const c of cookies) headers.append('set-cookie', c)
   return new Response(body, { status, headers })
 }
 
 export const redirect = (location: string, status: 302 | 303, cookies: string[] = []) => {
-  const headers = new Headers({ location })
+  const headers = new Headers({ location, ...REFERRER })
   for (const c of cookies) headers.append('set-cookie', c)
   return new Response(null, { status, headers })
 }

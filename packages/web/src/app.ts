@@ -88,7 +88,8 @@ export function createWebApp(deps: WebAppDeps): Hono {
     }
     await next()
     c.header('cache-control', c.res.headers.get('cache-control') ?? 'no-store')
-    c.header('referrer-policy', 'no-referrer')
+    // no-referrer, except where a route asks for same-origin (the dashboard's forms need it: see dashboard/kit.ts).
+    c.header('referrer-policy', c.res.headers.get('referrer-policy') === 'same-origin' ? 'same-origin' : 'no-referrer')
     c.header('x-content-type-options', 'nosniff')
     c.header('x-frame-options', 'DENY')
     c.header('content-security-policy', csp)
