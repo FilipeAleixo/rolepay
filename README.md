@@ -141,7 +141,7 @@ AI writes the rule once. Humans approve it. Code runs it. The chain caps it.
 
 - `packages/core`: the domain (run state machine, money, memos, proposals), ports, adapters (Tempo, SQLite, key vault, Anthropic, in-memory fakes) and services, which are the only public interface.
 - `packages/discord`: the Discord adapter over HTTP interactions.
-- `packages/web`: the claim, treasurer setup and payee account pages (passkeys), and the web dashboard.
+- `packages/web`: the home page, the claim, treasurer setup and payee account pages (passkeys), and the web dashboard, in one dark design with the fonts served from the same origin.
 - `apps/server`: the composition root (Hono).
 - `docs/ARCHITECTURE.md`: the design. `docs/THREAT-MODEL.md`: the threat model.
 
