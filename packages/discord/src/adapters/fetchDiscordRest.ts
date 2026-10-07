@@ -69,13 +69,19 @@ export class FetchDiscordRest implements DiscordRest {
     return this.result(sent)
   }
 
-  async getMember(guildId: string, userId: string): Promise<{ roles: string[]; joinedAt: Date | null } | null> {
+  async getMember(guildId: string, userId: string): Promise<{ roles: string[]; joinedAt: Date | null; name: string | null } | null> {
     const res = await this.request('GET', `/guilds/${guildId}/members/${userId}`, { bot: true })
     if (res.status === 404) return null
     if (!res.ok) throw new Error(`Discord GET guild member failed: HTTP ${res.status}`)
-    const member = (await res.json()) as { roles?: string[]; joined_at?: string | null }
+    const member = (await res.json()) as {
+      roles?: string[]
+      joined_at?: string | null
+      nick?: string | null
+      user?: { username?: string; global_name?: string | null }
+    }
     const joined = member.joined_at ? new Date(member.joined_at) : null
-    return { roles: member.roles ?? [], joinedAt: joined && !Number.isNaN(joined.getTime()) ? joined : null }
+    const name = [member.nick, member.user?.global_name, member.user?.username].find((n): n is string => typeof n === 'string' && n.length > 0) ?? null
+    return { roles: member.roles ?? [], joinedAt: joined && !Number.isNaN(joined.getTime()) ? joined : null, name }
   }
 
   getChannelMessages(channelId: string, query: { before?: string; limit: number }) {
