@@ -53,6 +53,11 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 **Standing policies, with no AI at runtime.** The model compiles the rule once, a human approves it, code runs it, the chain caps it.
 - Tests: [`services/schedulerService.test.ts`](packages/core/src/services/schedulerService.test.ts) (no AI at runtime, veto timing, crashes at each step), [`test/policies.sqlite.integration.test.ts`](packages/core/test/policies.sqlite.integration.test.ts) (two instances, one run per period), [`test/policiesDashboard.test.ts`](apps/server/test/policiesDashboard.test.ts), [`test/judgeDemo.test.ts`](apps/server/test/judgeDemo.test.ts) (the judge demo: a daily run pays each new payee once, with nobody online), [`test/policy.chain.test.ts`](packages/core/test/policy.chain.test.ts) (an autopilot payout on Moderato)
 
+**Funding with attribution, on Tempo's virtual addresses (TIP-1022).** The treasury registers once as a virtual-address master: the setup page mines the registration's 32-bit proof of work in the browser, builds the call itself, refuses a server copy that differs, and the passkey signs one transaction. Each funding source ("Q4 bounty sponsor: Acme DAO", "Judges pool") then gets its own deposit address, derived off chain. Whatever is sent there lands in the treasury in the same transaction, with no sweep, and Rolepay attributes it to its source from the two Transfer events the protocol emits. A deposit address can only ever add money. `/rolepay fund new`, a Funding page with QR codes, and "Funded this month" on the Overview.
+- Code: [`domain/funding.ts`](packages/core/src/domain/funding.ts) (`attributeDeposits`), [`services/fundingService.ts`](packages/core/src/services/fundingService.ts), [`tempo/tempoFundingChain.ts`](packages/core/src/adapters/tempo/tempoFundingChain.ts), [`client/deposits.ts`](packages/web/src/client/deposits.ts)
+- Tests: [`test/funding.chain.test.ts`](packages/core/test/funding.chain.test.ts) (on Moderato: a passkey-like treasury registers, two deposits land with no sweep, each attributed once), [`services/fundingService.test.ts`](packages/core/src/services/fundingService.test.ts) (idempotent, two instances), [`e2e/depositAddresses.spec.ts`](apps/server/e2e/depositAddresses.spec.ts) (the browser mines, a tampered plan gets nothing signed, one passkey prompt)
+- On Moderato: [the registration](https://explore.testnet.tempo.xyz/tx/0x2c263e0461d1facdec17c88ab5c4e3bc5bcc956c541c4b1e15f9b7fe9708abb5), deposits to [source 1](https://explore.testnet.tempo.xyz/tx/0x2a7f8c310c397b0d6b81a847eccbe4251274284aa614bc54e62549ade0b1aefa) and [source 2](https://explore.testnet.tempo.xyz/tx/0x266eb6fbc465a110f1c8cc59913495e0aa1740af3aacb1e75d81fe7076c880f9), each showing the two hops into the treasury; and from the treasury page in Chromium, [registered by the passkey](https://explore.testnet.tempo.xyz/tx/0xb34f5265d5f6caed1150d8db6383b022acbe47e93bf5d1792a564b3ff50132e7) and [a deposit](https://explore.testnet.tempo.xyz/tx/0xfecebc1c81b94be320af2234579341d45b8f30b0c2308972b4039f47b3d99048)
+
 **A web dashboard with no script.** Discord sign-in with PKCE (S256) and state, session tokens stored hashed, a CSRF token on every form, and the member's roles read fresh from Discord for every action.
 - Code: [`dashboard/sessions.ts`](packages/web/src/dashboard/sessions.ts), [`dashboard/routes/auth.ts`](packages/web/src/dashboard/routes/auth.ts), [`dashboard/access.ts`](packages/web/src/dashboard/access.ts)
 - Tests: [`dashboard/auth.test.ts`](packages/web/src/dashboard/auth.test.ts), [`e2e/dashboard.spec.ts`](apps/server/e2e/dashboard.spec.ts)
@@ -62,27 +67,27 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 ```bash
 pnpm install
 pnpm typecheck
-pnpm test            # 1,380 tests in 121 files, no network, no secrets
+pnpm test            # 1,498 tests in 132 files, no network, no secrets
 pnpm test:coverage   # what CI runs, with a threshold per package
 ```
 
-`pnpm test` runs 1,380 tests: core 699, discord 356, web 197, server 128. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
+`pnpm test` runs 1,498 tests: core 757, discord 366, web 237, server 138. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
 
 Coverage from `pnpm test:coverage`:
 
 | Package | Lines | Statements | Functions | Branches |
 | --- | --- | --- | --- | --- |
-| `packages/core` | 94.97% | 91.68% | 94.91% | 82.65% |
-| `packages/discord` | 96.59% | 93.3% | 96.82% | 83.37% |
-| `packages/web` | 85.12% | 82.3% | 81.62% | 77.33% |
-| `apps/server` | 85.6% | 85.15% | 84.43% | 84.85% |
+| `packages/core` | 95.35% | 92.2% | 95.47% | 83.24% |
+| `packages/discord` | 96.7% | 93.23% | 96.88% | 83.04% |
+| `packages/web` | 86.25% | 83.63% | 83.97% | 77.68% |
+| `apps/server` | 85.74% | 85.4% | 84.74% | 85.67% |
 
 `packages/web` is lower because its browser code (`src/client/`, 44% of lines here) runs in the Playwright e2e, which these numbers do not count. Its server code is at 99% of lines.
 
 Opt-in suites, on Tempo's Moderato testnet:
 
-- `pnpm test:chain`: full pay runs at service level and over HTTP, the fee budget, an autopilot policy payout after a one-minute veto window, and the protocol test above. It generates throwaway keys into the gitignored `.env`, funds them from the public faucet, and refuses any chain but Moderato. About two minutes.
-- `pnpm test:e2e`: Playwright in Chromium with a virtual passkey authenticator. The claim and treasurer flows on Moderato, the mainnet path rehearsed on Moderato with no sponsor, and the dashboard walk (no network). The first time, install the browser with `pnpm --filter @rolepay/server exec playwright install chromium`.
+- `pnpm test:chain`: full pay runs at service level and over HTTP, the fee budget, an autopilot policy payout after a one-minute veto window, the protocol test above, and deposit addresses (a passkey-like treasury registers, two deposits land with no sweep and are attributed). It generates throwaway keys into the gitignored `.env`, funds them from the public faucet, and refuses any chain but Moderato. About two minutes.
+- `pnpm test:e2e`: Playwright in Chromium with a virtual passkey authenticator. The claim and treasurer flows on Moderato, deposit addresses set up on the treasury page (the salt mined in the browser) on Moderato, the mainnet path rehearsed on Moderato with no sponsor, and the dashboard walk (no network). The first time, install the browser with `pnpm --filter @rolepay/server exec playwright install chromium`.
 
 Where the limit refusal is tested:
 
