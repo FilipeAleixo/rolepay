@@ -1,22 +1,32 @@
 import React from 'react'
 import { useCurrentFrame } from 'remotion'
 import { Scene } from '../components/Scene'
-import { AI_PROPOSAL_USD, CHAIN_PROOFS, LINE_COVERAGE, TOTAL_TESTS } from '../data/numbers'
+import { AI_PROPOSAL_USD, CHAIN_PROOFS, CHAIN_SUITE, LINE_COVERAGE, TOTAL_TESTS } from '../data/numbers'
 import { SANS, SERIF } from '../fonts'
 import { EASE_IN_OUT, enter, progress } from '../motion'
 import { C, gold, sec, white } from '../theme'
 
-export const NUMBERS_FRAMES = sec(7)
+export const NUMBERS_FRAMES = sec(8)
 
 const COUNT = 38 // frames a count-up takes
 
 const STATS = [
   { at: 14, value: (t: number) => Math.round(TOTAL_TESTS * t).toLocaleString('en-US'), label: 'tests in the default suite', detail: 'No network, no secrets. CI runs them on every push.' },
-  { at: 26, value: (t: number) => String(Math.round(CHAIN_PROOFS.length * t)), label: 'chain proofs on Tempo testnet', detail: CHAIN_PROOFS.join(' · ') },
+  {
+    at: 26,
+    value: (t: number) => String(Math.round(CHAIN_PROOFS.length * t)),
+    label: 'chain proofs on Tempo testnet',
+    detail: `Each on the explorer, from ${CHAIN_SUITE.tests} chain tests in ${CHAIN_SUITE.files} files.`,
+  },
   { at: 38, value: (t: number) => `$${(AI_PROPOSAL_USD * t).toFixed(3)}`, label: 'per AI proposal', detail: 'Sonnet 5.5, prompt cache warm' },
 ] as const
 
-/** 7. By the numbers: count-ups of what the repo itself shows. */
+const LIST_AT = 62
+const COVERAGE_AT = 84
+
+const smallLabel: React.CSSProperties = { font: `500 17px/1 ${SANS}`, letterSpacing: '0.2em', textTransform: 'uppercase', color: C.meta }
+
+/** 7. By the numbers: count-ups of what the repo itself shows, then the chain proofs by name. */
 export const Numbers: React.FC = () => {
   const frame = useCurrentFrame()
   return (
@@ -34,11 +44,24 @@ export const Numbers: React.FC = () => {
         })}
       </div>
 
-      <div style={{ position: 'absolute', left: 180, right: 180, top: 704 }}>
-        <div style={{ ...enter(frame, 70, { distance: 8 }), font: `500 17px/1 ${SANS}`, letterSpacing: '0.2em', textTransform: 'uppercase', color: C.meta }}>Line coverage, per package</div>
+      {/* The chain proofs, by name, as the README links them. */}
+      <div style={{ position: 'absolute', left: 180, right: 180, top: 576, ...enter(frame, LIST_AT, { distance: 8 }) }}>
+        <div style={smallLabel}>The {CHAIN_PROOFS.length} chain proofs</div>
+        <div style={{ marginTop: 16, display: 'flex', flexWrap: 'wrap', columnGap: 18, rowGap: 4, font: `400 20px/1.45 ${SANS}`, color: C.soft }}>
+          {CHAIN_PROOFS.map((p, i) => (
+            <span key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: 18, whiteSpace: 'nowrap' }}>
+              {i > 0 ? <span style={{ width: 5, height: 5, borderRadius: 3, background: gold(0.6) }} /> : null}
+              {p}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ position: 'absolute', left: 180, right: 180, top: 760 }}>
+        <div style={{ ...enter(frame, COVERAGE_AT, { distance: 8 }), ...smallLabel }}>Line coverage, per package</div>
         <div style={{ marginTop: 30, display: 'flex', justifyContent: 'space-between' }}>
           {LINE_COVERAGE.map((c, i) => {
-            const at = 78 + i * 8
+            const at = COVERAGE_AT + 8 + i * 8
             const t = progress(frame, at + 4, 32, EASE_IN_OUT)
             return (
               <div key={c.pkg} style={{ width: 345, ...enter(frame, at, { distance: 10 }) }}>

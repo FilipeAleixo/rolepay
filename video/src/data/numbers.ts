@@ -1,24 +1,41 @@
 /**
  * The real numbers the "By the numbers" scene counts up to. Re-read them before a final render.
  *
- * Measured on main at 8bf685e (2026-10-07) with `pnpm test` and `pnpm test:coverage` at the repo
- * root: core 699, discord 356, web 208, server 132 tests (122 files). The README's "How to verify
- * it yourself" still says 1,380 (web 197, server 128) and web 85.12%, server 85.6%: it predates the
- * last commits, so the README, not this file, is the one to update.
+ * Measured on main at 9ceb17a (2026-10-08) with `pnpm test` and `pnpm test:coverage` at the repo
+ * root, and the same as the README's "How to verify it yourself": 1,734 tests in 145 files (core
+ * 882, discord 416, web 292, server 144).
  */
-export const TESTS = { core: 699, discord: 356, web: 208, server: 132 } as const
+export const TESTS = { core: 882, discord: 416, web: 292, server: 144 } as const
 export const TOTAL_TESTS = TESTS.core + TESTS.discord + TESTS.web + TESTS.server
 
 /** Line coverage per package, from `pnpm test:coverage` (what CI runs, with a threshold per package). */
 export const LINE_COVERAGE = [
-  { pkg: 'core', pct: 94.97 },
-  { pkg: 'discord', pct: 96.59 },
-  { pkg: 'web', pct: 86.23 },
-  { pkg: 'server', pct: 85.92 },
+  { pkg: 'core', pct: 95.72 },
+  { pkg: 'discord', pct: 96.91 },
+  { pkg: 'web', pct: 86.91 },
+  { pkg: 'server', pct: 85.78 },
 ] as const
 
-/** The README's chain proofs on Moderato, each with Rolepay's own checks skipped. */
-export const CHAIN_PROOFS = ['over-limit batch', 'out-of-scope call', 'revoked key'] as const
+/** `pnpm test:chain` on Moderato: 37 tests in 9 files (8 in packages/core/test, 1 in apps/server/test). */
+export const CHAIN_SUITE = { tests: 37, files: 9 } as const
+
+/**
+ * The distinct on-chain proofs the README links on Moderato's explorer, in its order: the bot key's
+ * limit, scope and revocation (protocolLimit, protocolKey), a policy's own key (policyKey),
+ * preferred stablecoins through the DEX (preferredToken) and deposit addresses (funding).
+ */
+export const CHAIN_PROOFS = [
+  'over-limit batch',
+  'out-of-scope call',
+  'revoked key',
+  'a policy paid with its own key',
+  'a policy key over its own limit',
+  'a revoked policy key',
+  'two stablecoins in one batch',
+  'a swap over its cap',
+  'the swap scope outside a run',
+  'attributed deposits, no sweep',
+] as const
 
 /** A warm proposal on Sonnet 5.5: "about $0.003 to $0.004" (README, measured live October 2026). */
 export const AI_PROPOSAL_USD = 0.003
