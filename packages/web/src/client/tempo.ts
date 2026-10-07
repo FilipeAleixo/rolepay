@@ -1,7 +1,7 @@
 // The treasurer's transactions, signed in the browser with the passkey (WebAuthn P256), sent
 // straight to Tempo. Fees go through the sponsor when one is configured (testnet: the public
 // Moderato sponsor), otherwise the treasury pays them in its fee token.
-import { Abis, type Account, createClient, http, withRelay } from 'viem/tempo'
+import { Abis, type Account, Actions, createClient, http, withRelay } from 'viem/tempo'
 import { type WireAuthorization, authorizeKeyCall, rotationCalls } from './keychain.js'
 
 export type { WireAuthorization }
@@ -36,6 +36,17 @@ export async function revokeAccessKey(c: ChainConfig, root: Account.Account, key
   const { receipt } = await client(c, root).accessKey.revokeSync({ accessKey: keyAddress as `0x${string}`, ...feeFields(c) } as never)
   if (receipt.status !== 'success') throw new Error(`the revoke transaction ${receipt.transactionHash} reverted`)
   return receipt.transactionHash as string
+}
+
+/**
+ * The treasury registers as a virtual-address master (deposit addresses): viem's
+ * `registerVirtualMaster(salt)` on the address registry, one transaction from the root, so one
+ * passkey prompt. Its masterId comes from the chain's own MasterRegistered event.
+ */
+export async function registerMaster(c: ChainConfig, root: Account.Account, salt: string) {
+  const { receipt, masterId } = await Actions.virtualAddress.registerMasterSync(client(c, root), { salt: salt as `0x${string}`, ...feeFields(c) } as never)
+  if (receipt.status !== 'success') throw new Error(`the registration ${receipt.transactionHash} reverted`)
+  return { txHash: receipt.transactionHash as string, masterId: (masterId as string).toLowerCase() }
 }
 
 /**

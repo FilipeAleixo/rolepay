@@ -1,7 +1,7 @@
 // A web app over the real core services on in-memory fakes, with fake passkey sessions and
 // a stub client bundle. No network, no browser.
 import { createRolepay } from '@rolepay/core'
-import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { createWebApp } from '../src/index.js'
 import { FakePasskeySessions, staticAssets } from '../src/testing/index.js'
 
@@ -27,10 +27,14 @@ const MAINNET_WEB = {
   explorerUrl: 'https://explore.tempo.xyz',
 } as const
 
-/** `discordAppId`: the Discord application, for the home page's install link (absent: no link, as in the other tests). */
-export function webHarness(opts: { mainnet?: boolean; discordAppId?: string } = {}) {
+/**
+ * `discordAppId`: the Discord application, for the home page's install link (absent: no link, as in
+ * the other tests). `funding: false`: a server without the funding chain (deposit addresses unavailable).
+ */
+export function webHarness(opts: { mainnet?: boolean; discordAppId?: string; funding?: boolean } = {}) {
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
+  const fundingChain = new FakeFundingChain()
   const rolepay = createRolepay({
     chain,
     repositories: createMemoryRepositories(),
@@ -38,6 +42,7 @@ export function webHarness(opts: { mainnet?: boolean; discordAppId?: string } = 
     ids: new SequentialIds(),
     clock,
     network: opts.mainnet ? 'mainnet' : 'moderato',
+    ...(opts.funding === false ? {} : { fundingChain }),
   })
   const sessions = new FakePasskeySessions()
   const app = createWebApp({
@@ -71,7 +76,7 @@ export function webHarness(opts: { mainnet?: boolean; discordAppId?: string } = 
   }
   const post = (path: string, body: unknown = {}, passkey?: Passkey) =>
     send(path, { method: 'POST', body: JSON.stringify(body), ...(passkey ? { passkey } : {}) })
-  return { app, rolepay, chain, clock, sessions, send, post }
+  return { app, rolepay, chain, fundingChain, clock, sessions, send, post }
 }
 
 export async function registeredCommunity(h: ReturnType<typeof webHarness>, treasuryAddress = PASSKEY, over: Record<string, unknown> = {}) {

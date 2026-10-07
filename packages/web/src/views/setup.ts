@@ -17,6 +17,8 @@ export type SetupPageConfig = {
   feeToken: string | null
   feeTokenLabel: string | null
   passkeyName: string
+  /** Whether this server offers deposit addresses (it reads the chain for them). */
+  deposits: boolean
   defaults: { limit: string; periodDays: number; validityDays: number; feeBudget: string }
 }
 
@@ -88,6 +90,21 @@ export function setupPage(c: SetupPageConfig): string {
   </form>
   <div id="live-keys"></div>
 </section>
+${
+  c.deposits
+    ? `<section data-step="deposits" hidden>
+  <h2>4. Deposit addresses</h2>
+  <p>Give each funder its own address to send to: a sponsor, a judges pool, a grant. Every deposit lands in this account directly (no sweep), and Rolepay shows which source it came from. A deposit address can only ever add money.</p>
+  <p data-field="deposits-status" class="muted"></p>
+  <div data-when="deposits-off">
+    <p class="muted">Set up once. This browser first works for about a minute (a proof of work Tempo asks of every registration), then your passkey signs one transaction that registers this account as the owner of its deposit addresses.</p>
+    <p data-field="deposits-signs"></p>
+    <button id="deposits" type="button" class="secondary">Set up deposit addresses</button>
+  </div>
+  <p data-when="deposits-on" hidden>Create a funding source for each funder on the dashboard's <a data-field="deposits-dashboard" href="#">Funding page</a>, or with <code>/rolepay fund new</code> in Discord. <a data-field="deposits-tx" href="#" target="_blank" rel="noreferrer" hidden>Registration on the explorer</a></p>
+</section>`
+    : ''
+}
 <p id="status" role="status" aria-live="polite"></p>
 <noscript><p>This page needs JavaScript for the passkey.</p></noscript>`,
   })

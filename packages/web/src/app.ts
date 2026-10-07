@@ -43,14 +43,21 @@ const lastForwardedHop = (req: Request) => req.headers.get('x-forwarded-for')?.s
  * URIs, for the grain and the select's chevron), connections only to this origin, the RPC and the
  * sponsor (the page signs and sends the treasurer's transactions itself), and no framing, plugins
  * or base-URL tricks. The JSON page config is a data block, never executed.
+ *
+ * `mining` (the setup page only): the page mines the deposit-address salt (TIP-1022's 32-bit
+ * proof of work) with WebAssembly keccak in Web Workers that viem's `VirtualMaster.mineSaltAsync`
+ * starts from blob: URLs. So that page also allows compiling WebAssembly ('wasm-unsafe-eval', which
+ * is not JavaScript eval) and workers from blob: URLs; both can only be started by script already
+ * on the page, and scripts still come only from this origin.
  */
-function contentSecurityPolicy(config: WebConfig): string {
+function contentSecurityPolicy(config: WebConfig, opts: { mining?: boolean } = {}): string {
   const origin = (u: string | null) => (u && URL.canParse(u) ? [new URL(u).origin] : [])
   const connect = ["'self'", ...new Set([...origin(config.rpcUrl), ...origin(config.sponsorUrl)])]
   const styles = [STYLE, DASHBOARD_STYLE].map((s) => `'sha256-${createHash('sha256').update(s).digest('base64')}'`)
   return [
     "default-src 'none'",
-    "script-src 'self'",
+    opts.mining ? "script-src 'self' 'wasm-unsafe-eval'" : "script-src 'self'",
+    ...(opts.mining ? ['worker-src blob:'] : []),
     `style-src ${styles.join(' ')}`,
     `connect-src ${connect.join(' ')}`,
     "img-src 'self' data:",
@@ -83,6 +90,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
   const testnet = NETWORKS[config.network].testnet
   const app = new Hono()
   const csp = contentSecurityPolicy(config)
+  const setupCsp = contentSecurityPolicy(config, { mining: true })
   const https = new URL(config.origin).protocol === 'https:'
 
   app.use(async (c, next) => {
@@ -101,7 +109,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
     c.header('referrer-policy', c.res.headers.get('referrer-policy') === 'same-origin' ? 'same-origin' : 'no-referrer')
     c.header('x-content-type-options', 'nosniff')
     c.header('x-frame-options', 'DENY')
-    c.header('content-security-policy', csp)
+    c.header('content-security-policy', c.req.path.startsWith('/setup/') ? setupCsp : csp)
     // Browsers only honour HSTS over https; never sent for http://localhost.
     if (https) c.header('strict-transport-security', 'max-age=31536000')
   })

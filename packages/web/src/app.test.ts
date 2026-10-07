@@ -88,6 +88,23 @@ describe('the web app', () => {
     expect(directives['object-src']).toEqual(["'none'"])
   })
 
+  it('lets the setup page alone run WebAssembly in workers it makes itself, to mine the deposit-address salt', async () => {
+    const h = webHarness()
+    const directives = async (path: string) => {
+      const csp = (await h.send(path)).headers.get('content-security-policy') ?? ''
+      return Object.fromEntries(csp.split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]))
+    }
+    const setup = await directives('/setup/nope')
+    expect(setup['script-src']).toEqual(["'self'", "'wasm-unsafe-eval'"])
+    expect(setup['worker-src']).toEqual(['blob:'])
+    expect(setup['connect-src']).toEqual(["'self'", 'https://rpc.moderato.tempo.xyz', 'https://sponsor.moderato.tempo.xyz'])
+    for (const path of ['/', '/account', '/claim/nope', '/dashboard', '/setupx']) {
+      const other = await directives(path)
+      expect(other['script-src'], path).toEqual(["'self'"])
+      expect(other['worker-src'], path).toBeUndefined()
+    }
+  })
+
   it('sends HSTS only on an https origin', async () => {
     expect((await webHarness().send('/claim/nope')).headers.get('strict-transport-security')).toBeNull()
     const clock = new ManualClock()
