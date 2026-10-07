@@ -1,6 +1,9 @@
 // Test fixtures: valid domain objects with overridable fields.
 import type { BotKey, Community, SetupLink } from '../../src/domain/community.js'
 import type { LinkToken, Payee } from '../../src/domain/payee.js'
+import type { NewAuditEvent } from '../../src/domain/policy/audit.js'
+import type { Policy, PolicyVersion } from '../../src/domain/policy/policy.js'
+import type { PolicyRun } from '../../src/domain/policy/policyRun.js'
 import type { Proposal } from '../../src/domain/proposal/proposal.js'
 import { type Run, type RunEvent, newRun, transition } from '../../src/domain/run.js'
 
@@ -163,4 +166,97 @@ export function proposal(over: Partial<Proposal> = {}): Proposal {
     expiresAt: at(86_400),
     ...over,
   }
+}
+
+/** An active weekly policy (v1): 1 per reply in #help for Mods, capped at 50 each. */
+export function policy(over: Partial<Policy> = {}): Policy {
+  return {
+    id: 'pol_fixture01',
+    communityId: GUILD,
+    name: 'Help desk',
+    instruction: 'Every Monday: 1 per answered question in #help, max 50 a week each, for Mods',
+    compiled: {
+      criteria: { ...(proposal().criteria as NonNullable<Proposal['criteria']>), repliesIn: { channelIds: ['700000000000000001'], since: at(-7 * 86_400), until: T0, min: 1 } },
+      plan: { rule: { kind: 'perUnit', amount: 1_000_000n, per: 'replies', cap: 50_000_000n }, overrides: [], perPersonCap: null },
+      note: 'Help desk',
+      assumptions: ['"a week" means since the previous run'],
+      amountsInInstruction: true,
+    },
+    schedule: { kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'Europe/Lisbon' },
+    caps: { perRun: 500_000_000n, perPerson: null },
+    channelId: '700000000000000009',
+    status: 'active',
+    version: 1,
+    mode: 'propose',
+    vetoWindowMinutes: 1440,
+    autopilot: null,
+    createdBy: TREASURER,
+    createdAt: T0,
+    updatedAt: T0,
+    approvedBy: TREASURER,
+    approvedAt: at(60),
+    activeSince: at(60),
+    rev: 0,
+    ...over,
+  }
+}
+
+/** The version row matching a policy's current definition. */
+export function policyVersion(p: Policy = policy(), over: Partial<PolicyVersion> = {}): PolicyVersion {
+  return {
+    policyId: p.id,
+    communityId: p.communityId,
+    version: p.version,
+    name: p.name,
+    instruction: p.instruction,
+    compiled: p.compiled,
+    schedule: p.schedule,
+    caps: p.caps,
+    authoredBy: p.createdBy,
+    authoredAt: p.createdAt,
+    approvedBy: p.approvedBy,
+    approvedAt: p.approvedAt,
+    discardedBy: null,
+    discardedAt: null,
+    ...over,
+  }
+}
+
+/** A scheduled autopilot run of the fixture policy, with two lines and one unregistered person. */
+export function policyRun(over: Partial<PolicyRun> = {}): PolicyRun {
+  return {
+    id: 'prun_fixture01',
+    policyId: 'pol_fixture01',
+    policyVersion: 1,
+    communityId: GUILD,
+    periodKey: at(7 * 86_400).toISOString(),
+    periodStart: T0,
+    periodEnd: at(7 * 86_400),
+    mode: 'autopilot',
+    status: 'scheduled',
+    runId: 'run_fixture01',
+    executeAfter: at(8 * 86_400),
+    lines: [
+      { discordUserId: ALICE, amount: 12_000_000n, metrics: { messages: null, activeDays: null, replies: 12 }, capped: false },
+      { discordUserId: BOB, amount: 50_000_000n, metrics: { messages: null, activeDays: null, replies: 70 }, capped: true },
+    ],
+    unregistered: [{ discordUserId: CAROL, metrics: { messages: null, activeDays: null, replies: 3 } }],
+    total: 62_000_000n,
+    remaining: 100_000_000n,
+    problems: [],
+    hold: null,
+    vetoedBy: null,
+    vetoedAt: null,
+    releasedBy: null,
+    releasedAt: null,
+    leaseUntil: null,
+    createdAt: at(7 * 86_400),
+    updatedAt: at(7 * 86_400),
+    rev: 1,
+    ...over,
+  }
+}
+
+export function auditEvent(over: Partial<NewAuditEvent> = {}): NewAuditEvent {
+  return { communityId: GUILD, at: T0, type: 'policy.created', actor: TREASURER, policyId: 'pol_fixture01', policyVersion: 1, policyRunId: null, runId: null, details: { mode: 'propose' }, ...over }
 }

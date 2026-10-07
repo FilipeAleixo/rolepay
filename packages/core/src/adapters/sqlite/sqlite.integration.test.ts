@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { keyValueContract } from '../../../test/support/keyValueContract.js'
+import { policyRepositoryContract } from '../../../test/support/policyRepositoryContract.js'
 import { proposalRepositoryContract } from '../../../test/support/proposalRepositoryContract.js'
 import { repositoryContracts } from '../../../test/support/repositoryContracts.js'
 import * as f from '../../../test/support/fixtures.js'
@@ -26,6 +27,7 @@ async function fresh(options: Parameters<typeof openSqliteDatabase>[1] = {}) {
 repositoryContracts('sqlite', async () => (await fresh()).repositories)
 keyValueContract('sqlite', async (clock) => (await fresh({ clock })).kv)
 proposalRepositoryContract('sqlite', async (clock) => (await fresh({ clock })).repositories.proposals)
+policyRepositoryContract('sqlite', async () => (await fresh()).repositories)
 
 describe('sqlite: migrations and persistence', () => {
   it('migrates idempotently and keeps data across reopen', async () => {

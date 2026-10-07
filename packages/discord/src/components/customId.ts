@@ -56,3 +56,36 @@ export function decodeProposalModalId(customId: string): { modal: ProposalModal;
   const parsed = ProposalModalIdSchema.safeParse(customId)
   return parsed.success ? { modal: parsed.data[1], id: parsed.data[2] } : null
 }
+
+/**
+ * Buttons on a policy preview: `policy:<action>:<policyId>:<version>`. The version is the one the
+ * approver saw: approving it after an edit made a newer version is refused (version_mismatch).
+ */
+export const POLICY_ACTIONS = ['approve', 'discard'] as const
+export type PolicyAction = (typeof POLICY_ACTIONS)[number]
+
+const PolicyButtonSchema = z
+  .string()
+  .regex(/^policy:[a-z]+:[A-Za-z0-9_]{1,40}:\d{1,6}$/)
+  .transform((s) => s.split(':'))
+  .pipe(z.tuple([z.literal('policy'), z.enum(POLICY_ACTIONS), z.string(), z.string().transform(Number)]))
+
+export const encodePolicyButton = (action: PolicyAction, policyId: string, version: number) => `policy:${action}:${policyId}:${version}`
+
+export function decodePolicyButton(customId: string): { action: PolicyAction; policyId: string; version: number } | null {
+  const parsed = PolicyButtonSchema.safeParse(customId)
+  return parsed.success ? { action: parsed.data[1], policyId: parsed.data[2], version: parsed.data[3] } : null
+}
+
+/** The Veto button on an autopilot run: `policy-run:veto:<policyRunId>`. */
+const PolicyRunButtonSchema = z
+  .string()
+  .regex(/^policy-run:veto:[A-Za-z0-9_]{1,40}$/)
+  .transform((s) => s.split(':')[2] as string)
+
+export const encodeVetoButton = (policyRunId: string) => `policy-run:veto:${policyRunId}`
+
+export function decodeVetoButton(customId: string): { policyRunId: string } | null {
+  const parsed = PolicyRunButtonSchema.safeParse(customId)
+  return parsed.success ? { policyRunId: parsed.data } : null
+}

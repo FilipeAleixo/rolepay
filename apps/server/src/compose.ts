@@ -8,6 +8,7 @@ import {
   type MemberDirectory,
   RestMemberDirectory,
   createDiscordInteractions,
+  createPolicyNotifier,
   createRecoveryNotifier,
   createRunExecutor,
 } from '@rolepay/discord'
@@ -16,6 +17,7 @@ import { Hono } from 'hono'
 import type { ServerConfig } from './config.js'
 import { errorFields } from './logging.js'
 import { startRecovery } from './recovery.js'
+import { startScheduler } from './scheduler.js'
 
 export type Log = (event: string, fields?: Record<string, unknown>) => void
 
@@ -74,6 +76,16 @@ export function composeServer(deps: ServerDeps) {
     { onError: (error, job) => log('job_error', { runId: job.runId, ...errorFields(error) }) },
   )
 
+  // Tells each policy's channel what the scheduler did (and edits those messages later), sharing
+  // the run message records with the executor and the recovery sweep.
+  const policyNotifier = createPolicyNotifier({ rolepay, rest, notices, network: config.core.network, onError: (error) => log('policy_notify_error', errorFields(error)) })
+  /** One scheduler pass and its announcement: what the interval runs (and the tests call). */
+  const tickPolicies = async () => {
+    const report = await rolepay.scheduler.tick()
+    await policyNotifier.announce(report.events)
+    return report
+  }
+
   // Background work started by an interaction (deferred replies). Tracked for tests and shutdown.
   const background = new Set<Promise<unknown>>()
   const waitUntil = (work: Promise<unknown>) => {
@@ -92,6 +104,7 @@ export function composeServer(deps: ServerDeps) {
       pendingSources: new KvPendingSources(deps.kv),
       clock: deps.clock,
       config: config.app,
+      announcer: policyNotifier,
       onError: (error) => log('interaction_error', errorFields(error)),
     },
     waitUntil,
@@ -133,6 +146,25 @@ export function composeServer(deps: ServerDeps) {
         intervalMs: config.recoveryIntervalMs,
         onResult: (results) => log('recovery', { results }),
         onError: (error) => log('recovery_error', errorFields(error)),
+      }),
+    /** One policy scheduler pass, announced in Discord. */
+    tickPolicies,
+    /**
+     * Starts the policy scheduler (on start, then every interval, never two ticks at once): makes
+     * due runs and releases autopilot runs whose veto window passed, with code only.
+     */
+    startScheduler: () =>
+      startScheduler({
+        tick: () => rolepay.scheduler.tick(),
+        announce: (events) => policyNotifier.announce(events),
+        intervalMs: config.policies.schedulerIntervalMs,
+        // Counts and codes only: the events carry no user text worth logging.
+        onReport: (report) =>
+          log('policies', {
+            events: report.events.map((e) => ({ kind: e.kind, policyId: e.policy.id, policyRunId: e.policyRun.id, status: e.policyRun.status, hold: e.policyRun.hold?.code ?? null })),
+            errors: report.errors,
+          }),
+        onError: (error) => log('policies_error', errorFields(error)),
       }),
     /** Resolves once deferred replies and queued payments have all finished. */
     async drain() {

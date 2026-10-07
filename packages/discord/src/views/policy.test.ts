@@ -1,0 +1,211 @@
+import type { Policy, PolicyPreview, PolicyRun } from '@rolepay/core'
+import { describe, expect, it } from 'vitest'
+import { ALICE, BOB, CAROL, GUILD, MODS_ROLE, T0, TOKEN, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
+import { explainPolicyError } from './errors.js'
+import { explainHold, policyChangedMessage, policyDiscardedMessage, policyListMessage, policyMessage, policyRunNoticeMessage } from './policy.js'
+
+const text = (v: unknown) => JSON.stringify(v)
+const ctx = { token: TOKEN, approverRoleId: TREASURER_ROLE }
+const HELP = '700000000000000002'
+
+const policy = (over: Partial<Policy> = {}): Policy => ({
+  id: 'pol_view01',
+  communityId: GUILD,
+  name: 'Help desk',
+  instruction: 'Every Monday: 1 per answered question in #help, max 50 a week each, for Mods',
+  compiled: {
+    criteria: {
+      hasRole: [MODS_ROLE],
+      lacksRole: [],
+      joinedBefore: null,
+      joinedAfter: null,
+      messagesIn: null,
+      activeDaysIn: null,
+      repliesIn: { channelIds: [HELP], since: T0, until: T0, min: 1 },
+      reactedTo: null,
+      mentionedIn: null,
+      postedIn: null,
+      paidInRun: null,
+      exclude: [],
+      excludeProposer: false,
+    },
+    plan: { rule: { kind: 'perUnit', amount: 1_000_000n, per: 'replies', cap: 50_000_000n }, overrides: [], perPersonCap: null },
+    note: 'Help desk',
+    assumptions: ['"a week" means since the previous run'],
+    amountsInInstruction: true,
+  },
+  schedule: { kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC' },
+  caps: { perRun: null, perPerson: null },
+  channelId: '700000000000000001',
+  status: 'draft',
+  version: 2,
+  mode: 'propose',
+  vetoWindowMinutes: 1440,
+  autopilot: null,
+  createdBy: TREASURER,
+  createdAt: T0,
+  updatedAt: T0,
+  approvedBy: null,
+  approvedAt: null,
+  activeSince: null,
+  rev: 0,
+  ...over,
+})
+
+const metrics = (replies: number) => ({ messages: null, activeDays: null, replies })
+const preview = (over: Partial<PolicyPreview> = {}): PolicyPreview => ({
+  policyId: 'pol_view01',
+  version: 2,
+  window: { start: T0, end: T0 },
+  nextRunAt: new Date('2026-10-12T18:00:00Z'),
+  matches: [
+    { discordUserId: ALICE, registered: true, metrics: metrics(70), amount: 50_000_000n, capped: true, reasons: [], reasonText: '70 replies' },
+    { discordUserId: CAROL, registered: false, metrics: metrics(4), amount: null, capped: false, reasons: [], reasonText: '4 replies' },
+  ],
+  nearMisses: [{ userId: BOB, condition: 'repliesIn', count: 2, min: 3, text: '2 replies (at least 3)' }],
+  total: 50_000_000n,
+  remaining: null,
+  problems: ['amount_not_in_instruction', 'over_budget', 'something_new'],
+  rule: ['1 per reply.'],
+  scans: [],
+  ...over,
+})
+
+const policyRun = (over: Partial<PolicyRun> = {}): PolicyRun => ({
+  id: 'prun_view01',
+  policyId: 'pol_view01',
+  policyVersion: 2,
+  communityId: GUILD,
+  periodKey: 'k',
+  periodStart: T0,
+  periodEnd: T0,
+  mode: 'propose',
+  status: 'held',
+  runId: null,
+  executeAfter: null,
+  lines: Array.from({ length: 20 }, (_, i) => ({ discordUserId: `2000000000000001${String(i).padStart(2, '0')}`, amount: 1_000_000n, metrics: metrics(1), capped: false })),
+  unregistered: [],
+  total: 20_000_000n,
+  remaining: 5_000_000n,
+  problems: [],
+  hold: { code: 'over_budget', total: 20_000_000n, limit: 5_000_000n },
+  vetoedBy: null,
+  vetoedAt: null,
+  releasedBy: null,
+  releasedAt: null,
+  leaseUntil: null,
+  createdAt: T0,
+  updatedAt: T0,
+  rev: 1,
+  ...over,
+})
+
+describe('policyMessage', () => {
+  it('a draft with a preview: capped amounts, the unregistered, near misses, no key, problems in plain words, the assumptions, Approve and Discard for its version', () => {
+    const m = text(policyMessage(policy(), { ...ctx, preview: preview() }))
+    expect(m).toContain('Policy draft: Help desk')
+    expect(m).toContain(`<@${ALICE}>  50 AlphaUSD (capped)`)
+    expect(m).toContain(`<@${CAROL}>. They run`)
+    expect(m).toContain(`<@${BOB}>  2 replies (at least 3)`)
+    expect(m).toContain('There is no active bot key.')
+    expect(m).toContain('cannot be approved')
+    expect(m).toContain('held whole, never paid in part')
+    expect(m).toContain('something_new')
+    expect(m).toContain('The AI assumed')
+    expect(m).toContain('policy:approve:pol_view01:2')
+    expect(m).toContain('First run after approval')
+  })
+
+  it('without a preview it can say why; active, paused and archived policies have no buttons', () => {
+    expect(text(policyMessage(policy(), { ...ctx, previewProblem: 'Rolepay could not read #help.' }))).toContain('Rolepay could not read #help.')
+    const active = text(policyMessage(policy({ status: 'active', approvedBy: TREASURER, approvedAt: T0, mode: 'autopilot', autopilot: { enabledBy: TREASURER, enabledAt: T0, approverRoleId: TREASURER_ROLE }, vetoWindowMinutes: 90 }), { ...ctx, nextRunAt: T0 }))
+    expect(active).toContain(`Active. Approved by <@${TREASURER}>`)
+    expect(active).toContain('pays 90 minutes after it is posted unless vetoed')
+    expect(active).not.toContain('policy:approve')
+    expect(text(policyMessage(policy({ status: 'paused' }), ctx))).toContain('Paused, version 2')
+    expect(text(policyMessage(policy({ status: 'archived' }), ctx))).toContain('Archived. It never runs again.')
+    expect(text(policyMessage(policy(), { token: TOKEN, approverRoleId: null }))).toContain('no approver role is set yet')
+  })
+
+  it('a long list is cut to fit Discord (1024 characters a field) and says how many more', () => {
+    const many = Array.from({ length: 60 }, (_, i) => ({ discordUserId: `2000000000000002${String(i).padStart(2, '0')}`, registered: true, metrics: metrics(5), amount: 5_000_000n, capped: false, reasons: [], reasonText: 'has @Mods; 5 replies to other people in #help (at least 1)' }))
+    const m = policyMessage(policy(), { ...ctx, preview: preview({ matches: many, nearMisses: [], problems: [], remaining: 100_000_000n }) })
+    const field = m.embeds?.[0]?.fields?.find((f) => f.name === 'Who it applies to right now')
+    expect(field?.value.length).toBeLessThanOrEqual(1024)
+    expect(field?.value).toMatch(/…and \d+ more$/)
+  })
+})
+
+describe('policy list, changes, discards and notices', () => {
+  it('lists policies, or says how to write the first', () => {
+    expect(text(policyListMessage([]))).toContain('No policies yet')
+    const m = text(policyListMessage([{ policy: policy({ status: 'active' }), nextRunAt: T0, lastRun: null }, { policy: policy({ id: 'pol_two', name: 'Monthly' }), nextRunAt: null, lastRun: null }]))
+    expect(m).toContain('pol_view01')
+    expect(m).toContain('next run <t:')
+    expect(m).toContain('Monthly')
+  })
+
+  it('says each governance change publicly, and what a discard brought back', () => {
+    expect(text(policyChangedMessage(policy({ status: 'paused' }), 'paused', TREASURER, ctx))).toContain('paused by')
+    expect(text(policyChangedMessage(policy(), 'resumed', TREASURER, ctx))).toContain('Periods it missed are not run')
+    expect(text(policyChangedMessage(policy({ mode: 'propose' }), 'mode', TREASURER, ctx))).toContain('back to propose')
+    expect(text(policyChangedMessage(policy({ mode: 'autopilot', vetoWindowMinutes: 60 }), 'mode', TREASURER, { token: TOKEN, approverRoleId: null }))).toContain('1 hour after it is posted unless an approver vetoes it')
+    expect(text(policyDiscardedMessage(policy({ status: 'paused', version: 1 }), TREASURER))).toContain('Version 1 is back, paused.')
+    expect(text(policyDiscardedMessage(policy({ status: 'archived' }), TREASURER))).not.toContain('is back')
+  })
+
+  it('a held run says why with the numbers and who would have been paid; an empty period is one line', () => {
+    const held = text(policyRunNoticeMessage(policy(), policyRun(), ctx))
+    expect(held).toContain('Held: Help desk')
+    expect(held).toContain('more than the bot key has left (5 AlphaUSD)')
+    expect(held).toContain('Would have paid 20 AlphaUSD to 20 people')
+    expect(held).toContain('…and 5 more')
+    expect(text(policyRunNoticeMessage(policy(), policyRun({ status: 'empty', hold: null, lines: [], total: 0n }), ctx))).toContain('nobody matched')
+  })
+})
+
+describe('explainHold and explainPolicyError: every code in plain words', () => {
+  it('holds', () => {
+    const say = (code: string, autopilotBy: string | null = null) => explainHold({ code, total: 20_000_000n, limit: 5_000_000n }, { token: TOKEN, autopilotBy })
+    expect(say('insufficient_limit')).toContain('press Retry')
+    expect(say('over_policy_cap')).toContain("over this policy's cap of 5 AlphaUSD")
+    expect(say('too_many_lines')).toContain('at most 50')
+    expect(say('no_active_key')).toContain('no active bot key')
+    for (const c of ['key_revoked', 'key_expired', 'key_expires_too_soon', 'key_not_authorized']) expect(say(c)).toContain('cannot pay any more')
+    expect(say('policy_not_active')).toContain('paused or changed')
+    expect(say('autopilot_off')).toContain('switched off')
+    expect(say('policy_changed')).toContain('edited')
+    expect(say('approver_changed', TREASURER)).toContain(`<@${TREASURER}> no longer holds the approver role`)
+    expect(say('approver_changed')).toContain('The treasurer who switched autopilot on')
+    expect(say('creator_cannot_approve')).toContain('separate approver')
+    expect(say('cannot_read')).toContain('could not read')
+    expect(say('mystery')).toBe('Held (mystery). Nothing was paid.')
+    expect(explainHold({ code: 'over_budget', total: null, limit: null }, { token: TOKEN })).toContain('?')
+  })
+
+  it('errors', () => {
+    const community = { approverRoleId: TREASURER_ROLE, proposerRoleId: null }
+    const cases: [Record<string, unknown> & { code: string }, string][] = [
+      [{ code: 'policy_not_found' }, '/rolepay policy list'],
+      [{ code: 'policy_run_not_found' }, 'does not exist'],
+      [{ code: 'not_permitted' }, `<@&${TREASURER_ROLE}>`],
+      [{ code: 'policy_not_draft', status: 'active' }, 'is active'],
+      [{ code: 'version_mismatch', version: 3 }, 'version 3'],
+      [{ code: 'policy_blocked', problems: [] }, 'cannot be approved'],
+      [{ code: 'creator_cannot_approve' }, 'separate approver'],
+      [{ code: 'invalid_veto_window', min: 60, max: 10_080 }, 'between 60 minutes and 168 hours'],
+      [{ code: 'policy_not_approved' }, 'Approve the policy first'],
+      [{ code: 'policy_archived' }, 'archived'],
+      [{ code: 'policy_not_active', status: 'paused' }, 'it is paused'],
+      [{ code: 'policy_not_paused', status: 'active' }, 'not paused'],
+      [{ code: 'not_scheduled', status: 'vetoed' }, 'already vetoed'],
+      [{ code: 'not_scheduled', status: 'released' }, 'already released'],
+      [{ code: 'too_late', status: 'pending_approval' }, 'already pending approval'],
+      [{ code: 'already_run' }, 'already been made'],
+      [{ code: 'discord_not_configured' }, 'cannot read Discord activity'],
+      [{ code: 'ai_disabled' }, 'AI proposals are off'],
+    ]
+    for (const [error, says] of cases) expect([error.code, explainPolicyError(error, { community })]).toEqual([error.code, expect.stringContaining(says)])
+    expect(explainPolicyError({ code: 'not_permitted' })).toContain('the approver role')
+  })
+})

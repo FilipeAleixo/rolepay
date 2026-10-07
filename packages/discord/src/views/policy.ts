@@ -1,0 +1,211 @@
+import {
+  type Hold,
+  MAX_LINES_PER_RUN,
+  type Micros,
+  type Policy,
+  type PolicyPreview,
+  type PolicyRun,
+  type PolicySummary,
+  describeRule,
+  describeSchedule,
+} from '@rolepay/core'
+import { type ActionRow, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
+import { encodePolicyButton } from '../components/customId.js'
+import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, roleMention } from './format.js'
+
+export type PolicyViewContext = {
+  /** The community's payout token, for amounts. */
+  token: string
+  approverRoleId: string | null
+}
+
+const FIELD_MAX = 1024
+const SHOWN = 15
+const unix = (d: Date) => Math.floor(d.getTime() / 1000)
+const when = (d: Date) => `<t:${unix(d)}:f> (<t:${unix(d)}:R>)`
+
+/** Lines into one embed field, cut (with "...and N more") to Discord's 1024 characters. */
+function listField(lines: string[], more: number): string {
+  const out: string[] = []
+  let length = 0
+  for (const [i, line] of lines.entries()) {
+    const rest = lines.length - i + more
+    const tail = `…and ${rest} more`
+    if (length + line.length + 1 > FIELD_MAX - tail.length - 1) {
+      out.push(tail)
+      return out.join('\n')
+    }
+    out.push(line)
+    length += line.length + 1
+  }
+  if (more > 0) out.push(`…and ${more} more`)
+  return out.join('\n')
+}
+
+const cut = (text: string, max = FIELD_MAX) => (text.length > max ? `${text.slice(0, max - 1)}…` : text)
+
+const veto = (minutes: number) => (minutes % 60 === 0 ? count(minutes / 60, 'hour', 'hours') : count(minutes, 'minute', 'minutes'))
+
+/** Why a run would be (or was) held, in plain words with the numbers. */
+export function explainHold(hold: Pick<Hold, 'code' | 'total' | 'limit'>, ctx: { token: string; autopilotBy?: string | null }): string {
+  const m = (v: Micros | null) => (v === null ? '?' : money(v, ctx.token))
+  switch (hold.code) {
+    case 'over_budget':
+      return `The run would pay ${m(hold.total)}, more than the bot key has left (${m(hold.limit)}). Held whole: nothing was paid. Raise the key's limit on the setup page, or wait for its next period.`
+    case 'insufficient_limit':
+      return `The run pays ${m(hold.total)}, more than the bot key has left (${m(hold.limit)}). Nothing was paid; press Retry once the key has room.`
+    case 'over_policy_cap':
+      return `The run would pay ${m(hold.total)}, over this policy's cap of ${m(hold.limit)} per run. Held whole: nothing was paid.`
+    case 'too_many_lines':
+      return `More than ${MAX_LINES_PER_RUN} people matched, and one run pays at most ${MAX_LINES_PER_RUN}. Held: nothing was paid. Narrow the rule.`
+    case 'no_active_key':
+      return 'There is no active bot key, so nothing can be paid. Held: nothing was paid. Authorise a key on the setup page.'
+    case 'key_revoked':
+    case 'key_expired':
+    case 'key_expires_too_soon':
+    case 'key_not_authorized':
+      return 'The bot key cannot pay any more (revoked or expired). Nothing was paid. Authorise a new key on the setup page, then press Retry.'
+    case 'policy_not_active':
+      return 'The policy was paused or changed during the veto window, so autopilot did not approve this run. A treasurer can approve it by hand.'
+    case 'autopilot_off':
+      return 'Autopilot was switched off during the veto window, so this run waits for the normal approval.'
+    case 'policy_changed':
+      return 'The policy was edited after this run was made, so autopilot did not approve it. A treasurer can approve it by hand.'
+    case 'approver_changed':
+      return `${ctx.autopilotBy ? mention(ctx.autopilotBy) : 'The treasurer who switched autopilot on'} no longer holds the approver role (or the role changed), so autopilot did not approve this run. A treasurer can approve it by hand.`
+    case 'creator_cannot_approve':
+      return 'This server requires a separate approver, and the run would have been approved by its own author. A different treasurer approves it by hand.'
+    case 'cannot_read':
+      return 'Rolepay could not read a channel the rule counts in (the bot needs View Channel and Read Message History there). Nothing was paid.'
+    default:
+      return `Held (${hold.code}). Nothing was paid.`
+  }
+}
+
+const PROBLEM_WORDS: Record<string, string> = {
+  amount_not_in_instruction: 'An amount in the rule is not stated in your instruction, so it cannot be approved. Rewrite the instruction with the amounts.',
+  scan_truncated: 'Rolepay reads at most 10,000 messages per run, so some counts may be low.',
+  too_many_lines: `More than ${MAX_LINES_PER_RUN} people would be paid: the run would be held (one run pays at most ${MAX_LINES_PER_RUN}).`,
+  over_policy_cap: "Over this policy's cap per run: the run would be held whole.",
+  no_active_key: 'No active bot key: the run would be held.',
+  over_budget: 'More than the bot key has left: the run would be held whole, never paid in part.',
+}
+
+function statusLine(p: Policy, ctx: PolicyViewContext): string {
+  const approver = ctx.approverRoleId ? `a member with ${roleMention(ctx.approverRoleId)}` : 'an approver (no approver role is set yet)'
+  switch (p.status) {
+    case 'draft':
+      return `Draft, version ${p.version}. Waiting for ${approver} to approve.`
+    case 'active':
+      return `Active. Approved by ${p.approvedBy ? mention(p.approvedBy) : 'a treasurer'}${p.approvedAt ? ` <t:${unix(p.approvedAt)}:R>` : ''}, version ${p.version}.`
+    case 'paused':
+      return `Paused, version ${p.version}. An approver resumes it with \`/rolepay policy resume\`.`
+    case 'archived':
+      return 'Archived. It never runs again.'
+  }
+}
+
+const TITLES: Record<Policy['status'], string> = { draft: 'Policy draft', active: 'Policy', paused: 'Policy paused', archived: 'Policy archived' }
+
+/**
+ * A policy: the rule in plain words (and the original instruction), the schedule, the mode and,
+ * with a preview, who it applies to right now. A draft carries Approve and Discard, for the version shown.
+ */
+export function policyMessage(p: Policy, ctx: PolicyViewContext & { preview?: PolicyPreview | null; previewProblem?: string; nextRunAt?: Date | null }): Message {
+  const rule = ctx.preview?.rule ?? describeRule(p.compiled, { schedule: p.schedule, caps: p.caps, guildId: p.communityId })
+  const fields: NonNullable<Embed['fields']> = [{ name: 'Instruction', value: cut(`> ${escapeMarkdown(p.instruction)}`) }]
+  const next = ctx.preview?.nextRunAt ?? ctx.nextRunAt ?? null
+  fields.push({ name: 'Schedule', value: `${describeSchedule(p.schedule)}.${next && p.status !== 'archived' && p.status !== 'paused' ? ` ${p.status === 'draft' ? 'First run after approval' : 'Next run'}: ${when(next)}.` : ''}` })
+  fields.push({
+    name: 'Mode',
+    value:
+      p.mode === 'autopilot' && p.autopilot
+        ? `Autopilot: each run pays ${veto(p.vetoWindowMinutes)} after it is posted unless vetoed, approved in the name of ${mention(p.autopilot.enabledBy)}.`
+        : 'Propose: each run waits for the one-tap approval.',
+  })
+  const pv = ctx.preview
+  if (pv) {
+    const payable = pv.matches.filter((m) => m.registered && m.amount !== null && m.amount > 0n)
+    const shown = payable.slice(0, SHOWN).map((m) => `${mention(m.discordUserId)}  ${money(m.amount as Micros, ctx.token)}${m.capped ? ' (capped)' : ''}  ·  ${m.reasonText}`)
+    fields.push({ name: 'Who it applies to right now', value: shown.length ? listField(shown, payable.length - shown.length) : 'Nobody matches yet in this period.' })
+    const unregistered = pv.matches.filter((m) => !m.registered)
+    if (unregistered.length) {
+      fields.push({ name: 'Matches, not registered', value: cut(`${unregistered.slice(0, 20).map((m) => mention(m.discordUserId)).join(' ')}${unregistered.length > 20 ? ` …and ${unregistered.length - 20} more` : ''}. They run \`/payee link\` to be paid.`) })
+    }
+    if (pv.nearMisses.length) fields.push({ name: 'Just below the line', value: listField(pv.nearMisses.map((n) => `${mention(n.userId)}  ${n.text}`), 0) })
+    const left = pv.remaining === null ? 'There is no active bot key.' : `The bot key has ${money(pv.remaining, ctx.token)} left.`
+    fields.push({ name: 'The next run so far', value: `${money(pv.total, ctx.token)} for ${count(payable.length, 'person', 'people')} so far, counting since <t:${unix(pv.window.start)}:f>. ${left}` })
+    if (pv.problems.length) fields.push({ name: 'Look first', value: cut(pv.problems.map((x) => `• ${PROBLEM_WORDS[x] ?? x}`).join('\n')) })
+  } else if (ctx.previewProblem) fields.push({ name: 'Who it applies to right now', value: cut(ctx.previewProblem) })
+  if (p.compiled.assumptions.length) fields.push({ name: 'The AI assumed', value: cut(p.compiled.assumptions.map((a) => `• ${escapeMarkdown(a)}`).join('\n')) })
+  fields.push({ name: 'Status', value: statusLine(p, ctx) })
+  const embed: Embed = {
+    title: cut(`${TITLES[p.status]}: ${p.name}`, 256),
+    color: p.status === 'active' ? COLORS.paid : p.status === 'draft' ? COLORS.pending : COLORS.muted,
+    description: cut(rule.join('\n'), 4096),
+    fields: fields.slice(0, 25),
+    footer: { text: `Policy ${p.id} · version ${p.version}` },
+  }
+  const components: ActionRow[] =
+    p.status === 'draft'
+      ? [
+          {
+            type: ComponentType.ActionRow,
+            components: [
+              { type: ComponentType.Button, style: ButtonStyle.Success, label: 'Approve policy', custom_id: encodePolicyButton('approve', p.id, p.version) },
+              { type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Discard', custom_id: encodePolicyButton('discard', p.id, p.version) },
+            ],
+          },
+        ]
+      : []
+  return { embeds: [embed], components, allowed_mentions: NO_PINGS }
+}
+
+/** A draft that was discarded (and, for an edit, which approved version is back). */
+export function policyDiscardedMessage(p: Policy, by: string): Message {
+  const back = p.status === 'paused' ? ` Version ${p.version} is back, paused.` : ''
+  return { embeds: [{ title: cut(`Discarded: ${p.name}`, 256), color: COLORS.muted, description: `Discarded by ${mention(by)}.${back}`, footer: { text: `Policy ${p.id}` } }], components: [], allowed_mentions: NO_PINGS }
+}
+
+/** /rolepay policy list. */
+export function policyListMessage(items: readonly PolicySummary[]): Message {
+  if (items.length === 0) return { content: 'No policies yet. Write one with `/rolepay policy new`.', allowed_mentions: NO_PINGS }
+  const lines = items.slice(0, 20).map(({ policy: p, nextRunAt }) => {
+    const next = nextRunAt ? `, next run <t:${unix(nextRunAt)}:R>` : ''
+    return `**${escapeMarkdown(p.name)}** \`${p.id}\`: ${p.status}, ${p.mode}${next}\n${describeSchedule(p.schedule)}`
+  })
+  return { embeds: [{ title: 'Policies', color: COLORS.working, description: cut(lines.join('\n\n'), 4096), footer: { text: '/rolepay policy show for one in detail' } }], allowed_mentions: NO_PINGS }
+}
+
+/** The public line for a governance change (pause, resume, mode), so everyone in the channel sees it. */
+export function policyChangedMessage(p: Policy, change: 'paused' | 'resumed' | 'mode', by: string, ctx: PolicyViewContext): Message {
+  const name = `**${escapeMarkdown(p.name)}**`
+  const who = ctx.approverRoleId ? `a member with ${roleMention(ctx.approverRoleId)}` : 'an approver'
+  const content =
+    change === 'paused'
+      ? `Policy ${name} paused by ${mention(by)}. It makes no runs until it is resumed.`
+      : change === 'resumed'
+        ? `Policy ${name} resumed by ${mention(by)}. Periods it missed are not run.`
+        : p.mode === 'autopilot'
+          ? `Autopilot is on for ${name}, switched on by ${mention(by)}: each run pays ${veto(p.vetoWindowMinutes)} after it is posted unless ${who} vetoes it, within the bot key's limit.`
+          : `${name} is back to propose, set by ${mention(by)}: each run waits for the one-tap approval.`
+  return { content, allowed_mentions: NO_PINGS }
+}
+
+/** A policy run that made no pay run: held whole (with why) or nobody matched. */
+export function policyRunNoticeMessage(p: Policy, pr: PolicyRun, ctx: PolicyViewContext): Message {
+  const period = `the period to <t:${unix(pr.periodEnd)}:f>`
+  if (pr.status === 'empty') {
+    return { content: `**${escapeMarkdown(p.name)}**: nobody matched for ${period}, so there is no run this time.`, allowed_mentions: NO_PINGS }
+  }
+  const fields: NonNullable<Embed['fields']> = []
+  if (pr.hold) fields.push({ name: 'Why', value: explainHold(pr.hold, { token: ctx.token, autopilotBy: p.autopilot?.enabledBy ?? null }) })
+  if (pr.lines.length) {
+    const shown = pr.lines.slice(0, SHOWN).map((l) => `${mention(l.discordUserId)}  ${money(l.amount, ctx.token)}`)
+    fields.push({ name: `Would have paid ${money(pr.total, ctx.token)} to ${count(pr.lines.length, 'person', 'people')}`, value: listField(shown, pr.lines.length - shown.length) })
+  }
+  return {
+    embeds: [{ title: cut(`Held: ${p.name}`, 256), color: COLORS.failed, description: `Policy run for ${period}. Nothing was paid.`, fields, footer: { text: `Policy ${p.id} · version ${pr.policyVersion} · ${pr.id}` } }],
+    allowed_mentions: NO_PINGS,
+  }
+}

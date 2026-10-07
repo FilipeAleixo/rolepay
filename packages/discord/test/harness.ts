@@ -30,6 +30,8 @@ export async function harness(opts: { proposer?: FakeRunProposer | null } = {}) 
     network: 'moderato',
     proposer,
     activity: new RestActivityReader(rest),
+    // As the server runs with the testnet dev shortcuts on: veto windows down to a minute.
+    minVetoMinutes: 1,
   })
   const queue = new RecordingQueue()
   /** Moves the service clock and chain time together, as real waiting would. */

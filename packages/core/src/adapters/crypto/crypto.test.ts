@@ -65,6 +65,12 @@ describe('RandomIds', () => {
     expect(ids.runId()).not.toBe(a)
   })
 
+  it('makes distinct policy and policy run IDs that fit a button ID', () => {
+    expect(ids.policyId()).toMatch(/^pol_[0-9a-z]{16}$/)
+    expect(ids.policyRunId()).toMatch(/^prun_[0-9a-z]{16}$/)
+    expect(ids.policyId()).not.toBe(ids.policyId())
+  })
+
   it('makes URL-safe link tokens with 256 bits of entropy', () => {
     const t = ids.linkToken()
     expect(t).toMatch(/^[A-Za-z0-9_-]{43}$/)

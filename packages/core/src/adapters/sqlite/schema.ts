@@ -1,3 +1,5 @@
+import type { Generated } from 'kysely'
+
 /**
  * Table shapes. Portable on purpose: TEXT for money (exact decimal micro-units, maps to
  * Postgres NUMERIC), TEXT ISO-8601 for timestamps, TEXT JSON for small nested values.
@@ -96,6 +98,88 @@ export interface SetupLinksTable {
   expires_at: string
 }
 
+export interface PoliciesTable {
+  id: string
+  community_id: string
+  name: string
+  instruction: string
+  compiled: string
+  schedule: string
+  caps: string
+  channel_id: string | null
+  status: string
+  version: number
+  mode: string
+  veto_window_minutes: number
+  autopilot: string | null
+  created_by: string
+  created_at: string
+  updated_at: string
+  approved_by: string | null
+  approved_at: string | null
+  active_since: string | null
+  rev: number
+}
+
+export interface PolicyVersionsTable {
+  policy_id: string
+  version: number
+  community_id: string
+  name: string
+  instruction: string
+  compiled: string
+  schedule: string
+  caps: string
+  authored_by: string
+  authored_at: string
+  approved_by: string | null
+  approved_at: string | null
+  discarded_by: string | null
+  discarded_at: string | null
+}
+
+export interface PolicyRunsTable {
+  id: string
+  policy_id: string
+  policy_version: number
+  community_id: string
+  period_key: string
+  period_start: string
+  period_end: string
+  mode: string
+  status: string
+  run_id: string | null
+  execute_after: string | null
+  lines: string
+  unregistered: string
+  total: string
+  remaining: string | null
+  problems: string
+  hold: string | null
+  vetoed_by: string | null
+  vetoed_at: string | null
+  released_by: string | null
+  released_at: string | null
+  lease_until: string | null
+  created_at: string
+  updated_at: string
+  rev: number
+}
+
+export interface AuditEventsTable {
+  /** Assigned by the database on insert. */
+  seq: Generated<number>
+  community_id: string
+  at: string
+  type: string
+  actor: string | null
+  policy_id: string | null
+  policy_version: number | null
+  policy_run_id: string | null
+  run_id: string | null
+  details: string
+}
+
 export interface Database {
   kv: KvTable
   setup_links: SetupLinksTable
@@ -105,4 +189,8 @@ export interface Database {
   link_tokens: LinkTokensTable
   runs: RunsTable
   run_lines: RunLinesTable
+  policies: PoliciesTable
+  policy_versions: PolicyVersionsTable
+  policy_runs: PolicyRunsTable
+  audit_events: AuditEventsTable
 }

@@ -1,6 +1,6 @@
 import type { Failure, NetworkName, Run, RunLine } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
-import { type RunAction, encodeCustomId } from '../components/customId.js'
+import { type RunAction, encodeCustomId, encodeVetoButton } from '../components/customId.js'
 import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention, shortAddress, txUrl } from './format.js'
 
 export type RunViewContext = {
@@ -23,6 +23,13 @@ export type RunViewContext = {
    * (`/rolepay status run:`): a public message shows the reason code alone (L2).
    */
   showDetail?: boolean
+  /** The run was made by a standing policy: which one, which version, for which period. */
+  policy?: { name: string; version: number; periodStart: Date; periodEnd: Date }
+  /**
+   * An autopilot run: while it waits it shows when it pays and a Veto button (instead of Approve);
+   * `vetoedBy` once vetoed; `stopped` when autopilot did not approve it (it waits for a person).
+   */
+  autopilot?: { policyRunId: string; executeAfter: Date; vetoedBy?: string | null; stopped?: string }
 }
 
 /**
@@ -42,6 +49,11 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
     if (run.status === 'approved') fields.push({ name: 'Not paid yet', value: ctx.problem })
     if (run.status === 'failed') fields.push({ name: 'Note', value: ctx.problem })
   }
+  if (ctx.policy) {
+    const p = ctx.policy
+    fields.push({ name: 'Policy', value: `**${escapeMarkdown(p.name)}** (version ${p.version}), for <t:${unix(p.periodStart)}:f> to <t:${unix(p.periodEnd)}:f>` })
+  }
+  if (ctx.autopilot?.stopped && !ctx.paying) fields.push({ name: 'Autopilot stopped', value: ctx.autopilot.stopped })
   if (ctx.receipts && run.status === 'paid') fields.push({ name: 'Receipts', value: receiptsText(ctx.receipts) })
   if (ctx.stillConfirming && run.status === 'executing') {
     fields.push({ name: 'Confirming', value: 'The transaction is out but not confirmed yet. Rolepay keeps checking; /rolepay status shows the result.' })
@@ -104,6 +116,13 @@ export function explainFailure(failure: Failure, opts: { showDetail?: boolean } 
 function header(run: Run, ctx: RunViewContext): { title: string; color: number; status: string } {
   const approvedBy = run.approvedBy ? mention(run.approvedBy) : 'the treasurer'
   if (ctx.paying && run.status !== 'paid') return { title: 'Approved, paying…', color: COLORS.working, status: `Approved by ${approvedBy}. Paying…` }
+  const auto = ctx.autopilot
+  if (auto && !auto.stopped && run.status === 'pending_approval') {
+    const at = unix(auto.executeAfter)
+    const who = ctx.approverRoleId ? `a member with ${roleMention(ctx.approverRoleId)}` : 'an approver'
+    return { title: `Autopilot: pays <t:${at}:t> unless vetoed`, color: COLORS.pending, status: `Pays <t:${at}:f> (<t:${at}:R>) unless ${who} vetoes it.` }
+  }
+  if (auto?.vetoedBy && run.status === 'cancelled') return { title: 'Vetoed', color: COLORS.muted, status: `Vetoed by ${mention(auto.vetoedBy)}. The run was cancelled before it paid anything.` }
   switch (run.status) {
     case 'draft':
     case 'pending_approval':
@@ -133,6 +152,9 @@ function header(run: Run, ctx: RunViewContext): { title: string; color: number; 
 function buttonsFor(run: Run, ctx: RunViewContext): Button[] {
   const action = (a: RunAction, label: string, style: 1 | 3 | 4): Button => ({ type: ComponentType.Button, style, label, custom_id: encodeCustomId(a, run.id) })
   if (ctx.paying && run.status !== 'paid') return []
+  if (ctx.autopilot && !ctx.autopilot.stopped && run.status === 'pending_approval') {
+    return [{ type: ComponentType.Button, style: ButtonStyle.Danger, label: 'Veto', custom_id: encodeVetoButton(ctx.autopilot.policyRunId) }]
+  }
   switch (run.status) {
     case 'draft':
     case 'pending_approval':
@@ -154,6 +176,8 @@ function receiptsText(r: NonNullable<RunViewContext['receipts']>): string {
   const missed = r.total - r.sent
   return `Sent by DM to ${r.sent} of ${count(r.total, 'person', 'people')} (${missed} ${missed === 1 ? 'does' : 'do'} not accept DMs from this server).`
 }
+
+const unix = (d: Date) => Math.floor(d.getTime() / 1000)
 
 const rows = (buttons: Button[]): ActionRow[] => (buttons.length ? [{ type: ComponentType.ActionRow, components: buttons }] : [])
 

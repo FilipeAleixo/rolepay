@@ -1,5 +1,5 @@
 import type { Clock, NetworkName, Rolepay } from '@rolepay/core'
-import type { DiscordRest, ExecutionQueue, MemberDirectory, PendingSources } from '../ports.js'
+import type { DiscordRest, ExecutionQueue, MemberDirectory, PendingSources, PolicyAnnouncer } from '../ports.js'
 
 /** Operational settings for the Discord layer (the server builds these from env). */
 export type DiscordAppConfig = {
@@ -36,5 +36,7 @@ export type DiscordAppDeps = {
   pendingSources: PendingSources
   clock: Clock
   config: DiscordAppConfig
+  /** Posts what the policy scheduler did (used by the dev shortcut that makes a run now). */
+  announcer?: PolicyAnnouncer
   onError?: (error: unknown) => void
 }

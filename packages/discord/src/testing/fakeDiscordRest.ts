@@ -27,7 +27,7 @@ export class FakeDiscordRest implements DiscordRest {
   readonly edits: { reply: ReplyHandle; message: Message }[] = []
   readonly deletes: ReplyHandle[] = []
   readonly followUps: { reply: ReplyHandle; message: Message }[] = []
-  readonly channelPosts: { channelId: string; message: Message }[] = []
+  readonly channelPosts: { channelId: string; message: Message; messageId?: string }[] = []
   readonly channelEdits: { channelId: string; messageId: string; message: Message }[] = []
   readonly goneMessages = new Set<string>()
   readonly guilds = new Map<string, string>()
@@ -88,6 +88,13 @@ export class FakeDiscordRest implements DiscordRest {
   async postToChannel(channelId: string, message: Message): Promise<RestResult> {
     this.channelPosts.push({ channelId, message })
     return OK
+  }
+
+  private posted = 0
+  async postMessage(channelId: string, message: Message) {
+    const messageId = `9${String(++this.posted).padStart(17, '0')}`
+    this.channelPosts.push({ channelId, message, messageId })
+    return { ok: true as const, value: { messageId } }
   }
 
   async editChannelMessage(channelId: string, messageId: string, message: Message): Promise<RestResult> {

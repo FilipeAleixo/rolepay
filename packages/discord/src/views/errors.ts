@@ -122,3 +122,44 @@ export function explainError(error: CodedError, ctx: { token?: string } = {}): s
       return `Something went wrong (${error.code}). Try again in a moment.`
   }
 }
+
+/** Policy errors in plain English, then the proposal and general ones (compiling uses criteria mode). */
+export function explainPolicyError(error: CodedError, ctx: { token?: string; community?: Pick<Community, 'approverRoleId' | 'proposerRoleId'> } = {}): string {
+  const approver = ctx.community?.approverRoleId ? `members with ${roleMention(ctx.community.approverRoleId)}` : 'the approver role'
+  switch (error.code) {
+    case 'policy_not_found':
+      return 'There is no policy with that ID in this server. `/rolepay policy list` shows them.'
+    case 'policy_run_not_found':
+      return 'That policy run does not exist in this server.'
+    case 'not_permitted':
+      return `Only ${approver} can approve, pause, resume, switch modes or veto policies.`
+    case 'policy_not_draft':
+      return `This policy is ${String(error.status)}, not a draft waiting for approval.`
+    case 'version_mismatch':
+      return `This preview is out of date: the policy is now at version ${String(error.version)}. Run \`/rolepay policy show\` and approve that one.`
+    case 'policy_blocked':
+      return 'This rule uses an amount your instruction does not state, so it cannot be approved. Write the policy again with the amounts in the instruction.'
+    case 'creator_cannot_approve':
+      return 'This server requires a separate approver: someone other than the author of the rule approves it or switches its autopilot on.'
+    case 'invalid_veto_window':
+      return `The veto window must be between ${String(error.min)} minutes and ${Number(error.max) / 60} hours.`
+    case 'policy_not_approved':
+      return 'Approve the policy first; autopilot is switched on for an approved policy.'
+    case 'policy_archived':
+      return 'This policy is archived. It never runs again.'
+    case 'policy_not_active':
+      return `This policy is not active${error.status ? ` (it is ${String(error.status)})` : ''}.`
+    case 'policy_not_paused':
+      return `This policy is not paused (it is ${String(error.status)}).`
+    case 'not_scheduled':
+      return error.status === 'vetoed' ? 'This run was already vetoed.' : `Too late to veto: this run is already ${String(error.status)}.`
+    case 'too_late':
+      return `Too late to veto: the run is already ${String(error.status).replace('_', ' ')}.`
+    case 'already_run':
+      return "This policy's next run has already been made."
+    case 'discord_not_configured':
+      return 'This Rolepay server cannot read Discord activity, so it cannot show who a policy applies to.'
+    default:
+      return explainProposalError(error, ctx)
+  }
+}
