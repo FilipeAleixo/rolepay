@@ -3,6 +3,7 @@ import { AI_PROPOSAL_FRAMES, AiProposal } from './AiProposal'
 import { ARCHITECTURE_FRAMES, Architecture } from './Architecture'
 import { END_CARD_FRAMES, EndCard } from './EndCard'
 import { FOUR_BEATS_FRAMES, FourBeats } from './FourBeats'
+import { FUNDING_FRAMES, Funding } from './Funding'
 import { NEVER_PAY_TWICE_FRAMES, NeverPayTwice } from './NeverPayTwice'
 import { NUMBERS_FRAMES, Numbers } from './Numbers'
 import { OWN_BUDGETS_FRAMES, OwnBudgets } from './OwnBudgets'
@@ -25,6 +26,7 @@ export const SCENES = {
   numbers: { id: 'Numbers', component: Numbers, frames: NUMBERS_FRAMES },
   architecture: { id: 'Architecture', component: Architecture, frames: ARCHITECTURE_FRAMES },
   whyTempo: { id: 'WhyTempo', component: WhyTempo, frames: WHY_TEMPO_FRAMES },
+  funding: { id: 'Funding', component: Funding, frames: FUNDING_FRAMES },
   endCard: { id: 'EndCard', component: EndCard, frames: END_CARD_FRAMES },
 } as const satisfies Record<string, { id: string; component: React.FC; frames: number }>
 
