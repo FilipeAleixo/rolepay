@@ -5,8 +5,9 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
     exclude: ['**/*.chain.test.ts', '**/node_modules/**'],
-    // `pnpm test:coverage` (CI): every source file counts, tested or not. The thresholds sit a little
-    // below the current numbers, so a change that drops coverage fails the build.
+    // `pnpm test:coverage` (CI): every source file counts, tested or not. The thresholds are a floor:
+    // coverage below them fails the build. They were set just below the numbers of the day and the
+    // numbers have risen since (about 85% lines and 84% branches), so here they sit well below.
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

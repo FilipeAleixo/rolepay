@@ -49,8 +49,9 @@ export type ServerDeps = {
 }
 
 /**
- * Budgets for the public page endpoints (/webauthn, /claim, /setup POSTs): a person clicking
- * through the pages uses a handful; a loop filling the database with challenge rows does not
+ * Budgets for the public page endpoints (POSTs to /webauthn, /claim, /setup and /dashboard, and
+ * every request under /auth/: `rateLimitGroup` in @rolepay/web): a person clicking through the
+ * pages uses a handful; a loop filling the database with challenge rows does not
  * get far. Per client a burst of 30 then one every 2 seconds; per endpoint group 300 then 5 a
  * second, whatever client the requests claim to come from.
  */
