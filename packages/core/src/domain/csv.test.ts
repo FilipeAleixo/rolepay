@@ -64,6 +64,14 @@ describe('runToCsv', () => {
     expect(rows[3]).toBe('')
   })
 
+  it('a large amount stays machine-readable: no thousands separators (those are for display only)', () => {
+    const r = newRun({ ...paidRunInput(), id: 'run_csv3', lines: [{ ...paidRunInput().lines[0], amount: 999_995_000_000n } as ReturnType<typeof paidRunInput>['lines'][number]] })
+    if (!r.ok) throw new Error('fixture')
+    const csv = runToCsv(r.value, { explorerTxUrl })
+    expect(csv.split('\r\n')[1]?.split(',')[4]).toBe('999995.000000')
+    expect(csv).not.toContain('999,995')
+  })
+
   it('leaves chain columns empty for an unpaid run', () => {
     const r = newRun({ ...paidRunInput(), id: 'run_csv2' })
     if (!r.ok) throw new Error('fixture')

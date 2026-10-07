@@ -128,6 +128,20 @@ describe('the account page (browser code)', () => {
     expect(prompted).toBe(false)
   })
 
+  it('a large balance reads with thousands grouped; Max still fills the field with plain digits, which send reads back', async () => {
+    h.balances = new Map([[ALPHA, 999_995_000_000n]])
+    page('https://sponsor.moderato.tempo.xyz')
+    await vi.waitFor(() => expect((ids.balances as El).children).toHaveLength(1))
+    expect((ids.balances as El).text).toBe('999,995 AlphaUSD')
+    ;(ids.max as El).fire('click')
+    expect((ids.amount as El).value).toBe('999995')
+    type('to', TO)
+    expect((fields['send-says'] as El).textContent).toBe(`You will send 999,995 AlphaUSD to ${TO}.`)
+    await send()
+    expect(h.sent).toMatchObject([{ amount: 999_995_000_000n }])
+    expect(status()).toBe(`Sent 999,995 AlphaUSD to ${TO}. Transaction: https://explore.tempo.xyz/tx/0xfeed`)
+  })
+
   it('otherwise signs in with the passkey first', async () => {
     h.account = null
     page(null)

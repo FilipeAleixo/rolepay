@@ -54,12 +54,22 @@ export async function get<T>(path: string): Promise<ApiResult<T>> {
 
 export const shortAddress = (a: string) => `${a.slice(0, 6)}...${a.slice(-4)}`
 
-/** 6-decimal micro-units (as a decimal string) to "12.5". */
+/** 6-decimal micro-units (as a decimal string) to "12.5": plain digits, for a field that is read back. */
 export function formatMicros(micros: string): string {
   const v = BigInt(micros)
   const whole = v / 1_000_000n
   const frac = (v % 1_000_000n).toString().padStart(6, '0').replace(/0+$/, '')
   return frac ? `${whole}.${frac}` : `${whole}`
+}
+
+/**
+ * The same for reading, thousands grouped: "999,995", "1,234,567.89" (core's displayAmount; the
+ * browser bundle cannot import core). Never put it in a field: the send form refuses commas.
+ */
+export function displayMicros(micros: string): string {
+  const [whole = '0', frac] = formatMicros(micros).split('.')
+  const grouped = whole.replace(/\B(?=(\d{3})+$)/g, ',')
+  return frac ? `${grouped}.${frac}` : grouped
 }
 
 /** A passkey prompt the person closed, or any other failure, in plain English. */

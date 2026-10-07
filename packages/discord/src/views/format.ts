@@ -1,11 +1,11 @@
-import { NETWORKS, type NetworkName, TOKEN_SYMBOLS, formatAmount } from '@rolepay/core'
+import { NETWORKS, type NetworkName, TOKEN_SYMBOLS, displayAmount } from '@rolepay/core'
 
 export const shortAddress = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`
 
 export const tokenLabel = (token: string) => TOKEN_SYMBOLS[token.toLowerCase()] ?? shortAddress(token)
 
-/** Money for people: bigint micro-units in, "1.5 AlphaUSD" out. */
-export const money = (micros: bigint, token: string) => `${formatAmount(micros)} ${tokenLabel(token)}`
+/** Money for people: bigint micro-units in, "1.5 AlphaUSD" or "999,995 AlphaUSD" out (display only, never parsed back). */
+export const money = (micros: bigint, token: string) => `${displayAmount(micros)} ${tokenLabel(token)}`
 
 /** A count with its noun: "1 person", "3 people", "0 people". */
 export const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`

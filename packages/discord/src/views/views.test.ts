@@ -27,6 +27,17 @@ describe('format', () => {
     expect(money(1n, '0x20c0000000000000000000000000000000000001')).toBe('0.000001 AlphaUSD')
   })
 
+  it('groups thousands with commas for people to read ("999,995 AlphaUSD"), in every embed that shows money', () => {
+    expect(money(999_995_000_000n, TOKEN)).toBe('999,995 AlphaUSD')
+    expect(money(1_234_567_890_000n, TOKEN)).toBe('1,234,567.89 AlphaUSD')
+    expect(money(0n, TOKEN)).toBe('0 AlphaUSD')
+    const big = { ...run(), lines: run().lines.map((l) => ({ ...l, amount: 999_995_000_000n })), total: 1_999_990_000_000n }
+    const shown = text(runMessage(big, ctx))
+    expect(shown).toContain('999,995 AlphaUSD')
+    expect(shown).toContain('1,999,990 AlphaUSD')
+    expect(shown).not.toMatch(/\b999995\b/)
+  })
+
   it('counts in the singular for exactly one, the plural otherwise', () => {
     expect(count(1, 'person', 'people')).toBe('1 person')
     expect(count(3, 'person', 'people')).toBe('3 people')

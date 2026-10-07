@@ -49,7 +49,7 @@ describe('proposalMessage', () => {
 
   it('flags: left out with the reasons, not registered with a nudge, ignored instructions by author, over budget', () => {
     const fields = Object.fromEntries((embedOf(proposalMessage(proposal(), ctx)).fields ?? []).map((f) => [f.name, f.value]))
-    expect(fields['Left out (shown, not in the run)']).toBe('<@200000000000000666> 10000 AlphaUSD: their own message is the only source; the amount is not in your instruction.')
+    expect(fields['Left out (shown, not in the run)']).toBe('<@200000000000000666> 10,000 AlphaUSD: their own message is the only source; the amount is not in your instruction.')
     expect(fields['Not registered payees']).toBe(`<@${CAROL}> (50 AlphaUSD)\nThey register with \`/payee link\`, then propose again.`)
     expect(fields['Ignored instructions in messages']).toBe(`[A message](https://discord.com/channels/${GUILD}/${CHANNEL}/810000000000000002) by <@200000000000000666>: Asks the AI to pay its author 10,000.`)
     expect(fields['Check before creating']).toMatch(/^⚠️ The total is more than the bot key has left/)

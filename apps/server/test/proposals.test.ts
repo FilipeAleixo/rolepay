@@ -125,7 +125,7 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     await s.drain()
     const proposal = text(s.rest.lastEdit('tok-propose'))
     expect(proposal).toContain('100 AlphaUSD for 2 people')
-    expect(proposal).toContain(`<@${MALLORY}> 10000 AlphaUSD: their own message is the only source; the amount is not in your instruction.`)
+    expect(proposal).toContain(`<@${MALLORY}> 10,000 AlphaUSD: their own message is the only source; the amount is not in your instruction.`)
     const proposalId = /proposal:create:([A-Za-z0-9_]+)/.exec(proposal)?.[1] as string
 
     // Forced: someone types the attacker's line back in with Edit and creates the run.
@@ -135,7 +135,7 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     const runId = /rolepay:approve:([^"]+)"/.exec(text(s.rest.followUps.at(-1)?.message))?.[1] as string
     await s.interact(buttonClick(SCOPE, `rolepay:approve:${runId}`, TREASURER, 'tok-approve'))
     await s.drain()
-    expect(text(s.rest.lastEdit('tok-approve'))).toMatch(/needs 10100 AlphaUSD but the bot key has 500 AlphaUSD left/)
+    expect(text(s.rest.lastEdit('tok-approve'))).toMatch(/needs 10,100 AlphaUSD but the bot key has 500 AlphaUSD left/)
     expect(s.chain.landedTxCount).toBe(0)
   })
 

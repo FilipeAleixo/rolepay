@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GUILD, MEMBER, ROLE, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
+import { GUILD, MEMBER, ROLE, TOKEN, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
 
 const ALICE = { id: '200000000000000011', address: '0x1111111111111111111111111111111111111111' }
 const BOB = { id: '200000000000000012', address: '0x2222222222222222222222222222222222222222' }
@@ -168,6 +168,25 @@ describe('Runs', () => {
     expect(first).toContain('page=2')
     const second = await (await browser.get(`/dashboard/${GUILD}/runs?page=2`)).text()
     expect(second.match(/href="\/dashboard\/\d+\/runs\/run_/g)?.length).toBe(2)
+  })
+})
+
+describe('money on the dashboard reads with thousands grouped', () => {
+  it('the treasury balance, a run\'s total and its lines: "999,995 AlphaUSD", while the CSV stays plain digits', async () => {
+    const h = await seeded()
+    await h.activeKey(usd('2000'))
+    h.chain.fund(TOKEN, TREASURY, usd('998995')) // 1,000 from the harness: 999,995 in all
+    const run = await h.run([[ALICE.id, '1500'], [BOB.id, '0.5']], { pay: false })
+    const { browser } = await h.signIn(identity(MEMBER))
+    const overview = text(await (await browser.get(`/dashboard/${GUILD}`)).text())
+    expect(overview).toContain('999,995 AlphaUSD')
+    expect(overview).not.toMatch(/\b999995\b/)
+    const detail = text(await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text())
+    expect(detail).toContain('1,500 AlphaUSD')
+    expect(detail).toContain('1,500.5 AlphaUSD')
+    const csv = await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}/csv`)).text()
+    expect(csv).toContain('1500.000000')
+    expect(csv).not.toContain('1,500')
   })
 })
 

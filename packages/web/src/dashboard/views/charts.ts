@@ -1,4 +1,4 @@
-import { type KeyStatusView, formatAmount } from '@rolepay/core'
+import { type KeyStatusView, displayAmount } from '@rolepay/core'
 import type { PaidByWeekView, PaidWeekView } from '../policyPort.js'
 import { day, esc, money, row, table, tokenLabel, when } from './format.js'
 import type { ChainRead } from './overview.js'
@@ -18,7 +18,8 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 const weekLabel = (d: Date) => `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`
 /** A drawing coordinate, to two decimals. */
 const px = (n: number) => Math.round(n * 100) / 100
-const amount = (m: bigint) => formatAmount(m)
+/** Money for reading, thousands grouped ("999,995"). */
+const amount = (m: bigint) => displayAmount(m)
 
 const part = (body: string) => `<div class="glance-part">${body}</div>`
 const notice = (tone: '' | 'warn' | 'bad', body: string) => `<p class="notice${tone ? ` ${tone}` : ''}">${body}</p>`
@@ -113,9 +114,9 @@ function niceCeiling(peak: bigint): bigint {
 
 /** A scale tick: "250", "12.5K", "2M" (whole tokens; large ones compact). */
 function compact(v: bigint): string {
-  if (v >= 10_000_000_000_000n) return `${formatAmount(v / 1_000_000n)}M`
-  if (v >= 10_000_000_000n) return `${formatAmount(v / 1_000n)}K`
-  return formatAmount(v)
+  if (v >= 10_000_000_000_000n) return `${displayAmount(v / 1_000_000n)}M`
+  if (v >= 10_000_000_000n) return `${displayAmount(v / 1_000n)}K`
+  return displayAmount(v)
 }
 
 const runsWord = (n: number) => `${n} ${n === 1 ? 'run' : 'runs'}`
