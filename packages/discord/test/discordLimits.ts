@@ -64,10 +64,16 @@ const TextInput = z.strictObject({
   value: z.string().max(4000).optional(),
   placeholder: z.string().max(100).optional(),
 })
+/** Markdown text above a modal's inputs (Components: Text Display, allowed in messages and modals). */
+const TextDisplay = z.strictObject({ type: z.literal(10), content: z.string().min(1).max(4000) })
 const Modal = z.strictObject({
   custom_id: CustomId,
   title: z.string().min(1).max(45),
-  components: z.array(z.strictObject({ type: z.literal(1), components: z.tuple([TextInput]) })).min(1).max(5),
+  components: z
+    .array(z.union([z.strictObject({ type: z.literal(1), components: z.tuple([TextInput]) }), TextDisplay]))
+    .min(1)
+    .max(5)
+    .refine((cs) => cs.some((c) => c.type === 1), 'a modal needs at least one input'),
 })
 const Choices = z.strictObject({ choices: z.array(z.strictObject({ name: z.string().min(1).max(100), value: z.string().max(100) })).max(25) })
 

@@ -52,7 +52,7 @@ describe('createDiscordInteractions (verifier + router + endpoint in one call)',
     }
     const target = wireMessage({ channelId: CHANNEL, authorId: TREASURER, at: new Date(), content: `Winners: <@${ALICE}> and <@${BOB}>`, mentions: [ALICE, BOB] })
     const who = { userId: TREASURER, roles: [TREASURER_ROLE] }
-    const opened = (await (await post(messageCommand({ guildId: GUILD, channelId: CHANNEL }, 'Propose pay run', target, who))).json()) as { type: number }
+    const opened = (await (await post(messageCommand({ guildId: GUILD, channelId: CHANNEL }, 'Draft pay run with AI', target, who))).json()) as { type: number }
     expect(opened.type).toBe(9)
     const submitted = (await (await post(modalSubmit({ guildId: GUILD, channelId: CHANNEL }, `proposal-modal:instruct:${target.id}`, { instruction: '10 each' }, who, { token: 'tok-signed' }))).json()) as { type: number }
     expect(submitted).toEqual({ type: 4, data: { content: 'Reading the message and drafting a proposal…', flags: 64 } })

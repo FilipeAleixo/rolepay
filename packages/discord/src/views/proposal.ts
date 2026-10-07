@@ -304,12 +304,17 @@ export function proposalDiscardedMessage(p: Proposal): Message {
   return { embeds: [{ title: 'Proposal discarded', color: COLORS.muted, description: 'Nothing was created.', footer: { text: `Proposal ${p.id}` } }], components: [], allowed_mentions: NO_PINGS }
 }
 
-/** The form "Propose pay run" opens on a message: what to pay. */
+/** What the AI form says before anyone types: what Rolepay does with the message, and that nothing is paid yet. */
+export const DRAFT_EXPLAINED =
+  'Rolepay reads this message and drafts lines for the people it names (for example a winners announcement). Nothing is paid until the Treasurer approves.'
+
+/** The form "Draft pay run with AI" opens on a message: what it does, then what to pay. */
 export function instructionModal(messageId: string): Modal {
   return {
     custom_id: encodeProposalModalId('instruct', messageId),
-    title: 'Propose pay run',
+    title: 'Draft pay run with AI',
     components: [
+      { type: ComponentType.TextDisplay, content: DRAFT_EXPLAINED },
       {
         type: ComponentType.ActionRow,
         components: [

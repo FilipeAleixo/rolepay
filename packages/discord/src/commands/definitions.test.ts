@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { OptionType, Permission } from '../api.js'
-import { ROUTED_COMMANDS, ROUTED_MESSAGE_COMMANDS } from '../app/router.js'
+import { RENAMED_MESSAGE_COMMANDS, ROUTED_COMMANDS, ROUTED_MESSAGE_COMMANDS } from '../app/router.js'
 import { COMMAND_DEFINITIONS, commandDefinitions } from './definitions.js'
 
 type Def = { name: string; description: string; type?: number; required?: boolean; options?: Def[]; default_member_permissions?: string; contexts?: number[] }
@@ -95,8 +95,11 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
   })
 
   it('the message commands (Apps on a message) are registered and routed, hidden from members by default, server only', () => {
-    expect(messageCommands.map((c) => c.name)).toEqual(['Propose pay run', 'Pay the author'])
+    expect(messageCommands.map((c) => c.name)).toEqual(['Draft pay run with AI', 'Pay the author'])
     expect(messageCommands.map((c) => c.name)).toEqual([...ROUTED_MESSAGE_COMMANDS])
+    // Renamed: no longer registered (register-commands overwrites the whole list), still routed for a client that has not refreshed.
+    expect(messageCommands.map((c) => c.name)).not.toContain('Propose pay run')
+    expect(RENAMED_MESSAGE_COMMANDS).toEqual(['Propose pay run'])
     for (const c of messageCommands) {
       expect(c.name.length).toBeLessThanOrEqual(32)
       expect(c).not.toHaveProperty('description')

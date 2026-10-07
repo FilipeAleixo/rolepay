@@ -108,7 +108,7 @@ export interface MemberDirectory {
 }
 
 /**
- * The message a "Propose pay run" command targeted, kept between the command and the modal that
+ * The message a "Draft pay run with AI" command targeted, kept between the command and the modal that
  * asks for the instruction (Discord does not send the message again with the modal). Kept for
  * 15 minutes at most and taken once; the text is never logged.
  */

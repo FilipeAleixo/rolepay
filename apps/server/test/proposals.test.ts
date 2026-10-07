@@ -1,5 +1,5 @@
 // AI-proposed pay runs end to end, in process, every step a signed POST /discord/interactions:
-// setup with AI on -> Apps > Propose pay run on the winners message -> instruction modal ->
+// setup with AI on -> Apps > Draft pay run with AI on the winners message -> instruction modal ->
 // proposal -> Create pay run -> the normal review -> Approve -> one batch on the fake chain ->
 // receipts. The model is the deterministic fake proposer; Discord REST and the chain are fakes.
 import { emptyCriteria, naiveMessageProposal } from '@rolepay/core/adapters'
@@ -63,8 +63,8 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
       ignoredInstructions: [],
     })
 
-    // 1. Apps > Propose pay run: the modal asks for the instruction.
-    const opened = await json(await s.interact(messageCommand(SCOPE, 'Propose pay run', winners, TREASURER)))
+    // 1. Apps > Draft pay run with AI: the modal asks for the instruction.
+    const opened = await json(await s.interact(messageCommand(SCOPE, 'Draft pay run with AI', winners, TREASURER)))
     expect(opened).toMatchObject({ type: 9, data: { custom_id: `proposal-modal:instruct:${winners.id}` } })
 
     // 2. The instruction: deferred, only the treasurer sees the proposal.
@@ -105,7 +105,7 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     const answered = s.logs.filter((l) => l.event === 'interaction').map((l) => l.fields ?? {})
     // The setup's own interactions come first; these are the flow's four.
     expect(answered.slice(-4).map((f) => [f.kind, f.name, f.status, f.responseType, f.ok, f.late])).toEqual([
-      ['message_command', 'Propose pay run', 200, 9, true, false],
+      ['message_command', 'Draft pay run with AI', 200, 9, true, false],
       ['modal', 'proposal-modal:instruct', 200, 4, true, false],
       ['component', 'proposal:create', 200, 7, true, false],
       ['component', 'rolepay:approve', 200, 7, true, false],
@@ -187,7 +187,7 @@ describe('what a proposal cost, end to end', () => {
     const oauth = new FakeDiscordOAuth()
     const s = await community({ server: { policySeam: true, dashboard: { oauth } } })
     const winners = wireMessage({ channelId: CHANNEL, authorId: TREASURER.userId, at: s.clock.now(), content: `Winners: <@${ANA}> and <@${RUI}>`, mentions: [ANA, RUI] })
-    await s.interact(messageCommand(SCOPE, 'Propose pay run', winners, TREASURER))
+    await s.interact(messageCommand(SCOPE, 'Draft pay run with AI', winners, TREASURER))
     const submitted = await json(await s.interact(modalSubmit(SCOPE, `proposal-modal:instruct:${winners.id}`, { instruction: '50 each' }, TREASURER, { token: 'tok-cost' })))
     expect(submitted.data?.flags).toBe(64)
     await s.drain()

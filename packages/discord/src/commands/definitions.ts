@@ -176,7 +176,7 @@ export const commandDefinitions = (opts: { devShortcuts: boolean; demoControls: 
     ],
   },
   {
-    // Right-click a message > Apps > Propose pay run. Message commands have a name and no description.
+    // Right-click a message > Apps > Draft pay run with AI. Message commands have a name and no description.
     name: PROPOSE_MESSAGE_COMMAND,
     type: CommandType.Message,
     ...GUILD_ONLY,

@@ -198,12 +198,16 @@ describe('criteriaInWords and amountInWords', () => {
   })
 })
 
+const inputsOf = (m: ReturnType<typeof editModal>) => m.components.flatMap((c) => ('components' in c ? c.components : []))
+
 describe('the modals', () => {
   it('the instruction form fits Discord limits', () => {
     const m = instructionModal('810000000000000001')
     expect(m.custom_id).toBe('proposal-modal:instruct:810000000000000001')
-    expect(m.title.length).toBeLessThanOrEqual(45)
-    const input = m.components[0]?.components[0]
+    expect(m.title).toBe('Draft pay run with AI')
+    // First what happens, in plain words; then the one input.
+    expect(m.components[0]).toEqual({ type: 10, content: 'Rolepay reads this message and drafts lines for the people it names (for example a winners announcement). Nothing is paid until the Treasurer approves.' })
+    const input = inputsOf(m)[0]
     expect(input?.label.length).toBeLessThanOrEqual(45)
     expect(input?.placeholder?.length ?? 0).toBeLessThanOrEqual(100)
   })
@@ -219,7 +223,7 @@ describe('the modals', () => {
     expect(text.split('\n').filter((l) => !l.startsWith('#'))).toHaveLength(50)
     const m = editModal(proposal())
     expect(m.custom_id).toBe('proposal-modal:edit:prop_view01')
-    expect(m.components[0]?.components[0]?.label.length).toBeLessThanOrEqual(45)
-    expect(m.components[0]?.components[0]?.value?.length).toBeLessThanOrEqual(4000)
+    expect(inputsOf(m)[0]?.label.length).toBeLessThanOrEqual(45)
+    expect(inputsOf(m)[0]?.value?.length).toBeLessThanOrEqual(4000)
   })
 })

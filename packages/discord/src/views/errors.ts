@@ -40,7 +40,7 @@ export function explainProposalError(error: CodedError, ctx: { token?: string; c
     case 'source_not_readable':
       return 'You can only propose from a channel you can read yourself (View Channel and Read Message History).'
     case 'no_message_content':
-      return 'Rolepay can see those messages but not their text. Turn on the Message Content intent (Developer Portal, Bot), or right-click a message and use Apps > Propose pay run, which needs no intent.'
+      return 'Rolepay can see those messages but not their text. Turn on the Message Content intent (Developer Portal, Bot), or right-click a message and use Apps > Draft pay run with AI, which needs no intent.'
     case 'source_empty':
       return 'There are no messages to read there in that period.'
     case 'proposal_not_found':

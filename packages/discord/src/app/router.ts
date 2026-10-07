@@ -14,7 +14,7 @@ import {
   policyShowCommand,
 } from '../commands/policy.js'
 import { proposeCommand } from '../commands/propose.js'
-import { PROPOSE_MESSAGE_COMMAND, proposeFromMessageCommand } from '../commands/proposeFromMessage.js'
+import { PROPOSE_MESSAGE_COMMAND, PROPOSE_MESSAGE_COMMAND_BEFORE, proposeFromMessageCommand } from '../commands/proposeFromMessage.js'
 import { runChoices } from '../commands/runChoices.js'
 import { setupCommand } from '../commands/setup.js'
 import { statusCommand } from '../commands/status.js'
@@ -64,6 +64,13 @@ const MESSAGE_COMMANDS: Record<string, MessageCommandHandler> = {
   [PAY_AUTHOR_COMMAND]: payAuthorCommand,
 }
 
+/**
+ * Message commands under a name they had before a rename, still answered. `pnpm register-commands`
+ * overwrites the whole list (a bulk PUT), which deletes the old command, but a client that has not
+ * refreshed its list (or a copy registered in another scope, global or one server) can still send it.
+ */
+const RENAMED: Record<string, MessageCommandHandler> = { [PROPOSE_MESSAGE_COMMAND_BEFORE]: proposeFromMessageCommand }
+
 const AUTOCOMPLETE: Record<string, AutocompleteHandler> = {
   'rolepay status': runChoices,
   'rolepay export': runChoices,
@@ -86,6 +93,7 @@ const POLICY_BUTTONS: Record<PolicyAction, PolicyButtonHandler> = { approve: app
 
 export const ROUTED_COMMANDS = Object.keys(COMMANDS)
 export const ROUTED_MESSAGE_COMMANDS = Object.keys(MESSAGE_COMMANDS)
+export const RENAMED_MESSAGE_COMMANDS = Object.keys(RENAMED)
 
 const GENERIC_FAILURE = 'Something went wrong on our side. Nothing was paid by this action; try again in a moment.'
 const NO_CHOICES: Outcome = { kind: 'choices', choices: [] }
@@ -179,7 +187,7 @@ async function route(i: Exclude<ParsedInteraction, { kind: 'ping' }>, deps: Disc
       return ephemeralReply('Sorry, I do not know that button. It may be from an older version.')
     }
     case 'message_command': {
-      const handler = MESSAGE_COMMANDS[i.command]
+      const handler = MESSAGE_COMMANDS[i.command] ?? RENAMED[i.command]
       return handler ? handler({ target: i.target, ctx }, deps) : ephemeralReply('Sorry, I do not know that command.')
     }
     case 'modal': {
