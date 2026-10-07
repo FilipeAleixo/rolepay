@@ -78,12 +78,24 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
   const e = parsed.data
   const core = parseConfig(env)
   const testnet = core.network === 'moderato'
+  const sponsor = core.sponsorUrl !== null
   if (!testnet && !e.ROLEPAY_PAYOUT_TOKEN) throw new ConfigError('invalid server config: ROLEPAY_PAYOUT_TOKEN is required off testnet')
+  const payoutToken = e.ROLEPAY_PAYOUT_TOKEN ?? TESTNET_TOKENS.alpha_usd
+  const feeToken = e.ROLEPAY_FEE_TOKEN ?? (testnet ? TESTNET_TOKENS.path_usd : null)
+  // Without a sponsor every run pays its fee from the bot key's fee budget, in a token of its own.
+  if (!sponsor && !feeToken) {
+    throw new ConfigError('invalid server config: ROLEPAY_FEE_TOKEN is required without a fee sponsor (mainnet): new communities pay network fees from a fee budget in it')
+  }
+  if (feeToken === payoutToken) {
+    throw new ConfigError('invalid server config: ROLEPAY_FEE_TOKEN must differ from the payout token, or fees would come out of the payout limit')
+  }
   const limit = parseAmount(e.ROLEPAY_BOT_KEY_LIMIT)
   if (!limit.ok) throw new ConfigError('invalid server config: ROLEPAY_BOT_KEY_LIMIT')
   const feeBudget = parseAmount(e.ROLEPAY_BOT_KEY_FEE_BUDGET)
   if (!feeBudget.ok) throw new ConfigError('invalid server config: ROLEPAY_BOT_KEY_FEE_BUDGET')
   const { origin, rpId } = passkeyDomain(e.PUBLIC_URL, e.ROLEPAY_RP_ID)
+  // A treasury passkey is bound to its host for good: on mainnet that host must be the public one.
+  if (!testnet && !origin.startsWith('https://')) throw new ConfigError('invalid server config: PUBLIC_URL must use https on mainnet (never localhost: passkeys made there only work there)')
   const botKey = { limit: limit.value, periodSeconds: e.ROLEPAY_BOT_KEY_PERIOD_DAYS * DAY, validitySeconds: e.ROLEPAY_BOT_KEY_VALIDITY_DAYS * DAY }
 
   return {
@@ -93,8 +105,9 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       network: core.network,
       claimBaseUrl: `${origin}/claim`,
       setupBaseUrl: `${origin}/setup`,
-      defaultFeeToken: e.ROLEPAY_FEE_TOKEN ?? (testnet ? TESTNET_TOKENS.path_usd : null),
-      defaultPayoutToken: e.ROLEPAY_PAYOUT_TOKEN ?? TESTNET_TOKENS.alpha_usd,
+      defaultFeeToken: feeToken,
+      defaultPayoutToken: payoutToken,
+      sponsor,
       botKey,
       authorizeHint: core.devShortcuts ? DEV_AUTHORIZE_HINT : null,
       devShortcuts: core.devShortcuts,

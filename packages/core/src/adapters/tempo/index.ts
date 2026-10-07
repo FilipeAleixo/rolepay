@@ -1,3 +1,4 @@
+export { rpcChainId } from './chainId.js'
 export { buildBatchCalls, classifyChainError, errorSummary, memoTransfersFromLogs } from './encoding.js'
 export { idempotentSend } from './idempotentSend.js'
 export { retryUnavailable } from './retryUnavailable.js'

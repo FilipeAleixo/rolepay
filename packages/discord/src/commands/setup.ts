@@ -34,6 +34,17 @@ const notPermitted = (c: Community, what: string, nextRoleId?: string) =>
     ? `Only a member with ${roleMention(c.approverRoleId)} can change ${what}. Manage Server alone is not enough.`
     : `Only a member who holds ${nextRoleId ? roleMention(nextRoleId) : 'the approver role'} can set it as the approver role.`
 
+const NO_SPONSOR =
+  'This Rolepay server has no fee sponsor (as on mainnet), so the bot pays network fees from a fee budget: keep `fees:fee_budget`.'
+
+/**
+ * The fees a new community starts with: sponsored where this server has a sponsor (testnet),
+ * otherwise a fee budget in the server's fee token (mainnet), so no run waits on a sponsor that
+ * does not exist. null when there is neither (the server config refuses that).
+ */
+const defaultFees = (config: DiscordAppDeps['config']): Fees | null =>
+  config.sponsor ? { feeMode: 'sponsor', feeToken: null } : config.defaultFeeToken ? { feeMode: 'fee_budget', feeToken: config.defaultFeeToken } : null
+
 const DEV_SHORTCUTS_OFF =
   '`treasury`, `new_key` and `key_limit` are testnet dev shortcuts, and they are off on this server. Run /rolepay setup without them: the treasurer sets up the treasury and the bot key on the treasury page.'
 
@@ -73,13 +84,16 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
   )
   const fees: Fees | null = o.fees ? { feeMode: o.fees, feeToken: o.fees === 'fee_budget' ? (o.fee_token ?? config.defaultFeeToken) : null } : null
   if (fees?.feeMode === 'fee_budget' && !fees.feeToken) return fail('fees:fee_budget needs `fee_token`: the token the bot pays network fees in.')
+  if (fees?.feeMode === 'sponsor' && !config.sponsor) return fail(NO_SPONSOR)
 
   let community = await rolepay.communities.get(guildId)
   if (!community.ok) {
     if (o.ai_proposals !== undefined || o.proposer_role !== undefined) {
       return fail('AI proposals are set after the treasury exists: finish setup on the treasury page, then run `/rolepay setup ai_proposals:true`.')
     }
-    if (!o.treasury) return firstSetup(o, fees, guildName, ctx, deps)
+    const chosen = fees ?? defaultFees(config)
+    if (!chosen) return fail('fees: this Rolepay server has no fee sponsor and no default fee token. Run /rolepay setup with `fees:fee_budget fee_token:<address>`.')
+    if (!o.treasury) return firstSetup(o, chosen, guildName, ctx, deps)
     // Dev path: register an existing treasury account (its root key signs elsewhere). The same
     // rule as the treasury page link: Manage Server AND the approver role being set.
     const role = chosenRole(o, ctx)
@@ -89,8 +103,8 @@ async function runSetup(o: Options, limit: bigint, ctx: GuildContext, deps: Disc
       name: guildName,
       treasuryAddress: o.treasury,
       payoutToken: o.token ?? config.defaultPayoutToken,
-      feeMode: fees?.feeMode ?? 'sponsor',
-      feeToken: fees?.feeToken ?? null,
+      feeMode: chosen.feeMode,
+      feeToken: chosen.feeToken,
       approverRoleId: role.roleId,
       requireSeparateApprover: o.separate_approver ?? false,
     })
@@ -193,14 +207,14 @@ function chosenRole(o: Options, ctx: GuildContext): { ok: true; roleId: string }
 }
 
 /** Nothing is registered yet: the treasury does not exist until the treasurer creates it on the page. */
-async function firstSetup(o: Options, fees: Fees | null, guildName: string | null, ctx: GuildContext, deps: DiscordAppDeps): Promise<DeferredResult> {
+async function firstSetup(o: Options, fees: Fees, guildName: string | null, ctx: GuildContext, deps: DiscordAppDeps): Promise<DeferredResult> {
   const role = chosenRole(o, ctx)
   if (!('roleId' in role)) return role
   const settings = {
     name: guildName,
     payoutToken: o.token ?? deps.config.defaultPayoutToken,
-    feeMode: fees?.feeMode ?? ('sponsor' as const),
-    feeToken: fees?.feeToken ?? null,
+    feeMode: fees.feeMode,
+    feeToken: fees.feeToken,
     approverRoleId: role.roleId,
     requireSeparateApprover: o.separate_approver ?? false,
   }

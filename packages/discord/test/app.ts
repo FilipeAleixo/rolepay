@@ -17,6 +17,7 @@ export const CONFIG: DiscordAppConfig = {
   setupBaseUrl: 'https://rolepay.test/setup',
   defaultFeeToken: TESTNET_TOKENS.path_usd,
   defaultPayoutToken: TESTNET_TOKENS.alpha_usd,
+  sponsor: true,
   botKey: { limit: usd('100'), periodSeconds: 2_592_000, validitySeconds: 2_592_000 },
   authorizeHint: 'Dev: run `pnpm dev:authorize-key {guildId}`.',
   devShortcuts: true,

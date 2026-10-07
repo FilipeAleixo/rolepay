@@ -12,6 +12,11 @@ export type DiscordAppConfig = {
   defaultFeeToken: string | null
   /** Payout token for a community registered without an explicit `token` option. */
   defaultPayoutToken: string
+  /**
+   * Whether this server has a fee sponsor. Without one (mainnet by default) a new community pays
+   * fees from a fee budget in `defaultFeeToken`, and `fees:sponsor` is refused.
+   */
+  sponsor: boolean
   /** The bot key `/rolepay setup` provisions when the community has none. */
   botKey: { limit: bigint; periodSeconds: number; validitySeconds: number }
   /** A second way to authorise a pending key, shown in /rolepay setup (the dev script on testnet). `{guildId}` is filled in. */

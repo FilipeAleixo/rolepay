@@ -47,6 +47,11 @@ describe('parseConfig (operational settings from env)', () => {
     expect(c).toMatchObject({ rpcUrl: 'http://localhost:8545', sponsorUrl: 'http://localhost:3000' })
   })
 
+  it('ROLEPAY_SPONSOR_URL=none turns the sponsor off (a mainnet rehearsal on testnet: fees from a fee budget, as on mainnet)', () => {
+    expect(parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_SPONSOR_URL: 'none' })).toMatchObject({ network: 'moderato', sponsorUrl: null })
+    expect(() => parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_SPONSOR_URL: 'off please' })).toThrow(/ROLEPAY_SPONSOR_URL/)
+  })
+
   it('refuses mainnet unless explicitly allowed', () => {
     expect(() => parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_NETWORK: 'mainnet' })).toThrow(/ROLEPAY_ALLOW_MAINNET/)
     const c = parseConfig({ ROLEPAY_MASTER_KEY: MASTER, ROLEPAY_NETWORK: 'mainnet', ROLEPAY_ALLOW_MAINNET: 'true' })

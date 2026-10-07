@@ -8,7 +8,8 @@ const EnvSchema = z.object({
   ROLEPAY_MASTER_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'must be 32 bytes of hex (64 chars)'),
   ROLEPAY_DB_PATH: z.string().min(1).default('./rolepay.db'),
   ROLEPAY_RPC_URL: z.url().optional(),
-  ROLEPAY_SPONSOR_URL: z.url().optional(),
+  /** A fee sponsor relay, or `none` for no sponsor even on testnet (to rehearse mainnet's fee budget path). Mainnet has none by default. */
+  ROLEPAY_SPONSOR_URL: z.union([z.literal('none'), z.url()]).optional(),
   ROLEPAY_LINK_TTL_SECONDS: z.coerce.number().int().positive().default(1800),
   ROLEPAY_DEV_SHORTCUTS: z.enum(['true', 'false']).default('false'),
   ROLEPAY_DEMO_CONTROLS: z.enum(['true', 'false']).default('false'),
@@ -124,7 +125,7 @@ export function parseConfig(raw: Record<string, string | undefined>): RolepayCon
     network: net.name,
     chainId: net.chainId,
     rpcUrl: e.ROLEPAY_RPC_URL ?? net.rpcUrl,
-    sponsorUrl: e.ROLEPAY_SPONSOR_URL ?? net.sponsorUrl,
+    sponsorUrl: e.ROLEPAY_SPONSOR_URL === 'none' ? null : (e.ROLEPAY_SPONSOR_URL ?? net.sponsorUrl),
     explorerUrl: net.explorerUrl,
     masterKey: e.ROLEPAY_MASTER_KEY,
     dbPath: e.ROLEPAY_DB_PATH,

@@ -1,7 +1,14 @@
-import { TESTNET_TOKENS } from '@rolepay/core'
+import { MAINNET_TOKENS, TESTNET_TOKENS } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { parseServerConfig } from './config.js'
 
+/** A mainnet server as fly.app.toml configures it: USDC.e payouts, fees from a pathUSD fee budget (no sponsor on mainnet). */
+const MAINNET = {
+  ROLEPAY_NETWORK: 'mainnet',
+  ROLEPAY_ALLOW_MAINNET: 'true',
+  ROLEPAY_PAYOUT_TOKEN: MAINNET_TOKENS.usdc_e,
+  ROLEPAY_FEE_TOKEN: MAINNET_TOKENS.path_usd,
+}
 const SECRET_TOKEN = 'MTIzNDU2Nzg5MDEyMzQ1Njc4.secret-bot-token'
 const env = (over: Record<string, string | undefined> = {}) => ({
   ROLEPAY_MASTER_KEY: 'ab'.repeat(32),
@@ -35,6 +42,7 @@ describe('parseServerConfig', () => {
     expect(c.app.devShortcuts).toBe(false)
     expect(c.app.demoControls).toBe(false)
     expect(c.app.authorizeHint).toBeNull()
+    expect(c.app.sponsor).toBe(true)
     expect(c.recoveryIntervalMs).toBe(30_000)
     expect(c.policies).toEqual({ schedulerIntervalMs: 30_000, minVetoMinutes: 60 })
   })
@@ -51,18 +59,16 @@ describe('parseServerConfig', () => {
     const dev = parseServerConfig(env({ ROLEPAY_DEV_SHORTCUTS: 'true' }))
     expect([dev.app.demoControls, dev.app.devShortcuts]).toEqual([false, true])
     expect(parseServerConfig(env()).app.demoControls).toBe(false)
-    const mainnet = { ROLEPAY_NETWORK: 'mainnet', ROLEPAY_ALLOW_MAINNET: 'true', ROLEPAY_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001' }
-    expect(() => parseServerConfig(env({ ...mainnet, ROLEPAY_DEMO_CONTROLS: 'true' }))).toThrow(/ROLEPAY_DEMO_CONTROLS/)
-    expect(parseServerConfig(env(mainnet)).app.demoControls).toBe(false)
+    expect(() => parseServerConfig(env({ ...MAINNET, ROLEPAY_DEMO_CONTROLS: 'true' }))).toThrow(/ROLEPAY_DEMO_CONTROLS/)
+    expect(parseServerConfig(env(MAINNET)).app.demoControls).toBe(false)
   })
 
   it('the dev shortcuts (and their hint) exist only with ROLEPAY_DEV_SHORTCUTS=true on testnet', () => {
     const c = parseServerConfig(env({ ROLEPAY_DEV_SHORTCUTS: 'true' }))
     expect(c.app.devShortcuts).toBe(true)
     expect(c.app.authorizeHint).toMatch(/pnpm dev:authorize-key \{guildId\}/)
-    const mainnet = { ROLEPAY_NETWORK: 'mainnet', ROLEPAY_ALLOW_MAINNET: 'true', ROLEPAY_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001' }
-    expect(() => parseServerConfig(env({ ...mainnet, ROLEPAY_DEV_SHORTCUTS: 'true' }))).toThrow(/ROLEPAY_DEV_SHORTCUTS/)
-    expect(parseServerConfig(env(mainnet)).app.devShortcuts).toBe(false)
+    expect(() => parseServerConfig(env({ ...MAINNET, ROLEPAY_DEV_SHORTCUTS: 'true' }))).toThrow(/ROLEPAY_DEV_SHORTCUTS/)
+    expect(parseServerConfig(env(MAINNET)).app.devShortcuts).toBe(false)
   })
 
   it('reads overrides', () => {
@@ -142,15 +148,32 @@ describe('parseServerConfig', () => {
     expect(message).not.toContain('nope')
   })
 
-  it('on mainnet needs an explicit payout token, has no dev hint, and a fee token only if configured', () => {
-    const mainnet = { ROLEPAY_NETWORK: 'mainnet', ROLEPAY_ALLOW_MAINNET: 'true' }
-    expect(() => parseServerConfig(env(mainnet))).toThrow(/ROLEPAY_PAYOUT_TOKEN/)
-    const c = parseServerConfig(env({ ...mainnet, ROLEPAY_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001' }))
-    expect(c.app.authorizeHint).toBeNull()
-    expect(c.app.defaultFeeToken).toBeNull()
-    expect(parseServerConfig(env({ ...mainnet, ROLEPAY_PAYOUT_TOKEN: '0x20c0000000000000000000000000000000000001', ROLEPAY_FEE_TOKEN: '0x20c0000000000000000000000000000000000000' })).app.defaultFeeToken).toBe(
-      '0x20c0000000000000000000000000000000000000',
-    )
+  it('on mainnet needs an explicit payout token, has no sponsor, no dev hint and no demo controls', () => {
+    const c = parseServerConfig(env(MAINNET))
+    expect(c.core).toMatchObject({ network: 'mainnet', chainId: 4217, sponsorUrl: null, devShortcuts: false, demoControls: false })
+    expect(c.app).toMatchObject({ defaultPayoutToken: MAINNET_TOKENS.usdc_e, defaultFeeToken: MAINNET_TOKENS.path_usd, sponsor: false, authorizeHint: null })
+    expect(c.web).toMatchObject({ network: 'mainnet', rpcUrl: 'https://rpc.tempo.xyz', sponsorUrl: null, explorerUrl: 'https://explore.tempo.xyz' })
+    expect(c.policies.minVetoMinutes).toBe(60)
+    expect(() => parseServerConfig(env({ ...MAINNET, ROLEPAY_PAYOUT_TOKEN: undefined }))).toThrow(/ROLEPAY_PAYOUT_TOKEN/)
+  })
+
+  it('without a fee sponsor (mainnet, or ROLEPAY_SPONSOR_URL=none) needs ROLEPAY_FEE_TOKEN: new communities pay fees from a fee budget in it', () => {
+    expect(() => parseServerConfig(env({ ...MAINNET, ROLEPAY_FEE_TOKEN: undefined }))).toThrow(/ROLEPAY_FEE_TOKEN.*fee sponsor/)
+    // A mainnet server with its own sponsor (Tempo's hosted relay, or a self-hosted one) may leave it out.
+    const sponsored = parseServerConfig(env({ ...MAINNET, ROLEPAY_FEE_TOKEN: undefined, ROLEPAY_SPONSOR_URL: 'https://relay.example.org' }))
+    expect(sponsored.app).toMatchObject({ sponsor: true, defaultFeeToken: null })
+    // Testnet without the sponsor (a rehearsal of mainnet) falls back to pathUSD like testnet always did.
+    expect(parseServerConfig(env({ ROLEPAY_SPONSOR_URL: 'none' })).app).toMatchObject({ sponsor: false, defaultFeeToken: TESTNET_TOKENS.path_usd })
+  })
+
+  it('refuses a fee token that is the payout token: fees would silently come out of the payout limit', () => {
+    expect(() => parseServerConfig(env({ ...MAINNET, ROLEPAY_FEE_TOKEN: MAINNET_TOKENS.usdc_e.toUpperCase().replace('0X', '0x') }))).toThrow(/ROLEPAY_FEE_TOKEN.*payout token/)
+    expect(() => parseServerConfig(env({ ROLEPAY_FEE_TOKEN: TESTNET_TOKENS.alpha_usd }))).toThrow(/ROLEPAY_FEE_TOKEN.*payout token/)
+  })
+
+  it('on mainnet the pages must be on https: a treasury passkey made on localhost would only ever work on that machine', () => {
+    expect(() => parseServerConfig(env({ ...MAINNET, PUBLIC_URL: 'http://localhost:8787' }))).toThrow(/PUBLIC_URL.*https.*mainnet/)
+    expect(parseServerConfig(env({ ...MAINNET, PUBLIC_URL: 'https://app.rolepay.app' })).web).toMatchObject({ origin: 'https://app.rolepay.app', rpId: 'app.rolepay.app' })
   })
 
   it('the passkey domain is config only: the origin from PUBLIC_URL, the rpId its host unless ROLEPAY_RP_ID says otherwise', () => {

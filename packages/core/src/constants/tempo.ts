@@ -31,11 +31,33 @@ export const TESTNET_TOKENS = {
   beta_usd: '0x20c0000000000000000000000000000000000002',
 } as const
 
-/** Display names of the tokens Rolepay knows, by lowercase address. */
+/**
+ * Mainnet USD stablecoins (TIP-20, 6 decimals, currency USD), from Tempo's token list
+ * (tokenlist.tempo.xyz/list/4217) and read back on chain on 2026-10-07. USDC.e is Circle's USDC
+ * bridged by Stargate (LayerZero); pathUSD is the protocol's fallback fee token; OUSD is Open
+ * Standard's Open USD, which Tempo's docs recommend; USDT0 is Tether's LayerZero USDT.
+ */
+export const MAINNET_TOKENS = {
+  usdc_e: '0x20c000000000000000000000b9537d11c60e8b50',
+  path_usd: '0x20c0000000000000000000000000000000000000',
+  ousd: '0x20c0000000000000000000006a37da5c996874be',
+  usdt0: '0x20c00000000000000000000014f22ca97301eb73',
+} as const
+
+/** Display names of the tokens Rolepay knows, by lowercase address. pathUSD and OUSD have the same address on both networks. */
 export const TOKEN_SYMBOLS: Readonly<Record<string, string>> = {
   [TESTNET_TOKENS.path_usd]: 'pathUSD',
   [TESTNET_TOKENS.alpha_usd]: 'AlphaUSD',
   [TESTNET_TOKENS.beta_usd]: 'BetaUSD',
+  [MAINNET_TOKENS.usdc_e]: 'USDC.e',
+  [MAINNET_TOKENS.ousd]: 'OUSD',
+  [MAINNET_TOKENS.usdt0]: 'USDT0',
+}
+
+/** The tokens a payee's account page shows (and can send) on each network, the usual payout token first. */
+export const KNOWN_TOKENS: Readonly<Record<NetworkName, readonly string[]>> = {
+  moderato: [TESTNET_TOKENS.alpha_usd, TESTNET_TOKENS.path_usd, TESTNET_TOKENS.beta_usd],
+  mainnet: [MAINNET_TOKENS.usdc_e, MAINNET_TOKENS.path_usd, MAINNET_TOKENS.ousd, MAINNET_TOKENS.usdt0],
 }
 
 /** Account Keychain precompile. Lowercase: the docs' mixed-case form fails viem's checksum check. */

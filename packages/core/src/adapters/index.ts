@@ -27,5 +27,6 @@ export {
   createTestnetTools,
   idempotentSend,
   rootSignerFromPrivateKey,
+  rpcChainId,
 } from './tempo/index.js'
 export { openRolepayAdapters } from './wiring.js'

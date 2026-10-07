@@ -215,6 +215,36 @@ describe('/rolepay setup', () => {
   })
 })
 
+describe('/rolepay setup on a Rolepay server without a fee sponsor (mainnet)', () => {
+  const BETA_USD = '0x20c0000000000000000000000000000000000002'
+
+  it('a first setup pays fees from a fee budget in the server fee token, so runs never wait on a sponsor that does not exist', async () => {
+    const a = await appHarness({ config: { sponsor: false } })
+    const { final } = await setup(a, { approver_role: TREASURER_ROLE }, treasurerAdmin)
+    expect(final).toMatch(/From a fee budget in pathUSD/)
+    const link = await a.rolepay.communities.describeSetupLink({ token: setupUrl(final) as string })
+    expect(link).toMatchObject({ ok: true, value: { settings: { feeMode: 'fee_budget', feeToken: PATH_USD } } })
+    const other = await setup(a, { approver_role: TREASURER_ROLE, fees: 'fee_budget', fee_token: BETA_USD }, treasurerAdmin)
+    expect(await a.rolepay.communities.describeSetupLink({ token: setupUrl(other.final) as string })).toMatchObject({
+      ok: true,
+      value: { settings: { feeMode: 'fee_budget', feeToken: BETA_USD } },
+    })
+  })
+
+  it('fees:sponsor is refused, at first setup and after: nothing would pay the fees', async () => {
+    const a = await appHarness({ config: { sponsor: false } })
+    const first = await setup(a, { approver_role: TREASURER_ROLE, fees: 'sponsor' }, treasurerAdmin)
+    expect(first.final).toMatch(/no fee sponsor/)
+    expect(setupUrl(first.final)).toBeNull()
+    // Registered (the dev path, testnet) with the server default: a fee budget.
+    await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'fee_budget', feeToken: PATH_USD } })
+    const later = await setup(a, { fees: 'sponsor' }, treasurerAdmin)
+    expect(later.final).toMatch(/no fee sponsor/)
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { feeMode: 'fee_budget', feeToken: PATH_USD } })
+  })
+})
+
 describe('/rolepay setup dev shortcuts (treasury, new_key, key_limit)', () => {
   const NOT_HERE = /dev shortcuts.*off/i
 

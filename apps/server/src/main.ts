@@ -3,11 +3,12 @@
 // Production runs it compiled (`pnpm build`, then `node dist/main.js`); `pnpm dev` runs it with tsx.
 import { join } from 'node:path'
 import { serve } from '@hono/node-server'
-import { createRolepay, deprecatedEnvNames } from '@rolepay/core'
-import { openRolepayAdapters } from '@rolepay/core/adapters'
+import { ConfigError, createRolepay, deprecatedEnvNames } from '@rolepay/core'
+import { openRolepayAdapters, rpcChainId } from '@rolepay/core/adapters'
 import { FetchDiscordRest, RestActivityReader } from '@rolepay/discord'
 import { bundledAssets, createPasskeys } from '@rolepay/web'
 import { prebuiltAssets } from './assets.js'
+import { checkChain } from './chainCheck.js'
 import { composeServer } from './compose.js'
 import { parseServerConfig } from './config.js'
 import { loadEnvironment } from './env.js'
@@ -21,6 +22,13 @@ async function main() {
   const deprecated = deprecatedEnvNames(env)
   if (deprecated.length > 0) log('deprecated_env', { names: deprecated, hint: 'rename PAYRUN_* to ROLEPAY_* in .env' })
   const config = parseServerConfig(env)
+  // The RPC must be the network the config names (a mainnet server behind a testnet RPC, or the
+  // reverse, refuses to start). An RPC that is down only gets a log line: payments wait for it anyway.
+  const chain = await checkChain(config.core, () => rpcChainId(config.core.rpcUrl))
+  if (!chain.ok && chain.code === 'wrong_chain') {
+    throw new ConfigError(`the RPC answers for chain ${chain.actual}, but ROLEPAY_NETWORK=${config.core.network} is chain ${chain.expected}: check ROLEPAY_RPC_URL`)
+  }
+  if (!chain.ok) log('chain_check_failed', { network: config.core.network, detail: chain.detail })
   const { deps, kv, close } = await openRolepayAdapters(config.core)
   const rest = new FetchDiscordRest({ botToken: config.discord.botToken })
   // AI proposals and policies read Discord through the bot's REST client; one log line per proposal (counts and cost, never text).
