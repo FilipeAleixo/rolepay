@@ -1,12 +1,17 @@
 import { type Message, MessageFlags, type Modal, ResponseType, splitFiles } from '../api.js'
-import type { Responded } from '../http/handler.js'
+import type { BackgroundReport, Responded } from '../http/handler.js'
 import type { DiscordRest, ReplyHandle } from '../ports.js'
 import type { InteractionContext } from './interaction.js'
 
 export type Choice = { name: string; value: string }
 
-/** A deferred job's result: the message to show, or an error for the caller only. */
-export type DeferredResult = { ok: true; message: Message } | { ok: false; message: Message }
+/**
+ * A deferred job's result: the message to show, or an error for the caller only. `timings`: the
+ * job's own phases in milliseconds (Discord reads, the database...), for the log line, never shown.
+ */
+export type DeferredResult = { ok: true; message: Message; timings?: Record<string, number> } | { ok: false; message: Message; timings?: Record<string, number> }
+
+const sinceMs = (started: number) => Math.round(performance.now() - started)
 
 /** What a handler decides. Handlers never talk to Discord directly; this is rendered for them. */
 export type Outcome =
@@ -49,12 +54,19 @@ export function renderOutcome(outcome: Outcome, ctx: InteractionContext, rest: D
       return { kind: 'respond', body: { type: ResponseType.AutocompleteResult, data: { choices: outcome.choices.slice(0, 25) } } }
     case 'defer': {
       const reply = replyTo(ctx)
-      const background = async () => {
+      const background = async (): Promise<BackgroundReport> => {
+        const started = performance.now()
         const result = await finish(outcome.work, onError)
-        if (result.ok || outcome.ephemeral) return editReply(rest, reply, result.message, onError)
-        // A public placeholder must not turn into a public error: remove it, tell only the caller.
-        await rest.deleteOriginal(reply)
-        await rest.followUp(reply, privately(result.message))
+        const work = sinceMs(started)
+        const replying = performance.now()
+        if (result.ok || outcome.ephemeral) {
+          await editReply(rest, reply, result.message, onError)
+        } else {
+          // A public placeholder must not turn into a public error: remove it, tell only the caller.
+          await rest.deleteOriginal(reply)
+          await rest.followUp(reply, privately(result.message))
+        }
+        return { phases: { ...result.timings, work, reply: sinceMs(replying) } }
       }
       const flags = outcome.ephemeral ? { flags: MessageFlags.Ephemeral } : {}
       const body = outcome.placeholder
@@ -93,25 +105,36 @@ export function renderLate(
     if (!posted.ok) return editReply(rest, reply, message, onError)
     await rest.deleteOriginal(reply)
   }
-  const background = async () => {
+  /** Waits for the handler (and its deferred work), then says what to deliver; the timings are the work's own. */
+  const ready = async (): Promise<{ deliver: () => Promise<void>; timings?: Record<string, number> }> => {
     const outcome = await pending
     switch (outcome.kind) {
       case 'reply':
-        return show(outcome.message, outcome.ephemeral)
+        return { deliver: () => show(outcome.message, outcome.ephemeral) }
       case 'update':
-        if (ack === 'reply') return editReply(rest, reply, outcome.message, onError)
-        await editReply(rest, reply, outcome.message, onError)
-        if (outcome.followUp) await postFollowUp(rest, ctx, outcome.followUp)
-        return
+        return {
+          deliver: async () => {
+            await editReply(rest, reply, outcome.message, onError)
+            if (ack === 'update' && outcome.followUp) await postFollowUp(rest, ctx, outcome.followUp)
+          },
+        }
       case 'defer': {
         const result = await finish(outcome.work, onError)
-        return show(result.message, outcome.ephemeral || !result.ok)
+        return { deliver: () => show(result.message, outcome.ephemeral || !result.ok), ...(result.timings ? { timings: result.timings } : {}) }
       }
       case 'modal':
-        return show({ content: FORM_TOO_LATE }, true)
+        return { deliver: () => show({ content: FORM_TOO_LATE }, true) }
       case 'choices':
-        return
+        return { deliver: async () => {} }
     }
+  }
+  const background = async (): Promise<BackgroundReport> => {
+    const started = performance.now()
+    const { deliver, timings } = await ready()
+    const work = sinceMs(started)
+    const replying = performance.now()
+    await deliver()
+    return { phases: { ...timings, work, reply: sinceMs(replying) } }
   }
   const body = ack === 'update' ? { type: ResponseType.DeferredUpdateMessage } : { type: ResponseType.DeferredChannelMessage, data: { flags: MessageFlags.Ephemeral } }
   return { kind: 'respond', body, background }
