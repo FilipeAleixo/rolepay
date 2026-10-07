@@ -12,6 +12,7 @@ import type { IdGenerator } from '../ports/idGenerator.js'
 import type { KeyVault } from '../ports/keyVault.js'
 import type { BroadcastOutcome, FeePayment, PayoutChain } from '../ports/payoutChain.js'
 import type { CommunityRepository, PayeeRepository, RunRepository } from '../ports/repositories.js'
+import type { AuditTrail } from './auditTrail.js'
 import { type InvalidInput, invalidInput } from './common.js'
 
 export type PayRunServiceDeps = {
@@ -23,6 +24,8 @@ export type PayRunServiceDeps = {
   ids: IdGenerator
   clock: Clock
   network: NetworkName
+  /** The audit stream (best effort: a failed write never fails a payment step). */
+  audit?: AuditTrail
 }
 
 export const CreateRunInputSchema = z.object({
@@ -75,8 +78,13 @@ export type AttemptMayStillLand = { code: 'attempt_may_still_land'; retryAfter: 
 export class PayRunService {
   constructor(private readonly deps: PayRunServiceDeps) {}
 
+  /**
+   * `opts.runId`: for a caller that must know the ID before the run exists (the scheduler records
+   * it first, so a crash between the two can never make a second run). Default: a fresh ID.
+   */
   async create(
     input: CreateRunInput,
+    opts: { runId?: string } = {},
   ): Promise<Result<Run, InvalidInput | NewRunError | { code: 'community_not_found' } | { code: 'unregistered_payees'; discordUserIds: string[] }>> {
     const parsed = CreateRunInputSchema.safeParse(input)
     if (!parsed.success) return invalidInput(parsed.error)
@@ -87,7 +95,7 @@ export class PayRunService {
     const missing = [...new Set(resolved.filter((l) => !l.payee).map((l) => l.discordUserId))]
     if (missing.length) return err({ code: 'unregistered_payees', discordUserIds: missing })
     const run = newRun({
-      id: this.deps.ids.runId(),
+      id: opts.runId ?? this.deps.ids.runId(),
       communityId: guildId,
       token: community.payoutToken,
       note: note || null,
@@ -97,6 +105,7 @@ export class PayRunService {
     })
     if (!run.ok) return run
     await this.deps.runs.insert(run.value)
+    await this.deps.audit?.run(run.value, 'run.created', createdBy)
     return run
   }
 
@@ -365,7 +374,30 @@ export class PayRunService {
     const next = transition(run, event, this.deps.clock.now())
     if (!next.ok) return next.error.code === 'not_retryable' ? err({ code: 'not_retryable' }) : err({ code: 'illegal_state', status: run.status })
     if ((await this.deps.runs.update(next.value)) === 'conflict') return err({ code: 'concurrent_update' })
+    await this.audited(next.value, event)
     return next
+  }
+
+  /** Each step a person (or Rolepay) would want in the governance report; signing details stay out. */
+  private async audited(run: Run, event: RunEvent) {
+    const audit = this.deps.audit
+    if (!audit) return
+    switch (event.type) {
+      case 'submit':
+        return audit.run(run, 'run.submitted', event.actor)
+      case 'approve':
+        return audit.run(run, 'run.approved', event.actor)
+      case 'cancel':
+        return audit.run(run, 'run.cancelled', event.actor)
+      case 'start_attempt':
+        return audit.run(run, 'run.executing', null, { attempt: run.attempts.length })
+      case 'mark_paid':
+        return audit.run(run, 'run.paid', null, { txHash: event.txHash })
+      case 'mark_failed':
+        return audit.run(run, 'run.failed', null, { reason: event.reason, retryable: run.failure?.retryable ?? false })
+      case 'record_signed':
+        return
+    }
   }
 }
 

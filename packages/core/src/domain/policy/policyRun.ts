@@ -3,7 +3,8 @@ import { MAX_LINES_PER_RUN, POLICY_LIMITS } from '../../constants/limits.js'
 import { DiscordIdSchema, RunIdSchema } from '../ids.js'
 import { MetricsSchema } from '../proposal/amounts.js'
 import { type Result, err, ok } from '../result.js'
-import { PolicyIdSchema, PolicyModeSchema } from './policy.js'
+import type { Micros } from '../money.js'
+import { type PolicyCaps, PolicyIdSchema, PolicyModeSchema } from './policy.js'
 import { periodKey } from './schedule.js'
 
 /**
@@ -79,7 +80,20 @@ export const PolicyRunSchema = z.object({
 })
 export type PolicyRun = z.infer<typeof PolicyRunSchema>
 
-export const MAX_RUN_LINES = MAX_LINES_PER_RUN
+/**
+ * Why a run cannot be paid as computed, in the order they are checked: more people than one run
+ * holds, over the policy's cap per run, no active bot key, over what the key has left. The
+ * scheduler holds a run on the first (whole, never in part); a preview lists them all.
+ */
+export function runGuards(input: { lines: number; total: Micros; caps: PolicyCaps; remaining: Micros | null }): Hold[] {
+  const { total } = input
+  const out: Hold[] = []
+  if (input.lines > MAX_LINES_PER_RUN) out.push({ code: 'too_many_lines', total, limit: null })
+  if (input.caps.perRun !== null && total > input.caps.perRun) out.push({ code: 'over_policy_cap', total, limit: input.caps.perRun })
+  if (input.remaining === null) out.push({ code: 'no_active_key', total, limit: null })
+  else if (total > input.remaining) out.push({ code: 'over_budget', total, limit: input.remaining })
+  return out
+}
 
 export function newPolicyRun(input: {
   id: string
@@ -127,8 +141,9 @@ export type Snapshot = Pick<PolicyRun, 'lines' | 'unregistered' | 'total' | 'rem
 export type PolicyRunEvent =
   | ({ type: 'proposed'; runId: string } & Snapshot)
   | ({ type: 'scheduled'; runId: string; executeAfter: Date } & Snapshot)
-  | ({ type: 'held'; hold: Hold } & Partial<Snapshot>)
-  | ({ type: 'empty' } & Snapshot)
+  /** `runId: null` when no pay run was made after all (held or empty at generation). */
+  | ({ type: 'held'; hold: Hold; runId?: string | null } & Partial<Snapshot>)
+  | ({ type: 'empty'; runId?: string | null } & Snapshot)
   | { type: 'lease'; until: Date }
   | { type: 'released'; by: string }
   | { type: 'vetoed'; by: string }

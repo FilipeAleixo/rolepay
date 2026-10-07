@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { POLICY_RUN_STATUSES, type PolicyRun, type PolicyRunEvent, PolicyRunSchema, movePolicyRun, newPolicyRun } from './policyRun.js'
+import { POLICY_RUN_STATUSES, type PolicyRun, type PolicyRunEvent, PolicyRunSchema, movePolicyRun, newPolicyRun, runGuards } from './policyRun.js'
 
 const GUILD = '1094309218049937418'
 const TREASURER = '300000000000000001'
@@ -91,5 +91,23 @@ describe('PolicyRun: transitions', () => {
     for (const status of POLICY_RUN_STATUSES) {
       for (const e of events) expect([status, e.type, movePolicyRun(sample(status), e, at(1)).ok]).toEqual([status, e.type, (allowed[status] ?? []).includes(e.type)])
     }
+  })
+})
+
+describe('PolicyRun: the guards that hold a run whole', () => {
+  const caps = { perRun: 100n, perPerson: null }
+  it('nothing in the way: no holds', () => {
+    expect(runGuards({ lines: 3, total: 60n, caps, remaining: 80n })).toEqual([])
+  })
+
+  it('more people than one run holds, over the policy cap, no key, over the key budget: in that order, with the numbers', () => {
+    expect(runGuards({ lines: 51, total: 120n, caps, remaining: 90n })).toEqual([
+      { code: 'too_many_lines', total: 120n, limit: null },
+      { code: 'over_policy_cap', total: 120n, limit: 100n },
+      { code: 'over_budget', total: 120n, limit: 90n },
+    ])
+    expect(runGuards({ lines: 1, total: 5n, caps: { perRun: null, perPerson: null }, remaining: null })).toEqual([{ code: 'no_active_key', total: 5n, limit: null }])
+    // Exactly the budget is fine.
+    expect(runGuards({ lines: 1, total: 90n, caps, remaining: 90n })).toEqual([])
   })
 })

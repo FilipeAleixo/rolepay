@@ -32,4 +32,8 @@ export type RolepayDeps = {
   activity?: ActivityReader | null
   /** One line per proposal: counts, latency, cost. */
   proposalLog?: ProposalLog
+  /** Standing policies: the shortest veto window, in minutes (default 60; the testnet dev setting lowers it for manual tests). */
+  minVetoMinutes?: number
+  /** A pay run's audit event could not be written (it never fails the payment): for the server's log. */
+  onAuditError?: (error: unknown) => void
 }
