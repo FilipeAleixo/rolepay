@@ -27,7 +27,8 @@ const MAINNET_WEB = {
   explorerUrl: 'https://explore.tempo.xyz',
 } as const
 
-export function webHarness(opts: { mainnet?: boolean } = {}) {
+/** `discordAppId`: the Discord application, for the home page's install link (absent: no link, as in the other tests). */
+export function webHarness(opts: { mainnet?: boolean; discordAppId?: string } = {}) {
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
   const rolepay = createRolepay({
@@ -52,6 +53,7 @@ export function webHarness(opts: { mainnet?: boolean } = {}) {
       sponsorUrl: 'https://sponsor.moderato.tempo.xyz',
       explorerUrl: 'https://explore.testnet.tempo.xyz',
       ...(opts.mainnet ? MAINNET_WEB : {}),
+      ...(opts.discordAppId ? { discordAppId: opts.discordAppId } : {}),
       botKeyDefaults: { limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400, feeBudget: 1_000_000n },
     },
   })

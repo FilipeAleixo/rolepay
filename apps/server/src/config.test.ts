@@ -35,6 +35,7 @@ describe('parseServerConfig', () => {
       rpcUrl: 'https://rpc.moderato.tempo.xyz',
       sponsorUrl: 'https://sponsor.moderato.tempo.xyz',
       explorerUrl: 'https://explore.testnet.tempo.xyz',
+      discordAppId: '500000000000000001',
       botKeyDefaults: { limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400, feeBudget: 1_000_000n },
     })
     expect(c.app.defaultPayoutToken).toBe(TESTNET_TOKENS.alpha_usd)

@@ -41,7 +41,7 @@ describe('the web app', () => {
     expect(icon.status).toBe(200)
     expect(icon.headers.get('content-type')).toBe('image/svg+xml')
     expect(await icon.text()).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 512 512"><rect [^>]*fill="#4A1B2A"\/>/)
-    for (const path of ['/account', '/claim/nope', '/setup/nope']) {
+    for (const path of ['/', '/account', '/claim/nope', '/setup/nope']) {
       const html = await (await h.send(path)).text()
       expect(html, path).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">')
       expect(html, path).toMatch(/<svg class="mark" width="\d+" height="\d+" aria-hidden="true"/)

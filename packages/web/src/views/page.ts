@@ -15,7 +15,7 @@ const configScript = (config: unknown) =>
 
 /**
  * The pages' only stylesheet, inline: the shared ink base (theme.ts) and the rules for the claim,
- * setup and account pages. Exported so the server can allow exactly it in the CSP (by hash).
+ * setup, account and home pages. Exported so the server can allow exactly it in the CSP (by hash).
  */
 export const STYLE = `${INK_BASE}
 main{max-width:40rem;margin:0 auto;padding:1.75rem 1rem 4rem}
@@ -44,7 +44,22 @@ strong[data-field]{font:400 1.25em/1 var(--serif);color:var(--head);font-variant
 #live-keys p{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;margin:1rem 0 0;padding-top:1rem;border-top:1px solid var(--line);font-size:14px}
 #live-keys button{margin:0}
 noscript p{color:var(--muted)}
-@media (min-width:40rem){main{padding-top:3.5rem}section{padding:1.5rem 1.6rem}}
+.home{max-width:44rem;padding-top:3rem}
+.home h1+p{margin-bottom:2.5rem}
+.home .brand{margin-bottom:1.5rem}
+.wordmark{display:flex;align-items:center;gap:1rem;margin:0 0 1rem;font-size:48px;line-height:1;letter-spacing:-.015em}
+.tagline{margin:0 0 2.5rem;font-size:17px;line-height:1.55;color:var(--soft);max-width:34rem}
+.home h2{font:500 10.5px/1.5 var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--meta);margin:0 0 .25rem}
+ol.trust{list-style:none;margin:0;padding:0}
+ol.trust li{display:flex;gap:1rem;align-items:baseline;padding:.9rem 0;border-top:1px solid var(--line)}
+ol.trust li:first-child{border-top:0}
+ol.trust .n{font:400 22px/1 var(--serif);color:var(--meta);min-width:1.1rem;font-variant-numeric:lining-nums}
+ol.trust p{margin:0;font-size:15.5px;color:var(--fg)}
+.cta{display:flex;flex-wrap:wrap;align-items:center;gap:.75rem 1rem;margin:2rem 0 0}
+.cta .button{margin:0}
+.cta .source{font-size:13.5px;color:var(--soft)}
+@media (min-width:40rem){main{padding-top:3.5rem}section{padding:1.5rem 1.6rem}.home{padding-top:clamp(5rem,16vh,10rem)}.wordmark{font-size:56px}}
+@media (max-width:40rem){.cta .button{flex:1 1 100%}}
 `
 
 /** The document head: the title, the favicon and font preloads, and one inline stylesheet (allowed by its hash). */

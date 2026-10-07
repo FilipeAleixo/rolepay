@@ -9,6 +9,7 @@ import { fontFile } from './fonts.js'
 import type { Assets, PasskeySessions, RateLimiter } from './ports.js'
 import { accountRoutes } from './routes/account.js'
 import { claimRoutes } from './routes/claim.js'
+import { landingRoutes } from './routes/landing.js'
 import { setupRoutes } from './routes/setup.js'
 import { STYLE } from './views/page.js'
 import { MARK_SVG } from './views/theme.js'
@@ -70,9 +71,9 @@ const rateLimitGroup = (method: string, path: string) =>
   path.startsWith('/auth/') ? 'auth' : method === 'POST' ? RATE_LIMITED_PREFIXES.exec(path)?.[1] : undefined
 
 /**
- * The web pages: the recipient claim page and the treasurer setup page, their JSON endpoints,
- * the WebAuthn ceremony endpoints, the client bundle, the fonts and the favicon. One origin for
- * all of it, because passkeys are bound to it.
+ * The web pages: the home page, the recipient claim page and the treasurer setup page, their
+ * JSON endpoints, the WebAuthn ceremony endpoints, the client bundle, the fonts and the favicon.
+ * One origin for all of it, because passkeys are bound to it.
  */
 export function createWebApp(deps: WebAppDeps): Hono {
   const { config } = deps
@@ -142,6 +143,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
   app.get('/favicon.svg', (c) => c.body(MARK_SVG, 200, { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' }))
 
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
+  app.route('/', landingRoutes({ testnet, discordAppId: config.discordAppId }))
   app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))
   app.route('/', accountRoutes({ config, testnet }))
   app.route('/', setupRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))

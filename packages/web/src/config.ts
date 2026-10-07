@@ -11,6 +11,8 @@ export type WebConfig = {
   /** Fee sponsor relay the browser uses for the treasurer's transactions. null = the treasury pays its own fee. */
   sponsorUrl: string | null
   explorerUrl: string
+  /** The Discord application (its id), for the home page's "Add Rolepay to a server" link. Absent: no such link. */
+  discordAppId?: string
   /** What the setup page suggests for a new bot key. */
   botKeyDefaults: { limit: bigint; periodSeconds: number; validitySeconds: number; feeBudget: bigint }
 }

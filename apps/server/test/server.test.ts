@@ -128,4 +128,15 @@ describe('web pages through the composed server', () => {
     expect((await s.app.request(`/setup/${link.value.token}`)).status).toBe(200)
     expect((await s.app.request('/assets/rolepay.js')).status).toBe(200)
   })
+
+  it('serves the home page at /, with the install link for this Discord application (DISCORD_APP_ID), and its fonts and favicon', async () => {
+    const s = await testServer()
+    const home = await s.app.request('/')
+    expect(home.status).toBe(200)
+    const html = await home.text()
+    expect(html).toContain('href="https://discord.com/oauth2/authorize?client_id=500000000000000001&amp;scope=bot+applications.commands&amp;permissions=84992"')
+    expect(html).toContain('Testnet demo')
+    expect((await s.app.request('/favicon.svg')).headers.get('content-type')).toBe('image/svg+xml')
+    expect((await s.app.request('/assets/fonts/lora-latin-400-normal.woff2')).headers.get('content-type')).toBe('font/woff2')
+  })
 })

@@ -55,7 +55,7 @@ export type ServerConfig = {
   recoveryIntervalMs: number
   /** Standing policies: the scheduler's interval, and the shortest veto window (1 minute with the testnet demo controls). */
   policies: { schedulerIntervalMs: number; minVetoMinutes: number }
-  /** The claim and setup pages: origin, passkey relying party, chain endpoints for the browser. */
+  /** The web pages: origin, passkey relying party, chain endpoints for the browser, the app id for the home page's install link. */
   web: WebConfig
   /** The dashboard's Discord OAuth2 client: the app itself. `clientSecret` null = sign-in not configured. */
   dashboard: { clientId: string; clientSecret: string | null }
@@ -123,6 +123,7 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       rpcUrl: core.rpcUrl,
       sponsorUrl: core.sponsorUrl,
       explorerUrl: core.explorerUrl,
+      discordAppId: e.DISCORD_APP_ID,
       botKeyDefaults: { ...botKey, feeBudget: feeBudget.value },
     },
     dashboard: { clientId: e.DISCORD_APP_ID, clientSecret: e.ROLEPAY_DISCORD_CLIENT_SECRET ?? null },
