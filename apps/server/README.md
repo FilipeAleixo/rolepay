@@ -101,6 +101,54 @@ Optional: stop the server with Ctrl-C right after clicking Approve on a new run,
 
 Settings are listed in the repo-root `.env.example`. The SQLite file defaults to `rolepay.db` at the repo root, shared by the server and the dev scripts; it also holds the passkey credentials and sessions (so returning users can sign in after a restart). An install from before the rename keeps its `payrun.db`: when that file exists at the repo root and `ROLEPAY_DB_PATH` is unset, it is the one used. If something looks stuck, the server logs one JSON line per event (`interaction_error`, `job_error`, `recovery`, `recovery_notify_error`, `proposal`); they never include tokens, keys or message text.
 
+## Deploying
+
+Rolepay runs on Fly.io as one always-on machine per network, built from the repo-root `Dockerfile` (Node 22, the server's production dependencies only, run with tsx as `pnpm start` does, as the unprivileged `node` user).
+
+| App | Config | URL | Network | Status |
+| --- | --- | --- | --- | --- |
+| `rolepay-demo` | `fly.demo.toml` | <https://demo.rolepay.app> (also <https://rolepay-demo.fly.dev>) | Moderato testnet, for judges | live |
+| `rolepay-app` | `fly.app.toml` | <https://app.rolepay.app> | mainnet | prepared, not created (its header lists what is still owed) |
+
+The demo: region `cdg` (Paris), one `shared-cpu-1x` machine with 512 MB and 512 MB of swap, never stopped (`min_machines_running = 1`, no auto-stop: Discord needs an answer within 3 seconds, so no cold starts), health checked on `GET /health`. The SQLite file is `/data/rolepay.db` on the encrypted 1 GB volume `rolepay_demo_data` (Fly snapshots it daily, five days kept). Memory: node with tsx uses about 170 MB; the first page request builds the client bundle with esbuild, whose process then holds about 180 MB, which leaves about 130 MB free. About US$4.20 a month for the machine (Fly's Paris price, October 2026) plus US$0.15 for the volume; the shared IPv4 is free (no dedicated one).
+
+**Settings.** Non-secret ones are in the `[env]` block of the Fly config: the network, `PUBLIC_URL`, `ROLEPAY_RP_ID` (the demo's passkeys bind to `demo.rolepay.app` only), `HOST=0.0.0.0`, `PORT`, `ROLEPAY_DB_PATH`, `ROLEPAY_CLIENT_IP_HEADER=Fly-Client-IP` (the per-client rate limits key on the IP Fly's proxy saw, which a client cannot forge) and `ROLEPAY_AI_DAILY_CAP` (at most 50 model calls a UTC day on the server). Dev shortcuts are off. Secrets, set with `fly secrets` and never written anywhere else:
+
+- `ROLEPAY_MASTER_KEY`: generated for this app alone, never a local one. It opens the sealed bot keys in this volume's database, so changing it orphans them (each community then authorises a new key on its setup page).
+- `DISCORD_APP_ID`, `DISCORD_PUBLIC_KEY`, `DISCORD_BOT_TOKEN`: the Discord application this server answers for. The demo uses the `Rolepay Dev` application, so its Interactions Endpoint URL points here and no longer at a tunnel.
+- `ANTHROPIC_API_KEY`: optional, for AI proposals (each community still turns them on with `/rolepay setup ai_proposals:true`).
+
+**First deploy** (done for the demo on 2026-10-07; from the repo root):
+
+```bash
+fly apps create rolepay-demo
+fly volumes create rolepay_demo_data --app rolepay-demo --region cdg --size 1
+# Secrets from .env without printing them, and a fresh master key:
+{ grep -E '^(DISCORD_APP_ID|DISCORD_PUBLIC_KEY|DISCORD_BOT_TOKEN|ANTHROPIC_API_KEY)=' .env; echo "ROLEPAY_MASTER_KEY=$(openssl rand -hex 32)"; } \
+  | fly secrets import --app rolepay-demo --stage
+fly deploy -c fly.demo.toml --local-only --ha=false
+fly certs add demo.rolepay.app -a rolepay-demo
+```
+
+`--local-only` builds the image with the local Docker (for linux/amd64) and pushes it to Fly. Fly's remote builder built it but failed to push (401 from the registry) with flyctl 0.3.77; `--remote-only` should work again after `fly version upgrade`.
+
+**DNS** (Namecheap, Advanced DNS for `rolepay.app`): a `CNAME` record, host `demo`, value `rolepay-demo.fly.dev`. Fly then issues the Let's Encrypt certificate; `fly certs show demo.rolepay.app -a rolepay-demo` says when. Until it is issued, use <https://rolepay-demo.fly.dev>.
+
+**Discord.** Developer Portal, the application, General Information, Interactions Endpoint URL: `https://demo.rolepay.app/discord/interactions` (or the `fly.dev` one until the certificate is issued). Register the commands from a checkout with the same Discord settings in `.env`: `pnpm register-commands`, with `DISCORD_DEV_GUILD_ID` set to the demo server's ID (instant, that server only) or unset (global, every server the bot is in). Invite the bot with the link in step 4 of the setup above.
+
+**Redeploy** after a change: `fly deploy -c fly.demo.toml --local-only --ha=false`. The one machine stops and the new one starts on the same volume, about 20 seconds without answers; the boot recovery sweep finishes any payment that was in flight, so nothing is paid twice. Change a secret without printing it, for example `grep '^ANTHROPIC_API_KEY=' .env | fly secrets import -a rolepay-demo`; that restarts the machine.
+
+**Logs and state.**
+
+```bash
+fly logs -a rolepay-demo             # follow; --no-tail for the recent lines only
+fly status -a rolepay-demo           # the machine, its version and health check
+fly checks list -a rolepay-demo
+fly ssh console -a rolepay-demo      # a shell on the machine (the database is /data/rolepay.db)
+```
+
+The server logs one JSON line per event (`listening`, `interaction_error`, `job_error`, `recovery`, `proposal`, ...), never tokens, keys or message text. A `proposal` line with outcome `could_not_propose` and no tokens used, many times in a day, is usually the daily cap.
+
 ## Upgrading a setup from before the rename (payrun)
 
 The product was called payrun while it was built. An existing setup keeps working; three things are worth doing once:
