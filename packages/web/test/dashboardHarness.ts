@@ -91,6 +91,7 @@ export function dashboardHarness(opts: { oauth?: boolean; origin?: string; polic
   const members = new FakeGuildMembers()
   const policies = new InMemoryPolicies(clock)
   policies.setApproverRole(GUILD, ROLE)
+  const errors: unknown[] = []
   const app = createWebApp({
     rolepay,
     clock,
@@ -110,6 +111,7 @@ export function dashboardHarness(opts: { oauth?: boolean; origin?: string; polic
       oauth: opts.oauth === false ? null : oauth,
       members,
       ...(opts.policies === false ? {} : { policies, audit: policies }),
+      onError: (e) => errors.push(e),
     },
   })
 
@@ -135,7 +137,47 @@ export function dashboardHarness(opts: { oauth?: boolean; origin?: string; polic
     return r.value
   }
 
-  return { app, origin, rolepay, chain, clock, kv, oauth, members, policies, browser, signIn, community }
+  /** A registered payee (their passkey address), as /payee link and the claim page would make one. */
+  async function payee(userId: string, address: string) {
+    const link = await rolepay.payees.issueLink({ guildId: GUILD, discordUserId: userId })
+    if (!link.ok) throw new Error(link.error.code)
+    const r = await rolepay.payees.register({ token: link.value.token, address })
+    if (!r.ok) throw new Error(r.error.code)
+  }
+
+  /** An active bot key authorised by the treasury (the fake chain's root signer), and a funded treasury. */
+  async function activeKey(limit = usd('100')) {
+    const expiresAt = Math.floor(clock.now().getTime() / 1000) + 60 * 86_400
+    const p = await rolepay.communities.provisionBotKey({ guildId: GUILD, limit, periodSeconds: 30 * 86_400, expiresAt })
+    if (!p.ok) throw new Error(p.error.code)
+    const a = await rolepay.communities.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
+    if (!a.ok) throw new Error(a.error.code)
+    chain.fund(TOKEN, TREASURY, usd('1000'))
+    return a.value.key
+  }
+
+  /** A run made by `by` (default the treasurer), submitted; approved by the treasurer and paid unless asked not to. */
+  async function run(lines: [string, string][], opts: { note?: string; by?: string; approve?: boolean; pay?: boolean } = {}) {
+    const created = await rolepay.payRuns.create({
+      guildId: GUILD,
+      createdBy: opts.by ?? TREASURER.id,
+      note: opts.note ?? null,
+      lines: lines.map(([discordUserId, amount]) => ({ discordUserId, amount: usd(amount) })),
+    })
+    if (!created.ok) throw new Error(JSON.stringify(created.error))
+    const runId = created.value.id
+    await rolepay.payRuns.submit({ guildId: GUILD, runId, actor: opts.by ?? TREASURER.id })
+    if (opts.approve !== false) await rolepay.payRuns.approve({ guildId: GUILD, runId, actor: TREASURER.id, actorCanApprove: true })
+    if (opts.approve !== false && opts.pay !== false) {
+      const paid = await rolepay.payRuns.execute({ guildId: GUILD, runId })
+      if (!paid.ok || paid.value.status !== 'paid') throw new Error(`run ${runId} did not pay: ${JSON.stringify(paid, (_k, v) => (typeof v === 'bigint' ? `${v}` : v))}`)
+    }
+    const r = await rolepay.payRuns.get({ guildId: GUILD, runId })
+    if (!r.ok) throw new Error(r.error.code)
+    return r.value
+  }
+
+  return { app, origin, rolepay, chain, clock, kv, oauth, members, policies, errors, browser, signIn, community, payee, activeKey, run }
 }
 
 export type DashboardHarness = ReturnType<typeof dashboardHarness>

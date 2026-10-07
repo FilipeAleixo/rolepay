@@ -1,6 +1,9 @@
 import { Hono } from 'hono'
 import { type DashboardContext, dashboardKit, html } from './kit.js'
 import { authRoutes } from './routes/auth.js'
+import { auditRoutes } from './routes/audit.js'
+import { communityRoutes } from './routes/community.js'
+import { policyRoutes } from './routes/policies.js'
 import { messagePage } from './views/layout.js'
 
 export type { DashboardDeps } from './kit.js'
@@ -15,6 +18,9 @@ export function dashboardRoutes(ctx: DashboardContext): Hono {
   const kit = dashboardKit(ctx)
   const app = new Hono()
   app.route('/', authRoutes(kit))
+  app.route('/', communityRoutes(kit))
+  app.route('/', policyRoutes(kit))
+  app.route('/', auditRoutes(kit))
   app.onError((error) => {
     ctx.onError?.(error)
     return html(
