@@ -7,6 +7,7 @@ import type { Address, Result } from '@rolepay/core'
 import type { DiscordIdentity, DiscordOAuth, GuildMember, GuildMembers, OAuthError } from '../dashboard/ports.js'
 import type { Assets, PasskeySession, PasskeySessions } from '../ports.js'
 
+export { InMemoryAiUsage } from './inMemoryAiUsage.js'
 export { InMemoryPolicies } from './inMemoryPolicies.js'
 
 const COOKIE = 'fake_passkey'

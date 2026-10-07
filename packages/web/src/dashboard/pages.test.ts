@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GUILD, MEMBER, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
+import { GUILD, MEMBER, ROLE, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
 
 const ALICE = { id: '200000000000000011', address: '0x1111111111111111111111111111111111111111' }
 const BOB = { id: '200000000000000012', address: '0x2222222222222222222222222222222222222222' }
@@ -240,5 +240,73 @@ describe('Payees', () => {
     expect(html).toContain(`href="${EXPLORER}/address/${BOB.address}"`)
     expect(text(html)).toMatch(/November 2026/)
     expect(text(html)).toMatch(/October 2026/)
+  })
+})
+
+describe('AI spend (read only, for every member)', () => {
+  const OCT = new Date('2026-10-01T00:00:00Z')
+
+  it('Overview: what the AI cost this month, and the average cost of a drafted proposal', async () => {
+    const h = await seeded()
+    h.aiUsage.setSpend(GUILD, { since: OCT, calls: 7, totalMicroUsd: 42_100n, unpriced: 0, proposals: 5, averagePerProposalMicroUsd: 3_869n })
+    const { browser } = await h.signIn(identity(MEMBER))
+    const t = text(await (await browser.get(`/dashboard/${GUILD}`)).text())
+    expect(t).toMatch(/AI this month \$0\.042/)
+    expect(t).toMatch(/7 model calls since 2026-10-01 ?, estimated from the list price/)
+    expect(t).toMatch(/Average per proposal \$0\.004 \(5 drafted\)/)
+    expect(t).not.toMatch(/no price/)
+  })
+
+  it('Overview: no calls yet, and calls on a model with no price said apart', async () => {
+    const h = await seeded()
+    const { browser } = await h.signIn(identity(MEMBER))
+    expect(text(await (await browser.get(`/dashboard/${GUILD}`)).text())).toMatch(/AI this month \$0 No model calls this month\./)
+    h.aiUsage.setSpend(GUILD, { since: OCT, calls: 3, totalMicroUsd: 4_000n, unpriced: 2, proposals: 1, averagePerProposalMicroUsd: null })
+    const t = text(await (await browser.get(`/dashboard/${GUILD}`)).text())
+    expect(t).toMatch(/2 calls on a model with no price are not in the total/)
+    expect(t).toMatch(/Average per proposal unknown \(1 drafted\)/)
+  })
+
+  it('Audit log: each proposal with who asked, its model, latency and cost, linked to the run it became', async () => {
+    const h = await seeded()
+    await h.activeKey()
+    const run = await h.run([[ALICE.id, '10']])
+    h.aiUsage.addProposal(GUILD, { at: new Date('2026-10-06T10:00:00Z'), model: 'Sonnet 5.5', latencyMs: 2_100, costMicroUsd: 3_869n, mode: 'messages', actorId: TREASURER.id, outcome: 'proposed', runId: run.id })
+    h.aiUsage.addProposal(GUILD, { at: new Date('2026-10-06T11:00:00Z'), model: 'Sonnet 5.5', latencyMs: null, costMicroUsd: null, mode: 'criteria', actorId: MEMBER.id, outcome: 'could_not_propose', runId: null })
+    h.aiUsage.addProposal(GUILD, { at: new Date('2026-10-06T09:00:00Z'), model: 'Sonnet 5.5', latencyMs: 40, costMicroUsd: 300n, mode: 'messages', actorId: TREASURER.id, outcome: 'proposed', runId: null })
+    const { browser } = await h.signIn(identity(MEMBER))
+    const html = await (await browser.get(`/dashboard/${GUILD}/audit`)).text()
+    const section = html.slice(html.indexOf('AI proposals'))
+    const rows = section.split('<tr>').slice(2).map(text)
+    expect(rows[0]).toMatch(/2026-10-06 11:00 UTC Felix from criteria Sonnet 5\.5 . . could_not_propose/)
+    expect(rows[1]).toMatch(/2026-10-06 10:00 UTC Tess from messages Sonnet 5\.5 2\.1 s \$0\.004 drafted/)
+    expect(section).toContain(`href="/dashboard/${GUILD}/runs/${run.id}"`)
+    // Under a tenth of a second and of a cent, escaped like any text.
+    expect(rows[2]).toMatch(/&lt;0\.1 s &lt;\$0\.001 drafted/)
+  })
+
+  it('Policy version history: what compiling each version cost', async () => {
+    const h = await seeded()
+    const policyId = h.policies.seed(GUILD, { name: 'Weekly helpers', instruction: 'Every Monday: 1 per answer' })
+    await h.policies.edit({ guildId: GUILD, policyId, actor: { id: TREASURER.id, roleIds: [ROLE] }, draft: { name: 'Weekly helpers', instruction: 'Every Monday: 2 per answer', schedule: { kind: 'weekly', weekday: 1, hour: 18, timezone: 'UTC' } } })
+    h.aiUsage.addCompile(GUILD, policyId, 1, { at: OCT, model: 'Sonnet 5.5', latencyMs: 3_400, costMicroUsd: 18_000n })
+    h.aiUsage.addCompile(GUILD, policyId, 2, { at: OCT, model: 'Opus 5.5', latencyMs: 5_000, costMicroUsd: null })
+    const { browser } = await h.signIn(identity(MEMBER))
+    const html = await (await browser.get(`/dashboard/${GUILD}/policies/${policyId}`)).text()
+    const versions = text(html.slice(html.indexOf('Version history')))
+    expect(versions).toMatch(/Version 2 .*Compiled by Opus 5\.5 in 5\.0 s \(no price for this model\)\./)
+    expect(versions).toMatch(/Version 1 .*Compiled by Sonnet 5\.5 in 3\.4 s for \$0\.018\./)
+  })
+
+  it('a server without the AI spend leaves it out of every page', async () => {
+    const h = dashboardHarness({ aiUsage: false })
+    await h.community()
+    const policyId = h.policies.seed(GUILD, { name: 'Weekly helpers', instruction: 'Every Monday: 1 per answer' })
+    const { browser } = await h.signIn(identity(MEMBER))
+    for (const path of [`/dashboard/${GUILD}`, `/dashboard/${GUILD}/audit`, `/dashboard/${GUILD}/policies/${policyId}`]) {
+      const res = await browser.get(path)
+      expect(res.status, path).toBe(200)
+      expect(text(await res.text()), path).not.toMatch(/AI this month|AI proposals|Compiled by/)
+    }
   })
 })

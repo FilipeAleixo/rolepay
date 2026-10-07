@@ -13,6 +13,8 @@ const SAMPLE_FOR_FILTERS = 500
 const EXPORT_BATCH = 500
 const EXPORT_CAP = 50_000
 const MAX_NAMED = 60
+/** The latest proposals listed with their model, latency and cost. */
+const AI_PROPOSALS_SHOWN = 50
 const SAFE_ID = /^[\w.:-]{1,100}$/
 
 const COLUMNS = ['at', 'type', 'actor_id', 'actor_name', 'policy_id', 'policy_name', 'run_id', 'summary']
@@ -46,13 +48,15 @@ export function auditRoutes(kit: DashboardKit): Hono {
     if (!audit) return render(auditBody({ guildId, events: null, filters: { type: null, actor: null, policy: null }, eventTypes: [], actors: [], policies, names: new Map(), olderThan: null, newer: false }))
     const filters = filtersFrom((n) => c.req.query(n), audit)
     const before = c.req.query('before')
-    const [page, sample] = await Promise.all([
+    const [page, sample, aiProposals] = await Promise.all([
       audit.events({ ...query(guildId, filters), limit: PAGE_SIZE + 1, ...(before && SAFE_ID.test(before) ? { beforeId: before } : {}) }),
       audit.events({ guildId, limit: SAMPLE_FOR_FILTERS }),
+      kit.aiUsage ? kit.aiUsage.proposals({ guildId, limit: AI_PROPOSALS_SHOWN }) : Promise.resolve(null),
     ])
     const events = page.slice(0, PAGE_SIZE)
     const actors = [...new Set([...sample.map((e) => e.actorId), filters.actor].filter((x): x is string => x !== null))]
-    const names = await kit.members.names(guildId, [...events.map((e) => e.actorId).filter((x): x is string => x !== null), ...actors], { limit: MAX_NAMED })
+    const people = [...events.map((e) => e.actorId).filter((x): x is string => x !== null), ...actors, ...(aiProposals ?? []).map((p) => p.actorId)]
+    const names = await kit.members.names(guildId, people, { limit: MAX_NAMED })
     return render(
       auditBody({
         guildId,
@@ -64,6 +68,7 @@ export function auditRoutes(kit: DashboardKit): Hono {
         names,
         olderThan: page.length > PAGE_SIZE ? (events.at(-1)?.id ?? null) : null,
         newer: Boolean(before),
+        aiProposals,
       }),
     )
   })

@@ -6,7 +6,7 @@ const EVIL = '<img src=x onerror=alert(1)>"\'&'
 const ESCAPED = '&lt;img src=x onerror=alert(1)&gt;&quot;&#39;&amp;'
 
 describe('every string a person or Discord controls is escaped (XSS)', () => {
-  it('server names, user names, run notes, policy texts, preview reasons and audit summaries', async () => {
+  it('server names, user names, run notes, policy texts, preview reasons, audit summaries and AI model names', async () => {
     const h = dashboardHarness()
     await h.community({ name: `Guild ${EVIL}` })
     h.members.set(GUILD, TREASURER.id, [ROLE], `Tess ${EVIL}`)
@@ -28,6 +28,9 @@ describe('every string a person or Discord controls is escaped (XSS)', () => {
     await h.policies.edit({ guildId: GUILD, policyId, actor: { id: TREASURER.id, roleIds: [ROLE] }, draft: { name: 'x', instruction: `Edited ${EVIL}`, schedule: { kind: 'weekly', weekday: 1, hour: 1, timezone: 'UTC' } } })
     h.policies.linkRun(GUILD, run.id, { policyId, policyRunId: 'prun_1', policyName: `Policy ${EVIL}`, version: 1, period: `period ${EVIL}`, mode: 'autopilot', scheduledFor: new Date(), executesAt: null, vetoedBy: MEMBER.id, vetoedAt: new Date(), executedAt: null, vetoable: false })
     h.policies.addEvent(GUILD, { at: new Date(), type: 'run.vetoed', actorId: MEMBER.id, policyId, runId: run.id, summary: `Summary ${EVIL}` })
+    // The model name comes from the API's answer (or ROLEPAY_AI_MODEL); the outcome is a code, escaped anyway.
+    h.aiUsage.addProposal(GUILD, { at: new Date(), model: `Model ${EVIL}`, latencyMs: 2_100, costMicroUsd: 3_869n, mode: 'messages', actorId: MEMBER.id, outcome: `code ${EVIL}`, runId: run.id })
+    h.aiUsage.addCompile(GUILD, policyId, 1, { at: new Date(), model: `Model ${EVIL}`, latencyMs: 3_400, costMicroUsd: null })
 
     const { browser } = await h.signIn(identity({ id: TREASURER.id, name: `Tess ${EVIL}` }, [{ id: GUILD, name: `Listed ${EVIL}` }]))
     const pages = ['/dashboard', `/dashboard/${GUILD}`, `/dashboard/${GUILD}/runs`, `/dashboard/${GUILD}/runs/${run.id}`, `/dashboard/${GUILD}/payees`, `/dashboard/${GUILD}/policies`, `/dashboard/${GUILD}/policies/${policyId}`, `/dashboard/${GUILD}/policies/${policyId}/edit`, `/dashboard/${GUILD}/audit`]

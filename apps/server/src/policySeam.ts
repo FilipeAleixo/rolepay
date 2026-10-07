@@ -1,6 +1,8 @@
 import {
   AUDIT_EVENT_TYPES,
   type ActivityReader,
+  type AiUsage,
+  type AiUsagePurpose,
   type AuditEvent,
   type AuditEventType,
   type CompiledRule,
@@ -20,9 +22,12 @@ import {
   describeRule,
   err,
   formatAmount,
+  modelLabel,
   ok,
 } from '@rolepay/core'
 import type {
+  AiCallView,
+  AiUsagePort,
   AuditEventView,
   AuditPort,
   PolicyActor,
@@ -473,6 +478,43 @@ export function auditPortFromCore(rolepay: Rolepay): AuditPort {
       if (!r.ok) return []
       const symbol = await symbolOf(rolepay, q.guildId)
       return r.value.events.map((e) => ({ id: String(e.seq), at: e.at, type: e.type, actorId: e.actor, policyId: e.policyId, runId: e.runId, summary: auditSummary(e, symbol) }))
+    },
+  }
+}
+
+// ---- the AI spend --------------------------------------------------------------------------
+
+const PROPOSALS: readonly AiUsagePurpose[] = ['proposal_messages', 'proposal_criteria']
+const callOf = (u: AiUsage): AiCallView => ({ at: u.createdAt, model: modelLabel(u.model), latencyMs: u.latencyMs, costMicroUsd: u.costMicroUsd })
+
+/**
+ * The dashboard's AiUsagePort over `rolepay.aiUsage`: the rows core writes for every model call
+ * (counts, codes, IDs and the estimated cost, never any text), with the model named as people say it.
+ */
+export function aiUsagePortFromCore(rolepay: Rolepay): AiUsagePort {
+  return {
+    async spend({ guildId }) {
+      const m = await rolepay.aiUsage.month({ guildId })
+      return { since: m.since, calls: m.calls, totalMicroUsd: m.totalMicroUsd, unpriced: m.unpriced, proposals: m.proposals, averagePerProposalMicroUsd: m.averagePerProposalMicroUsd }
+    },
+
+    async proposals({ guildId, limit }) {
+      return (await rolepay.aiUsage.list({ guildId, purposes: PROPOSALS, limit })).map((u) => ({
+        ...callOf(u),
+        mode: u.purpose === 'proposal_messages' ? ('messages' as const) : ('criteria' as const),
+        actorId: u.actor,
+        outcome: u.outcome,
+        runId: u.runId,
+      }))
+    },
+
+    async compiles({ guildId, policyId }) {
+      const byVersion: Record<number, AiCallView> = {}
+      // Newest first: should a version have two compiles (two edits racing), the newer one is shown.
+      for (const u of await rolepay.aiUsage.list({ guildId, policyId, purposes: ['policy_compile'], limit: 500 })) {
+        if (u.policyVersion !== null && !(u.policyVersion in byVersion)) byVersion[u.policyVersion] = callOf(u)
+      }
+      return byVersion
     },
   }
 }

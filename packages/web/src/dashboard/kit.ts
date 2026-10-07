@@ -2,7 +2,7 @@ import type { Clock, KeyValueStore, Rolepay } from '@rolepay/core'
 import type { WebConfig } from '../config.js'
 import { type CookieNames, cookieNames, readCookie } from './cookies.js'
 import { CachedGuildMembers } from './members.js'
-import type { AuditPort, PolicyPort } from './policyPort.js'
+import type { AiUsagePort, AuditPort, PolicyPort } from './policyPort.js'
 import type { DiscordOAuth, GuildMembers } from './ports.js'
 import { type DashboardSession, DashboardSessionStore } from './sessions.js'
 
@@ -17,6 +17,8 @@ export type DashboardDeps = {
   /** The policy seam (see policyPort.ts). Absent: the Policies and Audit pages say they are not available. */
   policies?: PolicyPort
   audit?: AuditPort
+  /** The AI spend (policyPort.ts). Absent: the Overview, Audit log and policy pages leave it out. */
+  aiUsage?: AiUsagePort
   /** Unexpected errors (the page shows a generic message). Never given request data. */
   onError?: (error: unknown) => void
 }

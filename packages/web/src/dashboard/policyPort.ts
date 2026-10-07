@@ -1,13 +1,14 @@
 import type { Result } from '@rolepay/core'
 
 /**
- * THE POLICY SEAM. The dashboard's Policies and Audit pages read and act through these two ports,
+ * THE POLICY SEAM. The dashboard's Policies and Audit pages read and act through these ports,
  * never through core's policy services directly: the types stay plain (Dates, bigint micro-units,
  * words written by code) and the pages stay testable without the AI or Discord. The server wires
  * them with a thin adapter over core's `PolicyService` and `AuditService` (`policyPortFromCore`
  * and `auditPortFromCore` in apps/server, see docs/ARCHITECTURE.md "The policy seam"). Tests use
  * `InMemoryPolicies` from `@rolepay/web/testing`, and the page contract (`@rolepay/web/contract`)
  * runs the same page tests against both. Without them the pages say policies are not available.
+ * The AI spend (`AiUsagePort`, at the end) is read the same way, over core's AiUsageService.
  *
  * Money is bigint micro-units, as everywhere in Rolepay. Times are Dates. Every text field here
  * is shown escaped; none of it may carry Discord message text (only what a run already stores).
@@ -179,4 +180,51 @@ export interface AuditPort {
   /** The event types the filter offers. */
   readonly eventTypes: readonly string[]
   events(query: AuditQuery): Promise<AuditEventView[]>
+}
+
+// ---- the AI spend --------------------------------------------------------------------------
+
+/**
+ * One model call, as the dashboard shows it: the model, how long it took and what it cost. Rows
+ * hold no one's words (core stores counts, codes, IDs and the cost only). Money is bigint
+ * micro-dollars, estimated from the model's list price.
+ */
+export type AiCallView = {
+  at: Date
+  /** The model as people say it, for example "Sonnet 5.5". */
+  model: string
+  latencyMs: number | null
+  /** null when the model has no price (or the call returned no usage). */
+  costMicroUsd: bigint | null
+}
+
+/** A proposal attempt that reached the model, and the pay run it became. */
+export type AiProposalView = AiCallView & {
+  mode: 'messages' | 'criteria'
+  /** Who asked. */
+  actorId: string
+  /** `proposed`, or the code that stopped it (`could_not_propose`, `criteria_unclear`, `cannot_read`, ...). */
+  outcome: string
+  runId: string | null
+}
+
+/** This month's AI spend (UTC, from the first of the month). */
+export type AiSpendView = {
+  since: Date
+  calls: number
+  totalMicroUsd: bigint
+  /** Calls on a model with no price: counted, not in the total. */
+  unpriced: number
+  /** Drafted proposals this month, and the average cost of one (null with none). */
+  proposals: number
+  averagePerProposalMicroUsd: bigint | null
+}
+
+/** What the AI cost the community. Absent: the pages leave the AI spend out. */
+export interface AiUsagePort {
+  spend(input: { guildId: string }): Promise<AiSpendView>
+  /** Newest first. */
+  proposals(input: { guildId: string; limit: number }): Promise<AiProposalView[]>
+  /** What compiling each version of a policy cost, by version number; a version made without the model is absent. */
+  compiles(input: { guildId: string; policyId: string }): Promise<Record<number, AiCallView>>
 }

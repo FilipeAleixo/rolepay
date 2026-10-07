@@ -12,7 +12,7 @@ import { checkChain } from './chainCheck.js'
 import { composeServer } from './compose.js'
 import { parseServerConfig } from './config.js'
 import { loadEnvironment } from './env.js'
-import { auditPortFromCore, policyPortFromCore } from './policySeam.js'
+import { aiUsagePortFromCore, auditPortFromCore, policyPortFromCore } from './policySeam.js'
 
 const log = (event: string, fields: Record<string, unknown> = {}) => console.log(JSON.stringify({ at: new Date().toISOString(), event, ...fields }))
 
@@ -43,8 +43,9 @@ async function main() {
   })
   const passkeys = createPasskeys({ kv, origin: config.web.origin, rpId: config.web.rpId })
   const assets = prebuiltAssets(join(import.meta.dirname, 'rolepay.js')) ?? bundledAssets()
-  // The dashboard's policy seam: its Policies and Audit pages over core's policy services and audit stream.
-  const dashboard = { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay) }
+  // The dashboard's policy seam: its Policies and Audit pages over core's policy services and audit stream,
+  // and the AI spend (one content-free row per model call) on the Overview, the Audit log and each policy's versions.
+  const dashboard = { policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay), aiUsage: aiUsagePortFromCore(rolepay) }
   const web = { sessions: passkeys.sessions, passkeys: passkeys.handler, assets, dashboard }
   const composed = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web, log })
   const recovery = composed.startRecovery()

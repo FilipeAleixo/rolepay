@@ -1,5 +1,5 @@
-import { POLICY_LIMITS, PROPOSAL_LIMITS } from '@rolepay/core'
-import type { PolicyDetail, PolicyPreview, PolicySchedule, PolicySummary, PolicyVersionView } from '../policyPort.js'
+import { POLICY_LIMITS, PROPOSAL_LIMITS, secondsText, usdText } from '@rolepay/core'
+import type { AiCallView, PolicyDetail, PolicyPreview, PolicySchedule, PolicySummary, PolicyVersionView } from '../policyPort.js'
 import { lineDiff } from './diff.js'
 import { type Names, esc, money, person, pill, row, table, when } from './format.js'
 import { csrfField } from './layout.js'
@@ -125,7 +125,15 @@ function previewSection(d: { preview: PolicyPreview | { error: string }; names: 
 
 const versionText = (v: PolicyVersionView) => `Instruction:\n${v.instruction}\n\nRule:\n${v.ruleInWords}\n\nFilter:\n${JSON.stringify(v.filter, null, 2)}`
 
-function versionsSection(versions: PolicyVersionView[], names: Names): string {
+/** "Compiled by Sonnet 5.5 in 3.4 s for $0.018.": the one model call that made this version. */
+function compileLine(c: AiCallView | undefined): string {
+  if (!c) return ''
+  const time = c.latencyMs === null ? '' : ` in ${esc(secondsText(c.latencyMs))}`
+  const cost = c.costMicroUsd === null ? ' (no price for this model)' : ` for ${esc(usdText(c.costMicroUsd))}`
+  return `<br><span class="small muted">Compiled by ${esc(c.model)}${time}${cost}.</span>`
+}
+
+function versionsSection(versions: PolicyVersionView[], names: Names, compiles: Record<number, AiCallView> | null): string {
   const items = versions
     .map((v, i) => {
       const status =
@@ -142,7 +150,7 @@ function versionsSection(versions: PolicyVersionView[], names: Names): string {
             .map((l) => (l.op === ' ' ? `  ${esc(l.line)}` : `<span class="${l.op === '+' ? 'add' : 'del'}">${l.op} ${esc(l.line)}</span>`))
             .join('\n')}</pre></details>`
         : ''
-      return `<li><strong>Version ${v.version}</strong> ${status}<br><span class="small muted">written by ${person(v.createdBy, names)}, ${when(v.createdAt)}</span>${diff}</li>`
+      return `<li><strong>Version ${v.version}</strong> ${status}<br><span class="small muted">written by ${person(v.createdBy, names)}, ${when(v.createdAt)}</span>${compileLine(compiles?.[v.version])}${diff}</li>`
     })
     .reverse()
   return `<section class="card"><h2>Version history</h2><ol class="timeline">${items.join('')}</ol></section>`
@@ -177,6 +185,8 @@ export function policyBody(d: {
   canAct: boolean
   csrf: string
   notice: string
+  /** What compiling each version cost; null: the AI spend is not wired on this server. */
+  compiles?: Record<number, AiCallView> | null
 }): string {
   const p = d.policy
   const g = esc(d.guildId)
@@ -200,7 +210,7 @@ export function policyBody(d: {
 <section class="card"><h2>Settings</h2><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section></div>
 ${previewSection({ preview: d.preview, names: d.names, token: d.token })}
 ${actions}
-${versionsSection(d.versions, d.names)}`
+${versionsSection(d.versions, d.names, d.compiles ?? null)}`
 }
 
 export type PolicyFormValues = { name: string; instruction: string; kind: string; weekday: string; day: string; hour: string; timezone: string }

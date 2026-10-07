@@ -122,7 +122,11 @@ export function policyRoutes(kit: DashboardKit): Hono {
     const ref = { guildId: a.community.id, policyId: c.req.param('policyId') }
     const policy = await policies.get(ref)
     if (!policy.ok) return notFound(a)
-    const [preview, versions] = await Promise.all([policies.preview(ref).catch(() => null), policies.versions(ref)])
+    const [preview, versions, compiles] = await Promise.all([
+      policies.preview(ref).catch(() => null),
+      policies.versions(ref),
+      kit.aiUsage ? kit.aiUsage.compiles(ref) : Promise.resolve(null),
+    ])
     const shown = preview?.ok ? preview.value : { error: preview && !preview.ok ? (preview.error.message ?? '') : '' }
     const people = [
       ...('error' in shown ? [] : [...shown.matches.map((m) => m.userId), ...shown.nearMisses.map((n) => n.userId)]),
@@ -139,6 +143,7 @@ export function policyRoutes(kit: DashboardKit): Hono {
       canAct: a.viewer.canAct,
       csrf: a.viewer.csrf,
       notice: notice(c.req.query('done'), c.req.query('error')),
+      compiles,
     })
     return page(a, policy.value.name, body)
   })

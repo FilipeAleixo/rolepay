@@ -1,6 +1,6 @@
-import type { Community, KeyStatusView, Run } from '@rolepay/core'
-import type { RunOrigin, ScheduledRunView } from '../policyPort.js'
-import { type Names, addressLink, esc, money, period, person, pill, row, runPill, table, tokenLabel, when } from './format.js'
+import { type Community, type KeyStatusView, type Run, usdText } from '@rolepay/core'
+import type { AiSpendView, RunOrigin, ScheduledRunView } from '../policyPort.js'
+import { type Names, addressLink, day, esc, money, period, person, pill, row, runPill, table, tokenLabel, when } from './format.js'
 
 /** A chain read that may have failed: the value, `missing` (no key yet), or `unavailable` (the RPC). */
 export type ChainRead<T> = { kind: 'ok'; value: T } | { kind: 'missing' } | { kind: 'unavailable' }
@@ -15,6 +15,8 @@ export type OverviewData = {
   recent: Run[]
   origins: Record<string, RunOrigin>
   names: Names
+  /** null: the AI spend is not wired on this server (the card is left out). */
+  aiSpend: AiSpendView | null
 }
 
 const UNREADABLE = '<p class="muted">Rolepay could not read the chain just now. Reload in a moment.</p>'
@@ -59,6 +61,22 @@ function upcomingCard(d: OverviewData): string {
   return `<section class="card"><h2>Next scheduled runs</h2>${body}</section>`
 }
 
+const calls = (n: number) => `${n} model ${n === 1 ? 'call' : 'calls'}`
+
+/** This month's AI spend: the estimated total and the average cost of a drafted proposal. */
+function aiCard(spend: AiSpendView | null): string {
+  if (!spend) return ''
+  const head = `<h2>AI this month</h2><p class="big">${esc(usdText(spend.totalMicroUsd))}</p>`
+  if (spend.calls === 0) return `<section class="card">${head}<p class="muted">No model calls this month.</p></section>`
+  const average =
+    spend.proposals === 0 ? 'no proposal drafted yet' : `${spend.averagePerProposalMicroUsd === null ? 'unknown' : esc(usdText(spend.averagePerProposalMicroUsd))} (${spend.proposals} drafted)`
+  const unpriced = spend.unpriced
+    ? `<p class="muted small">${spend.unpriced === 1 ? '1 call on a model with no price is' : `${spend.unpriced} calls on a model with no price are`} not in the total.</p>`
+    : ''
+  return `<section class="card">${head}<p class="muted small">${calls(spend.calls)} since ${day(spend.since)}, estimated from the list price.</p>
+<dl class="facts"><dt>Average per proposal</dt><dd>${average}</dd></dl>${unpriced}</section>`
+}
+
 export function runRows(guildId: string, runs: Run[], origins: Record<string, RunOrigin>, names: Names): string[] {
   return runs.map((r) =>
     row(
@@ -84,6 +102,6 @@ export function overviewBody(d: OverviewData): string {
     ? table('Recent runs', RUN_COLUMNS, runRows(d.community.id, d.recent, d.origins, d.names), { numeric: [3, 4] })
     : '<p class="muted">No runs yet. <code>/rolepay new</code> in Discord makes one.</p>'
   return `<h1>Overview</h1><p class="lede">The treasury, what the bot may spend, and what is coming.</p>
-<div class="grid">${treasuryCard(d)}${keyCard(d)}${upcomingCard(d)}</div>
+<div class="grid">${treasuryCard(d)}${keyCard(d)}${upcomingCard(d)}${aiCard(d.aiSpend)}</div>
 <section class="card"><h2>Recent runs</h2>${recent}<p><a href="/dashboard/${g}/runs">All runs</a> · <a href="/dashboard/${g}/payees">Payees</a> · <a href="/dashboard/${g}/policies">Policies</a> · <a href="/dashboard/${g}/audit">Audit log</a></p></section>`
 }

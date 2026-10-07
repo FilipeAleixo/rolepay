@@ -7,7 +7,7 @@ import type { Hono } from 'hono'
 import { createWebApp } from '../src/index.js'
 import type { AuditPort, PolicyActor, PolicyPort } from '../src/dashboard/policyPort.js'
 import type { DiscordIdentity } from '../src/dashboard/ports.js'
-import { FakeDiscordOAuth, FakeGuildMembers, FakePasskeySessions, InMemoryPolicies, staticAssets } from '../src/testing/index.js'
+import { FakeDiscordOAuth, FakeGuildMembers, FakePasskeySessions, InMemoryAiUsage, InMemoryPolicies, staticAssets } from '../src/testing/index.js'
 
 export const GUILD = '1094309218049937418'
 export const OTHER_GUILD = '1094309218049937419'
@@ -120,7 +120,7 @@ export type PolicyBackendSetup<B extends { policies: PolicyPort; audit: AuditPor
 }
 
 export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditPort } = { policies: PolicyPort; audit: AuditPort }>(
-  opts: { oauth?: boolean; origin?: string; policies?: boolean; backend?: (clock: ManualClock) => PolicyBackendSetup<B> } = {},
+  opts: { oauth?: boolean; origin?: string; policies?: boolean; aiUsage?: boolean; backend?: (clock: ManualClock) => PolicyBackendSetup<B> } = {},
 ) {
   const origin = opts.origin ?? 'http://localhost:8787'
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
@@ -140,6 +140,7 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
   const members = new FakeGuildMembers()
   const policies = new InMemoryPolicies(clock)
   policies.setApproverRole(GUILD, ROLE)
+  const aiUsage = new InMemoryAiUsage(clock)
   const errors: unknown[] = []
   const calls: PortCall[] = []
   const base: HarnessBase = { rolepay, clock, chain, members, community, payee, activeKey, run }
@@ -164,6 +165,7 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
       oauth: opts.oauth === false ? null : oauth,
       members,
       ...(opts.policies === false ? {} : ports),
+      ...(opts.aiUsage === false ? {} : { aiUsage }),
       onError: (e) => errors.push(e),
     },
   })
@@ -230,7 +232,7 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
     return r.value
   }
 
-  return { app, origin, rolepay, chain, clock, kv, oauth, members, policies, backend, calls, errors, browser, signIn, community, payee, activeKey, run }
+  return { app, origin, rolepay, chain, clock, kv, oauth, members, policies, aiUsage, backend, calls, errors, browser, signIn, community, payee, activeKey, run }
 }
 
 /** What a policy backend may use to set itself up: core's services, the clock, the chain, the bot's member view, the helpers. */

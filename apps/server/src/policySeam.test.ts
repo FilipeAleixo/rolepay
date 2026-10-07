@@ -5,7 +5,7 @@ import { AUDIT_EVENT_TYPES, type AuditEvent, type AuditEventType, createRolepay,
 import { FakeActivityReader, FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories, unclearCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { scriptedProposer } from '../test/coreBackend.js'
-import { auditPortFromCore, auditSummary, policyPortFromCore, toCoreSchedule, toPortSchedule } from './policySeam.js'
+import { aiUsagePortFromCore, auditPortFromCore, auditSummary, policyPortFromCore, toCoreSchedule, toPortSchedule } from './policySeam.js'
 
 const GUILD = '1094309218049937418'
 const ROLE = '400000000000000001'
@@ -247,5 +247,34 @@ describe('auditSummary: every event in plain words, from codes, counts and amoun
     expect(say('run.failed', { reason: 'rejected', retryable: true })).toBe('The payment failed (rejected); it can be retried.')
     expect(say('run.failed', { reason: 'partial_match', retryable: false })).toBe('The payment failed (partial_match).')
     expect(auditSummary(event('run.paid', { lines: 1 }), 'AlphaUSD')).toBe('Paid ? AlphaUSD to 1 person.')
+  })
+})
+
+describe('aiUsagePortFromCore: the AI spend, read from the rows core writes', () => {
+  it('the month so far, each proposal with its model, time, cost and the run it became, and the compile of each policy version', async () => {
+    const w = await world()
+    const fake = w.proposer as FakeRunProposer
+    fake.usage = { ...fake.usage, model: 'claude-sonnet-5-5' } // 7 ms and 10,800 micro-dollars a call
+    const ai = aiUsagePortFromCore(w.rolepay)
+    const draft = { name: 'Help desk', instruction: RULE, schedule: MONDAY }
+    const created = await w.port.create({ guildId: GUILD, actor, draft })
+    if (!created.ok) throw new Error(created.error.code)
+    const policyId = created.value.policyId
+    expect((await w.port.edit({ guildId: GUILD, policyId, actor, draft: { ...draft, instruction: `${RULE} From today.` } })).ok).toBe(true)
+    const ALICE = '200000000000000011'
+    const link = await w.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: ALICE })
+    if (!link.ok) throw new Error(link.error.code)
+    await w.rolepay.payees.register({ token: link.value.token, address: '0x1111111111111111111111111111111111111111' })
+    const winners = { id: '810000000000000001', channelId: '700000000000000001', authorId: TREASURER, authorIsBot: false, content: `Winner: <@${ALICE}>`, mentionIds: [ALICE], at: w.clock.now(), replyTo: null }
+    const proposed = await w.rolepay.proposals.proposeFromMessages({ ...asTreasurer, instruction: '5 each', source: { kind: 'messages', channelId: winners.channelId, messages: [winners] } })
+    if (!proposed.ok) throw new Error(proposed.error.code)
+    const made = await w.rolepay.proposals.createRun({ ...asTreasurer, proposalId: proposed.value.id })
+    if (!made.ok) throw new Error(made.error.code)
+
+    expect(await ai.spend({ guildId: GUILD })).toEqual({ since: new Date('2026-10-01T00:00:00Z'), calls: 3, totalMicroUsd: 32_400n, unpriced: 0, proposals: 1, averagePerProposalMicroUsd: 10_800n })
+    const call = { at: w.clock.now(), model: 'Sonnet 5.5', latencyMs: 7, costMicroUsd: 10_800n }
+    expect(await ai.proposals({ guildId: GUILD, limit: 10 })).toEqual([{ ...call, mode: 'messages', actorId: TREASURER, outcome: 'proposed', runId: made.value.run.id }])
+    expect(await ai.compiles({ guildId: GUILD, policyId })).toEqual({ 1: call, 2: call })
+    expect(await ai.compiles({ guildId: GUILD, policyId: 'pol_unknown' })).toEqual({})
   })
 })

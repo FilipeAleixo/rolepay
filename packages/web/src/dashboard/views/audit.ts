@@ -1,5 +1,6 @@
-import type { AuditEventView } from '../policyPort.js'
-import { type Names, esc, person, row, table, when } from './format.js'
+import { secondsText, usdText } from '@rolepay/core'
+import type { AiProposalView, AuditEventView } from '../policyPort.js'
+import { type Names, esc, person, pill, row, table, when } from './format.js'
 
 export type AuditFilters = { type: string | null; actor: string | null; policy: string | null }
 
@@ -27,6 +28,8 @@ export function auditBody(d: {
   /** The id of the oldest event shown when there are older ones (the next page). */
   olderThan: string | null
   newer: boolean
+  /** The latest proposals that reached the model; null: the AI spend is not wired on this server. */
+  aiProposals?: AiProposalView[] | null
 }): string {
   const g = esc(d.guildId)
   if (d.events === null) {
@@ -54,5 +57,30 @@ export function auditBody(d: {
     d.olderThan ? `<a href="/dashboard/${g}/audit${esc(auditQuery(d.filters, { before: d.olderThan }))}">Older events</a>` : ''
   }</nav>`
   return `<h1>Audit log</h1><p class="lede">Every policy and run event, who did it and when: the governance record a community can publish.</p>
-${filters}<p><a class="button secondary" href="/dashboard/${g}/audit/csv${esc(auditQuery(d.filters))}">Export CSV</a></p><section class="card">${list}${pager}</section>`
+${filters}<p><a class="button secondary" href="/dashboard/${g}/audit/csv${esc(auditQuery(d.filters))}">Export CSV</a></p><section class="card">${list}${pager}</section>${aiSection(d.guildId, d.aiProposals ?? null, d.names)}`
+}
+
+const unknown = '<span class="muted">?</span>'
+
+/** Each proposal that reached the model: who asked, the model, the time and the cost, and the run it became. */
+function aiSection(guildId: string, proposals: AiProposalView[] | null, names: Names): string {
+  if (proposals === null) return ''
+  const g = esc(guildId)
+  const rows = proposals.map((p) =>
+    row(
+      [
+        when(p.at),
+        person(p.actorId, names),
+        p.mode === 'messages' ? 'from messages' : 'from criteria',
+        esc(p.model),
+        p.latencyMs === null ? unknown : esc(secondsText(p.latencyMs)),
+        p.costMicroUsd === null ? unknown : esc(usdText(p.costMicroUsd)),
+        p.outcome === 'proposed' ? pill('drafted', 'ok') : `<code>${esc(p.outcome)}</code>`,
+        p.runId ? `<a href="/dashboard/${g}/runs/${encodeURIComponent(p.runId)}">${esc(p.runId)}</a>` : '',
+      ],
+      { numeric: [4, 5] },
+    ),
+  )
+  const list = rows.length ? table('AI proposals', ['When', 'By', 'Mode', 'Model', 'Time', 'Cost', 'Outcome', 'Run'], rows, { numeric: [4, 5] }) : '<p class="muted">No proposals yet.</p>'
+  return `<section class="card"><h2>AI proposals</h2><p class="muted small">The latest proposals that reached the model, newest first, with the estimated cost of each. No instruction or message text is kept for them.</p>${list}</section>`
 }

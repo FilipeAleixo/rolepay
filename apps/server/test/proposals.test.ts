@@ -4,6 +4,8 @@
 // receipts. The model is the deterministic fake proposer; Discord REST and the chain are fakes.
 import { emptyCriteria, naiveMessageProposal } from '@rolepay/core/adapters'
 import { READ_HISTORY, buttonClick, messageCommand, modalSubmit, slashCommand, wireMessage } from '@rolepay/discord/testing'
+import { TestBrowser, identity } from '@rolepay/web/contract'
+import { FakeDiscordOAuth } from '@rolepay/web/testing'
 import { describe, expect, it } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer, usd } from './support.js'
 
@@ -26,8 +28,8 @@ const ADDR: Record<string, string> = {
 const text = (v: unknown) => JSON.stringify(v ?? null)
 
 /** A community with a 1000 AlphaUSD key, AI proposals on, and four registered payees (through their claim links). */
-async function community(opts: { limit?: string } = {}) {
-  const s = await testServer()
+async function community(opts: { limit?: string; server?: Parameters<typeof testServer>[0] } = {}) {
+  const s = await testServer(opts.server)
   await s.interact(slashCommand(SCOPE, 'rolepay', 'setup', { treasury: TREASURY, approver_role: TREASURER_ROLE, key_limit: opts.limit ?? '1000' }, TREASURER, 'tok-setup'))
   await s.drain()
   expect((await s.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })).ok).toBe(true)
@@ -174,5 +176,45 @@ describe('AI proposals end to end through the HTTP endpoint', () => {
     await s.drain()
     expect(s.chain.balance(TOKEN, ADDR[ANA] as string)).toBe(usd('20'))
     expect(s.chain.landedTxCount).toBe(1)
+  })
+})
+
+describe('what a proposal cost, end to end', () => {
+  const FELIX = '200000000000000009'
+  const visible = (html: string) => html.replace(/<style>[\s\S]*?<\/style>/, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
+
+  it('a footer only the proposer sees; nothing on the run, its review or the receipts; the month and each proposal on the dashboard for any member', async () => {
+    const oauth = new FakeDiscordOAuth()
+    const s = await community({ server: { policySeam: true, dashboard: { oauth } } })
+    const winners = wireMessage({ channelId: CHANNEL, authorId: TREASURER.userId, at: s.clock.now(), content: `Winners: <@${ANA}> and <@${RUI}>`, mentions: [ANA, RUI] })
+    await s.interact(messageCommand(SCOPE, 'Propose pay run', winners, TREASURER))
+    const submitted = await json(await s.interact(modalSubmit(SCOPE, `proposal-modal:instruct:${winners.id}`, { instruction: '50 each' }, TREASURER, { token: 'tok-cost' })))
+    expect(submitted.data?.flags).toBe(64)
+    await s.drain()
+    const proposal = text(s.rest.lastEdit('tok-cost'))
+    // The fake model: 7 ms and 10,800 micro-dollars a call.
+    expect(proposal).toContain('Drafted by fake-proposer · <0.1 s · $0.011')
+    const proposalId = /proposal:create:([A-Za-z0-9_]+)/.exec(proposal)?.[1] as string
+    await s.interact(buttonClick(SCOPE, `proposal:create:${proposalId}`, TREASURER, 'tok-create'))
+    await s.drain()
+    const review = text(s.rest.followUps.at(-1)?.message)
+    const runId = /rolepay:approve:([^"]+)"/.exec(review)?.[1] as string
+    await s.interact(buttonClick(SCOPE, `rolepay:approve:${runId}`, TREASURER, 'tok-approve'))
+    await s.drain()
+    expect(s.rest.dms).toHaveLength(2)
+    for (const shown of [review, text(s.rest.lastEdit('tok-approve')), text(s.rest.dms)]) expect(shown).not.toMatch(/Drafted by|fake-proposer|\$0\.011/)
+
+    // A member without any role reads the spend on the dashboard.
+    s.rest.setMember(GUILD, FELIX, [], null, 'Felix')
+    const felix = new TestBrowser(s.app, 'https://rolepay.test')
+    oauth.signInAs(identity({ id: FELIX, name: 'Felix' }, [{ id: GUILD, name: 'Mods guild' }]))
+    const consent = new URL((await felix.get('/auth/discord')).headers.get('location') as string)
+    expect((await felix.get(consent.pathname + consent.search)).status).toBe(303)
+    expect(visible(await (await felix.get(`/dashboard/${GUILD}`)).text())).toMatch(/AI this month \$0\.011 1 model call since .*Average per proposal \$0\.011 \(1 drafted\)/)
+    const audit = await (await felix.get(`/dashboard/${GUILD}/audit`)).text()
+    const ai = audit.slice(audit.indexOf('AI proposals'))
+    expect(visible(ai)).toMatch(/from messages fake-proposer &lt;0\.1 s \$0\.011 drafted/)
+    expect(ai).toContain(`href="/dashboard/${GUILD}/runs/${runId}"`)
+    expect(audit).not.toMatch(/Winners|50 each/)
   })
 })
