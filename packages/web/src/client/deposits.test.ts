@@ -107,4 +107,17 @@ describe("mining in the browser: ox's workers never lose their start message", (
     expect(found).toEqual({ salt: SALT, masterId: '0x58e21090' })
     expect(seen).toEqual([100_000, 200_000])
   })
+
+  it("searches far past ox's default 2^32 salts, which hold no valid salt for about a third of accounts (and the search would repeat on every try)", async () => {
+    let count: number | undefined
+    await mineSalt(TREASURY, () => {}, 0n, {
+      mine: (async (o: { count?: number }) => {
+        count = o.count
+        return { salt: SALT, masterId: '0x58E21090', registrationHash: '0x' }
+      }) as never,
+      stallMs: 1_000,
+    })
+    // 2^40 salts: the chance that none passes the 32-bit proof of work is about e^-256.
+    expect(count).toBe(2 ** 40)
+  })
 })

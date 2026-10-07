@@ -80,7 +80,8 @@ describe('deposit addresses on Moderato: registered by a passkey-like treasury, 
 
     // 1. Mine a salt with the 32-bit proof of work for this treasury (as the setup page does in the browser).
     const started = Date.now()
-    const mined = await VirtualMaster.mineSaltAsync({ address: treasuryAddress, workers: Math.max(2, availableParallelism() - 1) })
+    // count: past ox's default 2^32 salts, which hold no valid salt for about 37% of accounts (as the page does, client/deposits.ts).
+    const mined = await VirtualMaster.mineSaltAsync({ address: treasuryAddress, count: 2 ** 40, workers: Math.max(2, availableParallelism() - 1) })
     if (!mined) throw new Error('no salt found in the range')
     record({ step: 'mined', seconds: (Date.now() - started) / 1000, masterId: mined.masterId })
 

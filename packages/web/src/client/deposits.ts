@@ -91,6 +91,13 @@ export async function withQueuedWorkerMessages<T>(work: () => Promise<T>): Promi
 type Miner = typeof VirtualMaster.mineSaltAsync
 
 /**
+ * How many salts one search may try. ox stops after 2^32 by default, and the chance that none of
+ * those passes a 32-bit proof of work is about 1/e (37%); the search starts from the same salt each
+ * time, so for such an account every try would fail the same way. 2^40 leaves a chance of about e^-256.
+ */
+const SEARCH_COUNT = 2 ** 40
+
+/**
  * Mines a salt that passes the registry's 32-bit proof of work for `treasury`, with WebAssembly in
  * Web Workers (all but one of this device's cores): about 4.3 billion tries on average, about a
  * minute and a half on a recent laptop. `start` resumes after an earlier salt whose masterId was
@@ -116,6 +123,7 @@ export async function mineSalt(
       mine({
         address: treasury as Hex,
         start,
+        count: SEARCH_COUNT,
         signal: abort.signal,
         onProgress: (p) => {
           watch()
