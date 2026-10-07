@@ -79,10 +79,10 @@ export const AiProposal: React.FC = () => {
               <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 5, borderRadius: '8px 0 0 8px', background: C.gold, transform: `scaleY(${bar})`, transformOrigin: 'top' }} />
               <div style={{ font: `600 24px/1.3 ${SANS}`, color: C.head, ...at(18) }}>Pay run proposal</div>
               <div style={{ ...body, marginTop: 8, ...at(26) }}>
-                <b style={{ color: C.head }}>From:</b> <Link>1 message</Link> in <span style={{ color: C.head }}>#bounties</span>.
+                <b style={{ color: C.head, fontWeight: 600 }}>From:</b> <Link>1 message</Link> in <span style={{ color: C.head }}>#bounties</span>.
               </div>
               <div style={{ ...body, ...at(32) }}>
-                <b style={{ color: C.head }}>Instruction:</b> 20 each, the indexer one 50
+                <b style={{ color: C.head, fontWeight: 600 }}>Instruction:</b> 20 each, the indexer one 50
               </div>
 
               <div style={{ marginTop: 12 }}>
