@@ -48,6 +48,17 @@ export class FetchDiscordRest implements DiscordRest {
     return this.result(res)
   }
 
+  async postMessage(channelId: string, message: Message): Promise<Result<{ messageId: string }, RestError>> {
+    const res = await this.request('POST', `/channels/${channelId}/messages`, { message, bot: true })
+    if (!res.ok) {
+      const failed = this.result(res)
+      return failed.ok ? { ok: false, error: { code: 'http_error', status: res.status } } : failed
+    }
+    const posted = (await res.json()) as { id?: unknown }
+    if (typeof posted.id !== 'string') return { ok: false, error: { code: 'http_error', status: res.status } }
+    return { ok: true, value: { messageId: posted.id } }
+  }
+
   async editChannelMessage(channelId: string, messageId: string, message: Message): Promise<RestResult> {
     return this.result(await this.request('PATCH', `/channels/${channelId}/messages/${messageId}`, { message, bot: true }))
   }

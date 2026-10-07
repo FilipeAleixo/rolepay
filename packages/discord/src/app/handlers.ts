@@ -13,6 +13,10 @@ export type CommandHandler = (input: CommandInput, deps: DiscordAppDeps) => Prom
 export type AutocompleteHandler = (input: CommandInput & { focused: string | null }, deps: DiscordAppDeps) => Promise<Outcome>
 export type ButtonHandler = (input: { runId: string; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
 export type ProposalButtonHandler = (input: { proposalId: string; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
+/** Approve or Discard on a policy preview, for the version it showed. */
+export type PolicyButtonHandler = (input: { policyId: string; version: number; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
+/** Veto on an autopilot run. */
+export type VetoButtonHandler = (input: { policyRunId: string; messageId: string | null; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
 /** A right-click command on a message: the message arrives with the interaction. */
 export type MessageCommandHandler = (input: { target: SourceMessage; ctx: GuildContext }, deps: DiscordAppDeps) => Promise<Outcome>
 /** A submitted modal: `id` is what its custom_id carries, `fields` its text inputs. */

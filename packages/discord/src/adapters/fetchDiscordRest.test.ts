@@ -33,6 +33,16 @@ describe('FetchDiscordRest', () => {
     expect(JSON.parse(calls[0]?.body as string)).toEqual({ content: 'paid' })
   })
 
+  it('posts a message as the bot and returns its ID (so a policy run message can be edited later)', async () => {
+    const { fetch, calls } = fakeFetch({ status: 200, json: { id: '910000000000000001', channel_id: '700000000000000001' } }, { status: 403, json: { code: 50013 } })
+    const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })
+    expect(await rest.postMessage('700000000000000001', { content: 'run' })).toEqual({ ok: true, value: { messageId: '910000000000000001' } })
+    expect(calls[0]?.method).toBe('POST')
+    expect(calls[0]?.url).toBe(`${API}/channels/700000000000000001/messages`)
+    expect(calls[0]?.headers.get('authorization')).toBe(`Bot ${BOT_TOKEN}`)
+    expect(await rest.postMessage('700000000000000001', { content: 'run' })).toEqual({ ok: false, error: { code: 'forbidden' } })
+  })
+
   it('sends files as multipart on an edit', async () => {
     const { fetch, calls } = fakeFetch({ status: 200, json: {} })
     const rest = new FetchDiscordRest({ botToken: BOT_TOKEN, fetch, sleep: noSleep })

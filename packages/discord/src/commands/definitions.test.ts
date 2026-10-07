@@ -10,10 +10,52 @@ const defs = all.filter((c) => c.type === 1)
 const messageCommands = all.filter((c) => c.type === 3)
 
 describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
-  const subcommands = defs.flatMap((c) => (c.options ?? []).filter((o) => o.type === OptionType.SubCommand).map((s) => `${c.name} ${s.name}`))
+  const subcommandsOf = (d: Def[]) =>
+    d
+      .filter((c) => c.type === 1)
+      .flatMap((c) =>
+        (c.options ?? []).flatMap((o) =>
+          o.type === OptionType.SubCommand ? [`${c.name} ${o.name}`] : o.type === OptionType.SubCommandGroup ? (o.options ?? []).map((s) => `${c.name} ${o.name} ${s.name}`) : [],
+        ),
+      )
+  const subcommands = subcommandsOf(defs)
 
-  it('every registered subcommand has a handler, and every handler is registered', () => {
-    expect([...subcommands].sort()).toEqual([...ROUTED_COMMANDS].sort())
+  it('every registered subcommand (dev shortcuts included) has a handler, and every handler is registered', () => {
+    expect([...subcommandsOf(commandDefinitions({ devShortcuts: true }) as Def[])].sort()).toEqual([...ROUTED_COMMANDS].sort())
+    expect(ROUTED_COMMANDS).toEqual(expect.arrayContaining(subcommands))
+    // The only dev-only subcommand: making a policy's next run now ("time skips to Monday").
+    expect(ROUTED_COMMANDS.filter((c) => !subcommands.includes(c))).toEqual(['rolepay policy run_now'])
+  })
+
+  it('/rolepay policy new|list|show|pause|resume|mode: the policy commands, hidden from members like the rest of /rolepay', () => {
+    expect(subcommands.filter((c) => c.startsWith('rolepay policy '))).toEqual([
+      'rolepay policy new',
+      'rolepay policy list',
+      'rolepay policy show',
+      'rolepay policy pause',
+      'rolepay policy resume',
+      'rolepay policy mode',
+    ])
+    const policy = defs.find((d) => d.name === 'rolepay')?.options?.find((o) => o.name === 'policy')
+    const opts = (sub: string) => policy?.options?.find((o) => o.name === sub)?.options?.map((o) => [o.name, o.type, o.required ?? false])
+    expect(opts('new')).toEqual([
+      ['instruction', OptionType.String, true],
+      ['schedule', OptionType.String, true],
+      ['hour', OptionType.Integer, true],
+      ['weekday', OptionType.String, false],
+      ['day', OptionType.Integer, false],
+      ['timezone', OptionType.String, false],
+      ['name', OptionType.String, false],
+      ['max_per_run', OptionType.String, false],
+      ['max_per_person', OptionType.String, false],
+    ])
+    expect(opts('mode')).toEqual([
+      ['policy', OptionType.String, true],
+      ['mode', OptionType.String, true],
+      ['veto_hours', OptionType.Integer, false],
+    ])
+    const devMode = (commandDefinitions({ devShortcuts: true }) as Def[]).find((d) => d.name === 'rolepay')?.options?.find((o) => o.name === 'policy')?.options?.find((o) => o.name === 'mode')
+    expect(devMode?.options?.map((o) => o.name)).toContain('veto_minutes')
   })
 
   it('names and descriptions fit Discord limits; required options come first', () => {

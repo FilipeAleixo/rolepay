@@ -5,7 +5,8 @@ import type { DiscordAppConfig, DiscordAppDeps } from '../src/app/deps.js'
 import { createDispatcher } from '../src/app/router.js'
 import type { Dispatched } from '../src/http/handler.js'
 import type { MemberDirectory } from '../src/ports.js'
-import { MemoryPendingSources } from '../src/testing/fakeDiscordRest.js'
+import { createPolicyNotifier } from '../src/execution/policyNotifier.js'
+import { MemoryPendingSources, MemoryRunNotices } from '../src/testing/fakeDiscordRest.js'
 import type { FakeRunProposer } from '@rolepay/core/adapters'
 import { CHANNEL, GUILD } from './fixtures.js'
 import { harness, usd } from './harness.js'
@@ -34,6 +35,7 @@ export async function appHarness(opts: { members?: MemberDirectory; config?: Par
     pendingSources: new MemoryPendingSources(),
     clock: h.clock,
     config: { ...CONFIG, ...opts.config },
+    announcer: createPolicyNotifier({ rolepay: h.rolepay, rest: h.rest, notices: new MemoryRunNotices(), network: 'moderato' }),
     onError: (e) => errors.push(e),
   }
   const dispatch = createDispatcher(deps)
