@@ -5,13 +5,21 @@ import type { KeyVault } from './keyVault.js'
 import type { PayoutChain } from './payoutChain.js'
 import type { ActivityReader } from './activityReader.js'
 import type { ProposalLog } from './proposalLog.js'
-import type { CommunityRepository, PayeeRepository, ProposalRepository, RunRepository } from './repositories.js'
+import type { AuditLog, CommunityRepository, PayeeRepository, PolicyRepository, PolicyRunRepository, ProposalRepository, RunRepository } from './repositories.js'
 import type { RunProposer } from './runProposer.js'
 
 /** Everything `createRolepay` needs: one implementation of each port. */
 export type RolepayDeps = {
   chain: PayoutChain
-  repositories: { communities: CommunityRepository; payees: PayeeRepository; runs: RunRepository; proposals: ProposalRepository }
+  repositories: {
+    communities: CommunityRepository
+    payees: PayeeRepository
+    runs: RunRepository
+    proposals: ProposalRepository
+    policies: PolicyRepository
+    policyRuns: PolicyRunRepository
+    audit: AuditLog
+  }
   vault: KeyVault
   ids: IdGenerator
   clock: Clock

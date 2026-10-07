@@ -5,6 +5,7 @@ import { SystemClock } from '../crypto/index.js'
 import { KvProposalRepository } from '../kv/proposals.js'
 import { SqliteKeyValueStore } from './keyValue.js'
 import { migrateToLatest } from './migrations.js'
+import { SqliteAuditLog, SqlitePolicyRepository, SqlitePolicyRunRepository } from './policyRepositories.js'
 import { SqliteCommunityRepository, SqlitePayeeRepository, SqliteRunRepository } from './repositories.js'
 import type { Database } from './schema.js'
 
@@ -25,6 +26,9 @@ export async function openSqliteDatabase(path: string, options: { clock?: Clock 
       runs: new SqliteRunRepository(db),
       // Drafts that expire within a day: kept in the key-value table, no migration needed.
       proposals: new KvProposalRepository(kv, clock),
+      policies: new SqlitePolicyRepository(db),
+      policyRuns: new SqlitePolicyRunRepository(db),
+      audit: new SqliteAuditLog(db),
     },
     kv,
     close: () => db.destroy(),

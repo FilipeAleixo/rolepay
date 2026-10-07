@@ -30,6 +30,12 @@ export class RandomIds implements IdGenerator {
   proposalId() {
     return `prop_${base32(randomBytes(10))}`
   }
+  policyId() {
+    return `pol_${base32(randomBytes(10))}`
+  }
+  policyRunId() {
+    return `prun_${base32(randomBytes(10))}`
+  }
 }
 
 export class SystemClock implements Clock {
