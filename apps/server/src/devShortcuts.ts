@@ -1,4 +1,4 @@
-import type { PayrunConfig } from '@payrun/core'
+import type { PayrunConfig } from '@rolepay/core'
 
 /**
  * The guard for the dev scripts (`pnpm dev:treasury`, `pnpm dev:authorize-key`): they exist only

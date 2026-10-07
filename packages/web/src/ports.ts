@@ -1,8 +1,8 @@
-import type { Address } from '@payrun/core'
+import type { Address } from '@rolepay/core'
 
 /**
  * Ports: what the web layer needs from outside. Each has a real implementation in this
- * package (passkeys.ts, assets.ts) and a fake in `@payrun/web/testing`.
+ * package (passkeys.ts, assets.ts) and a fake in `@rolepay/web/testing`.
  */
 
 /**

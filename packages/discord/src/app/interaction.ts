@@ -1,4 +1,4 @@
-import { DiscordIdSchema, type Result, type SourceMessage, err, ok } from '@payrun/core'
+import { DiscordIdSchema, type Result, type SourceMessage, err, ok } from '@rolepay/core'
 import { z } from 'zod'
 import { CommandType, ComponentType, InteractionType, OptionType } from '../api.js'
 import { DiscordMessageSchema, toSourceMessage } from '../wire.js'

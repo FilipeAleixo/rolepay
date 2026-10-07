@@ -18,15 +18,15 @@ This document covers the whole system. `packages/core`, `packages/discord`, `pac
 ## Repository layout
 
 ```
-packages/core        @payrun/core: domain, ports, services, adapters
-packages/discord     @payrun/discord: the Discord adapter over HTTP interactions
-packages/web         @payrun/web: the claim and treasurer setup pages, WebAuthn ceremonies, the client bundle
-apps/server          @payrun/server: Hono on Node, the composition root (README: how to run it)
+packages/core        @rolepay/core: domain, ports, services, adapters
+packages/discord     @rolepay/discord: the Discord adapter over HTTP interactions
+packages/web         @rolepay/web: the claim and treasurer setup pages, WebAuthn ceremonies, the client bundle
+apps/server          @rolepay/server: Hono on Node, the composition root (README: how to run it)
 docs/tempo           Tempo and viem docs snapshot from the spike
 docs/ARCHITECTURE.md this file
 ```
 
-Dependencies point one way: `apps/server` -> `packages/discord` and `packages/web` -> `@payrun/core` (services only). Discord and web never import each other. Only `apps/server` (its `src/` and `scripts/`) imports `@payrun/core/adapters`; a guard in core's architecture test fails the build otherwise.
+Dependencies point one way: `apps/server` -> `packages/discord` and `packages/web` -> `@rolepay/core` (services only). Discord and web never import each other. Only `apps/server` (its `src/` and `scripts/`) imports `@rolepay/core/adapters`; a guard in core's architecture test fails the build otherwise.
 
 ## packages/core layers
 
@@ -57,7 +57,7 @@ adapters/      tempo/ (viem), sqlite/ (Kysely), crypto/ (node:crypto), anthropic
 
 These rules are enforced by `packages/core/test/architecture.test.ts`, not by memory. The same file checks that the package root exports no adapter and that nothing outside core reaches into core internals.
 
-**Public surface.** `@payrun/core` exports `createPayrun(deps)` (returns the four services), the services' types and input schemas, domain types and schemas, port types, config and constants. `@payrun/core/adapters` exports the implementations, for composition roots only. `openPayrunAdapters(parseConfig(process.env))` opens the production set (SQLite file, AES vault, Tempo chain, random IDs, system clock) and returns `{ deps, kv, close }`: `kv` is the KeyValueStore in the same database file.
+**Public surface.** `@rolepay/core` exports `createPayrun(deps)` (returns the four services), the services' types and input schemas, domain types and schemas, port types, config and constants. `@rolepay/core/adapters` exports the implementations, for composition roots only. `openPayrunAdapters(parseConfig(process.env))` opens the production set (SQLite file, AES vault, Tempo chain, random IDs, system clock) and returns `{ deps, kv, close }`: `kv` is the KeyValueStore in the same database file.
 
 **Results, not throws.** Every expected failure is a value: `{ ok: false, error: { code: 'snake_case', ... } }`. Services throw only for the unexpected (a database or RPC outage), which the caller treats as "try again".
 
@@ -194,7 +194,7 @@ The composition root (`src/main.ts`). It parses config (`src/config.ts`: the ser
 
 - `POST /discord/interactions`: the Discord interactions endpoint (HTTP interactions, no gateway bot).
 - `GET /health`: `{ ok, network, jobsInFlight }`.
-- `/claim/:token`, `/setup/:token`, `/webauthn/*`, `/assets/payrun.js`: the web pages (`@payrun/web`, below).
+- `/claim/:token`, `/setup/:token`, `/webauthn/*`, `/assets/payrun.js`: the web pages (`@rolepay/web`, below).
 - The recovery sweep: `payRuns.recoverInFlight()` on start and every 30 seconds (`src/recovery.ts`), never two at once. Runs it settles are reported in Discord as part of the sweep (`createRecoveryNotifier`).
 
 **The passkey domain is config only.** `PUBLIC_URL` is the public origin (the tunnel URL while developing); the WebAuthn rpId defaults to its host, or `PAYRUN_RP_ID` names a parent domain. Config refuses what browsers refuse for passkeys: plain http off localhost, an IP address, a path, an rpId that is not the host or a parent of it. Moving to the production domain means changing these two values, and passkeys made on the old host do not carry over.
@@ -213,7 +213,7 @@ const server = composeServer({ config, payrun, rest, clock: deps.clock, kv, web 
 
 ## packages/web
 
-The claim and setup pages, as an adapter over core like `packages/discord`: it calls core only through `@payrun/core` services, and everything external is a port with a fake in `@payrun/web/testing`.
+The claim and setup pages, as an adapter over core like `packages/discord`: it calls core only through `@rolepay/core` services, and everything external is a port with a fake in `@rolepay/web/testing`.
 
 ```
 app.ts       the Hono app: security headers (a strict CSP: our one script, the inline style by hash, connections only to us, the RPC and the sponsor; HSTS on https), same-origin POSTs only (CSRF), rate limits, /webauthn, /assets, the routes
@@ -240,11 +240,11 @@ The browser itself signs the keychain transactions (`client/tempo.ts`, with the 
 
 **One passkey prompt per action.** Creating the treasury is one prompt (the new passkey), authorising the key is one, replacing it (revoke the old key and authorise the new one, in one transaction) is one, revoking it is one. The authorisation is a transaction from the root calling the keychain's `authorizeKey(keyId, signatureType, KeyRestrictions)` directly (`client/keychain.ts`), which a root key may do. viem's `accessKey.authorize` would instead sign a key authorization and then the transaction carrying it, two prompts for the same result on chain (the protocol runs the same `authorizeKey` for a signed key authorization). Revocation is viem's `accessKey.revokeSync`, already one transaction. The only second prompt is a sign-in: when the treasury's server session is live but this browser no longer remembers the passkey account (site data cleared), the page must sign in before it can sign, and says "Your device will ask twice" before the click. The Playwright e2e counts every WebAuthn call to hold these numbers, and reads the key's call scope back from the chain.
 
-Layering is enforced by `packages/web/test/architecture.test.ts`: server code imports only `@payrun/core`, hono, zod, the Accounts SDK server, `viem/tempo`, esbuild and node; client code imports only the Accounts SDK and viem; views are pure; nothing imports the fakes.
+Layering is enforced by `packages/web/test/architecture.test.ts`: server code imports only `@rolepay/core`, hono, zod, the Accounts SDK server, `viem/tempo`, esbuild and node; client code imports only the Accounts SDK and viem; views are pure; nothing imports the fakes.
 
 ## packages/discord
 
-The Discord adapter. It calls core only through `@payrun/core` services; everything external is a port with an in-memory fake (`@payrun/discord/testing`).
+The Discord adapter. It calls core only through `@rolepay/core` services; everything external is a port with an in-memory fake (`@rolepay/discord/testing`).
 
 ```
 http/        Ed25519 verification (WebCrypto) and the endpoint as a fetch handler: Request in, Response out; each interaction ID is answered once (InteractionLog), so a replay inside the 5-minute window gets 409
@@ -258,7 +258,7 @@ wire.ts      Zod schemas for Discord messages (message-command targets, history)
 ports.ts     DiscordRest, ExecutionQueue, MemberDirectory, RunNotices, InteractionLog, PendingSources
 ```
 
-A handler is a thin route: parse options with Zod, check permissions, call a service, return an **outcome** (`reply`, `update`, `defer` or `choices`). Handlers never talk to Discord; `app/outcome.ts` renders the outcome. A `defer` answers at once ("thinking...") and finishes in the background, then edits the reply through the interaction webhook; a public deferral that fails is deleted and the error goes to the caller alone. Layering is enforced by `packages/discord/test/architecture.test.ts`: discord imports only `@payrun/core` and `zod`; views import nothing with IO; handlers never reach adapters, the HTTP layer or the queue implementation.
+A handler is a thin route: parse options with Zod, check permissions, call a service, return an **outcome** (`reply`, `update`, `defer` or `choices`). Handlers never talk to Discord; `app/outcome.ts` renders the outcome. A `defer` answers at once ("thinking...") and finishes in the background, then edits the reply through the interaction webhook; a public deferral that fails is deleted and the error goes to the caller alone. Layering is enforced by `packages/discord/test/architecture.test.ts`: discord imports only `@rolepay/core` and `zod`; views import nothing with IO; handlers never reach adapters, the HTTP layer or the queue implementation.
 
 | Command / component | Who | Service calls |
 | --- | --- | --- |

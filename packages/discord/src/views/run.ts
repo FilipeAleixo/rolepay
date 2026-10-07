@@ -1,4 +1,4 @@
-import type { Failure, NetworkName, Run, RunLine } from '@payrun/core'
+import type { Failure, NetworkName, Run, RunLine } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
 import { type RunAction, encodeCustomId } from '../components/customId.js'
 import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention, shortAddress, txUrl } from './format.js'

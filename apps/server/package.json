@@ -1,5 +1,5 @@
 {
-  "name": "@payrun/server",
+  "name": "@rolepay/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -18,9 +18,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.3",
-    "@payrun/core": "workspace:*",
-    "@payrun/discord": "workspace:*",
-    "@payrun/web": "workspace:*",
+    "@rolepay/core": "workspace:*",
+    "@rolepay/discord": "workspace:*",
+    "@rolepay/web": "workspace:*",
     "dotenv": "^18.0.5",
     "hono": "^4.13.13",
     "zod": "^4.6.5"

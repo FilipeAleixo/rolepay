@@ -1,5 +1,5 @@
 {
-  "name": "@payrun/core",
+  "name": "@rolepay/core",
   "version": "0.1.0",
   "private": true,
   "type": "module",

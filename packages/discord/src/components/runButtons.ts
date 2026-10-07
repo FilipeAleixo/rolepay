@@ -1,4 +1,4 @@
-import type { Community } from '@payrun/core'
+import type { Community } from '@rolepay/core'
 import { type ButtonHandler, type GuildContext, replyError } from '../app/handlers.js'
 import { type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canManageGuild, holdsApproverRole } from '../app/permissions.js'

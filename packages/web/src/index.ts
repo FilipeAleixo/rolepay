@@ -1,7 +1,7 @@
 /**
- * @payrun/web: the web pages over HTTP (the recipient claim page and the treasurer setup
+ * @rolepay/web: the web pages over HTTP (the recipient claim page and the treasurer setup
  * page), their JSON endpoints, the WebAuthn ceremonies and the client bundle. Calls core
- * only through `@payrun/core` services. Fakes for tests: `@payrun/web/testing`.
+ * only through `@rolepay/core` services. Fakes for tests: `@rolepay/web/testing`.
  */
 export { type WebAppDeps, createWebApp } from './app.js'
 export { bundledAssets } from './assets.js'

@@ -1,4 +1,4 @@
-import type { Clock, KeyValueStore, Payrun } from '@payrun/core'
+import type { Clock, KeyValueStore, Payrun } from '@rolepay/core'
 import {
   type DiscordRest,
   InProcessExecutionQueue,
@@ -10,8 +10,8 @@ import {
   createDiscordInteractions,
   createRecoveryNotifier,
   createRunExecutor,
-} from '@payrun/discord'
-import { type Assets, type PasskeySessions, type RateLimiter, TokenBucketLimiter, createWebApp } from '@payrun/web'
+} from '@rolepay/discord'
+import { type Assets, type PasskeySessions, type RateLimiter, TokenBucketLimiter, createWebApp } from '@rolepay/web'
 import { Hono } from 'hono'
 import type { ServerConfig } from './config.js'
 import { errorFields } from './logging.js'

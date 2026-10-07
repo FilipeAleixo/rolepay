@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { Address, KeyValueStore } from '@payrun/core'
+import type { Address, KeyValueStore } from '@rolepay/core'
 import { Handler, Kv } from 'accounts/server'
 import { Account } from 'viem/tempo'
 import type { PasskeySession, PasskeySessions } from './ports.js'

@@ -1,4 +1,4 @@
-import type { NetworkName, Payrun, RecoveryResult } from '@payrun/core'
+import type { NetworkName, Payrun, RecoveryResult } from '@rolepay/core'
 import type { DiscordRest, RunNotices } from '../ports.js'
 import { runMessage } from '../views/run.js'
 import { sendReceipts } from './receipts.js'

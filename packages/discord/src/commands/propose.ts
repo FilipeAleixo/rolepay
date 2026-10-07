@@ -1,4 +1,4 @@
-import { DiscordIdSchema, PROPOSAL_LIMITS } from '@payrun/core'
+import { DiscordIdSchema, PROPOSAL_LIMITS } from '@rolepay/core'
 import { z } from 'zod'
 import { type CommandHandler, parseOptions } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'

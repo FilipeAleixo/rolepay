@@ -1,4 +1,4 @@
-import { type Community, type Payrun, canPropose } from '@payrun/core'
+import { type Community, type Payrun, canPropose } from '@rolepay/core'
 import { type GuildContext, replyError } from '../app/handlers.js'
 import { type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canOperate } from '../app/permissions.js'

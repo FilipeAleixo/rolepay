@@ -1,5 +1,5 @@
 import { type Message, attachmentMeta, multipartBody, splitFiles } from '../api.js'
-import type { Result } from '@payrun/core'
+import type { Result } from '@rolepay/core'
 import type { DiscordRest, ReplyHandle, RestError, RestResult } from '../ports.js'
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>

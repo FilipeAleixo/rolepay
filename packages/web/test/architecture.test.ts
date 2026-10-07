@@ -1,4 +1,4 @@
-// Convention guards for @payrun/web, enforced by the build. Test files are exempt.
+// Convention guards for @rolepay/web, enforced by the build. Test files are exempt.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -33,10 +33,10 @@ const violations = (list: string[], allowed: (t: string) => boolean) =>
       .map(({ spec }) => `${relative(PKG, f)} imports ${spec}`),
   )
 
-describe('@payrun/web layering', () => {
-  it('server code reaches core only through @payrun/core, plus hono, zod, the Accounts SDK server, viem/tempo, esbuild and node', () => {
+describe('@rolepay/web layering', () => {
+  it('server code reaches core only through @rolepay/core, plus hono, zod, the Accounts SDK server, viem/tempo, esbuild and node', () => {
     const ok = (t: string) =>
-      t === '@payrun/core' || ['hono', 'hono/compress', 'zod', 'accounts/server', 'viem/tempo', 'esbuild'].includes(t) || t.startsWith('node:') || (t.startsWith('src/') && t !== 'src/client')
+      t === '@rolepay/core' || ['hono', 'hono/compress', 'zod', 'accounts/server', 'viem/tempo', 'esbuild'].includes(t) || t.startsWith('node:') || (t.startsWith('src/') && t !== 'src/client')
     expect(violations(server(), ok)).toEqual([])
   })
 

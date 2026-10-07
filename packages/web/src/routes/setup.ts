@@ -1,4 +1,4 @@
-import { AddressSchema, type Clock, type Community, type KeyStatusView, type Payrun, TOKEN_SYMBOLS, formatAmount, parseAmount } from '@payrun/core'
+import { AddressSchema, type Clock, type Community, type KeyStatusView, type Payrun, TOKEN_SYMBOLS, formatAmount, parseAmount } from '@rolepay/core'
 import { type Context, Hono } from 'hono'
 import { z } from 'zod'
 import type { WebConfig } from '../config.js'

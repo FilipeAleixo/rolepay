@@ -1,5 +1,5 @@
 {
-  "name": "@payrun/discord",
+  "name": "@rolepay/discord",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@payrun/core": "workspace:*",
+    "@rolepay/core": "workspace:*",
     "zod": "^4.6.5"
   },
   "devDependencies": {

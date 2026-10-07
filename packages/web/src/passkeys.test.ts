@@ -1,4 +1,4 @@
-import { MemoryKeyValueStore } from '@payrun/core/adapters'
+import { MemoryKeyValueStore } from '@rolepay/core/adapters'
 import { Account, P256 } from 'viem/tempo'
 import { describe, expect, it } from 'vitest'
 import { accountsKv, createPasskeys, passkeyAddress, withLoginProof } from './passkeys.js'

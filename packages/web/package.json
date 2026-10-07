@@ -1,5 +1,5 @@
 {
-  "name": "@payrun/web",
+  "name": "@rolepay/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,7 +14,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@payrun/core": "workspace:*",
+    "@rolepay/core": "workspace:*",
     "accounts": "0.19.1",
     "esbuild": "0.28.2",
     "hono": "^4.13.13",

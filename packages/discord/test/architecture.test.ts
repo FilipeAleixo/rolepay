@@ -1,4 +1,4 @@
-// Convention guards for @payrun/discord, enforced by the build. Test files are exempt.
+// Convention guards for @rolepay/discord, enforced by the build. Test files are exempt.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -33,14 +33,14 @@ function violations(dir: string, allowed: (t: string) => boolean) {
   )
 }
 
-describe('@payrun/discord layering', () => {
-  it('reaches core only through @payrun/core (never @payrun/core/adapters or core files), and imports nothing but zod besides', () => {
-    expect(violations('.', (t) => t === '@payrun/core' || t === 'zod' || t.startsWith('src/'))).toEqual([])
+describe('@rolepay/discord layering', () => {
+  it('reaches core only through @rolepay/core (never @rolepay/core/adapters or core files), and imports nothing but zod besides', () => {
+    expect(violations('.', (t) => t === '@rolepay/core' || t === 'zod' || t.startsWith('src/'))).toEqual([])
   })
 
   it('views are pure builders: domain values in, message payloads out', () => {
     expect(
-      violations('views', (t) => t === '@payrun/core' || t === 'src/api.ts' || t === 'src/api.js' || t.startsWith('src/views') || t === 'src/components'),
+      violations('views', (t) => t === '@rolepay/core' || t === 'src/api.ts' || t === 'src/api.js' || t.startsWith('src/views') || t === 'src/components'),
     ).toEqual([])
   })
 
@@ -55,7 +55,7 @@ describe('@payrun/discord layering', () => {
     expect(bad).toEqual([])
   })
 
-  it('the package root exports no fakes (they live in @payrun/discord/testing)', () => {
+  it('the package root exports no fakes (they live in @rolepay/discord/testing)', () => {
     expect(Object.keys(root).filter((k) => /Fake|Recording|Static|TestSigner|slashCommand|buttonClick/.test(k))).toEqual([])
   })
 

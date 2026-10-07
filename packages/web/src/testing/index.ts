@@ -1,8 +1,8 @@
 /**
- * @payrun/web/testing: in-memory fakes for the web ports, for this package's tests and the
+ * @rolepay/web/testing: in-memory fakes for the web ports, for this package's tests and the
  * server's. Production code never imports this.
  */
-import type { Address } from '@payrun/core'
+import type { Address } from '@rolepay/core'
 import type { Assets, PasskeySession, PasskeySessions } from '../ports.js'
 
 const COOKIE = 'fake_passkey'

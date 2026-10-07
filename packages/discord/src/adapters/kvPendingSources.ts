@@ -1,4 +1,4 @@
-import { type KeyValueStore, SourceMessageSchema, type SourceMessage } from '@payrun/core'
+import { type KeyValueStore, SourceMessageSchema, type SourceMessage } from '@rolepay/core'
 import type { PendingSources } from '../ports.js'
 
 /** A modal answered after 15 minutes finds nothing (Discord's own interaction tokens last that long). */

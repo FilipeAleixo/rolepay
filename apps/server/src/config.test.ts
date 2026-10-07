@@ -1,4 +1,4 @@
-import { TESTNET_TOKENS } from '@payrun/core'
+import { TESTNET_TOKENS } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { parseServerConfig } from './config.js'
 

@@ -1,6 +1,6 @@
-# @payrun/server
+# @rolepay/server
 
-The payrun server: Hono on Node, the composition root over `@payrun/core`, `@payrun/discord` and `@payrun/web`. It serves the Discord interactions endpoint (`POST /discord/interactions`), `GET /health`, the recipient claim page (`/claim/:token`), the treasurer setup page (`/setup/:token`), the passkey ceremonies (`/webauthn/*`) and the client bundle (`/assets/payrun.js`), and runs the crash-recovery sweep every 30 seconds.
+The payrun server: Hono on Node, the composition root over `@rolepay/core`, `@rolepay/discord` and `@rolepay/web`. It serves the Discord interactions endpoint (`POST /discord/interactions`), `GET /health`, the recipient claim page (`/claim/:token`), the treasurer setup page (`/setup/:token`), the passkey ceremonies (`/webauthn/*`) and the client bundle (`/assets/payrun.js`), and runs the crash-recovery sweep every 30 seconds.
 
 Everything below is testnet (Moderato). Secrets go only in the repo-root `.env`, which is gitignored.
 
@@ -94,8 +94,8 @@ Optional: stop the server with Ctrl-C right after clicking Approve on a new run,
 | `pnpm register-commands` | Registers the slash commands (guild if `DISCORD_DEV_GUILD_ID` is set, else global) |
 | `pnpm dev:treasury` | Testnet dev shortcut (`PAYRUN_DEV_SHORTCUTS=true`): prints and funds the dev treasury (`PAYRUN_TEST_ROOT_PRIVATE_KEY`) |
 | `pnpm dev:authorize-key <guildId>` | Testnet dev shortcut (`PAYRUN_DEV_SHORTCUTS=true`): the dev treasury authorises the pending bot key |
-| `pnpm --filter @payrun/server test` | Server tests (no network) |
-| `pnpm --filter @payrun/server test:chain` | Opt-in: the Discord flow over HTTP on Moderato, fake Discord REST |
+| `pnpm --filter @rolepay/server test` | Server tests (no network) |
+| `pnpm --filter @rolepay/server test:chain` | Opt-in: the Discord flow over HTTP on Moderato, fake Discord REST |
 | `pnpm test:e2e` | Opt-in: Playwright in Chromium with a virtual passkey authenticator, the real server on `http://localhost:8799`, Moderato |
 | `PAYRUN_AI_LIVE=true pnpm test:ai-live` | Opt-in: three real Anthropic API calls (a few cents) with `ANTHROPIC_API_KEY` from `.env` |
 

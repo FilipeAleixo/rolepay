@@ -1,4 +1,4 @@
-import { type Community, MAX_LINES_PER_RUN, PROPOSAL_LIMITS } from '@payrun/core'
+import { type Community, MAX_LINES_PER_RUN, PROPOSAL_LIMITS } from '@rolepay/core'
 import { escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'
 
 export const AI_NOT_CONFIGURED = 'AI proposals are not set up on this payrun server: it has no Anthropic API key. Create the run with `/payrun new` instead.'

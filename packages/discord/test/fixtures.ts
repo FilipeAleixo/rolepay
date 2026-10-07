@@ -1,5 +1,5 @@
 // Domain fixtures built with core's public domain functions (never its internals).
-import { type Proposal, type ProposalLine, type Run, type RunEvent, TESTNET_TOKENS, newRun, transition } from '@payrun/core'
+import { type Proposal, type ProposalLine, type Run, type RunEvent, TESTNET_TOKENS, newRun, transition } from '@rolepay/core'
 
 export const GUILD = '1094309218049937418'
 export const APP_ID = '500000000000000001'

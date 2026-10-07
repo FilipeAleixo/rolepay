@@ -1,4 +1,4 @@
-import { COMMAND_DEFINITIONS, commandDefinitions } from '@payrun/discord'
+import { COMMAND_DEFINITIONS, commandDefinitions } from '@rolepay/discord'
 import { describe, expect, it } from 'vitest'
 import { registerCommands } from './registerCommands.js'
 

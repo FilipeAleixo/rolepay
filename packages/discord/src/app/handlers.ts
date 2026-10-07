@@ -1,4 +1,4 @@
-import type { SourceMessage } from '@payrun/core'
+import type { SourceMessage } from '@rolepay/core'
 import type { z } from 'zod'
 import { explainError } from '../views/errors.js'
 import type { DiscordAppDeps } from './deps.js'

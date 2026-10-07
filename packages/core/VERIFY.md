@@ -1,4 +1,4 @@
-# Verify @payrun/core by hand
+# Verify @rolepay/core by hand
 
 About 5 minutes. From the repo root.
 

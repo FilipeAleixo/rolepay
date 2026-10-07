@@ -1,5 +1,5 @@
-import { type Result, devShortcutsEnabled, err, ok } from '@payrun/core'
-import { FetchDiscordRest, commandDefinitions } from '@payrun/discord'
+import { type Result, devShortcutsEnabled, err, ok } from '@rolepay/core'
+import { FetchDiscordRest, commandDefinitions } from '@rolepay/discord'
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 

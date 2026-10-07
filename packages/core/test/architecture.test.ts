@@ -72,7 +72,7 @@ describe('public surface', () => {
     expect(leaked).toEqual([])
   })
 
-  it('nothing outside core reaches into core internals (only @payrun/core and @payrun/core/adapters)', () => {
+  it('nothing outside core reaches into core internals (only @rolepay/core and @rolepay/core/adapters)', () => {
     const outside = [
       ...readdirSync(join(REPO, 'packages')).filter((p) => p !== 'core').map((p) => join(REPO, 'packages', p)),
       ...(statSync(join(REPO, 'apps'), { throwIfNoEntry: false })?.isDirectory()
@@ -82,7 +82,7 @@ describe('public surface', () => {
     const bad = outside.flatMap((pkg) =>
       files(pkg).flatMap((f) =>
         importsOf(f)
-          .filter((spec) => (spec.startsWith('@payrun/core/') && spec !== '@payrun/core/adapters') || resolve(dirname(f), spec).startsWith(CORE))
+          .filter((spec) => (spec.startsWith('@rolepay/core/') && spec !== '@rolepay/core/adapters') || resolve(dirname(f), spec).startsWith(CORE))
           .map((spec) => `${relative(REPO, f)} imports ${spec}`),
       ),
     )
@@ -91,7 +91,7 @@ describe('public surface', () => {
 })
 
 describe('composition roots', () => {
-  it('only apps/server imports @payrun/core/adapters (every other package uses the services)', () => {
+  it('only apps/server imports @rolepay/core/adapters (every other package uses the services)', () => {
     const others = [
       ...readdirSync(join(REPO, 'packages')).filter((p) => p !== 'core').map((p) => join(REPO, 'packages', p)),
       ...(statSync(join(REPO, 'apps'), { throwIfNoEntry: false })?.isDirectory()
@@ -102,7 +102,7 @@ describe('composition roots', () => {
     const bad = others.flatMap((pkg) =>
       files(join(pkg, 'src')).flatMap((f) =>
         importsOf(f)
-          .filter((spec) => spec === '@payrun/core/adapters')
+          .filter((spec) => spec === '@rolepay/core/adapters')
           .map((spec) => `${relative(REPO, f)} imports ${spec}`),
       ),
     )

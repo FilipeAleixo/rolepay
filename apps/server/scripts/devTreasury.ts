@@ -5,8 +5,8 @@
 import { randomBytes } from 'node:crypto'
 import { appendFileSync, existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { NETWORKS, TESTNET_TOKENS, formatAmount, parseConfig } from '@payrun/core'
-import { createTestnetTools, rootSignerFromPrivateKey } from '@payrun/core/adapters'
+import { NETWORKS, TESTNET_TOKENS, formatAmount, parseConfig } from '@rolepay/core'
+import { createTestnetTools, rootSignerFromPrivateKey } from '@rolepay/core/adapters'
 import { requireDevShortcuts } from '../src/devShortcuts.js'
 import { REPO_ROOT, loadEnvironment } from '../src/env.js'
 

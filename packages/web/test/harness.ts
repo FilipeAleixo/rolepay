@@ -1,7 +1,7 @@
 // A web app over the real core services on in-memory fakes, with fake passkey sessions and
 // a stub client bundle. No network, no browser.
-import { createPayrun } from '@payrun/core'
-import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
+import { createPayrun } from '@rolepay/core'
+import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { createWebApp } from '../src/index.js'
 import { FakePasskeySessions, staticAssets } from '../src/testing/index.js'
 

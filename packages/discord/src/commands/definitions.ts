@@ -1,4 +1,4 @@
-import { MAX_NOTE_LENGTH, PROPOSAL_LIMITS } from '@payrun/core'
+import { MAX_NOTE_LENGTH, PROPOSAL_LIMITS } from '@rolepay/core'
 import { ChannelType, CommandType, OptionType, Permission } from '../api.js'
 import { PROPOSE_MESSAGE_COMMAND } from './proposeFromMessage.js'
 

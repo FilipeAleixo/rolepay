@@ -7,7 +7,7 @@ export type ReadError = { code: 'cannot_read'; channelId: string; reason: 'forbi
 
 /**
  * What members of a community did, read from Discord (REST, no gateway). The implementation lives
- * in `@payrun/discord`; core decides what to read and stays within the bounds (31 days, 10,000
+ * in `@rolepay/discord`; core decides what to read and stays within the bounds (31 days, 10,000
  * messages, 5 channels). Channel history needs View Channel and Read Message History; author IDs
  * need no privileged intent, message text needs the Message Content intent. Bot accounts are
  * marked so code can leave them out.

@@ -1,4 +1,4 @@
-import type { SourceMessage } from '@payrun/core'
+import type { SourceMessage } from '@rolepay/core'
 import type { Message } from '../api.js'
 import type {
   DiscordRest,

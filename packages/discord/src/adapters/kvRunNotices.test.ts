@@ -1,4 +1,4 @@
-import { ManualClock, MemoryKeyValueStore } from '@payrun/core/adapters'
+import { ManualClock, MemoryKeyValueStore } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { KvRunNotices } from './kvRunNotices.js'
 

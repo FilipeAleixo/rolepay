@@ -2,8 +2,8 @@
 // that /payrun setup provisioned, signing in-process with PAYRUN_TEST_ROOT_PRIVATE_KEY.
 // The production path is the treasury page: /payrun setup hands a treasurer the link, and the
 // passkey signs the authorisation in the browser.
-import { NETWORKS, createPayrun, parseConfig } from '@payrun/core'
-import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@payrun/core/adapters'
+import { NETWORKS, createPayrun, parseConfig } from '@rolepay/core'
+import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@rolepay/core/adapters'
 import { requireDevShortcuts } from '../src/devShortcuts.js'
 import { loadEnvironment } from '../src/env.js'
 

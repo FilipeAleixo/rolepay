@@ -10,7 +10,7 @@ import {
   type Run,
   blockingProblems,
   formatAmount,
-} from '@payrun/core'
+} from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message, type Modal, TextInputStyle } from '../api.js'
 import { encodeProposalId, encodeProposalModalId } from '../components/customId.js'
 import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'

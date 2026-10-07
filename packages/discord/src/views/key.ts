@@ -1,4 +1,4 @@
-import type { KeyStatusView } from '@payrun/core'
+import type { KeyStatusView } from '@rolepay/core'
 import { count, money, relativeTime, shortAddress, tokenLabel } from './format.js'
 
 /** The bot key in one paragraph: what it may spend and what the chain says about it now. */

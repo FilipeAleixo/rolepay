@@ -1,4 +1,4 @@
-import { AddressSchema, type Community, DiscordIdSchema, FeeModeSchema, parseAmount } from '@payrun/core'
+import { AddressSchema, type Community, DiscordIdSchema, FeeModeSchema, parseAmount } from '@rolepay/core'
 import { z } from 'zod'
 import { type DiscordAppDeps, devShortcutsOn } from '../app/deps.js'
 import { type CommandHandler, type GuildContext, parseOptions } from '../app/handlers.js'

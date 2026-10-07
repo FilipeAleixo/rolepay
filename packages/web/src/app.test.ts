@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createPayrun } from '@payrun/core'
-import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
+import { createPayrun } from '@rolepay/core'
+import { FakePayoutChain, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { webHarness } from '../test/harness.js'
 import { createWebApp } from './app.js'
 import { TokenBucketLimiter } from './rateLimit.js'

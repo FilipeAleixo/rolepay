@@ -57,7 +57,7 @@ export type Proposed<T> = Result<{ raw: T; usage: ProposerUsage }, ProposerFailu
 /**
  * Turns an instruction into a raw proposal (tokens and the amounts as written). Code checks
  * everything it returns; it never approves, signs or pays. The production adapter is Anthropic's
- * API (`@payrun/core/adapters`); tests use a deterministic fake.
+ * API (`@rolepay/core/adapters`); tests use a deterministic fake.
  */
 export interface RunProposer {
   readonly model: string

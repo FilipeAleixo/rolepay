@@ -1,4 +1,4 @@
-import type { Community, KeyStatusView, Run, RunStatus } from '@payrun/core'
+import type { Community, KeyStatusView, Run, RunStatus } from '@rolepay/core'
 import type { Message } from '../api.js'
 import { COLORS, NO_PINGS, count, escapeMarkdown, money, relativeTime, roleMention } from './format.js'
 import { keyText } from './key.js'

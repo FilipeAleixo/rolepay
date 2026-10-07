@@ -18,7 +18,7 @@ pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut (PAYRUN_DEV_SHORTC
 
 ## Rules
 
-1. **Layers (enforced by `packages/core/test/architecture.test.ts`).** `domain/` is pure (zod and constants only, no IO). `ports/` are interfaces. `services/` import only domain, ports and constants, and are the only public interface. `adapters/` implement ports and never import services. Callers use `@payrun/core` and, in composition roots only, `@payrun/core/adapters`. Never import core internals from another package.
+1. **Layers (enforced by `packages/core/test/architecture.test.ts`).** `domain/` is pure (zod and constants only, no IO). `ports/` are interfaces. `services/` import only domain, ports and constants, and are the only public interface. `adapters/` implement ports and never import services. Callers use `@rolepay/core` and, in composition roots only, `@rolepay/core/adapters`. Never import core internals from another package.
 2. **TDD.** Write the failing test, watch it fail for the right reason, write the minimum to pass, refactor. For a test that passes on first run (an integration test of existing behaviour), mutate the code once to prove it can fail.
 3. **Money is bigint micro-units (6 decimals).** Parse with `parseAmount`, print with `formatAmount`. No floats, no `parseFloat`, no `toFixed`. Store as decimal text.
 4. **Expected failures are results**, `{ ok: false, error: { code } }` with snake_case codes. Throw only for the unexpected.
@@ -27,8 +27,8 @@ pnpm dev:treasury / dev:authorize-key  # testnet dev shortcut (PAYRUN_DEV_SHORTC
 7. **Find a sibling first.** New service, adapter or repository: copy the shape of an existing one. New repository behaviour goes into the shared contract (`test/support/repositoryContracts.ts`) so fakes and SQLite stay equal.
 8. **Config vs constants.** `config/` = operational settings from env. `constants/` = fixed facts (chain IDs, token decimals, memo layout).
 9. **Migrations are append-only** once shipped (`adapters/sqlite/migrations.ts`). Keep the schema portable to Postgres.
-10. **Discord layer (enforced by `packages/discord/test/architecture.test.ts`).** `packages/discord` imports only `@payrun/core` and `zod`. A handler parses options with Zod, checks permissions from the signed interaction, calls a service and returns an outcome; it never calls Discord itself. Views are pure builders. Everything external (Discord REST, the execution queue, member lookup) is a port with a fake in `@payrun/discord/testing`. Only `apps/server` imports `@payrun/core/adapters`.
-11. **Web layer (enforced by `packages/web/test/architecture.test.ts`).** `packages/web` server code imports only `@payrun/core`, hono, zod, `accounts/server`, `viem/tempo`, esbuild and node; `src/client/` (the browser bundle) imports only `accounts` and `viem`. An address is always derived from the verified passkey session, never taken from the page. POSTs must be same-origin.
+10. **Discord layer (enforced by `packages/discord/test/architecture.test.ts`).** `packages/discord` imports only `@rolepay/core` and `zod`. A handler parses options with Zod, checks permissions from the signed interaction, calls a service and returns an outcome; it never calls Discord itself. Views are pure builders. Everything external (Discord REST, the execution queue, member lookup) is a port with a fake in `@rolepay/discord/testing`. Only `apps/server` imports `@rolepay/core/adapters`.
+11. **Web layer (enforced by `packages/web/test/architecture.test.ts`).** `packages/web` server code imports only `@rolepay/core`, hono, zod, `accounts/server`, `viem/tempo`, esbuild and node; `src/client/` (the browser bundle) imports only `accounts` and `viem`. An address is always derived from the verified passkey session, never taken from the page. POSTs must be same-origin.
 
 ## Secrets and networks
 

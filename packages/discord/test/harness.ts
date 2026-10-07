@@ -1,7 +1,7 @@
 // Real core services on core's in-memory fakes, plus a fake Discord. Test-only: production
-// code in this package never imports @payrun/core/adapters.
-import { type Payrun, createPayrun, parseAmount } from '@payrun/core'
-import { FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
+// code in this package never imports @rolepay/core/adapters.
+import { type Payrun, createPayrun, parseAmount } from '@rolepay/core'
+import { FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { RestActivityReader } from '../src/adapters/restActivityReader.js'
 import { FakeDiscordRest, RecordingQueue } from '../src/testing/fakeDiscordRest.js'
 import { ADDR, ALICE, BOB, CAROL, GUILD, T0, TOKEN, TREASURER_ROLE, TREASURY } from './fixtures.js'

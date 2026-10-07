@@ -1,6 +1,6 @@
-import { AddressSchema, ConfigError, DiscordIdSchema, type PayrunConfig, TESTNET_TOKENS, parseAmount, parseConfig } from '@payrun/core'
-import type { DiscordAppConfig } from '@payrun/discord'
-import type { WebConfig } from '@payrun/web'
+import { AddressSchema, ConfigError, DiscordIdSchema, type PayrunConfig, TESTNET_TOKENS, parseAmount, parseConfig } from '@rolepay/core'
+import type { DiscordAppConfig } from '@rolepay/discord'
+import type { WebConfig } from '@rolepay/web'
 import { z } from 'zod'
 
 const DAY = 86_400

@@ -1,4 +1,4 @@
-import type { Community, KeyStatusView, NetworkName } from '@payrun/core'
+import type { Community, KeyStatusView, NetworkName } from '@rolepay/core'
 import type { Embed, Message } from '../api.js'
 import { COLORS, NO_PINGS, addressUrl, relativeTime, roleMention, shortAddress, tokenLabel } from './format.js'
 import { keyText } from './key.js'

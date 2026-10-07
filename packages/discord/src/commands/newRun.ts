@@ -1,4 +1,4 @@
-import { DiscordIdSchema, MAX_NOTE_LENGTH, parseAmount } from '@payrun/core'
+import { DiscordIdSchema, MAX_NOTE_LENGTH, parseAmount } from '@rolepay/core'
 import { z } from 'zod'
 import { type CommandHandler, parseOptions, replyError } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'

@@ -1,4 +1,4 @@
-import type { KeyValueStore } from '@payrun/core'
+import type { KeyValueStore } from '@rolepay/core'
 import type { RunMessageRef, RunNotices } from '../ports.js'
 
 /** Long enough for any restart or recovery to finish; short enough that the table stays small. */

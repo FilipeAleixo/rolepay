@@ -1,4 +1,4 @@
-import type { NetworkName, Payrun, Run } from '@payrun/core'
+import type { NetworkName, Payrun, Run } from '@rolepay/core'
 import type { Message } from '../api.js'
 import type { DiscordRest, ExecutionJob, RunNotices } from '../ports.js'
 import { explainError } from '../views/errors.js'

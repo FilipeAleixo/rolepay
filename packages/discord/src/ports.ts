@@ -1,10 +1,10 @@
-import type { Result, SourceMessage } from '@payrun/core'
+import type { Result, SourceMessage } from '@rolepay/core'
 import type { Message } from './api.js'
 
 /**
  * Ports: everything the Discord layer needs from the outside world. Each has a real
  * implementation (in this package's adapters or apps/server) and an in-memory fake
- * (`@payrun/discord/testing`).
+ * (`@rolepay/discord/testing`).
  */
 
 /** The interaction's webhook: lets us edit the reply or follow up for 15 minutes. */

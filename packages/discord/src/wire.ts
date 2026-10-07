@@ -1,4 +1,4 @@
-import { DiscordIdSchema, type SourceMessage } from '@payrun/core'
+import { DiscordIdSchema, type SourceMessage } from '@rolepay/core'
 import { z } from 'zod'
 
 /**

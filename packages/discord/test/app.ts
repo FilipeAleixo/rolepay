@@ -1,12 +1,12 @@
 // The Discord app wired to real core services (in-memory fakes) and a fake Discord.
-import { TESTNET_TOKENS } from '@payrun/core'
+import { TESTNET_TOKENS } from '@rolepay/core'
 import { RestMemberDirectory } from '../src/adapters/restMemberDirectory.js'
 import type { DiscordAppConfig, DiscordAppDeps } from '../src/app/deps.js'
 import { createDispatcher } from '../src/app/router.js'
 import type { Dispatched } from '../src/http/handler.js'
 import type { MemberDirectory } from '../src/ports.js'
 import { MemoryPendingSources } from '../src/testing/fakeDiscordRest.js'
-import type { FakeRunProposer } from '@payrun/core/adapters'
+import type { FakeRunProposer } from '@rolepay/core/adapters'
 import { CHANNEL, GUILD } from './fixtures.js'
 import { harness, usd } from './harness.js'
 

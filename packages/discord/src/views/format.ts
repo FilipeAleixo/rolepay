@@ -1,4 +1,4 @@
-import { NETWORKS, type NetworkName, TOKEN_SYMBOLS, formatAmount } from '@payrun/core'
+import { NETWORKS, type NetworkName, TOKEN_SYMBOLS, formatAmount } from '@rolepay/core'
 
 export const shortAddress = (address: string) => `${address.slice(0, 6)}…${address.slice(-4)}`
 

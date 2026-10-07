@@ -1,12 +1,12 @@
 // A whole server on in-memory adapters and a fake Discord, driven through real HTTP requests
 // (Hono's app.request), with Discord-style Ed25519 signatures.
 import { randomBytes } from 'node:crypto'
-import { TESTNET_TOKENS, createPayrun, parseAmount } from '@payrun/core'
-import { type KeyValueStore, type Payrun } from '@payrun/core'
-import { FakePayoutChain, FakeRunProposer, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@payrun/core/adapters'
-import { RestActivityReader } from '@payrun/discord'
-import { FakeDiscordRest, createTestSigner } from '@payrun/discord/testing'
-import { FakePasskeySessions, staticAssets } from '@payrun/web/testing'
+import { TESTNET_TOKENS, createPayrun, parseAmount } from '@rolepay/core'
+import { type KeyValueStore, type Payrun } from '@rolepay/core'
+import { FakePayoutChain, FakeRunProposer, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { RestActivityReader } from '@rolepay/discord'
+import { FakeDiscordRest, createTestSigner } from '@rolepay/discord/testing'
+import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
 import { parseServerConfig } from '../src/config.js'
 import { composeServer } from '../src/compose.js'
 

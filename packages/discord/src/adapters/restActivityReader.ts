@@ -1,4 +1,4 @@
-import { type ActivityReader, type ChannelKind, DiscordIdSchema, type MemberFacts, type NamedChannel, type ReadError, type Result, type SourceMessage, err, ok } from '@payrun/core'
+import { type ActivityReader, type ChannelKind, DiscordIdSchema, type MemberFacts, type NamedChannel, type ReadError, type Result, type SourceMessage, err, ok } from '@rolepay/core'
 import { z } from 'zod'
 import { ChannelType } from '../api.js'
 import type { DiscordRest, RestError } from '../ports.js'

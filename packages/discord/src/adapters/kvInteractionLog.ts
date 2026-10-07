@@ -1,4 +1,4 @@
-import type { KeyValueStore } from '@payrun/core'
+import type { KeyValueStore } from '@rolepay/core'
 import type { InteractionLog } from '../ports.js'
 
 /** Longer than Discord's 5-minute signature window, after which a replay fails verification anyway. */

@@ -1,6 +1,6 @@
 /**
- * @payrun/discord: the Discord adapter over HTTP interactions (no gateway bot). Calls
- * core only through `@payrun/core` services. Fakes for tests: `@payrun/discord/testing`.
+ * @rolepay/discord: the Discord adapter over HTTP interactions (no gateway bot). Calls
+ * core only through `@rolepay/core` services. Fakes for tests: `@rolepay/discord/testing`.
  */
 export { type FileUpload, type Message } from './api.js'
 export type { DiscordAppConfig, DiscordAppDeps } from './app/deps.js'

@@ -1,5 +1,5 @@
 /**
- * `@payrun/core/adapters`: concrete implementations of the ports, for composition roots
+ * `@rolepay/core/adapters`: concrete implementations of the ports, for composition roots
  * (apps/server, CLIs, chain tests) only. Services never import these.
  */
 export { AnthropicRunProposer, type AnthropicRunProposerOptions, DEFAULT_AI_MODEL } from './anthropic/index.js'

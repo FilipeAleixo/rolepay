@@ -1,4 +1,4 @@
-import { slashCommand } from '@payrun/discord/testing'
+import { slashCommand } from '@rolepay/discord/testing'
 import { describe, expect, it, vi } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer } from './support.js'
 

@@ -1,4 +1,4 @@
-import { type Result, err, ok, parseAmount } from '@payrun/core'
+import { type Result, err, ok, parseAmount } from '@rolepay/core'
 
 export type RecipientSpec = { userId: string; amount: bigint | null }
 

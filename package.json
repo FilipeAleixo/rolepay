@@ -1,5 +1,5 @@
 {
-  "name": "payrun",
+  "name": "rolepay",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.0.0",
@@ -11,13 +11,13 @@
     "test": "pnpm -r --if-present test",
     "test:coverage": "pnpm -r --if-present test:coverage",
     "test:chain": "pnpm -r --if-present test:chain",
-    "test:e2e": "pnpm --filter @payrun/server test:e2e",
-    "test:ai-live": "pnpm --filter @payrun/core test:ai-live",
-    "dev": "pnpm --filter @payrun/server dev",
-    "start": "pnpm --filter @payrun/server start",
-    "register-commands": "pnpm --filter @payrun/server register-commands",
-    "dev:treasury": "pnpm --filter @payrun/server dev:treasury",
-    "dev:authorize-key": "pnpm --filter @payrun/server dev:authorize-key"
+    "test:e2e": "pnpm --filter @rolepay/server test:e2e",
+    "test:ai-live": "pnpm --filter @rolepay/core test:ai-live",
+    "dev": "pnpm --filter @rolepay/server dev",
+    "start": "pnpm --filter @rolepay/server start",
+    "register-commands": "pnpm --filter @rolepay/server register-commands",
+    "dev:treasury": "pnpm --filter @rolepay/server dev:treasury",
+    "dev:authorize-key": "pnpm --filter @rolepay/server dev:authorize-key"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

@@ -1,4 +1,4 @@
-import { parseConfig } from '@payrun/core'
+import { parseConfig } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { requireDevShortcuts } from './devShortcuts.js'
 

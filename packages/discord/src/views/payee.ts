@@ -1,4 +1,4 @@
-import type { Payee } from '@payrun/core'
+import type { Payee } from '@rolepay/core'
 import { ButtonStyle, ComponentType, type Message } from '../api.js'
 import { NO_PINGS, relativeTime, shortAddress } from './format.js'
 

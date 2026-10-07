@@ -1,7 +1,7 @@
 /**
- * @payrun/core public API: the composition function, the services it returns, and the
+ * @rolepay/core public API: the composition function, the services it returns, and the
  * domain types/schemas callers need. Adapter implementations are NOT exported here;
- * composition roots import them from `@payrun/core/adapters`.
+ * composition roots import them from `@rolepay/core/adapters`.
  */
 import type { PayrunDeps } from './ports/deps.js'
 import { CommunityService } from './services/communityService.js'

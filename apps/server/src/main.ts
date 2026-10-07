@@ -1,10 +1,10 @@
 // The composition root: config from env, production adapters, core services, the
 // Discord adapter, an HTTP server. The only place (with scripts/) that opens adapters.
 import { serve } from '@hono/node-server'
-import { createPayrun } from '@payrun/core'
-import { openPayrunAdapters } from '@payrun/core/adapters'
-import { FetchDiscordRest, RestActivityReader } from '@payrun/discord'
-import { bundledAssets, createPasskeys } from '@payrun/web'
+import { createPayrun } from '@rolepay/core'
+import { openPayrunAdapters } from '@rolepay/core/adapters'
+import { FetchDiscordRest, RestActivityReader } from '@rolepay/discord'
+import { bundledAssets, createPasskeys } from '@rolepay/web'
 import { composeServer } from './compose.js'
 import { parseServerConfig } from './config.js'
 import { loadEnvironment } from './env.js'

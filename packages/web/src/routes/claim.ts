@@ -1,4 +1,4 @@
-import type { PayeeService } from '@payrun/core'
+import type { PayeeService } from '@rolepay/core'
 import { Hono } from 'hono'
 import { failure, jsonResponse, linkStatus } from '../json.js'
 import type { PasskeySessions } from '../ports.js'

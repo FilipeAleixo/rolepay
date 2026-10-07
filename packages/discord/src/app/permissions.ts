@@ -1,4 +1,4 @@
-import type { Community } from '@payrun/core'
+import type { Community } from '@rolepay/core'
 import { Permission } from '../api.js'
 import type { Caller } from './interaction.js'
 

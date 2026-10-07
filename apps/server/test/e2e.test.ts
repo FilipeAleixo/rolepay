@@ -1,7 +1,7 @@
 // In-process end to end, all through POST /discord/interactions with signed requests:
 // setup -> claim links -> /payrun new -> review -> Approve -> deferred -> queue -> core
 // -> fake chain -> webhook edit + DMs -> export. Only the Discord REST and the chain are fakes.
-import { buttonClick, slashCommand } from '@payrun/discord/testing'
+import { buttonClick, slashCommand } from '@rolepay/discord/testing'
 import { describe, expect, it, vi } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer, usd } from './support.js'
 

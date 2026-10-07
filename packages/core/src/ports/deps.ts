@@ -20,7 +20,7 @@ export type PayrunDeps = {
   linkTtlSeconds?: number
   /** AI proposals: the model. Without it (no ANTHROPIC_API_KEY) proposing answers `ai_not_configured`. */
   proposer?: RunProposer | null
-  /** AI proposals: Discord channel history, members and reactions (`@payrun/discord`). */
+  /** AI proposals: Discord channel history, members and reactions (`@rolepay/discord`). */
   activity?: ActivityReader | null
   /** One line per proposal: counts, latency, cost. */
   proposalLog?: ProposalLog

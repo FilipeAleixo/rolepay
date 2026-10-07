@@ -1,4 +1,4 @@
-import { type Result, err, ok, parseLooseAmount } from '@payrun/core'
+import { type Result, err, ok, parseLooseAmount } from '@rolepay/core'
 import type { ModalHandler } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'
 import { requireProposer } from '../commands/guards.js'

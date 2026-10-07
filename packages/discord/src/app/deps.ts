@@ -1,4 +1,4 @@
-import type { Clock, NetworkName, Payrun } from '@payrun/core'
+import type { Clock, NetworkName, Payrun } from '@rolepay/core'
 import type { DiscordRest, ExecutionQueue, MemberDirectory, PendingSources } from '../ports.js'
 
 /** Operational settings for the Discord layer (the server builds these from env). */

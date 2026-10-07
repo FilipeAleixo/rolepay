@@ -1,4 +1,4 @@
-import type { KeyStatusView } from '@payrun/core'
+import type { KeyStatusView } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { ADMIN, ALICE, BOB, GUILD, T0, TOKEN, TREASURER, TX, approved, cancelled, executing, failed, paid, pending, run } from '../../test/fixtures.js'
 import { ButtonStyle, type Message } from '../api.js'

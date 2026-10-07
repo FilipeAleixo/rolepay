@@ -1,4 +1,4 @@
-import type { Run } from '@payrun/core'
+import type { Run } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { SCOPE, appHarness, body, isEphemeral, text } from '../../test/app.js'
 import { ADMIN, ALICE, BOB, CAROL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'

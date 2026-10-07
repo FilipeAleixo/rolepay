@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { type Clock, NETWORKS, type Payrun } from '@payrun/core'
+import { type Clock, NETWORKS, type Payrun } from '@rolepay/core'
 import { Hono } from 'hono'
 import { compress } from 'hono/compress'
 import type { WebConfig } from './config.js'

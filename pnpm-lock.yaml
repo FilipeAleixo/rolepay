@@ -13,13 +13,13 @@ importers:
       '@hono/node-server':
         specifier: ^2.1.3
         version: 2.1.3(hono@4.13.13)
-      '@payrun/core':
+      '@rolepay/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@payrun/discord':
+      '@rolepay/discord':
         specifier: workspace:*
         version: link:../../packages/discord
-      '@payrun/web':
+      '@rolepay/web':
         specifier: workspace:*
         version: link:../../packages/web
       dotenv:
@@ -96,7 +96,7 @@ importers:
 
   packages/discord:
     dependencies:
-      '@payrun/core':
+      '@rolepay/core':
         specifier: workspace:*
         version: link:../core
       zod:
@@ -118,7 +118,7 @@ importers:
 
   packages/web:
     dependencies:
-      '@payrun/core':
+      '@rolepay/core':
         specifier: workspace:*
         version: link:../core
       accounts:

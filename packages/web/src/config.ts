@@ -1,4 +1,4 @@
-import type { NetworkName } from '@payrun/core'
+import type { NetworkName } from '@rolepay/core'
 
 /** Operational settings for the web pages (the server builds these from env). */
 export type WebConfig = {

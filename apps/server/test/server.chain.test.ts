@@ -8,10 +8,10 @@ import { randomBytes } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { NETWORKS, TESTNET_TOKENS, createPayrun, parseAmount } from '@payrun/core'
-import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@payrun/core/adapters'
-import { FakeDiscordRest, buttonClick, createTestSigner, slashCommand } from '@payrun/discord/testing'
-import { FakePasskeySessions, staticAssets } from '@payrun/web/testing'
+import { NETWORKS, TESTNET_TOKENS, createPayrun, parseAmount } from '@rolepay/core'
+import { createTestnetTools, openPayrunAdapters, rootSignerFromPrivateKey } from '@rolepay/core/adapters'
+import { FakeDiscordRest, buttonClick, createTestSigner, slashCommand } from '@rolepay/discord/testing'
+import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { composeServer } from '../src/compose.js'
 import { parseServerConfig } from '../src/config.js'
@@ -49,7 +49,7 @@ describe('Discord flow through HTTP on Moderato (fake Discord REST, real chain)'
   const sessions = new FakePasskeySessions()
 
   beforeAll(async () => {
-    if (!rootKey || !env.PAYRUN_MASTER_KEY) throw new Error('Run `pnpm --filter @payrun/core test:chain` (or `pnpm dev:treasury`) first: it creates the throwaway testnet keys in .env')
+    if (!rootKey || !env.PAYRUN_MASTER_KEY) throw new Error('Run `pnpm --filter @rolepay/core test:chain` (or `pnpm dev:treasury`) first: it creates the throwaway testnet keys in .env')
     expect(await testnet.chainId()).toBe(42431) // testnet only, never mainnet
     const root = rootSignerFromPrivateKey(rootKey as `0x${string}`)
     await testnet.ensureFunded(root.address, TOKEN, usd('100'))

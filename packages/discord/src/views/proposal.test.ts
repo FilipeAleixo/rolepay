@@ -1,4 +1,4 @@
-import type { Criteria } from '@payrun/core'
+import type { Criteria } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER_ROLE, proposal } from '../../test/fixtures.js'
 import { amountInWords, criteriaInWords, editModal, editText, instructionModal, proposalMessage } from './proposal.js'

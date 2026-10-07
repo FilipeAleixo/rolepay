@@ -2,8 +2,8 @@
 // setup with AI on -> Apps > Propose pay run on the winners message -> instruction modal ->
 // proposal -> Create pay run -> the normal review -> Approve -> one batch on the fake chain ->
 // receipts. The model is the deterministic fake proposer; Discord REST and the chain are fakes.
-import { emptyCriteria, naiveMessageProposal } from '@payrun/core/adapters'
-import { READ_HISTORY, buttonClick, messageCommand, modalSubmit, slashCommand, wireMessage } from '@payrun/discord/testing'
+import { emptyCriteria, naiveMessageProposal } from '@rolepay/core/adapters'
+import { READ_HISTORY, buttonClick, messageCommand, modalSubmit, slashCommand, wireMessage } from '@rolepay/discord/testing'
 import { describe, expect, it } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer, usd } from './support.js'
 
