@@ -29,7 +29,7 @@ import {
   decodeVetoButton,
 } from '../components/customId.js'
 import { approvePolicyButton, discardPolicyButton, vetoButton } from '../components/policyButtons.js'
-import { createProposalRunButton, discardProposalButton, editProposalButton } from '../components/proposalButtons.js'
+import { createProposalRunButton, criteriaProposalButton, discardProposalButton, editProposalButton } from '../components/proposalButtons.js'
 import { editModalSubmit, instructionModalSubmit } from '../components/proposalModals.js'
 import { approveButton, cancelButton, retryButton } from '../components/runButtons.js'
 import type { Dispatch, InteractionLabel } from '../http/handler.js'
@@ -70,7 +70,12 @@ const AUTOCOMPLETE: Record<string, AutocompleteHandler> = {
 }
 
 const BUTTONS: Record<RunAction, ButtonHandler> = { approve: approveButton, cancel: cancelButton, retry: retryButton }
-const PROPOSAL_BUTTONS: Record<ProposalAction, ProposalButtonHandler> = { create: createProposalRunButton, edit: editProposalButton, discard: discardProposalButton }
+const PROPOSAL_BUTTONS: Record<ProposalAction, ProposalButtonHandler> = {
+  create: createProposalRunButton,
+  edit: editProposalButton,
+  discard: discardProposalButton,
+  criteria: criteriaProposalButton,
+}
 const MODALS: Record<ProposalModal, ModalHandler> = { instruct: instructionModalSubmit, edit: editModalSubmit }
 const POLICY_BUTTONS: Record<PolicyAction, PolicyButtonHandler> = { approve: approvePolicyButton, discard: discardPolicyButton }
 

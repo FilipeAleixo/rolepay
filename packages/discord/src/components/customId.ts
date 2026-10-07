@@ -20,8 +20,11 @@ export function decodeCustomId(customId: string): { action: RunAction; runId: st
   return parsed.success ? { action: parsed.data[1], runId: parsed.data[2] } : null
 }
 
-/** Buttons on a proposal: `proposal:<action>:<proposalId>`. */
-export const PROPOSAL_ACTIONS = ['create', 'edit', 'discard'] as const
+/**
+ * Buttons on a proposal: `proposal:<action>:<proposalId>`. `criteria`: ask again in criteria mode
+ * (count who wrote), offered when a message-mode proposal left everyone out as self-sourced.
+ */
+export const PROPOSAL_ACTIONS = ['create', 'edit', 'discard', 'criteria'] as const
 export type ProposalAction = (typeof PROPOSAL_ACTIONS)[number]
 
 const ProposalIdSchema = z

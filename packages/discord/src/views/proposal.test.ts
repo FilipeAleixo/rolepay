@@ -66,6 +66,30 @@ describe('proposalMessage', () => {
     expect(blocked && 'disabled' in blocked && blocked.disabled).toBe(true)
   })
 
+  it('everyone held because the message behind their line is their own: says the way forward (an activity rule) and offers to count who wrote', () => {
+    const own = proposal().held[0] as ReturnType<typeof proposal>['held'][number]
+    const selfOnly = proposal({ lines: [], unregistered: [], held: [{ ...own, holds: ['self_sourced'] }, { ...own, discordUserId: BOB, holds: ['self_sourced', 'amount_not_in_instruction'] }], total: 0n, problems: ['no_lines'] })
+    const e = embedOf(proposalMessage(selfOnly, ctx))
+    expect(e.description).toContain("Nobody to pay: each person named wrote the message behind their own line, and Rolepay never pays anyone on the strength of their own message.")
+    expect(e.description).toContain('If this instruction pays people for writing in the channel, that is a rule about activity: run `/rolepay propose` without `source`, or press Count who wrote, and Rolepay counts who wrote, itself.')
+    expect(e.description).not.toContain('Nobody to pay.')
+    expect(JSON.stringify(e.fields)).not.toContain('Edit adds people')
+    const buttons = proposalMessage(selfOnly, ctx).components?.[0]?.components ?? []
+    expect(buttons.map((b) => 'label' in b && b.label)).toEqual(['Create pay run', 'Edit', 'Discard', 'Count who wrote'])
+    expect(buttons.at(-1)).toMatchObject({ custom_id: 'proposal:criteria:prop_view01', style: 1 })
+
+    // Anyone payable, anyone held for another reason, or a criteria proposal: no such advice, no button.
+    for (const p of [
+      proposal(),
+      proposal({ lines: [], unregistered: [], held: [{ ...own, holds: ['amount_not_in_instruction'] }], total: 0n, problems: ['no_lines'] }),
+      proposal({ mode: 'criteria', source: null, lines: [], unregistered: [], held: [{ ...own, holds: ['self_sourced'] }], total: 0n, problems: ['no_lines'] }),
+    ]) {
+      const m = proposalMessage(p, ctx)
+      expect(JSON.stringify(m)).not.toContain('rule about activity')
+      expect(JSON.stringify(m)).not.toContain('proposal:criteria:')
+    }
+  })
+
   it("the model's words cannot format the message: reasons, assumptions and summaries are escaped", () => {
     const evil = '**Approved** [click](https://evil.example) <@&400000000000000099>'
     const p = proposal({ lines: [{ ...proposal().lines[0], reason: evil } as ReturnType<typeof proposal>['lines'][number]], assumptions: [evil], unresolved: [{ text: evil, why: evil }] })

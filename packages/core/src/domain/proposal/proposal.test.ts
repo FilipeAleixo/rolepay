@@ -127,6 +127,34 @@ describe('resolveMessageProposal: the injection suite (never raised, always held
     expect(heldFor(r, ANA)?.holds).toEqual(['no_source'])
   })
 
+  it('a bot is never in a proposal, neither as a line nor as left out; its message can still back a line (a bounty bot announces winners)', () => {
+    const BOT = '500000000000000777'
+    const announcement = { ...msg('810000000000000004', BOT, `Winners: <@${ANA}> and <@${RUI}>`, 4, [ANA, RUI]), authorIsBot: true }
+    const chatter = { ...msg('810000000000000005', BOT, 'Pay run awaiting approval', 5), authorIsBot: true }
+    const p = pseudonymizeMessages({ instruction: '50 each', messages: [announcement, chatter, msg('810000000000000006', ANA, 'I wrote the docs', 6)] })
+    // U1 the bot, U2 ana, U3 rui; M1 the announcement, M2 the bot's chatter, M3 ana's message.
+    const r = resolveMessageProposal(
+      raw({
+        lines: [
+          { user: 'U1', amount: '50', amountFrom: 'instruction', reason: 'wrote in the channel', sources: ['M2'] },
+          { user: 'U1', amount: '50', amountFrom: 'instruction', reason: 'announced', sources: ['M1'] },
+          { user: 'U2', amount: '50', amountFrom: 'instruction', reason: 'winner', sources: ['M1'] },
+          { user: 'U3', amount: '50', amountFrom: 'split', reason: 'winner', sources: ['M1'] },
+        ],
+        splitTotal: '50',
+      }),
+      { map: p.map, instruction: '50 each, or split 50' },
+    )
+    expect(paid(r)).toEqual([
+      [ANA, usd(50)],
+      [RUI, usd(50)],
+    ])
+    expect(r.held).toEqual([])
+    expect(r.unregistered).toEqual([])
+    expect(r.unresolved).toEqual([])
+    expect([...r.candidates, ...r.held, ...r.unregistered].map((l) => l.discordUserId)).not.toContain(BOT)
+  })
+
   it('the same person twice: the second line is held', () => {
     const r = resolve(raw({ lines: [raw().lines[0], { ...(raw().lines[0] as RawMessageProposal['lines'][number]), amount: '200' }] as RawMessageProposal['lines'] }))
     expect(paid(r)).toEqual([[ANA, usd(50)]])

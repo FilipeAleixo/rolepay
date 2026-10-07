@@ -186,5 +186,8 @@ describe('the proposal buttons and forms', () => {
     expect(responseProblems({ type: 9, data: editModal(p) })).toEqual([])
     expect(responseProblems({ type: 9, data: instructionModal('810000000000000001') })).toEqual([])
     expect(messageProblems(proposalMessage(p, { approverRoleId: TREASURER_ROLE }), { ephemeral: true })).toEqual([])
+    // Everyone self-sourced: the way forward and a fourth button (Count who wrote).
+    const selfOnly = { ...p, lines: [], unregistered: [], held: p.held.map((h) => ({ ...h, holds: ['self_sourced' as const] })), total: 0n, problems: ['no_lines' as const] }
+    expect(messageProblems(proposalMessage(selfOnly, { approverRoleId: TREASURER_ROLE }), { ephemeral: true })).toEqual([])
   })
 })

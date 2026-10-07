@@ -146,6 +146,61 @@ describe('/rolepay propose', () => {
     expect(shown).toContain(`13 messages in <#${HELP}>`)
   })
 
+  it('"everyone who wrote here today" from the channel: the bot is never in it, and the proposal points to counting who wrote, which one button does', async () => {
+    const a = await ready()
+    const BOT = '500000000000000777'
+    const own = wireMessage({ channelId: CHANNEL, authorId: ALICE, at: ago(30), content: 'gm, shipped the indexer fix' })
+    const botPost = wireMessage({ channelId: CHANNEL, authorId: BOT, at: ago(20), content: 'Pay run awaiting approval', bot: true })
+    a.rest.addChannelMessages(own, botPost)
+    // The model pays each writer for their own message: Alice (U1, M1) and the bot (U2, M2).
+    a.proposer.onMessages = () => ({
+      lines: [
+        { user: 'U1', amount: '2', amountFrom: 'instruction', reason: 'wrote in the channel today', sources: ['M1'] },
+        { user: 'U2', amount: '2', amountFrom: 'instruction', reason: 'wrote in the channel today', sources: ['M2'] },
+      ],
+      splitTotal: null,
+      note: null,
+      unresolved: [],
+      assumptions: [],
+      ignoredInstructions: [],
+    })
+    const instruction = '2 each to everyone who wrote in this channel today'
+    await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction, source: CHANNEL, since: '24h' }, treasurer, 'tok-self'))
+    const shown = text(a.rest.lastEdit('tok-self'))
+    expect(shown).not.toContain(BOT)
+    expect(shown).toContain(`<@${ALICE}> 2 AlphaUSD: their own message is the only source.`)
+    expect(shown).toContain('that is a rule about activity: run `/rolepay propose` without `source`')
+    const id = /proposal:criteria:([A-Za-z0-9_]+)/.exec(shown)?.[1] as string
+    expect(id).toBeTruthy()
+
+    // Count who wrote: the same instruction, asked again in criteria mode with the channel named.
+    a.rest.channels.set(GUILD, [{ id: CHANNEL, name: 'general', type: 0 }])
+    a.proposer.onCriteria = () =>
+      emptyCriteria({ amount: { kind: 'flat', amount: '2', per: '', cap: '', total: '', splitBy: '' } }, { activity: [{ metric: 'messages', channels: ['C1'], since: '2026-10-06', until: '', min: 1 }] })
+    const d = await a.send(buttonClick(SCOPE, `proposal:criteria:${id}`, treasurer, 'tok-count'))
+    expect(body(d)).toEqual({ type: 4, data: { content: 'Drafting a proposal…', flags: 64 } })
+    const asked = a.proposer.requests.at(-1)
+    expect(asked?.mode).toBe('criteria')
+    expect(asked?.request.instruction).toBe(`${instruction} (in #C1)`)
+    const counted = text(a.rest.lastEdit('tok-count'))
+    expect(counted).toContain(`<@${ALICE}>  2 AlphaUSD · 1 message`)
+    expect(counted).not.toContain(BOT)
+  })
+
+  it('Count who wrote checks the role and that AI is on, like proposing', async () => {
+    const a = await ready()
+    a.rest.addChannelMessages(wireMessage({ channelId: CHANNEL, authorId: ALICE, at: ago(30), content: 'gm' }))
+    a.proposer.onMessages = () => ({ lines: [{ user: 'U1', amount: '2', amountFrom: 'instruction', reason: 'wrote', sources: ['M1'] }], splitTotal: null, note: null, unresolved: [], assumptions: [], ignoredInstructions: [] })
+    await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: '2 each to everyone who wrote', source: CHANNEL }, treasurer, 'tok-s'))
+    const id = /proposal:criteria:([A-Za-z0-9_]+)/.exec(text(a.rest.lastEdit('tok-s')))?.[1] as string
+    const refused = await a.send(buttonClick(SCOPE, `proposal:criteria:${id}`, { userId: ALICE, roles: [MODS_ROLE], manageGuild: true }))
+    expect(isEphemeral(refused) && body(refused).data?.content).toMatch(/Only members with/)
+    await a.rolepay.communities.setAiProposals({ guildId: GUILD, enabled: false, actorRoleIds: [TREASURER_ROLE] })
+    const off = await a.send(buttonClick(SCOPE, `proposal:criteria:${id}`, treasurer))
+    expect(body(off).data?.content).toMatch(/ai_proposals:true/)
+    expect(a.proposer.requests.filter((r) => r.mode === 'criteria')).toEqual([])
+  })
+
   it('since goes with source, and is checked', async () => {
     const a = await ready()
     expect(body(await a.send(slashCommand(SCOPE, 'rolepay', 'propose', { instruction: 'x', since: '7d' }, treasurer))).data?.content).toMatch(/goes with `source`/)

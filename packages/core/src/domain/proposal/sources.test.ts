@@ -45,8 +45,8 @@ describe('pseudonymizeMessages (no Discord IDs reach the model)', () => {
     expect(p.instruction).toBe('50 each, @U4 200')
     expect(p.map.users).toEqual({ U1: TREASURER, U2: ANA, U3: RUI, U4: LI })
     expect(p.map.messages).toEqual({
-      M1: { messageId: winners.id, channelId: CHANNEL, authorId: TREASURER, text: winners.content },
-      M2: { messageId: later.id, channelId: CHANNEL, authorId: LI, text: later.content },
+      M1: { messageId: winners.id, channelId: CHANNEL, authorId: TREASURER, authorIsBot: false, text: winners.content },
+      M2: { messageId: later.id, channelId: CHANNEL, authorId: LI, authorIsBot: false, text: later.content },
     })
     expect(JSON.stringify([p.messages, p.instruction])).not.toMatch(/\d{17,20}/)
   })
