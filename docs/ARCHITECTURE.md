@@ -65,7 +65,7 @@ These rules are enforced by `packages/core/test/architecture.test.ts`, not by me
 
 **Results, not throws.** Every expected failure is a value: `{ ok: false, error: { code: 'snake_case', ... } }`. Services throw only for the unexpected (a database or RPC outage), which the caller treats as "try again".
 
-**No orchestrator layer.** soulform-app puts multi-service flows in orchestrators. Rolepay has four services and two real flows, so services read the repositories they need directly (a pay run reads communities, keys and payees) but each entity is written only by its owning service. `ProposalService` is the one service that calls others: it reads the key's remaining budget through `CommunityService` and turns a proposal into a run through `PayRunService.create` and `submit`, so runs are still written only by their own service. `PolicyService` and `SchedulerService` follow the same rule: they read what they need, make runs only through `PayRunService.create`, `submit`, `approve` and `execute`, read the key budget through `CommunityService`, and share one criteria runner (`services/criteriaRunner.ts`) with criteria mode, so a policy is evaluated by exactly the code a proposal is. Add an orchestrator layer the day a flow genuinely spans more services than that.
+**No orchestrator layer.** Larger codebases put multi-service flows in an orchestrator layer. Rolepay has four services and two real flows, so services read the repositories they need directly (a pay run reads communities, keys and payees) but each entity is written only by its owning service. `ProposalService` is the one service that calls others: it reads the key's remaining budget through `CommunityService` and turns a proposal into a run through `PayRunService.create` and `submit`, so runs are still written only by their own service. `PolicyService` and `SchedulerService` follow the same rule: they read what they need, make runs only through `PayRunService.create`, `submit`, `approve` and `execute`, read the key budget through `CommunityService`, and share one criteria runner (`services/criteriaRunner.ts`) with criteria mode, so a policy is evaluated by exactly the code a proposal is. Add an orchestrator layer the day a flow genuinely spans more services than that.
 
 ## Domain model
 
@@ -418,7 +418,7 @@ http/        Ed25519 verification (WebCrypto) and the endpoint as a fetch handle
 app/         Zod parsing of interactions, the router, permission rules, outcome rendering
 commands/    slash command definitions (JSON) and handlers
 components/  the Approve, Cancel and Retry buttons
-views/       pure builders from domain objects to Discord message payloads (soulform's transformers)
+views/       pure builders from domain objects to Discord message payloads
 execution/   the in-process ExecutionQueue and the run executor job
 adapters/    DiscordRest over fetch, MemberDirectory and core's ActivityReader over DiscordRest, KV stores
 wire.ts      Zod schemas for Discord messages (message-command targets, history) and core's SourceMessage

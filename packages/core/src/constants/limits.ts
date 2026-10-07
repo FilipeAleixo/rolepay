@@ -1,6 +1,6 @@
 /**
  * Tempo caps one transaction at 30M gas (docs/tempo/guide_node_network-upgrades.md, T1A).
- * A first transfer to a fresh address costs about 250-300k gas (spike RESULTS.md), so
+ * A first transfer to a fresh address costs about 250-300k gas (measured on Moderato before the build), so
  * ~100 lines is the theoretical ceiling; 50 keeps a 2x margin. Raise only after a
  * chain test at the new size.
  */

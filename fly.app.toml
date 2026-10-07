@@ -1,5 +1,5 @@
 # Fly.io: the Rolepay MAINNET app, https://app.rolepay.app (Tempo mainnet, chain 4217). REAL MONEY.
-# Prepared, not created. The founder's runbook is apps/server/MAINNET.md: the production Discord
+# Prepared, not created. The runbook is apps/server/MAINNET.md: the production Discord
 # application, the app and its volume, the secrets, DNS, the first deploy, funding the treasury and
 # how to stop everything. `apps/server/test/flyConfig.test.ts` checks this file parses into a safe
 # mainnet server (no testnet controls, USDC.e payouts, a pathUSD fee budget, its own passkey domain).

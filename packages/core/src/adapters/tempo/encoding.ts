@@ -32,7 +32,7 @@ export function memoTransfersFromLogs(logs: readonly Log[]): MemoTransfer[] {
  * Maps a node/sponsor error to a definitive refusal, or null when ambiguous (network,
  * timeouts, replays): ambiguous means the tx may still land before its validBefore.
  * Revoked and expired keys surface as "Missing or invalid parameters" with the real
- * cause only in `details` (spike RESULTS.md), so match on the whole summary.
+ * cause only in `details` (seen on Moderato), so match on the whole summary.
  */
 export function classifyChainError(text: string): ChainRejectReason | null {
   if (/KeyAlreadyRevoked/i.test(text)) return 'key_revoked'

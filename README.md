@@ -45,6 +45,7 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 **AI proposes, code checks, a human approves.** Message text is escaped data, user IDs are replaced by tokens before anything is sent, every line is checked in code whatever the model says, and a daily cap bounds the bill.
 - Code: [`anthropic/prompts.ts`](packages/core/src/adapters/anthropic/prompts.ts) (escaping), [`proposal/sources.ts`](packages/core/src/domain/proposal/sources.ts) (pseudonymisation), [`adapters/wiring.ts`](packages/core/src/adapters/wiring.ts) (`DailyCappedProposer`)
 - Tests: the injection suite in [`proposal/proposal.test.ts`](packages/core/src/domain/proposal/proposal.test.ts)
+- Cost: a proposal costs about $0.003 to $0.004 on Sonnet 5.5 with the prompt cache warm (measured live, October 2026). Every model call is stored without any text, the proposer sees what theirs cost, and the dashboard shows the month's AI spend: [`domain/aiUsage.ts`](packages/core/src/domain/aiUsage.ts), [`services/aiUsageService.ts`](packages/core/src/services/aiUsageService.ts)
 
 **Standing policies, with no AI at runtime.** The model compiles the rule once, a human approves it, code runs it, the chain caps it.
 - Tests: [`services/schedulerService.test.ts`](packages/core/src/services/schedulerService.test.ts) (no AI at runtime, veto timing, crashes at each step), [`test/policies.sqlite.integration.test.ts`](packages/core/test/policies.sqlite.integration.test.ts) (two instances, one run per period), [`test/policiesDashboard.test.ts`](apps/server/test/policiesDashboard.test.ts), [`test/policy.chain.test.ts`](packages/core/test/policy.chain.test.ts) (an autopilot payout on Moderato)
@@ -58,20 +59,20 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 ```bash
 pnpm install
 pnpm typecheck
-pnpm test            # 1,262 tests in 114 files, no network, no secrets
+pnpm test            # 1,308 tests in 118 files, no network, no secrets
 pnpm test:coverage   # what CI runs, with a threshold per package
 ```
 
-`pnpm test` runs 1,262 tests: core 639, discord 343, web 161, server 119. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
+`pnpm test` runs 1,308 tests: core 664, discord 347, web 173, server 124. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
 
 Coverage from `pnpm test:coverage`:
 
 | Package | Lines | Statements | Functions | Branches |
 | --- | --- | --- | --- | --- |
-| `packages/core` | 94.59% | 91.06% | 94.37% | 81.32% |
-| `packages/discord` | 96.51% | 93.27% | 96.78% | 83.08% |
-| `packages/web` | 83.07% | 80.02% | 79.41% | 74.45% |
-| `apps/server` | 84.9% | 84.34% | 83.54% | 84.15% |
+| `packages/core` | 94.82% | 91.36% | 94.59% | 81.85% |
+| `packages/discord` | 96.52% | 93.29% | 96.79% | 83.14% |
+| `packages/web` | 83.86% | 80.9% | 80.22% | 75.24% |
+| `apps/server` | 85.3% | 84.77% | 84.14% | 84.22% |
 
 `packages/web` is lower because its browser code (`src/client/`, 44% of lines here) runs in the Playwright e2e, which these numbers do not count. Its server code is at 99% of lines.
 
