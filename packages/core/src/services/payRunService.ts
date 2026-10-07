@@ -58,7 +58,7 @@ export type ExecuteError =
   | { code: 'not_retryable' }
   | ChainShowsPayments
 
-/** A failed run's memos are on chain: payrun records what the chain shows and sends nothing. */
+/** A failed run's memos are on chain: Rolepay records what the chain shows and sends nothing. */
 export type ChainShowsPayments = { code: 'chain_shows_payments'; detail: 'all_paid' | 'partial' | 'mismatch' }
 /** A failed run's last signed tx could still land until `retryAfter`: nothing can be decided before. */
 export type AttemptMayStillLand = { code: 'attempt_may_still_land'; retryAfter: Date }
