@@ -27,6 +27,22 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
     expect(ROUTED_COMMANDS.filter((c) => !subcommands.includes(c))).toEqual(['rolepay policy run_now'])
   })
 
+  it('/payee prefer token: a fixed list of USD stablecoins per network, and the payout token as the default', () => {
+    const prefer = (network?: 'moderato' | 'mainnet') =>
+      ((commandDefinitions({ devShortcuts: false, demoControls: false, ...(network ? { network } : {}) }) as Def[]).find((c) => c.name === 'payee')?.options ?? []).find((o) => o.name === 'prefer') as
+        | (Def & { options?: (Def & { choices?: { name: string; value: string }[] })[] })
+        | undefined
+    expect(prefer()?.options?.map((o) => [o.name, o.type, o.required])).toEqual([['token', OptionType.String, true]])
+    expect(prefer('moderato')?.options?.[0]?.choices).toEqual([
+      { name: "The server's payout token (the default)", value: 'default' },
+      { name: 'AlphaUSD', value: '0x20c0000000000000000000000000000000000001' },
+      { name: 'BetaUSD', value: '0x20c0000000000000000000000000000000000002' },
+      { name: 'ThetaUSD', value: '0x20c0000000000000000000000000000000000003' },
+    ])
+    expect(prefer('mainnet')?.options?.[0]?.choices?.map((c) => c.name)).toEqual(["The server's payout token (the default)", 'USDC.e', 'OUSD', 'USDT0'])
+    expect(prefer()?.options?.[0]?.choices).toEqual(prefer('moderato')?.options?.[0]?.choices)
+  })
+
   it('/rolepay setup fees: the choices say which default holds where (sponsored on testnet, a fee budget on mainnet, which has no sponsor)', () => {
     const setup = (defs.find((c) => c.name === 'rolepay')?.options ?? []).find((o) => o.name === 'setup')
     const fees = (setup?.options ?? []).find((o) => o.name === 'fees') as (Def & { choices?: { name: string; value: string }[] }) | undefined

@@ -1,6 +1,6 @@
-import type { Payee } from '@rolepay/core'
+import type { Community, Payee } from '@rolepay/core'
 import { ButtonStyle, ComponentType, type Message } from '../api.js'
-import { NO_PINGS, relativeTime, shortAddress } from './format.js'
+import { NO_PINGS, relativeTime, shortAddress, tokenLabel } from './format.js'
 
 /** The ephemeral reply to /payee link: the caller's one-time registration link. */
 export function payeeLinkMessage(input: { url: string; expiresAt: Date; current: Payee | null }): Message {
@@ -17,4 +17,16 @@ export function payeeLinkMessage(input: { url: string; expiresAt: Date; current:
       : [],
     allowed_mentions: NO_PINGS,
   }
+}
+
+/** The ephemeral reply to /payee prefer: what they will be paid in, and how, in this server. */
+export function payeePreferMessage(input: { payee: Payee; community: Pick<Community, 'payoutToken' | 'preferredTokens'> }): Message {
+  const payout = tokenLabel(input.community.payoutToken)
+  const chosen = input.payee.preferredToken
+  let content: string
+  if (chosen === null) content = `You will be paid in ${payout}, the token this server pays in.`
+  else if (input.community.preferredTokens)
+    content = `You will be paid in ${tokenLabel(chosen)}. Each run swaps ${payout} into it on Tempo's stablecoin exchange, in the same transaction that pays you, for at most a set amount over your pay (the run waits if it cannot).`
+  else content = `Saved: ${tokenLabel(chosen)}. This server pays everyone in ${payout} for now; you get ${tokenLabel(chosen)} once a treasurer turns on preferred stablecoins.`
+  return { content, allowed_mentions: NO_PINGS }
 }

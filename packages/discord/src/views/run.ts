@@ -1,7 +1,7 @@
-import type { Failure, NetworkName, Run, RunLine } from '@rolepay/core'
+import { type Failure, type NetworkName, type Run, type RunLine, formatAmount, lineToken, swapLegs } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
 import { type RunAction, encodeCustomId, encodeVetoButton } from '../components/customId.js'
-import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention, shortAddress, txUrl } from './format.js'
+import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention, shortAddress, tokenLabel, txUrl } from './format.js'
 
 export type RunViewContext = {
   network: NetworkName
@@ -49,6 +49,8 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
     if (run.status === 'approved') fields.push({ name: 'Not paid yet', value: ctx.problem })
     if (run.status === 'failed') fields.push({ name: 'Note', value: ctx.problem })
   }
+  const swaps = swapsText(run)
+  if (swaps) fields.push({ name: 'Swaps', value: swaps })
   if (ctx.policy) {
     const p = ctx.policy
     fields.push({ name: 'Policy', value: `**${escapeMarkdown(p.name)}** (version ${p.version}), for <t:${unix(p.periodStart)}:f> to <t:${unix(p.periodEnd)}:f>` })
@@ -75,9 +77,13 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
 export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; communityName: string | null; accountUrl?: string | null }): Message {
   const tx = run.paidTxHash
   const embed: Embed = {
-    title: `You were paid ${money(line.amount, run.token)}`,
+    title: `You were paid ${money(line.amount, lineToken(run, line))}`,
     color: COLORS.paid,
-    description: [`From **${escapeMarkdown(ctx.communityName ?? 'your Discord server')}**, through Rolepay on Tempo.`, run.note ? `Note: ${escapeMarkdown(run.note)}` : null]
+    description: [
+      `From **${escapeMarkdown(ctx.communityName ?? 'your Discord server')}**, through Rolepay on Tempo.`,
+      line.swap ? `In ${tokenLabel(line.swap.token)}, the stablecoin you chose: swapped from ${tokenLabel(run.token)} on Tempo's stablecoin exchange in the same transaction.` : null,
+      run.note ? `Note: ${escapeMarkdown(run.note)}` : null,
+    ]
       .filter(Boolean)
       .join('\n'),
     fields: [
@@ -188,4 +194,15 @@ const unix = (d: Date) => Math.floor(d.getTime() / 1000)
 
 const rows = (buttons: Button[]): ActionRow[] => (buttons.length ? [{ type: ComponentType.ActionRow, components: buttons }] : [])
 
-const lineText = (l: RunLine, token: string) => `${l.line}. ${mention(l.payeeDiscordId)}  ${money(l.amount, token)}  ·  ${shortAddress(l.address)}`
+/** "1. @ana  5 AlphaUSD → 5 BetaUSD (swapped)  ·  0x1111…1111" for a line paid in the payee's preferred stablecoin. */
+const lineText = (l: RunLine, token: string) =>
+  `${l.line}. ${mention(l.payeeDiscordId)}  ${money(l.amount, token)}${l.swap ? ` → ${money(l.amount, l.swap.token)} (swapped)` : ''}  ·  ${shortAddress(l.address)}`
+
+/** For a run with swapped lines: how many, and the most the swaps may spend (the batch reverts whole past it). */
+function swapsText(run: Run): string | null {
+  const swapped = run.lines.filter((l) => l.swap)
+  if (swapped.length === 0) return null
+  const max = swapLegs(run.lines).reduce((s, l) => s + l.maxIn, 0n)
+  const who = swapped.length === 1 ? '1 line is' : `${swapped.length} lines are`
+  return `${who} paid in another stablecoin, as the payee chose. In the same transaction, Tempo's stablecoin exchange swaps at most ${formatAmount(max)} ${tokenLabel(run.token)} for ${swapped.length === 1 ? 'it' : 'them'}; past that the whole run reverts and nobody is paid.`
+}

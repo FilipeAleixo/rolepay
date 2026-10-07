@@ -277,3 +277,43 @@ describe('createRunExecutor: another worker on the same run (the recovery sweep,
     expect(reports[0]).toMatchObject({ status: 'paid', contended: 1 })
   })
 })
+
+describe('createRunExecutor: a run with a line in a preferred stablecoin', () => {
+  const BETA = '0x20c0000000000000000000000000000000000002'
+
+  async function preferring(route: { inPerOutBps: number } | null) {
+    const h = await harness()
+    await h.rolepay.communities.register({ guildId: GUILD, name: 'Test guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor' })
+    await h.rolepay.communities.setPreferredTokens({ guildId: GUILD, enabled: true })
+    await h.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 2_592_000, expiresAt: h.chain.time + 86_400 * 30 })
+    await h.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: h.chain.rootSigner(TREASURY) })
+    await h.registerAll()
+    await h.rolepay.payees.setPreferredToken({ guildId: GUILD, discordUserId: ALICE, token: BETA })
+    if (route) h.chain.setSwapRoute(TOKEN, BETA, { ...route, liquidity: usd('1000') })
+    const run = await h.approvedRun()
+    const execute = createRunExecutor({ rolepay: h.rolepay, rest: h.rest, notices: new MemoryRunNotices(), network: 'moderato', now: () => h.clock.now(), sleep: h.sleep })
+    return { ...h, run, execute }
+  }
+
+  it('pays it in one transaction; the message shows the swap and Alice\'s receipt says she received BetaUSD', async () => {
+    const h = await preferring({ inPerOutBps: 9_954 })
+    expect(h.run.lines[0]?.swap).toEqual({ token: BETA, maxIn: usd('1.515') })
+    await h.execute(job(h.run.id))
+    expect(text(h.rest.lastEdit('tok-approve'))).toMatch(/"title":"Paid"/)
+    expect(text(h.rest.lastEdit('tok-approve'))).toContain('1.5 AlphaUSD → 1.5 BetaUSD (swapped)')
+    expect(h.chain.landedTxCount).toBe(1)
+    expect(text(h.rest.dms[0]?.message)).toContain('You were paid 1.5 BetaUSD')
+    expect(text(h.rest.dms[1]?.message)).toContain('You were paid 25 AlphaUSD')
+  })
+
+  it('with no route on the exchange, holds the run whole, says why and offers Retry; nothing is sent', async () => {
+    const h = await preferring(null)
+    await h.execute(job(h.run.id))
+    const shown = text(h.rest.lastEdit('tok-approve'))
+    expect(shown).toMatch(/Approved, not paid yet/)
+    expect(shown).toContain('cannot buy BetaUSD right now')
+    expect(shown).toMatch(/"label":"Retry"/)
+    expect(h.chain.broadcastCount).toBe(0)
+    expect(h.rest.dms).toEqual([])
+  })
+})
