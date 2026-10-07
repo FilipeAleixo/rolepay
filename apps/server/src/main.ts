@@ -53,6 +53,8 @@ async function main() {
   const composed = composeServer({ config, rolepay, rest, clock: deps.clock, kv, web, log })
   const recovery = composed.startRecovery()
   const scheduler = composed.startScheduler()
+  // Deposit addresses: reads the chain only for communities that set them up.
+  const funding = composed.startFunding()
 
   const server = serve({ fetch: composed.app.fetch, hostname: config.http.host, port: config.http.port }, (info) => {
     log('listening', {
@@ -79,6 +81,7 @@ async function main() {
     server.close()
     await recovery.stop()
     await scheduler.stop()
+    await funding.stop()
     // Give payments in flight a moment; anything cut short is reconciled on the next start.
     await Promise.race([composed.drain(), new Promise((r) => setTimeout(r, 10_000))])
     await close()
