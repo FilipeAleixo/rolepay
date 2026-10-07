@@ -35,6 +35,12 @@ describe('parseServerConfig', () => {
     expect(c.app.devShortcuts).toBe(false)
     expect(c.app.authorizeHint).toBeNull()
     expect(c.recoveryIntervalMs).toBe(30_000)
+    expect(c.policies).toEqual({ schedulerIntervalMs: 30_000, minVetoMinutes: 60 })
+  })
+
+  it('policies: the scheduler interval is configurable; the dev shortcuts allow a one-minute veto window for testing', () => {
+    expect(parseServerConfig(env({ ROLEPAY_SCHEDULER_INTERVAL_SECONDS: '10' })).policies.schedulerIntervalMs).toBe(10_000)
+    expect(parseServerConfig(env({ ROLEPAY_DEV_SHORTCUTS: 'true' })).policies.minVetoMinutes).toBe(1)
   })
 
   it('the dev shortcuts (and their hint) exist only with ROLEPAY_DEV_SHORTCUTS=true on testnet', () => {

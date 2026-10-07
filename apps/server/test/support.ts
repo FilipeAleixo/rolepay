@@ -58,6 +58,7 @@ export async function testServer(opts: { from?: SharedState; sleep?: (ms: number
       proposer,
       activity: new RestActivityReader(rest),
       proposalLog: (entry) => logs.push({ event: 'proposal', fields: entry }),
+      minVetoMinutes: config.policies.minVetoMinutes,
     })
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
