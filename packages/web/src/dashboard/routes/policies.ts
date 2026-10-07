@@ -1,3 +1,4 @@
+import { POLICY_LIMITS, PROPOSAL_LIMITS } from '@rolepay/core'
 import { type Context, Hono } from 'hono'
 import { z } from 'zod'
 import { type CommunityAccess, actionAccess, communityAccess } from '../access.js'
@@ -17,9 +18,17 @@ const validTimezone = (tz: string) => {
   }
 }
 
+/** Core's own limits, so the form refuses what core would, in words. */
+const MAX_NAME = POLICY_LIMITS.maxNameLength
+const MAX_INSTRUCTION = PROPOSAL_LIMITS.maxInstructionLength
+
 const DraftForm = z.object({
-  name: z.string().trim().min(1, 'Give the policy a name.').max(100, 'The name is at most 100 characters.'),
-  instruction: z.string().trim().min(1, 'Write the instruction: who gets paid, how much, and when.').max(2000, 'The instruction is at most 2,000 characters.'),
+  name: z.string().trim().min(1, 'Give the policy a name.').max(MAX_NAME, `The name is at most ${MAX_NAME} characters.`),
+  instruction: z
+    .string()
+    .trim()
+    .min(1, 'Write the instruction: who gets paid, how much, and when.')
+    .max(MAX_INSTRUCTION, `The instruction is at most ${MAX_INSTRUCTION.toLocaleString('en-US')} characters.`),
   kind: z.enum(['weekly', 'monthly'], 'Choose weekly or monthly.'),
   weekday: z.coerce.number().int().min(0).max(6),
   day: z.coerce.number().int().min(1, 'The day of the month is 1 to 28.').max(28, 'The day of the month is 1 to 28.'),

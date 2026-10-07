@@ -1,3 +1,4 @@
+import { POLICY_LIMITS, PROPOSAL_LIMITS } from '@rolepay/core'
 import type { PolicyDetail, PolicyPreview, PolicySchedule, PolicySummary, PolicyVersionView } from '../policyPort.js'
 import { lineDiff } from './diff.js'
 import { type Names, esc, money, person, pill, row, table, when } from './format.js'
@@ -211,8 +212,8 @@ export function policyFormBody(d: { guildId: string; action: string; heading: st
 <p class="lede">Write the rule in your own words. Rolepay's AI compiles it once into an exact filter and amounts; you then see who it applies to and approve it. Nothing runs before that.</p>
 ${d.error ? `<p class="notice bad" role="alert">${esc(d.error)}</p>` : ''}
 <form class="card" method="post" action="${esc(d.action)}">${csrfField(d.csrf)}
-<div class="field"><label for="name">Name</label><input id="name" name="name" maxlength="100" required value="${esc(v.name)}"></div>
-<div class="field"><label for="instruction">Instruction</label><textarea id="instruction" name="instruction" maxlength="2000" required>${esc(v.instruction)}</textarea>
+<div class="field"><label for="name">Name</label><input id="name" name="name" maxlength="${POLICY_LIMITS.maxNameLength}" required value="${esc(v.name)}"></div>
+<div class="field"><label for="instruction">Instruction</label><textarea id="instruction" name="instruction" maxlength="${PROPOSAL_LIMITS.maxInstructionLength}" required>${esc(v.instruction)}</textarea>
 <p class="muted small">For example: every Monday, 1 per answered question in #help, at most 50 a week each.</p></div>
 <div class="row"><div class="field"><label for="kind">Runs</label><select id="kind" name="kind">${opt('weekly', 'Weekly', v.kind)}${opt('monthly', 'Monthly', v.kind)}</select></div>
 <div class="field"><label for="weekday">Day of the week (weekly)</label><select id="weekday" name="weekday">${WEEKDAYS.map((w, i) => opt(String(i), w, v.weekday)).join('')}</select></div>
