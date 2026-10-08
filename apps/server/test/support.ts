@@ -63,6 +63,7 @@ export async function testServer(
   const rest = new FakeDiscordRest()
   const proposer = opts.from?.proposer ?? new FakeRunProposer()
   const activity = new RestActivityReader(rest)
+  const feed = new InProcessLiveFeed()
   const rolepay =
     opts.from?.rolepay ??
     createRolepay({
@@ -79,7 +80,7 @@ export async function testServer(
       demoControls: config.core.demoControls,
       fundingChain,
       // Every audit event to the live pages, as main.ts wires it (openRolepayAdapters).
-      live: new InProcessLiveFeed(),
+      live: feed,
     })
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
@@ -123,5 +124,5 @@ export async function testServer(
   /** Discord's signature over `text` (the timestamp, then the body). */
   const sign = (text: string) => signer.sign(text)
 
-  return { ...server, config, clock, chain, fundingChain, rolepay, kv, rest, proposer, sessions, logs, interact, browserPost, sign }
+  return { ...server, config, clock, chain, fundingChain, rolepay, feed, kv, rest, proposer, sessions, logs, interact, browserPost, sign }
 }

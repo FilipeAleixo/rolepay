@@ -1,6 +1,8 @@
 // The live pages in process: a run approved in Discord and paid on the fake chain reaches the
 // dashboard's stream of that community and the payee's account stream, through the real wiring
 // (interactions, the execution queue, core's audit trail and live feed, the web routes).
+import type { AddressInfo } from 'node:net'
+import { serve } from '@hono/node-server'
 import { buttonClick, slashCommand } from '@rolepay/discord/testing'
 import { FakeDiscordOAuth } from '@rolepay/web/testing'
 import { describe, expect, it } from 'vitest'
@@ -98,4 +100,26 @@ describe('live pages, in process', () => {
     expect(received).toContain(`pay run ${runId}, line 1`)
     await Promise.all([dashboard.cancel(), alice.cancel()])
   })
+
+  it('over a real HTTP server: the stream arrives as it is written, and a client that hangs up is unsubscribed', async () => {
+    const s = await testServer()
+    const server = serve({ fetch: s.app.fetch, hostname: '127.0.0.1', port: 0 })
+    await new Promise<void>((resolve) => server.once('listening', () => resolve()))
+    try {
+      const { port } = server.address() as AddressInfo
+      const abort = new AbortController()
+      const res = await fetch(`http://127.0.0.1:${port}/account/live`, { headers: { cookie: s.sessions.cookieFor(ADDR.alice) }, signal: abort.signal })
+      expect(res.headers.get('content-type')).toBe('text/event-stream; charset=utf-8')
+      const stream = sse(res)
+      expect(await stream.read((t) => t.includes('retry:'))).toBe('retry: 5000\n\n') // not buffered until the end
+      expect(s.feed.size).toBe(1)
+      abort.abort()
+      const deadline = Date.now() + 2_000
+      while (s.feed.size > 0 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20))
+      expect(s.feed.size).toBe(0)
+    } finally {
+      await new Promise((r) => server.close(r))
+    }
+  })
 })
+
