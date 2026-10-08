@@ -107,10 +107,9 @@ noscript p{color:var(--muted)}
 .home .more::after{content:"\\2193";margin-left:.45em;color:var(--accent-2)}
 .home .more:hover{color:var(--fg)}
 /* What to do once in the demo server, in one line on a desktop: wider than its column by about 2.5rem, into the gap beside the product shot, where the shot has nothing at that height. */
-.home .hint{margin:1.15rem 0 0;font-size:13px;line-height:1.6;color:var(--meta)}
+.home .hint{max-width:28rem;margin:1.15rem 0 0;font-size:13px;line-height:1.6;color:var(--meta);text-wrap:pretty}
 .home .down{margin:1rem 0 0}
 .home .hint code{white-space:nowrap;word-break:normal}
-@media (min-width:70rem){.home .hint{white-space:nowrap}}
 .shot{display:flex;flex-direction:column;gap:.9rem;width:100%;max-width:30rem;justify-self:center}
 .shot p{margin:0}
 .shot .ways{padding:.95rem 1.05rem .95rem;border-radius:16px;border:1px solid color-mix(in srgb,var(--accent-2) 26%,transparent);background:linear-gradient(180deg,#141623,#101220);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 30px 60px -34px rgba(0,0,0,.95),0 0 46px -16px color-mix(in srgb,var(--accent-2) 42%,transparent)}
