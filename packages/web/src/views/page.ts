@@ -84,7 +84,11 @@ noscript p{color:var(--muted)}
 .topbar .quiet:hover{color:var(--fg)}
 .topbar nav a{white-space:nowrap}
 .topbar .narrow{display:none}
-.topbar .button,.home .button:not(.secondary){white-space:nowrap;box-shadow:0 12px 30px -16px rgba(237,190,90,.65)}
+.topbar .button,.home .button:not(.secondary){white-space:nowrap}
+.topbar .button:not(.cool),.home .button:not(.secondary):not(.cool){box-shadow:0 12px 30px -16px rgba(237,190,90,.65)}
+/* One gold button per screen. The second action is a periwinkle outline, no fill and no glow: periwinkle is Discord's colour on the home page, and these are Discord actions. */
+.button.cool{background:transparent;border-color:color-mix(in srgb,var(--accent-2) 28%,transparent);color:var(--accent-2)}
+.button.cool:hover{background:color-mix(in srgb,var(--accent-2) 6%,transparent);border-color:color-mix(in srgb,var(--accent-2) 55%,transparent);color:color-mix(in srgb,var(--accent-2),#fff 18%)}
 .home{max-width:70rem;padding:0 1rem 2.5rem}
 .home section{margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none}
 .home ul,.home ol{list-style:none;margin:0;padding:0}
@@ -100,6 +104,11 @@ noscript p{color:var(--muted)}
 .home .more{font-size:14px;color:var(--soft);text-decoration:none}
 .home .more::after{content:"\\2193";margin-left:.45em;color:var(--accent-2)}
 .home .more:hover{color:var(--fg)}
+/* What to do once in the demo server, in one line on a desktop: wider than its column by about 2.5rem, into the gap beside the product shot, where the shot has nothing at that height. */
+.home .hint{margin:1.15rem 0 0;font-size:13px;line-height:1.6;color:var(--meta)}
+.home .down{margin:1rem 0 0}
+.home .hint code{white-space:nowrap;word-break:normal}
+@media (min-width:70rem){.home .hint{white-space:nowrap}}
 .shot{display:flex;flex-direction:column;width:100%;max-width:30rem;justify-self:center}
 .shot p{margin:0}
 .shot .ways{align-self:flex-end;width:90%;margin:0 0 -1.1rem;position:relative;z-index:1;padding:.95rem 1.05rem .95rem;border-radius:16px;border:1px solid color-mix(in srgb,var(--accent-2) 26%,transparent);background:linear-gradient(180deg,#141623,#101220);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 30px 60px -34px rgba(0,0,0,.95),0 0 46px -16px color-mix(in srgb,var(--accent-2) 42%,transparent)}

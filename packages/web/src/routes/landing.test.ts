@@ -5,6 +5,8 @@ import { PAID_WEEKS, STYLE, esc } from '../views/page.js'
 
 const APP_ID = '500000000000000001'
 const INSTALL = `https://discord.com/oauth2/authorize?client_id=${APP_ID}&amp;scope=bot+applications.commands&amp;permissions=84992`
+/** The demo's own Discord server (ROLEPAY_DEMO_INVITE_URL, as fly.demo.toml sets it). */
+const INVITE = 'https://discord.gg/tCuABJt72P'
 const ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" }
 const text = (html: string) =>
   html
@@ -170,10 +172,59 @@ describe('the home page (/)', () => {
     expect(STYLE).toContain('.topbar .wide{display:none}.topbar .narrow{display:inline}')
   })
 
+  it("on the testnet demo with its own Discord server (ROLEPAY_DEMO_INVITE_URL) leads with joining it and getting paid: one gold button on the first screen, adding the bot second, in periwinkle", async () => {
+    const html = await (await webHarness({ discordAppId: APP_ID, demoInviteUrl: INVITE }).send('/')).text()
+    const gold = (part: string) => part.match(/class="button"/g)?.length ?? 0 // not "button cool", not "button secondary"
+    // The hero: join the demo and get paid (gold), add the bot to your own server (the outline), the way down the page, then what to do once there.
+    expect(hero(html)).toContain(
+      `<p class="actions"><a class="button" href="${INVITE}" rel="noreferrer">Join the demo and get paid</a><a class="button cool" href="${INSTALL}" rel="noreferrer">Add to your server</a></p><p class="hint">Run <code>/payee link</code>, react ✅ in #start-here, and the next daily run pays you a test dollar.</p><p class="down"><a class="more" href="#how">How it works</a></p>`,
+    )
+    // The top bar keeps its links; "Add to Discord" takes the outline, since the hero's gold is on the same screen.
+    expect(topBar(html)).toContain(`<nav aria-label="Main"><a class="quiet account" href="/account"><span class="wide">Payee account</span><span class="narrow">Account</span></a><a class="quiet" href="/dashboard">Treasury dashboard</a><a class="button cool" href="${INSTALL}" rel="noreferrer">Add to Discord</a></nav>`)
+    expect(gold(topBar(html) + hero(html))).toBe(1)
+    // The final band: add Rolepay to a server (gold), join the demo server (the outline), then the source.
+    expect(finalBand(html)).toContain(
+      `<nav class="cta" aria-label="Get started"><a class="button" href="${INSTALL}" rel="noreferrer">Add Rolepay to a server</a><a class="button cool" href="${INVITE}" rel="noreferrer">Join the demo server</a><a class="source" href="https://github.com/FilipeAleixo/rolepay" rel="noreferrer">Source on GitHub</a></nav>`,
+    )
+    expect(gold(finalBand(html))).toBe(1)
+    expect(text(html)).not.toContain('—') // no em dash
+  })
+
+  it('is the page it was without the demo server, without the install link, or on mainnet: the invite only changes a testnet that offers its install link', async () => {
+    const home = async (opts: Parameters<typeof webHarness>[0]) => (await webHarness(opts).send('/')).text()
+    expect(await home({ discordAppId: APP_ID })).not.toMatch(/discord\.gg|class="hint"|button cool/)
+    const cases: Array<Parameters<typeof webHarness>[0]> = [
+      { discordAppId: APP_ID, publicInstall: false },
+      { publicInstall: true }, // no application, nothing to install
+      { mainnet: true, discordAppId: APP_ID },
+      { mainnet: true, discordAppId: APP_ID, publicInstall: true },
+    ]
+    for (const opts of cases) {
+      const label = JSON.stringify(opts)
+      const html = await home({ ...opts, demoInviteUrl: INVITE })
+      expect(html, label).toBe(await home(opts))
+      expect(html, label).not.toContain('discord.gg')
+    }
+  })
+
+  it('draws the second action as a periwinkle outline: no fill, no glow, so the gold stays the one main action', () => {
+    const rules = [...STYLE.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selectors: (m[1] as string).split(',').map((s) => s.trim()), body: m[2] as string }))
+    const cool = rules.filter((r) => r.selectors.some((s) => s.includes('.button.cool')))
+    expect(cool.map((r) => r.selectors.join(','))).toEqual(['.button.cool', '.button.cool:hover'])
+    expect(cool[0]?.body).toMatch(/^background:transparent;border-color:color-mix\(in srgb,var\(--accent-2\) \d+%,transparent\);color:var\(--accent-2\)/)
+    for (const r of cool) expect(r.body).not.toContain('box-shadow')
+    // The gold buttons' glow leaves the outline out, wherever it is drawn.
+    const glows = rules.filter((r) => /(?:^|;)box-shadow:/.test(r.body) && r.selectors.some((s) => /\.button\b/.test(s)))
+    expect(glows.length).toBeGreaterThan(0)
+    for (const r of glows) for (const s of r.selectors.filter((s) => /\.button\b/.test(s))) expect(s).toContain(':not(.cool)')
+  })
+
   it('reads in order without the pictures: one h1, a heading per section, a title per step, and every icon and light hidden from assistive tech', () => {
     const html = landingPage({ testnet: true })
-    const headings = [...html.matchAll(/<h([1-6])[^>]*>/g)].map((m) => Number(m[1]))
-    expect(headings).toEqual([1, 2, 2, 3, 3, 3, 3, 2, 3, 3, 2, 3, 3, 2, 2])
+    const headings = (page: string) => [...page.matchAll(/<h([1-6])[^>]*>/g)].map((m) => Number(m[1]))
+    expect(headings(html)).toEqual([1, 2, 2, 3, 3, 3, 3, 2, 3, 3, 2, 3, 3, 2, 2])
+    // The demo's own server changes the actions, not the outline.
+    expect(headings(landingPage({ testnet: true, discordAppId: APP_ID, demoInviteUrl: INVITE }))).toEqual(headings(html))
     for (const id of ['hero-title', 'contrast-title', 'how-title', 'places-title', 'who', 'trust', 'final-title']) expect(html).toContain(`aria-labelledby="${id}"`)
     expect(html).toContain('<div class="atmos" aria-hidden="true">')
     const svgs = [...html.matchAll(/<svg\b[^>]*>/g)].map((m) => m[0])
@@ -227,6 +278,8 @@ describe('the home page (/)', () => {
     expect(mainnet).not.toContain('Testnet')
     expect(mainnet).not.toContain('class="testnet"')
     expect(testnet.replace('<p class="badge"><span class="testnet">Testnet demo</span></p>', '')).toBe(mainnet)
+    // The demo's own server is a testnet thing: mainnet ignores it.
+    expect(landingPage({ testnet: false, discordAppId: APP_ID, demoInviteUrl: INVITE })).toBe(mainnet)
   })
 
   it('offers the install link only with a Discord application and ROLEPAY_PUBLIC_INSTALL on (by default on testnet, off on mainnet, where the pilot bot is private)', async () => {
@@ -279,6 +332,10 @@ describe('the home page (/)', () => {
     const html = landingPage({ testnet: true, discordAppId: '1"><script>alert(1)</script>' })
     expect(html).not.toContain('<script>')
     expect(html).toContain('client_id=1%22%3E%3Cscript%3Ealert%281%29%3C%2Fscript%3E')
+    // The invite too: the server accepts only a Discord invite link, and the page escapes it anyway.
+    const invite = landingPage({ testnet: true, discordAppId: APP_ID, demoInviteUrl: 'https://discord.gg/x"><script>alert(1)</script>' })
+    expect(invite).not.toContain('<script>')
+    expect(invite.match(/href="https:\/\/discord\.gg\/x&quot;&gt;&lt;script&gt;alert\(1\)&lt;\/script&gt;"/g)).toHaveLength(2) // the hero and the final band
   })
 
   it('is served with the same strict CSP, which allows the fonts, the favicon and the home-screen icon from this origin and nothing new besides', async () => {

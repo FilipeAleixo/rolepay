@@ -192,19 +192,32 @@ const productShot = () => `<div class="shot" role="img" aria-label="The three wa
  * behind the hero breathes in CSS only and holds still under reduced motion. The same page on
  * every network, but for the testnet pill. With a Discord application id (the server passes one
  * only when ROLEPAY_PUBLIC_INSTALL is on) "Add to Discord" leads; without one, the dashboard does.
+ * On testnet, with that install link and the demo's own Discord server (ROLEPAY_DEMO_INVITE_URL),
+ * joining the demo and getting paid leads instead: the fastest way to see Rolepay work, with nobody
+ * online. One gold button per screen: the second action is the periwinkle outline (`.button.cool`),
+ * the colour the page gives Discord.
  */
-export function landingPage(opts: { testnet: boolean; discordAppId?: string | undefined }): string {
+export function landingPage(opts: { testnet: boolean; discordAppId?: string | undefined; demoInviteUrl?: string | undefined }): string {
   const item = (f: (typeof FEATURES)[number]) => `<li${f.cool ? ' class="cool"' : ''}>${icon(f.icon, 22)}<p><strong>${esc(f.title)}</strong> ${esc(f.line)}</p></li>`
   const href = opts.discordAppId ? esc(installUrl(opts.discordAppId)) : null
+  const invite = opts.testnet && href && opts.demoInviteUrl ? esc(opts.demoInviteUrl) : null
   const dashboard = '<a class="button" href="/dashboard">Open the dashboard</a>'
-  const install = (label: string) => `<a class="button" href="${href}" rel="noreferrer">${label}</a>`
+  const install = (label: string, kind = 'button') => `<a class="${kind}" href="${href}" rel="noreferrer">${label}</a>`
+  const join = (label: string, kind = 'button') => `<a class="${kind}" href="${invite}" rel="noreferrer">${label}</a>`
   // The people being paid come back on their phones, so their account link stays when Dashboard folds away.
   const account = '<a class="quiet account" href="/account"><span class="wide">Payee account</span><span class="narrow">Account</span></a>'
   const bar = href
-    ? `${account}<a class="quiet" href="/dashboard">Treasury dashboard</a>${install('Add to Discord')}`
+    ? `${account}<a class="quiet" href="/dashboard">Treasury dashboard</a>${install('Add to Discord', invite ? 'button cool' : 'button')}`
     : `${account}<a class="button" href="/dashboard"><span class="wide">Treasury dashboard</span><span class="narrow">Dashboard</span></a>`
-  const hero = href ? install('Add to Discord') : dashboard
-  const final = href ? `${install('Add Rolepay to a server')}<a class="button secondary" href="/dashboard">Open the dashboard</a>` : dashboard
+  const hero = invite ? `${join('Join the demo and get paid')}${install('Add to your server', 'button cool')}` : href ? install('Add to Discord') : dashboard
+  // What a visitor does once in the demo server (the Judges policy in apps/server/README.md pays them).
+  // With the hint, "How it works" follows it, so the hint sits right under the button it explains.
+  const hint = invite ? '<p class="hint">Run <code>/payee link</code>, react ✅ in #start-here, and the next daily run pays you a test dollar.</p>' : ''
+  const final = invite
+    ? `${install('Add Rolepay to a server')}${join('Join the demo server', 'button cool')}`
+    : href
+      ? `${install('Add Rolepay to a server')}<a class="button secondary" href="/dashboard">Open the dashboard</a>`
+      : dashboard
   return `<!doctype html>
 <html lang="en">${head({ title: 'Rolepay', style: STYLE, description: TAGLINE, index: true })}
 <body><div class="atmos" aria-hidden="true"><span class="glow warm"></span><span class="glow cool"></span></div>
@@ -213,7 +226,7 @@ export function landingPage(opts: { testnet: boolean; discordAppId?: string | un
 <section class="hero" aria-labelledby="hero-title"><div class="copy">${opts.testnet ? '<p class="badge"><span class="testnet">Testnet demo</span></p>' : ''}
 <h1 id="hero-title">Pay the people who run your community.</h1>
 <p class="sub">Pick a role, name the people, or describe them in plain words. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.</p>
-<p class="actions">${hero}<a class="more" href="#how">How it works</a></p></div>
+${invite ? `<p class="actions">${hero}</p>${hint}<p class="down"><a class="more" href="#how">How it works</a></p>` : `<p class="actions">${hero}<a class="more" href="#how">How it works</a></p>`}</div>
 ${productShot()}</section>
 <section class="contrast" aria-labelledby="contrast-title"><h2 id="contrast-title" class="sr">Paying people today, and with Rolepay</h2><p class="cols" aria-hidden="true"><span>Today</span><span>With Rolepay</span></p><ul>${CONTRAST.map((r) => `<li><p class="was"><span class="sr">Today: </span>${esc(r.was)}</p><p class="now"><span class="sr">With Rolepay: </span>${esc(r.now)}</p></li>`).join('')}</ul></section>
 <section class="how" id="how" aria-labelledby="how-title"><div class="intro"><h2 id="how-title">How a pay run works</h2>

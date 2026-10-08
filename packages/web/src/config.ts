@@ -18,6 +18,12 @@ export type WebConfig = {
    * on for testnet, off for mainnet). Absent or false: no install link, and the dashboard is the main action.
    */
   publicInstall?: boolean
+  /**
+   * The invite to the demo's own Discord server (ROLEPAY_DEMO_INVITE_URL, a discord.gg or
+   * discord.com/invite link, checked by the server). On testnet, with the install link on, the home
+   * page leads with joining it and getting paid. Ignored on mainnet.
+   */
+  demoInviteUrl?: string
   /** What the setup page suggests for a new bot key. */
   botKeyDefaults: { limit: bigint; periodSeconds: number; validitySeconds: number; feeBudget: bigint }
 }

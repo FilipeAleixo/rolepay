@@ -33,6 +33,9 @@ swap_size_mb = 512
   # The policy scheduler ticks every 10 seconds here (30 by default), so an autopilot run with a
   # one-minute veto window pays within seconds of it ending.
   ROLEPAY_SCHEDULER_INTERVAL_SECONDS = "10"
+  # The demo's own Discord server (a permanent invite): the home page leads with joining it, where the
+  # daily Judges policy pays each new payee a test dollar with nobody online.
+  ROLEPAY_DEMO_INVITE_URL = "https://discord.gg/tCuABJt72P"
 
 # The SQLite file (runs, payees, passkeys, sealed bot keys) lives on this 1 GB volume.
 [mounts]

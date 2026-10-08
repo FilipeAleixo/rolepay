@@ -60,6 +60,32 @@ describe('parseServerConfig', () => {
     expect(() => parseServerConfig(env({ ROLEPAY_PUBLIC_INSTALL: 'yes' }))).toThrow(/ROLEPAY_PUBLIC_INSTALL/)
   })
 
+  it("the demo server's invite (ROLEPAY_DEMO_INVITE_URL): unset or blank is none, and only a Discord invite link is accepted", () => {
+    expect(parseServerConfig(env()).web.demoInviteUrl).toBeUndefined()
+    expect(parseServerConfig(env({ ROLEPAY_DEMO_INVITE_URL: '' })).web.demoInviteUrl).toBeUndefined() // blank is unset
+    expect(parseServerConfig(env({ ROLEPAY_DEMO_INVITE_URL: 'https://discord.gg/tCuABJt72P' })).web.demoInviteUrl).toBe('https://discord.gg/tCuABJt72P')
+    expect(parseServerConfig(env({ ROLEPAY_DEMO_INVITE_URL: 'https://discord.com/invite/tCuABJt72P' })).web.demoInviteUrl).toBe('https://discord.com/invite/tCuABJt72P')
+    for (const bad of [
+      'discord.gg/tCuABJt72P',
+      'http://discord.gg/tCuABJt72P',
+      'https://discord.gg/',
+      'https://discord.gg/tCuABJt72P?event=1',
+      'https://discord.gg.example.org/tCuABJt72P',
+      'https://example.org/discord.gg/tCuABJt72P',
+      'https://discord.com/oauth2/authorize?client_id=500000000000000001',
+      'javascript:alert(1)',
+    ]) {
+      let message = ''
+      try {
+        parseServerConfig(env({ ROLEPAY_DEMO_INVITE_URL: bad }))
+      } catch (e) {
+        message = (e as Error).message
+      }
+      // It names the variable and never repeats the value.
+      expect(message, bad).toBe('invalid server config: ROLEPAY_DEMO_INVITE_URL: must be a Discord invite link, https://discord.gg/<code> or https://discord.com/invite/<code>')
+    }
+  })
+
   it('deposit addresses: the watcher interval is configurable', () => {
     expect(parseServerConfig(env({ ROLEPAY_FUNDING_INTERVAL_SECONDS: '15' })).fundingIntervalMs).toBe(15_000)
     expect(() => parseServerConfig(env({ ROLEPAY_FUNDING_INTERVAL_SECONDS: '0' }))).toThrow(/ROLEPAY_FUNDING_INTERVAL_SECONDS/)
