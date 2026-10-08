@@ -66,6 +66,11 @@ describe('fly.app.toml (the mainnet app, https://web.rolepay.app)', () => {
     expect(env.ROLEPAY_PUBLIC_INSTALL ?? 'false').toBe('false')
   })
 
+  it('names no demo server: that is the testnet demo, and mainnet would ignore it', () => {
+    expect(env.ROLEPAY_DEMO_INVITE_URL).toBeUndefined()
+    expect(config().web.demoInviteUrl).toBeUndefined()
+  })
+
   it('caps AI calls per day and suggests a small bot key for a small pilot treasury', () => {
     const c = config()
     expect(env.ROLEPAY_AI_DAILY_CAP).toBeDefined()
@@ -98,6 +103,10 @@ describe('fly.demo.toml (the testnet demo, https://demo.rolepay.app)', () => {
     const c = parseServerConfig({ ...SECRETS, ...flyEnv('fly.demo.toml') })
     expect(c.core).toMatchObject({ network: 'moderato', demoControls: true, devShortcuts: false })
     expect(c.web).toMatchObject({ origin: 'https://demo.rolepay.app', rpId: 'demo.rolepay.app', publicInstall: true })
+  })
+
+  it("names the demo's own Discord server, so the home page leads with joining it and getting paid", () => {
+    expect(parseServerConfig({ ...SECRETS, ...flyEnv('fly.demo.toml') }).web.demoInviteUrl).toBe('https://discord.gg/tCuABJt72P')
   })
 
   it('ticks the policy scheduler every 10 seconds, so a one-minute veto window pays soon after it ends; the default stays 30', () => {

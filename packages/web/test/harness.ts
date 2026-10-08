@@ -42,9 +42,10 @@ const MAINNET_WEB = {
 
 /**
  * `discordAppId`: the Discord application, for the home page's install link (absent: no link, as in
- * the other tests). `publicInstall`: ROLEPAY_PUBLIC_INSTALL, by default as the server has it (on testnet only). `funding: false`: a server without the funding chain (deposit addresses unavailable).
+ * the other tests). `publicInstall`: ROLEPAY_PUBLIC_INSTALL, by default as the server has it (on testnet only). `demoInviteUrl`:
+ * ROLEPAY_DEMO_INVITE_URL, the demo's own Discord server (absent: none). `funding: false`: a server without the funding chain (deposit addresses unavailable).
  */
-export function webHarness(opts: { mainnet?: boolean; discordAppId?: string; publicInstall?: boolean; funding?: boolean; live?: LiveStreamOptions } = {}) {
+export function webHarness(opts: { mainnet?: boolean; discordAppId?: string; publicInstall?: boolean; demoInviteUrl?: string; funding?: boolean; live?: LiveStreamOptions } = {}) {
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
   const chain = new FakePayoutChain({ startTime: Math.floor(clock.now().getTime() / 1000) })
   // The model (scripted) and Discord (fake) a policy needs to be written; AI stays off per community until a test turns it on.
@@ -83,6 +84,7 @@ export function webHarness(opts: { mainnet?: boolean; discordAppId?: string; pub
       ...(opts.mainnet ? MAINNET_WEB : {}),
       ...(opts.discordAppId ? { discordAppId: opts.discordAppId } : {}),
       publicInstall: opts.publicInstall ?? !opts.mainnet,
+      ...(opts.demoInviteUrl ? { demoInviteUrl: opts.demoInviteUrl } : {}),
       botKeyDefaults: { limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400, feeBudget: 1_000_000n },
     },
   })

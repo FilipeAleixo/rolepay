@@ -51,6 +51,14 @@ const ServerEnvSchema = z.object({
    * off on mainnet, where the pilot bot is private and a stranger's install would end in a Discord error.
    */
   ROLEPAY_PUBLIC_INSTALL: z.enum(['true', 'false']).optional(),
+  /**
+   * The invite to the demo's own Discord server. On testnet, with the install link on, the home page
+   * then leads with joining it and getting paid; mainnet ignores it. Unset: no such server.
+   */
+  ROLEPAY_DEMO_INVITE_URL: z
+    .string()
+    .regex(/^https:\/\/(?:discord\.gg|discord\.com\/invite)\/[A-Za-z0-9-]+$/, 'must be a Discord invite link, https://discord.gg/<code> or https://discord.com/invite/<code>')
+    .optional(),
 })
 
 export type ServerConfig = {
@@ -64,7 +72,7 @@ export type ServerConfig = {
   fundingIntervalMs: number
   /** Standing policies: the scheduler's interval, and the shortest veto window (1 minute with the testnet demo controls). */
   policies: { schedulerIntervalMs: number; minVetoMinutes: number }
-  /** The web pages: origin, passkey relying party, chain endpoints for the browser, the app id and whether the home page offers its install link. */
+  /** The web pages: origin, passkey relying party, chain endpoints for the browser, the app id, whether the home page offers its install link and the demo server's invite. */
   web: WebConfig
   /** The dashboard's Discord OAuth2 client: the app itself. `clientSecret` null = sign-in not configured. */
   dashboard: { clientId: string; clientSecret: string | null }
@@ -136,6 +144,7 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       explorerUrl: core.explorerUrl,
       discordAppId: e.DISCORD_APP_ID,
       publicInstall: e.ROLEPAY_PUBLIC_INSTALL === undefined ? testnet : e.ROLEPAY_PUBLIC_INSTALL === 'true',
+      ...(e.ROLEPAY_DEMO_INVITE_URL ? { demoInviteUrl: e.ROLEPAY_DEMO_INVITE_URL } : {}),
       botKeyDefaults: { ...botKey, feeBudget: feeBudget.value },
     },
     dashboard: { clientId: e.DISCORD_APP_ID, clientSecret: e.ROLEPAY_DISCORD_CLIENT_SECRET ?? null },
