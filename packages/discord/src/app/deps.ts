@@ -1,5 +1,6 @@
 import type { Clock, NetworkName, Rolepay } from '@rolepay/core'
-import type { DiscordRest, ExecutionQueue, MemberDirectory, PendingSources, PolicyAnnouncer } from '../ports.js'
+import type { DiscordRest, ExecutionQueue, MemberDirectory, PendingSources, PolicyAnnouncer, RunNotices } from '../ports.js'
+import type { TreasuryEvent } from './treasury.js'
 
 /** Operational settings for the Discord layer (the server builds these from env). */
 export type DiscordAppConfig = {
@@ -54,5 +55,13 @@ export type DiscordAppDeps = {
   config: DiscordAppConfig
   /** Posts what the policy scheduler did (used by the demo control that makes a run now). */
   announcer?: PolicyAnnouncer
+  /**
+   * Where each run's messages are (shared with the executor, the recovery sweep and the notifier).
+   * With it, a run made here goes to the treasury channel when there is one (its copy without
+   * buttons here), and a button pressed there updates both. Absent: one message, as always.
+   */
+  notices?: RunNotices
+  /** Rolepay found #treasury, or could not post in the treasury channel (the server logs it). */
+  onTreasury?: (event: TreasuryEvent) => void
   onError?: (error: unknown) => void
 }

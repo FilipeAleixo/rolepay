@@ -222,3 +222,305 @@ describe('createPolicyNotifier: telling the channel what the scheduler did', () 
     expect(w.rest.channelEdits).toEqual([])
   })
 })
+
+describe('createPolicyNotifier with a treasury channel: the buttons go there, the policy channel gets the run without them', () => {
+  const TREASURY_CHANNEL = '700000000000000009'
+  const OLD = '700000000000000008'
+  const SOMEONE = '200000000000000007'
+
+  /** The world above, the notifier logging what it does with the treasury channel, and buttons dispatched as Discord would. */
+  async function treasuryWorld(opts: Parameters<typeof world>[0] & { channels?: { id: string; name: string; type: number }[] } = {}) {
+    const w = await world(opts)
+    w.rest.channels.set(GUILD, [{ id: HELP, name: 'help', type: 0 }, ...(opts.channels ?? [])])
+    const events: unknown[] = []
+    const notifier = createPolicyNotifier({ rolepay: w.rolepay, rest: w.rest, notices: w.notices, network: 'moderato', onTreasury: (e) => events.push(e) })
+    const app = createDispatcher({
+      rolepay: w.rolepay,
+      rest: w.rest,
+      queue: w.queue,
+      members: new RestMemberDirectory(w.rest),
+      pendingSources: new MemoryPendingSources(),
+      clock: w.clock,
+      config: CONFIG,
+      notices: w.notices,
+    })
+    const click = async (customId: string, who = { userId: TREASURER, roles: [TREASURER_ROLE] }, token = 'tok-treasury-click') => {
+      const d = await app(buttonClick({ guildId: GUILD, channelId: TREASURY_CHANNEL }, customId, who, token))
+      if (d.kind === 'respond') await d.background?.()
+      return d
+    }
+    const pay = async () => {
+      const job = w.queue.jobs.at(-1)
+      if (!job) throw new Error('no job')
+      await createRunExecutor({ rolepay: w.rolepay, rest: w.rest, notices: w.notices, network: 'moderato', now: () => w.clock.now(), sleep: w.sleep })(job)
+    }
+    const choose = (channelId: string | null) => w.rolepay.communities.setTreasuryChannel({ ...asTreasurer, channelId })
+    const postsIn = (channelId: string) => w.rest.channelPosts.filter((p) => p.channelId === channelId)
+    const editsIn = (channelId: string) => w.rest.channelEdits.filter((e) => e.channelId === channelId)
+    return { ...w, notifier, events, click, pay, choose, postsIn, editsIn }
+  }
+
+  it('with no treasury channel (none set, none named "treasury"; #treasury-old is not it), the run and its Approve button stay in the policy channel, as always', async () => {
+    const w = await treasuryWorld({ channels: [{ id: OLD, name: 'treasury-old', type: 0 }] })
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelPosts.map((p) => p.channelId)).toEqual([CHANNEL])
+    expect(text(w.postsIn(CHANNEL)[0]?.message)).toContain('rolepay:approve:')
+    expect(w.events).toEqual([])
+    expect(await w.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: null, treasuryChannelSource: 'unset' } })
+  })
+
+  it('an autopilot run: Veto in the treasury channel; the policy channel says when it pays and who can veto, with no button; paid, both turn into Paid, receipts once', async () => {
+    const w = await treasuryWorld({ autopilot: true })
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    const made = await w.rolepay.scheduler.tick()
+    await w.notifier.announce(made.events)
+    const runId = made.events[0]?.run?.id as string
+    const [treasury] = w.postsIn(TREASURY_CHANNEL)
+    const [copy] = w.postsIn(CHANNEL)
+    expect(text(treasury?.message)).toContain('policy-run:veto:')
+    expect(text(treasury?.message)).toMatch(/Autopilot: pays <t:\d+:t> unless vetoed/)
+    expect(text(copy?.message)).toMatch(/Autopilot: pays <t:\d+:t> unless vetoed/)
+    expect(text(copy?.message)).toContain(`unless a member with <@&${TREASURER_ROLE}> vetoes it`)
+    expect(copy?.message.components).toEqual([])
+    // The public post never names the private channel.
+    expect(text(copy?.message)).not.toContain(TREASURY_CHANNEL)
+    expect(await w.notices.message(runId)).toEqual({ channelId: TREASURY_CHANNEL, messageId: treasury?.messageId })
+    expect(await w.notices.mirror(runId)).toEqual({ channelId: CHANNEL, messageId: copy?.messageId })
+
+    await w.sleep(3600 * 1000)
+    const released = await w.rolepay.scheduler.tick()
+    await w.notifier.announce(released.events)
+    await w.notifier.announce(released.events)
+    const paidThere = w.editsIn(TREASURY_CHANNEL).at(-1)
+    const paidHere = w.editsIn(CHANNEL).at(-1)
+    expect(paidThere?.messageId).toBe(treasury?.messageId)
+    expect(paidHere?.messageId).toBe(copy?.messageId)
+    for (const m of [paidThere?.message, paidHere?.message]) {
+      expect(text(m)).toContain('"title":"Paid"')
+      expect(text(m)).toContain('Paid on autopilot after the veto window')
+      expect(text(m)).toContain('View transaction')
+    }
+    expect(w.rest.dms.map((d) => d.userId).sort()).toEqual([ALICE, BOB])
+    expect(w.rest.channelPosts).toHaveLength(2)
+  })
+
+  it('vetoed with the button in the treasury channel: both messages say who vetoed it, neither keeps a button; a non-Treasurer is refused', async () => {
+    const w = await treasuryWorld({ autopilot: true })
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    const made = await w.rolepay.scheduler.tick()
+    await w.notifier.announce(made.events)
+    const veto = `policy-run:veto:${made.events[0]?.policyRun.id}`
+    // A channel left visible to everyone by mistake: the button still checks who presses it.
+    const refused = await w.click(veto, { userId: SOMEONE, roles: [] })
+    expect(text(refused.kind === 'respond' && refused.body)).toContain(`Only members with <@&${TREASURER_ROLE}>`)
+    const vetoed = await w.click(veto)
+    expect(text(vetoed.kind === 'respond' && vetoed.body)).toContain(`Vetoed by <@${TREASURER}>`)
+    const here = w.editsIn(CHANNEL).at(-1)
+    expect(here?.messageId).toBe(w.postsIn(CHANNEL)[0]?.messageId)
+    expect(text(here?.message)).toContain('"title":"Vetoed"')
+    expect(here?.message.components).toEqual([])
+  })
+
+  it('vetoed on the dashboard (announced as cancelled): both messages turn into Vetoed', async () => {
+    const w = await treasuryWorld({ autopilot: true })
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    const made = (await w.rolepay.scheduler.tick()).events[0]
+    if (!made) throw new Error('no run')
+    await w.notifier.announce([made])
+    const vetoed = await w.rolepay.policies.veto({ ...asTreasurer, policyRunId: made.policyRun.id })
+    if (!vetoed.ok) throw new Error('not vetoed')
+    await w.notifier.announce([{ kind: 'cancelled', policy: made.policy, policyRun: vetoed.value.policyRun, run: vetoed.value.run }])
+    expect(text(w.editsIn(TREASURY_CHANNEL).at(-1)?.message)).toContain(`Vetoed by <@${TREASURER}>`)
+    expect(text(w.editsIn(CHANNEL).at(-1)?.message)).toContain(`Vetoed by <@${TREASURER}>`)
+  })
+
+  it('a propose-mode run: Approve and pay in the treasury channel only; approved there, both say paying, then both say Paid', async () => {
+    const w = await treasuryWorld()
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    const made = await w.rolepay.scheduler.tick()
+    await w.notifier.announce(made.events)
+    const runId = made.events[0]?.run?.id as string
+    expect(text(w.postsIn(TREASURY_CHANNEL)[0]?.message)).toContain(`rolepay:approve:${runId}`)
+    const copy = w.postsIn(CHANNEL)[0]
+    expect(text(copy?.message)).toContain(`Waiting for a member with <@&${TREASURER_ROLE}> to approve.`)
+    expect(copy?.message.components).toEqual([])
+
+    const approved = await w.click(`rolepay:approve:${runId}`)
+    expect(text(approved.kind === 'respond' && approved.body)).toContain('Approved, paying')
+    expect(text(w.editsIn(CHANNEL).at(-1)?.message)).toContain('Approved, paying')
+    await w.pay()
+    expect(text(w.rest.lastEdit('tok-treasury-click'))).toContain('"title":"Paid"')
+    const paidHere = w.editsIn(CHANNEL).at(-1)
+    expect(paidHere?.messageId).toBe(copy?.messageId)
+    expect(text(paidHere?.message)).toContain('"title":"Paid"')
+    expect(text(paidHere?.message)).not.toContain('rolepay:')
+  })
+
+  it('autopilot stopped at release: the treasury message offers Approve, the copy says why with no button', async () => {
+    const w = await treasuryWorld({ autopilot: true })
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    w.rest.setMember(GUILD, TREASURER, [])
+    await w.sleep(3600 * 1000)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    const there = text(w.editsIn(TREASURY_CHANNEL).at(-1)?.message)
+    const here = w.editsIn(CHANNEL).at(-1)
+    expect(there).toContain('Autopilot stopped')
+    expect(there).toContain('rolepay:approve:')
+    expect(text(here?.message)).toContain('no longer holds the approver role')
+    expect(here?.message.components).toEqual([])
+  })
+
+  it('a run held whole (no pay run) is posted in the treasury channel and in the policy channel', async () => {
+    const w = await treasuryWorld({ limit: '2' })
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    for (const channel of [TREASURY_CHANNEL, CHANNEL]) expect(text(w.postsIn(channel)[0]?.message)).toContain('Held: Help desk')
+  })
+
+  it('a period nobody matched stays in the policy channel only (nothing for a Treasurer to do)', async () => {
+    const w = await treasuryWorld()
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(new Date(MONDAY.getTime() + 7 * 86_400_000))
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelPosts.map((p) => p.channelId)).toEqual([CHANNEL])
+  })
+
+  it('a policy with no channel of its own posts its runs in the treasury channel (only there)', async () => {
+    const w = await treasuryWorld({ channel: null })
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelPosts.map((p) => p.channelId)).toEqual([TREASURY_CHANNEL])
+    expect(text(w.rest.channelPosts[0]?.message)).toContain('rolepay:approve:')
+  })
+
+  it('with none set, a text channel named "Treasury" is found and used: the confirmation first, once, audited as picked by Rolepay', async () => {
+    const w = await treasuryWorld({ channels: [{ id: OLD, name: 'treasury-old', type: 0 }, { id: TREASURY_CHANNEL, name: 'Treasury', type: 0 }] })
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelPosts.map((p) => p.channelId)).toEqual([TREASURY_CHANNEL, TREASURY_CHANNEL, CHANNEL])
+    expect(w.rest.channelPosts[0]?.message.content).toBe('Rolepay will post here what needs a Treasurer: runs to approve, runs you can veto, and runs it holds.')
+    expect(text(w.rest.channelPosts[1]?.message)).toContain('rolepay:approve:')
+    expect(w.rest.channelPosts[2]?.message.components).toEqual([])
+    expect(await w.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: TREASURY_CHANNEL, treasuryChannelSource: 'found' } })
+    const audit = await w.rolepay.audit.list({ guildId: GUILD, types: ['community.treasury_channel_found'] })
+    expect(audit.ok && audit.value.events.map((e) => [e.actor, e.details])).toEqual([[null, { channelId: TREASURY_CHANNEL, replaced: null }]])
+    expect(w.events).toEqual([{ kind: 'found', guildId: GUILD, channelId: TREASURY_CHANNEL, replaced: null }])
+    // The next week: no second confirmation, no second pick.
+    await w.travelTo(new Date(MONDAY.getTime() + 7 * 86_400_000))
+    w.rest.addChannelMessages(wireMessage({ channelId: HELP, authorId: ALICE, at: new Date(w.clock.now().getTime() - 60_000), replyTo: { id: '820000000000000001', authorId: '200000000000000009' } }))
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelPosts.filter((p) => p.message.content?.startsWith('Rolepay will post here'))).toHaveLength(1)
+  })
+
+  it('a channel named "treasury" Rolepay cannot post in is not used: the run stays in the policy channel with its buttons, and nothing is picked', async () => {
+    const w = await treasuryWorld({ channels: [{ id: TREASURY_CHANNEL, name: 'treasury', type: 0 }] })
+    w.rest.closedChannels.set(TREASURY_CHANNEL, 'forbidden')
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelPosts.map((p) => p.channelId)).toEqual([CHANNEL])
+    expect(text(w.rest.channelPosts[0]?.message)).toContain('rolepay:approve:')
+    expect(await w.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: null, treasuryChannelSource: 'unset' } })
+  })
+
+  it('a Treasurer who chose none stops the lookup: #treasury is never used, the buttons stay in the policy channel', async () => {
+    const w = await treasuryWorld({ channels: [{ id: TREASURY_CHANNEL, name: 'treasury', type: 0 }] })
+    await w.choose(null)
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelPosts.map((p) => p.channelId)).toEqual([CHANNEL])
+    expect(text(w.rest.channelPosts[0]?.message)).toContain('rolepay:approve:')
+  })
+
+  it('the treasury channel was deleted: the run goes to the policy channel with its buttons, logged, never lost; a #treasury that exists takes over', async () => {
+    const w = await treasuryWorld({ autopilot: true })
+    await w.choose(OLD)
+    w.rest.closedChannels.set(OLD, 'not_found')
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelPosts.map((p) => p.channelId)).toEqual([CHANNEL])
+    expect(text(w.rest.channelPosts[0]?.message)).toContain('policy-run:veto:')
+    expect(w.events).toEqual([{ kind: 'unavailable', guildId: GUILD, channelId: OLD, reason: 'not_found' }])
+
+    // A #treasury exists by the next run: the lookup tries again, in place of the deleted channel.
+    w.rest.channels.set(GUILD, [{ id: TREASURY_CHANNEL, name: 'treasury', type: 0 }])
+    await w.sleep(3600 * 1000)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    await w.travelTo(new Date(MONDAY.getTime() + 7 * 86_400_000))
+    w.rest.addChannelMessages(wireMessage({ channelId: HELP, authorId: ALICE, at: new Date(w.clock.now().getTime() - 60_000), replyTo: { id: '820000000000000001', authorId: '200000000000000009' } }))
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(await w.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: TREASURY_CHANNEL, treasuryChannelSource: 'found' } })
+    expect(w.events.at(-1)).toEqual({ kind: 'found', guildId: GUILD, channelId: TREASURY_CHANNEL, replaced: OLD })
+    expect(text(w.postsIn(TREASURY_CHANNEL).at(-1)?.message)).toContain('policy-run:veto:')
+  })
+
+  it('the treasury channel went away after the run was posted: the copy in the policy channel takes the buttons over', async () => {
+    const w = await treasuryWorld({ autopilot: true })
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    const copy = w.postsIn(CHANNEL)[0]
+    w.rest.closedChannels.set(TREASURY_CHANNEL, 'forbidden')
+    w.rest.setMember(GUILD, TREASURER, [])
+    await w.sleep(3600 * 1000)
+    const held = await w.rolepay.scheduler.tick()
+    await w.notifier.announce(held.events)
+    const here = w.editsIn(CHANNEL).at(-1)
+    expect(here?.messageId).toBe(copy?.messageId)
+    expect(text(here?.message)).toContain('rolepay:approve:')
+    const runId = held.events[0]?.run?.id as string
+    expect(await w.notices.message(runId)).toEqual({ channelId: CHANNEL, messageId: copy?.messageId })
+    expect(await w.notices.mirror(runId)).toBeNull()
+    expect(w.events).toContainEqual({ kind: 'unavailable', guildId: GUILD, channelId: TREASURY_CHANNEL, reason: 'forbidden' })
+  })
+
+  it('a run the recovery sweep settles is reported on both messages', async () => {
+    const w = await treasuryWorld({ autopilot: true })
+    await w.choose(TREASURY_CHANNEL)
+    await w.travelTo(MONDAY)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    await w.sleep(3600 * 1000)
+    w.chain.faults.nextBroadcast = 'land_then_lose_response'
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    const recover = createRecoveryNotifier({ rolepay: w.rolepay, rest: w.rest, notices: w.notices, network: 'moderato' })
+    await recover(await w.rolepay.payRuns.recoverInFlight())
+    expect(text(w.editsIn(TREASURY_CHANNEL).at(-1)?.message)).toContain('"title":"Paid"')
+    expect(text(w.editsIn(CHANNEL).at(-1)?.message)).toContain('"title":"Paid"')
+    expect(w.editsIn(CHANNEL).at(-1)?.message.components?.flatMap((r) => r.components.map((b) => b.label))).toEqual(['View transaction'])
+  })
+})
+
+describe('createPolicyNotifier: a policy with no channel and a treasury channel', () => {
+  it('its run is updated where it was posted (the treasury channel), and a run never posted there is never posted anywhere', async () => {
+    const TREASURY_CHANNEL = '700000000000000009'
+    const STATUS_CHANNEL = '700000000000000004'
+    const w = await world({ channel: null, autopilot: true })
+    await w.rolepay.communities.setTreasuryChannel({ ...asTreasurer, channelId: TREASURY_CHANNEL })
+    await w.travelTo(MONDAY)
+    const made = await w.rolepay.scheduler.tick()
+    await w.notifier.announce(made.events)
+    const posted = w.rest.channelPosts.at(-1)
+    expect(posted?.channelId).toBe(TREASURY_CHANNEL)
+    await w.sleep(3600 * 1000)
+    await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
+    expect(w.rest.channelEdits.map((e) => [e.channelId, e.messageId])).toEqual([[TREASURY_CHANNEL, posted?.messageId]])
+
+    // A run whose only message is someone's private /rolepay status answer: nothing is posted for it.
+    const other = await world({ channel: null, autopilot: true })
+    await other.travelTo(MONDAY)
+    const run = (await other.rolepay.scheduler.tick()).events[0]
+    if (!run?.run) throw new Error('no run')
+    await other.notices.rememberMessage(run.run.id, { channelId: STATUS_CHANNEL, messageId: '810000000000000042' })
+    await other.notifier.announce([{ kind: 'cancelled', policy: run.policy, policyRun: run.policyRun, run: run.run }])
+    expect(other.rest.channelPosts).toEqual([])
+    expect(other.rest.channelEdits).toEqual([])
+  })
+})

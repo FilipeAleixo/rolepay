@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { SCOPE, appHarness, body, isEphemeral, text } from '../../test/app.js'
 import { ADMIN, ALICE, BOB, CAROL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
 import { usd } from '../../test/harness.js'
-import { slashCommand } from '../testing/interactions.js'
+import { buttonClick, slashCommand } from '../testing/interactions.js'
 
 const admin = { userId: ADMIN, manageGuild: true }
 const DAVE = '200000000000000004' // not registered
@@ -112,5 +112,85 @@ describe('/rolepay new', () => {
     const a = await ready()
     await newRun(a, { amount: '10', role: MODS_ROLE })
     expect(a.rest.followUps.at(-1)?.message.content).toMatch(/No registered payee has/)
+  })
+})
+
+describe('/rolepay new with a treasury channel', () => {
+  const TREASURY_CHANNEL = '700000000000000009'
+  const treasurer = { userId: TREASURER, roles: [TREASURER_ROLE] }
+  const posts = (a: Awaited<ReturnType<typeof ready>>, channelId: string) => a.rest.channelPosts.filter((p) => p.channelId === channelId)
+
+  it('the review with Approve and Cancel goes to the treasury channel, this channel gets it without buttons, and only the caller is told', async () => {
+    const a = await ready()
+    await a.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], channelId: TREASURY_CHANNEL })
+    const { d, token } = await newRun(a, { amount: '10', users: `<@${ALICE}>`, note: 'October mods' })
+    expect(body(d)).toEqual({ type: 5, data: {} }) // public deferral, as always
+    const r = await latestRun(a)
+    const [there] = posts(a, TREASURY_CHANNEL)
+    const [here] = posts(a, SCOPE.channelId)
+    expect(text(there?.message)).toContain(`rolepay:approve:${r?.id}`)
+    expect(text(there?.message)).toContain(`rolepay:cancel:${r?.id}`)
+    expect(text(here?.message)).toContain('Pay run awaiting approval')
+    expect(text(here?.message)).toContain(`Waiting for a member with <@&${TREASURER_ROLE}> to approve.`)
+    expect(here?.message.components).toEqual([])
+    expect(text(here?.message)).not.toContain(TREASURY_CHANNEL)
+    // The "thinking..." placeholder is removed; the caller alone reads where it went.
+    expect(a.rest.deletes.map((x) => x.token)).toEqual([token])
+    expect(text(a.rest.followUps.at(-1)?.message)).toContain('A Treasurer approves it in the treasury channel')
+    expect((a.rest.followUps.at(-1)?.message.flags ?? 0) & 64).toBe(64)
+    expect(await a.notices.message(r?.id as string)).toEqual({ channelId: TREASURY_CHANNEL, messageId: there?.messageId })
+    expect(await a.notices.mirror(r?.id as string)).toEqual({ channelId: SCOPE.channelId, messageId: here?.messageId })
+
+    // Approved in the treasury channel: the copy here says so at once.
+    const approved = await a.send(buttonClick({ guildId: GUILD, channelId: TREASURY_CHANNEL }, `rolepay:approve:${r?.id}`, treasurer))
+    expect(text(body(approved))).toContain('Approved, paying')
+    const edit = a.rest.channelEdits.at(-1)
+    expect(edit?.messageId).toBe(here?.messageId)
+    expect(text(edit?.message)).toContain('Approved, paying')
+  })
+
+  it('cancelled in the treasury channel: the copy here says who cancelled it', async () => {
+    const a = await ready()
+    await a.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], channelId: TREASURY_CHANNEL })
+    await newRun(a, { amount: '10', users: `<@${ALICE}>` })
+    const r = await latestRun(a)
+    await a.send(buttonClick({ guildId: GUILD, channelId: TREASURY_CHANNEL }, `rolepay:cancel:${r?.id}`, treasurer))
+    expect(text(a.rest.channelEdits.at(-1)?.message)).toContain(`Cancelled by <@${TREASURER}>`)
+  })
+
+  it('the command run in the treasury channel itself: one review there, with its buttons, as always', async () => {
+    const a = await ready()
+    await a.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], channelId: SCOPE.channelId })
+    const { final } = await newRun(a, { amount: '10', users: `<@${ALICE}>` })
+    expect(a.rest.channelPosts).toEqual([])
+    expect(text(final)).toContain('rolepay:approve:')
+  })
+
+  it('Rolepay cannot post in the treasury channel: the review with its buttons is the answer here, as without one, and that is reported', async () => {
+    const a = await ready()
+    await a.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], channelId: TREASURY_CHANNEL })
+    a.rest.closedChannels.set(TREASURY_CHANNEL, 'forbidden')
+    const { final } = await newRun(a, { amount: '10', users: `<@${ALICE}>` })
+    expect(text(final)).toContain('rolepay:approve:')
+    expect(a.rest.channelPosts).toEqual([])
+    expect(a.treasuryEvents).toEqual([{ kind: 'unavailable', guildId: GUILD, channelId: TREASURY_CHANNEL, reason: 'forbidden' }])
+  })
+
+  it('Rolepay cannot post its copy here: the answer is the copy, without buttons (Approve is in the treasury channel)', async () => {
+    const a = await ready()
+    await a.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], channelId: TREASURY_CHANNEL })
+    a.rest.closedChannels.set(SCOPE.channelId, 'forbidden')
+    const { final } = await newRun(a, { amount: '10', users: `<@${ALICE}>` })
+    expect(text(posts(a, TREASURY_CHANNEL)[0]?.message)).toContain('rolepay:approve:')
+    expect(text(final)).toContain('Pay run awaiting approval')
+    expect(text(final)).not.toContain('rolepay:approve:')
+  })
+
+  it('with none set, a channel named "treasury" is found, confirmed and used for the first run', async () => {
+    const a = await ready()
+    a.rest.channels.set(GUILD, [{ id: TREASURY_CHANNEL, name: 'treasury', type: 0 }])
+    await newRun(a, { amount: '10', users: `<@${ALICE}>` })
+    expect(posts(a, TREASURY_CHANNEL).map((p) => p.message.content ?? 'run')).toEqual(['Rolepay will post here what needs a Treasurer: runs to approve, runs you can veto, and runs it holds.', 'run'])
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: TREASURY_CHANNEL, treasuryChannelSource: 'found' } })
   })
 })

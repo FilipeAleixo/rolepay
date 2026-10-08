@@ -1,6 +1,8 @@
 import { PROPOSAL_LIMITS } from '@rolepay/core'
 import { type ProposalButtonHandler, replyError } from '../app/handlers.js'
+import { MessageFlags } from '../api.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'
+import { answerForNewRun } from '../app/treasury.js'
 import { requireProposer } from '../commands/guards.js'
 import { explainProposalError } from '../views/errors.js'
 import { DRAFTING, editModal, proposalCreatedMessage, proposalDiscardedMessage, proposalMessage } from '../views/proposal.js'
@@ -9,18 +11,24 @@ import { runMessage } from '../views/run.js'
 /**
  * Create pay run: the normal create and submit in core (claimed once per proposal). The proposal
  * turns into "created" for the caller, and the run's review is posted in the channel with Approve
- * and Cancel, exactly like one from /rolepay new: the approval path is unchanged.
+ * and Cancel, exactly like one from /rolepay new (with a treasury channel, there, and this channel
+ * gets the run without its buttons): the approval path is unchanged.
  */
-export const createProposalRunButton: ProposalButtonHandler = async ({ proposalId, ctx }, { rolepay, config }) => {
+export const createProposalRunButton: ProposalButtonHandler = async ({ proposalId, ctx }, deps) => {
+  const { rolepay, config } = deps
   const guard = await requireProposer(ctx, rolepay, { ai: false })
   if (!guard.ok) return guard.reply
   const community = guard.community
   const created = await rolepay.proposals.createRun({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, proposalId })
   if (!created.ok) return ephemeralReply(explainProposalError(created.error, { community, token: community.payoutToken }))
+  const run = created.value.run
+  const view = (mirror: boolean) => runMessage(run, { network: config.network, approverRoleId: community.approverRoleId, mirror })
+  // With a treasury channel, the review with Approve goes there; the follow-up then tells the caller alone.
+  const answer = await answerForNewRun(deps, { community, runId: run.id, view, channelId: ctx.channelId })
   return {
     kind: 'update',
-    message: proposalCreatedMessage(created.value.proposal, created.value.run, { approverRoleId: community.approverRoleId }),
-    followUp: runMessage(created.value.run, { network: config.network, approverRoleId: community.approverRoleId }),
+    message: proposalCreatedMessage(created.value.proposal, run, { approverRoleId: community.approverRoleId }),
+    followUp: answer.privately ? { ...answer.message, flags: MessageFlags.Ephemeral } : answer.message,
   }
 }
 

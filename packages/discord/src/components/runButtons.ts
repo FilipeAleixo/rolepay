@@ -3,6 +3,7 @@ import { type ButtonHandler, type GuildContext, replyError } from '../app/handle
 import { type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canManageGuild, holdsApproverRole } from '../app/permissions.js'
 import { autopilotReleaseOf } from '../app/runContext.js'
+import { mirrorOf } from '../app/treasury.js'
 import type { ExecutionJob } from '../ports.js'
 import { explainError } from '../views/errors.js'
 import { roleMention } from '../views/format.js'
@@ -31,7 +32,7 @@ function refuseUnlessApprover(ctx: GuildContext, community: Community): Outcome 
  * queues the payment and immediately turns the review into "paying" with no buttons, so
  * nobody can click twice. The queued job edits this message with the result.
  */
-export const approveButton: ButtonHandler = async ({ runId, messageId, ctx }, { rolepay, queue, config }) => {
+export const approveButton: ButtonHandler = async ({ runId, messageId, ctx }, { rolepay, queue, config, notices }) => {
   const community = await rolepay.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
   const refused = refuseUnlessApprover(ctx, community.value)
@@ -39,14 +40,14 @@ export const approveButton: ButtonHandler = async ({ runId, messageId, ctx }, { 
   const approved = await rolepay.payRuns.approve({ guildId: ctx.guildId, runId, actor: ctx.caller.userId, actorCanApprove: true })
   if (!approved.ok) return replyError(approved.error)
   await queue.enqueue(executeJob(ctx, runId, messageId))
-  return { kind: 'update', message: runMessage(approved.value, { network: config.network }) }
+  return { kind: 'update', message: runMessage(approved.value, { network: config.network }), ...(await mirrorOf(notices, runId, runMessage(approved.value, { network: config.network, mirror: true }))) }
 }
 
 /**
  * Cancel: the run's creator, an admin or an approver, while the run has not started paying. Core
  * refuses to cancel a failed run whose payments are on chain; the message then shows the truth.
  */
-export const cancelButton: ButtonHandler = async ({ runId, ctx }, { rolepay, config }) => {
+export const cancelButton: ButtonHandler = async ({ runId, ctx }, { rolepay, config, notices }) => {
   const community = await rolepay.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
   const run = await rolepay.payRuns.get({ guildId: ctx.guildId, runId })
@@ -57,10 +58,13 @@ export const cancelButton: ButtonHandler = async ({ runId, ctx }, { rolepay, con
   if (!cancelled.ok && cancelled.error.code === 'chain_shows_payments') {
     // Core has recorded what the chain shows: put the truth on the message, for everyone.
     const current = await rolepay.payRuns.get({ guildId: ctx.guildId, runId })
-    if (current.ok) return { kind: 'update', message: runMessage(current.value, { network: config.network, problem: explainError(cancelled.error) }) }
+    if (current.ok) {
+      const view = { network: config.network, problem: explainError(cancelled.error) }
+      return { kind: 'update', message: runMessage(current.value, view), ...(await mirrorOf(notices, runId, runMessage(current.value, { ...view, mirror: true }))) }
+    }
   }
   if (!cancelled.ok) return replyError(cancelled.error)
-  return { kind: 'update', message: runMessage(cancelled.value, { network: config.network }) }
+  return { kind: 'update', message: runMessage(cancelled.value, { network: config.network }), ...(await mirrorOf(notices, runId, runMessage(cancelled.value, { network: config.network, mirror: true }))) }
 }
 
 /**
@@ -68,7 +72,7 @@ export const cancelButton: ButtonHandler = async ({ runId, ctx }, { rolepay, con
  * failure, or a restart lost the job) or a failure core marks retryable. Core re-checks
  * the chain for this run's memos before any new attempt.
  */
-export const retryButton: ButtonHandler = async ({ runId, messageId, ctx }, { rolepay, queue, config }) => {
+export const retryButton: ButtonHandler = async ({ runId, messageId, ctx }, { rolepay, queue, config, notices }) => {
   const community = await rolepay.communities.get(ctx.guildId)
   if (!community.ok) return replyError(community.error)
   const refused = refuseUnlessApprover(ctx, community.value)
@@ -80,5 +84,6 @@ export const retryButton: ButtonHandler = async ({ runId, messageId, ctx }, { ro
   const retryable = r.status === 'approved' || r.status === 'executing' || (r.status === 'failed' && r.failure?.retryable)
   if (!retryable) return replyError(r.status === 'failed' ? { code: 'not_retryable' } : { code: 'illegal_state', status: r.status })
   await queue.enqueue(executeJob(ctx, runId, messageId))
-  return { kind: 'update', message: runMessage(r, { network: config.network, paying: true, ...(await autopilotReleaseOf(rolepay, r)) }) }
+  const view = { network: config.network, paying: true, ...(await autopilotReleaseOf(rolepay, r)) }
+  return { kind: 'update', message: runMessage(r, view), ...(await mirrorOf(notices, runId, runMessage(r, { ...view, mirror: true }))) }
 }

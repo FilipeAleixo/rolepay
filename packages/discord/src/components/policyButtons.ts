@@ -1,6 +1,7 @@
 import { nextOccurrence } from '@rolepay/core'
 import type { PolicyButtonHandler, VetoButtonHandler } from '../app/handlers.js'
 import { ephemeralReply } from '../app/outcome.js'
+import { mirrorOf } from '../app/treasury.js'
 import { policyBudgetLink, requirePolicyApprover } from '../commands/policy.js'
 import { explainPolicyError } from '../views/errors.js'
 import { policyBudgetOffer, policyDiscardedMessage, policyMessage } from '../views/policy.js'
@@ -43,7 +44,7 @@ export const discardPolicyButton: PolicyButtonHandler = async ({ policyId, ctx }
 }
 
 /** Veto an autopilot run during its window: the approver role. The run is cancelled; the message says who vetoed it. */
-export const vetoButton: VetoButtonHandler = async ({ policyRunId, ctx }, { rolepay, config }) => {
+export const vetoButton: VetoButtonHandler = async ({ policyRunId, ctx }, { rolepay, config, notices }) => {
   const guard = await requirePolicyApprover(ctx, rolepay)
   if (!guard.ok) return guard.reply
   const r = await rolepay.policies.veto({ guildId: ctx.guildId, actor: ctx.caller.userId, actorRoleIds: ctx.caller.roles, policyRunId })
@@ -51,13 +52,12 @@ export const vetoButton: VetoButtonHandler = async ({ policyRunId, ctx }, { role
   const { policyRun: pr, run } = r.value
   if (!run) return { kind: 'update', message: { content: `Vetoed by <@${ctx.caller.userId}>. Nothing was paid.`, components: [] } }
   const policy = await rolepay.policies.get({ guildId: ctx.guildId, policyId: pr.policyId })
-  return {
-    kind: 'update',
-    message: runMessage(run, {
-      network: config.network,
-      approverRoleId: guard.community.approverRoleId,
-      ...(policy.ok ? { policy: { name: policy.value.name, version: pr.policyVersion, periodStart: pr.periodStart, periodEnd: pr.periodEnd } } : {}),
-      autopilot: { policyRunId: pr.id, executeAfter: pr.executeAfter ?? pr.updatedAt, vetoedBy: pr.vetoedBy },
-    }),
+  const view = {
+    network: config.network,
+    approverRoleId: guard.community.approverRoleId,
+    ...(policy.ok ? { policy: { name: policy.value.name, version: pr.policyVersion, periodStart: pr.periodStart, periodEnd: pr.periodEnd } } : {}),
+    autopilot: { policyRunId: pr.id, executeAfter: pr.executeAfter ?? pr.updatedAt, vetoedBy: pr.vetoedBy },
   }
+  // Pressed in the treasury channel: the run's copy in the policy's channel says it was vetoed too.
+  return { kind: 'update', message: runMessage(run, view), ...(await mirrorOf(notices, run.id, runMessage(run, { ...view, mirror: true }))) }
 }

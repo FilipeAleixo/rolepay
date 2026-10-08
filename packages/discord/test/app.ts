@@ -31,6 +31,9 @@ export async function appHarness(opts: { members?: MemberDirectory; config?: Par
   // Core and the Discord layer agree on the demo controls, as the server wires them from one setting.
   const h = await harness({ ...(opts.proposer === undefined ? {} : { proposer: opts.proposer }), demoControls: opts.config?.demoControls ?? CONFIG.demoControls })
   const errors: unknown[] = []
+  // Where each run's messages are, shared as the server shares it (the treasury channel keeps two in step).
+  const notices = new MemoryRunNotices()
+  const treasuryEvents: unknown[] = []
   const deps: DiscordAppDeps = {
     rolepay: h.rolepay,
     rest: h.rest,
@@ -39,7 +42,9 @@ export async function appHarness(opts: { members?: MemberDirectory; config?: Par
     pendingSources: new MemoryPendingSources(),
     clock: h.clock,
     config: { ...CONFIG, ...opts.config },
-    announcer: createPolicyNotifier({ rolepay: h.rolepay, rest: h.rest, notices: new MemoryRunNotices(), network: 'moderato' }),
+    announcer: createPolicyNotifier({ rolepay: h.rolepay, rest: h.rest, notices, network: 'moderato' }),
+    notices,
+    onTreasury: (e) => treasuryEvents.push(e),
     onError: (e) => errors.push(e),
   }
   const dispatch = createDispatcher(deps)
@@ -49,7 +54,7 @@ export async function appHarness(opts: { members?: MemberDirectory; config?: Par
     if (d.kind === 'respond') await d.background?.()
     return d
   }
-  return { ...h, deps, dispatch, send, errors }
+  return { ...h, deps, dispatch, send, errors, notices, treasuryEvents }
 }
 
 export function body(d: Dispatched) {

@@ -10,6 +10,18 @@ describe('KvRunNotices (over core KeyValueStore)', () => {
     expect(await notices.message('run_1')).toEqual({ channelId: '700000000000000001', messageId: '810000000000000001' })
   })
 
+  it("remembers a run's copy without buttons apart from its message, and forgets it on request", async () => {
+    const notices = new KvRunNotices(new MemoryKeyValueStore())
+    expect(await notices.mirror('run_1')).toBeNull()
+    await notices.rememberMessage('run_1', { channelId: '700000000000000009', messageId: '810000000000000009' })
+    await notices.rememberMirror('run_1', { channelId: '700000000000000001', messageId: '810000000000000001' })
+    expect(await notices.mirror('run_1')).toEqual({ channelId: '700000000000000001', messageId: '810000000000000001' })
+    expect(await notices.message('run_1')).toEqual({ channelId: '700000000000000009', messageId: '810000000000000009' })
+    await notices.rememberMirror('run_1', null)
+    expect(await notices.mirror('run_1')).toBeNull()
+    expect(await notices.message('run_1')).not.toBeNull()
+  })
+
   it('lets exactly one caller claim the receipts of a run, even concurrently and across instances on one store', async () => {
     const store = new MemoryKeyValueStore()
     const a = new KvRunNotices(store)

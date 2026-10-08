@@ -36,10 +36,12 @@ export class FakeDiscordRest implements DiscordRest {
   readonly closedDms = new Set<string>()
   /** Channels the bot may not read (View Channel or Read Message History missing). */
   readonly forbiddenChannels = new Set<string>()
+  /** Channels the bot cannot post or edit in: `forbidden` (no access, or no Send Messages) or `not_found` (deleted). */
+  readonly closedChannels = new Map<string, 'forbidden' | 'not_found'>()
   /** Every read, in order, for tests of paging and bounds. */
   readonly reads: string[] = []
-  readonly roles = new Map<string, { id: string; name: string; managed?: boolean }[]>()
-  readonly channels = new Map<string, { id: string; name: string; type: number }[]>()
+  readonly roles = new Map<string, { id: string; name: string; managed?: boolean; permissions?: string }[]>()
+  readonly channels = new Map<string, { id: string; name: string; type: number; position?: number; parent_id?: string | null; permission_overwrites?: { id: string; type: number; allow: string; deny: string }[] }[]>()
   readonly threads = new Map<string, { id: string; name: string; type: number; parent_id?: string }[]>()
   private members = new Map<string, { roles: string[]; joinedAt: Date | null; name: string | null }>()
   private history = new Map<string, WireMessage[]>()
@@ -86,18 +88,24 @@ export class FakeDiscordRest implements DiscordRest {
   }
 
   async postToChannel(channelId: string, message: Message): Promise<RestResult> {
+    const closed = this.closedChannels.get(channelId)
+    if (closed) return fail(closed)
     this.channelPosts.push({ channelId, message })
     return OK
   }
 
   private posted = 0
   async postMessage(channelId: string, message: Message) {
+    const closed = this.closedChannels.get(channelId)
+    if (closed) return fail(closed)
     const messageId = `9${String(++this.posted).padStart(17, '0')}`
     this.channelPosts.push({ channelId, message, messageId })
     return { ok: true as const, value: { messageId } }
   }
 
   async editChannelMessage(channelId: string, messageId: string, message: Message): Promise<RestResult> {
+    const closed = this.closedChannels.get(channelId)
+    if (closed) return fail(closed)
     if (this.goneMessages.has(messageId)) return { ok: false, error: { code: 'not_found' } }
     this.channelEdits.push({ channelId, messageId, message })
     return OK
@@ -189,12 +197,21 @@ export class StaticMemberDirectory implements MemberDirectory {
 /** RunNotices in memory. */
 export class MemoryRunNotices implements RunNotices {
   private messages = new Map<string, RunMessageRef>()
+  private mirrors = new Map<string, RunMessageRef>()
   private receipts = new Set<string>()
   async rememberMessage(runId: string, ref: RunMessageRef) {
     this.messages.set(runId, { ...ref })
   }
   async message(runId: string) {
     const m = this.messages.get(runId)
+    return m ? { ...m } : null
+  }
+  async rememberMirror(runId: string, ref: RunMessageRef | null) {
+    if (ref) this.mirrors.set(runId, { ...ref })
+    else this.mirrors.delete(runId)
+  }
+  async mirror(runId: string) {
+    const m = this.mirrors.get(runId)
     return m ? { ...m } : null
   }
   async claimReceipts(runId: string) {

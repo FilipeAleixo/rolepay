@@ -276,6 +276,23 @@ describe('proposal buttons: Create pay run, Edit, Discard', () => {
     expect(await a.rolepay.payRuns.list({ guildId: GUILD })).toHaveLength(1)
   })
 
+  it('Create pay run with a treasury channel: the review with Approve goes there, this channel gets the run without buttons, the caller alone is told', async () => {
+    const TREASURY_CHANNEL = '700000000000000009'
+    const { a, id } = await proposed()
+    await a.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], channelId: TREASURY_CHANNEL })
+    const d = await a.send(buttonClick(SCOPE, `proposal:create:${id}`, treasurer, 'tok-create-t'))
+    expect(text(body(d))).toContain('Pay run created')
+    const told = a.rest.followUps.at(-1)?.message
+    expect(text(told)).toContain('A Treasurer approves it in the treasury channel')
+    expect((told?.flags ?? 0) & 64).toBe(64)
+    const [there, here] = a.rest.channelPosts
+    expect(there?.channelId).toBe(TREASURY_CHANNEL)
+    expect(text(there?.message)).toContain('rolepay:approve:')
+    expect(here?.channelId).toBe(CHANNEL)
+    expect(text(here?.message)).toContain('Pay run awaiting approval')
+    expect(here?.message.components).toEqual([])
+  })
+
   it('the cost footer is on the proposal only the caller sees (through an Edit too), never on the run posted for the channel', async () => {
     const a = await ready()
     demo(a)

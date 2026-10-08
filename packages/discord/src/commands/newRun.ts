@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { type CommandHandler, parseOptions, replyError } from '../app/handlers.js'
 import { type DeferredResult, ephemeralReply } from '../app/outcome.js'
 import { phaseTimer } from '../app/timing.js'
+import { answerForNewRun } from '../app/treasury.js'
 import { explainError } from '../views/errors.js'
 import { roleMention } from '../views/format.js'
 import { runMessage } from '../views/run.js'
@@ -21,10 +22,12 @@ const fail = (content: string): DeferredResult => ({ ok: false, message: { conte
 /**
  * /rolepay new: one amount per person, for registered payees holding `role` and/or the
  * listed `users` (a listed `@bob=40` overrides the amount). Creates the run, submits it
- * for approval and posts the review publicly, so the treasurer can approve in place.
- * Deferred, because role lookups go through Discord.
+ * for approval and posts the review publicly, so the treasurer can approve in place; with a
+ * treasury channel, the review with Approve goes there, this channel gets the run without its
+ * buttons, and the caller alone is told. Deferred, because role lookups go through Discord.
  */
-export const newRunCommand: CommandHandler = async ({ options, ctx }, { rolepay, members, config }) => {
+export const newRunCommand: CommandHandler = async ({ options, ctx }, deps) => {
+  const { rolepay, members, config } = deps
   const guard = await requireOperator(ctx, rolepay, 'Creating a pay run')
   if (!guard.ok) return guard.reply
   const community = guard.community
@@ -62,7 +65,10 @@ export const newRunCommand: CommandHandler = async ({ options, ctx }, { rolepay,
       if (!created.ok) return done(fail(explainError(created.error, { token: community.payoutToken })))
       const submitted = await timer.time('db', () => rolepay.payRuns.submit({ guildId, runId: created.value.id, actor: caller }))
       if (!submitted.ok) return done(fail(explainError(submitted.error)))
-      return done({ ok: true, message: runMessage(submitted.value, { network: config.network, approverRoleId: community.approverRoleId }) })
+      // With a treasury channel, Approve goes there and this channel gets the run without its buttons.
+      const view = (mirror: boolean) => runMessage(submitted.value, { network: config.network, approverRoleId: community.approverRoleId, mirror })
+      const answer = await timer.time('discord', () => answerForNewRun(deps, { community, runId: submitted.value.id, view, channelId: ctx.channelId }))
+      return done({ ok: true, message: answer.message, ...(answer.privately ? { privately: true } : {}) })
     },
   }
 }

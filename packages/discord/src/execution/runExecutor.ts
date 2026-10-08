@@ -1,6 +1,7 @@
 import type { ExecuteOutcome, NetworkName, Rolepay, Run } from '@rolepay/core'
 import type { Message } from '../api.js'
 import { autopilotReleaseOf } from '../app/runContext.js'
+import { updateMirror } from '../app/treasury.js'
 import type { DiscordRest, ExecutionJob, RunNotices } from '../ports.js'
 import { explainError } from '../views/errors.js'
 import { type RunViewContext, runMessage } from '../views/run.js'
@@ -89,6 +90,11 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
         // Interaction tokens last 15 minutes; after that, post as the bot instead.
         if (!edited.ok && job.channelId) await deps.rest.postToChannel(job.channelId, message)
       })
+    /** The run's message, and its copy without buttons when its buttons are in the treasury channel. */
+    const show = async (run: Run, extra: Omit<RunViewContext, 'network'> = {}) => {
+      await publish(view(run, extra))
+      await timedDiscord(() => updateMirror(deps, run.id, view(run, { ...extra, mirror: true })))
+    }
 
     try {
       if (job.channelId) await deps.notices.rememberMessage(job.runId, { channelId: job.channelId, messageId: job.messageId })
@@ -131,22 +137,22 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
         report.status = outcome.error.code
         const current = await payRuns.get(ref)
         if (!current.ok) return await publish({ content: explainError(outcome.error) })
-        return await publish(view(current.value, { problem: explainError(outcome.error, { token: current.value.token }) }))
+        return await show(current.value, { problem: explainError(outcome.error, { token: current.value.token }) })
       }
 
       const { run } = outcome.value
       report.status = outcome.value.status
       switch (outcome.value.status) {
         case 'pending':
-          return await publish(view(run, { stillConfirming: true }))
+          return await show(run, { stillConfirming: true })
         case 'failed':
-          return await publish(view(run))
+          return await show(run)
         case 'paid': {
           // Receipts go out once per run, whoever finishes it (this job or the recovery sweep).
-          if (alreadyPaid || !(await deps.notices.claimReceipts(run.id))) return await publish(view(run))
-          await publish(view(run, { receipts: 'sending' }))
+          if (alreadyPaid || !(await deps.notices.claimReceipts(run.id))) return await show(run)
+          await show(run, { receipts: 'sending' })
           const sent = await timedDiscord(() => sendReceipts(deps, run))
-          return await publish(view(run, { receipts: { sent, total: run.lines.length } }))
+          return await show(run, { receipts: { sent, total: run.lines.length } })
         }
       }
     } catch (error) {
@@ -154,7 +160,7 @@ export function createRunExecutor(deps: RunExecutorDeps): (job: ExecutionJob) =>
       deps.onError?.(error, job)
       try {
         const current = await payRuns.get(ref)
-        if (current.ok) await publish(view(current.value, { problem: OUTAGE, stillConfirming: true }))
+        if (current.ok) await show(current.value, { problem: OUTAGE, stillConfirming: true })
       } catch (again) {
         deps.onError?.(again, job)
       }

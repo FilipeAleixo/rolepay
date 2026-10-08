@@ -9,15 +9,22 @@ export type Choice = { name: string; value: string }
  * A deferred job's result: the message to show, or an error for the caller only. `timings`: the
  * job's own phases in milliseconds (Discord reads, the database...), for the log line, never shown.
  */
-export type DeferredResult = { ok: true; message: Message; timings?: Record<string, number> } | { ok: false; message: Message; timings?: Record<string, number> }
+export type DeferredResult =
+  /** `privately`: show it to the caller only, the public placeholder removed (as for an error): the run went out as Rolepay's own messages. */
+  | { ok: true; message: Message; timings?: Record<string, number>; privately?: boolean }
+  | { ok: false; message: Message; timings?: Record<string, number> }
 
 const sinceMs = (started: number) => Math.round(performance.now() - started)
 
 /** What a handler decides. Handlers never talk to Discord directly; this is rendered for them. */
 export type Outcome =
   | { kind: 'reply'; message: Message; ephemeral: boolean }
-  /** For a button (or a modal a button opened): replace the message it is on; `followUp` then posts a new message. */
-  | { kind: 'update'; message: Message; followUp?: Message }
+  /**
+   * For a button (or a modal a button opened): replace the message it is on; `followUp` then posts a
+   * new message, and `mirror` edits the run's copy without buttons (the button is in the treasury
+   * channel), so both show the same state.
+   */
+  | { kind: 'update'; message: Message; followUp?: Message; mirror?: MirrorEdit }
   /** Show a form. Only as the answer to a command or a button. */
   | { kind: 'modal'; modal: Modal }
   /**
@@ -26,6 +33,9 @@ export type Outcome =
    */
   | { kind: 'defer'; ephemeral: boolean; placeholder?: string; work: () => Promise<DeferredResult> }
   | { kind: 'choices'; choices: Choice[] }
+
+/** The copy of a run, without buttons, in the channel it would have gone to: edited as the bot. */
+export type MirrorEdit = { channelId: string; messageId: string; message: Message }
 
 export const ephemeralReply = (content: string): Outcome => ({ kind: 'reply', ephemeral: true, message: { content } })
 
@@ -44,9 +54,16 @@ export function renderOutcome(outcome: Outcome, ctx: InteractionContext, rest: D
     }
     case 'update': {
       const body = { type: ResponseType.UpdateMessage, data: splitFiles(outcome.message).json }
-      const followUp = outcome.followUp
-      if (!followUp) return { kind: 'respond', body }
-      return { kind: 'respond', body, background: () => postFollowUp(rest, ctx, followUp) }
+      const { followUp, mirror } = outcome
+      if (!followUp && !mirror) return { kind: 'respond', body }
+      return {
+        kind: 'respond',
+        body,
+        background: async () => {
+          if (followUp) await postFollowUp(rest, ctx, followUp)
+          if (mirror) await editMirror(rest, mirror)
+        },
+      }
     }
     case 'modal':
       return { kind: 'respond', body: { type: ResponseType.Modal, data: outcome.modal } }
@@ -59,7 +76,7 @@ export function renderOutcome(outcome: Outcome, ctx: InteractionContext, rest: D
         const result = await finish(outcome.work, onError)
         const work = sinceMs(started)
         const replying = performance.now()
-        if (result.ok || outcome.ephemeral) {
+        if ((result.ok && !result.privately) || outcome.ephemeral) {
           await editReply(rest, reply, result.message, onError)
         } else {
           // A public placeholder must not turn into a public error: remove it, tell only the caller.
@@ -116,11 +133,12 @@ export function renderLate(
           deliver: async () => {
             await editReply(rest, reply, outcome.message, onError)
             if (ack === 'update' && outcome.followUp) await postFollowUp(rest, ctx, outcome.followUp)
+            if (outcome.mirror) await editMirror(rest, outcome.mirror)
           },
         }
       case 'defer': {
         const result = await finish(outcome.work, onError)
-        return { deliver: () => show(result.message, outcome.ephemeral || !result.ok), ...(result.timings ? { timings: result.timings } : {}) }
+        return { deliver: () => show(result.message, outcome.ephemeral || !result.ok || result.privately === true), ...(result.timings ? { timings: result.timings } : {}) }
       }
       case 'modal':
         return { deliver: () => show({ content: FORM_TOO_LATE }, true) }
@@ -170,4 +188,9 @@ async function postFollowUp(rest: DiscordRest, ctx: InteractionContext, message:
   const posted = await rest.followUp(replyTo(ctx), message)
   const ephemeral = ((message.flags ?? 0) & MessageFlags.Ephemeral) !== 0
   if (!posted.ok && ctx.channelId && !ephemeral) await rest.postToChannel(ctx.channelId, message)
+}
+
+/** Best effort: if the copy cannot be edited now, the next update of the run (the payment job, the scheduler) shows it. */
+async function editMirror(rest: DiscordRest, mirror: MirrorEdit): Promise<void> {
+  await rest.editChannelMessage(mirror.channelId, mirror.messageId, mirror.message)
 }
