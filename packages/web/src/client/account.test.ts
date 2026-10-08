@@ -4,6 +4,7 @@
 // (apps/server/e2e/mainnetPath.spec.ts).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { FakeEventSource } from '../../test/fakeEventSource.js'
+import { STYLE } from '../views/page.js'
 
 const h = vi.hoisted(() => ({
   account: null as null | { address: string },
@@ -112,6 +113,67 @@ const payout = (over: Record<string, unknown> = {}) => ({
 })
 /** Each balance row as a person reads it, the mark included ("0 BetaUSD preferred"). */
 const balanceRows = () => (ids.balances as El).children.map((c) => (typeof c === 'string' ? c : c.text))
+
+/** One element of the account page, for matching the stylesheet's selectors against it. */
+type CssNode = { tag: string; id?: string; classes: string[]; attrs?: Record<string, string> }
+/** The pages' one stylesheet, flattened: every rule as if each media query matched, and each @keyframes' properties. */
+function cssRules(css: string) {
+  const rules: { selector: string; decls: [string, string][] }[] = []
+  const keyframes = new Map<string, string[]>()
+  const decls = (body: string) => [...body.matchAll(/(?:^|[;{])\s*([a-z-]+)\s*:([^;{}]*)/g)].map((m) => [m[1], m[2]] as [string, string])
+  const walk = (s: string) => {
+    let i = 0
+    for (let open = s.indexOf('{'); open >= 0; open = s.indexOf('{', i)) {
+      const prelude = s.slice(i, open).trim()
+      let j = open + 1
+      for (let depth = 1; depth > 0; j++) depth += s[j] === '{' ? 1 : s[j] === '}' ? -1 : 0
+      const body = s.slice(open + 1, j - 1)
+      if (prelude.startsWith('@keyframes')) keyframes.set(prelude.slice('@keyframes'.length).trim(), decls(body).map(([p]) => p))
+      else if (prelude.startsWith('@')) walk(body)
+      else rules.push({ selector: prelude, decls: decls(body) })
+      i = j
+    }
+  }
+  walk(css.replace(/\/\*[\s\S]*?\*\//g, ''))
+  return { rules, keyframes }
+}
+/**
+ * Whether `selector` selects the last node of `chain` (its ancestors before it). Enough of CSS for
+ * this stylesheet: tag, #id, .class, [attr=value], descendant and child combinators, :not, the
+ * child-position and hover/focus pseudo-classes, and ::before/::after (counted as the element's own).
+ * Anything else throws, so a selector this cannot read fails the test instead of passing it.
+ */
+function selects(selector: string, chain: CssNode[]): boolean {
+  const steps = selector.replace(/\s*>\s*/g, ' > ').trim().split(/\s+/)
+  if (steps.some((s) => /[+~]/.test(s.replace(/\([^)]*\)|\[[^\]]*\]/g, '')))) throw new Error(`unsupported combinator: ${selector}`)
+  const compound = (c: string, node: CssNode): boolean => {
+    const tag = /^(\*|[a-z][a-z0-9]*)/.exec(c)?.[1]
+    if (tag && tag !== '*' && tag !== node.tag) return false
+    const rest = c.slice(tag?.length ?? 0)
+    const parts = rest.match(/#[\w-]+|\.[\w-]+|\[[^\]]+\]|::?[\w-]+(\([^)]*\))?/g) ?? []
+    if (parts.join('') !== rest) throw new Error(`unsupported selector: ${selector}`)
+    return parts.every((p) => {
+      if (p.startsWith('#')) return node.id === p.slice(1)
+      if (p.startsWith('.')) return node.classes.includes(p.slice(1))
+      if (p.startsWith('[')) {
+        const [, name, value] = /^\[([\w-]+)(?:=["']?([^"'\]]*)["']?)?\]$/.exec(p) ?? []
+        return name !== undefined && name in (node.attrs ?? {}) && (value === undefined || node.attrs?.[name] === value)
+      }
+      if (/^::?(before|after)$/.test(p) || /^:(hover|focus|focus-visible|first-child|last-child|only-child)$/.test(p)) return true
+      const not = /^:not\((.*)\)$/.exec(p)?.[1]
+      if (not !== undefined) return !compound(not, node)
+      throw new Error(`unsupported pseudo-class ${p}: ${selector}`)
+    })
+  }
+  const fits = (k: number, at: number): boolean => {
+    if (at < 0 || !compound(steps[k] as string, chain[at] as CssNode)) return false
+    if (k === 0) return true
+    if (steps[k - 1] === '>') return fits(k - 2, at - 1)
+    for (let a = at - 1; a >= 0; a--) if (fits(k - 1, a)) return true
+    return false
+  }
+  return fits(steps.length - 1, chain.length - 1)
+}
 
 let ids: Record<string, El>
 let fields: Record<string, El>
@@ -436,6 +498,42 @@ describe('the account page (browser code)', () => {
       expect([fresh?.attrs['data-key'], fresh?.classes.has('arrived')]).toEqual(['run_2:1', true])
       expect([old?.attrs['data-key'], old?.classes.has('arrived')]).toEqual(['run_1:1', false])
       expect((steps.received as El | undefined)?.hidden ?? false).toBe(false)
+    })
+
+    it("a payment's glow only paints: no rule of the pages' stylesheet takes the glowing row out of the card, moves it or resizes it", async () => {
+      const source = await opened()
+      h.balances.set(ALPHA, 3_000_000n)
+      source.emit('payment', { key: 'run_2:1', tokenAddress: ALPHA })
+      await vi.waitFor(() => expect(amount().textContent).toBe('3'))
+      // The classes the arrival put on the row (the glow), against the real stylesheet: one for every page.
+      const arrival = [...balanceRow().classes]
+      expect(arrival).not.toEqual([])
+      const card: CssNode[] = [
+        { tag: 'html', classes: [] },
+        { tag: 'body', classes: [] },
+        { tag: 'main', classes: [] },
+        { tag: 'section', classes: [], attrs: { 'data-step': 'account' } },
+        { tag: 'div', id: 'balances', classes: [] },
+      ]
+      const row: CssNode = { tag: 'p', classes: arrival }
+      const number: CssNode = { tag: 'strong', classes: [] }
+      /** What a glow may change: paint only, never position, display, size, margin or padding. */
+      const PAINT = new Set(['color', 'text-shadow', 'box-shadow', 'animation'])
+      const { rules, keyframes } = cssRules(STYLE)
+      const changed: string[] = []
+      for (const { selector, decls } of rules) {
+        for (const s of selector.split(',')) {
+          if (!arrival.some((c) => new RegExp(`\\.${c}(?![\\w-])`).test(s))) continue
+          if (!selects(s, [...card, row]) && !selects(s, [...card, row, number])) continue
+          for (const [property, value] of decls) {
+            if (!PAINT.has(property)) changed.push(`${s}{${property}}`)
+            const name = value.trim().split(/\s+/)[0] ?? ''
+            if (property !== 'animation' || name === 'none') continue
+            for (const p of keyframes.get(name) ?? [`no @keyframes ${name}`]) if (!PAINT.has(p)) changed.push(`${s}{${property}: ${p}}`)
+          }
+        }
+      }
+      expect(changed).toEqual([])
     })
 
     it('with reduced motion, just shows the new balance: no animation frames, no glow', async () => {

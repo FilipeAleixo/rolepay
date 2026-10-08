@@ -212,7 +212,7 @@ describe('the home page (/)', () => {
     // The animation is declared only for people who have not asked for less motion.
     const animated = [...STYLE.matchAll(/animation:rp-breathe/g)].map((m) => m.index as number)
     expect(animated.length).toBe(2)
-    const gate = STYLE.indexOf('@media (prefers-reduced-motion:no-preference){.glow')
+    const gate = STYLE.indexOf('@media (prefers-reduced-motion:no-preference){.atmos .glow')
     expect(gate).toBeGreaterThan(-1)
     for (const at of animated) expect(at).toBeGreaterThan(gate)
     expect(STYLE.slice(gate, STYLE.indexOf('\n', gate))).toContain('animation:rp-breathe-cool')
