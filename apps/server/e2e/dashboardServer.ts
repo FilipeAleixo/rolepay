@@ -6,10 +6,11 @@
 import { randomBytes } from 'node:crypto'
 import { serve } from '@hono/node-server'
 import { TESTNET_TOKENS, WEEKDAYS, createRolepay, parseAmount } from '@rolepay/core'
-import { FakeFundingChain, FakePayoutChain, FakeRunProposer, MemoryKeyValueStore, PlainKeyVault, SequentialIds, SystemClock, createMemoryRepositories, emptyCriteria } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, FakeRunProposer, InProcessLiveFeed, MemoryKeyValueStore, PlainKeyVault, SequentialIds, SystemClock, createMemoryRepositories, emptyCriteria } from '@rolepay/core/adapters'
 import { RestActivityReader } from '@rolepay/discord'
 import { FakeDiscordRest, wireMessage } from '@rolepay/discord/testing'
-import { FakeDiscordOAuth, FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
+import { bundledAssets } from '@rolepay/web'
+import { FakeDiscordOAuth, FakePasskeySessions } from '@rolepay/web/testing'
 import { composeServer } from '../src/compose.js'
 import { parseServerConfig } from '../src/config.js'
 import { auditPortFromCore, payoutsPortFromCore, policyKeysPortFromCore, policyPortFromCore } from '../src/policySeam.js'
@@ -56,7 +57,7 @@ export async function startDashboardServer(port: number) {
     )
   // Deposit addresses: an in-memory registry and transfer log (its deposits do not move the payout fake's balances).
   const fundingChain = new FakeFundingChain()
-  const rolepay = createRolepay({ chain, repositories: createMemoryRepositories({ clock }), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato', proposer, activity, fundingChain })
+  const rolepay = createRolepay({ chain, repositories: createMemoryRepositories({ clock }), vault: new PlainKeyVault(), ids: new SequentialIds(), clock, network: 'moderato', proposer, activity, fundingChain, live: new InProcessLiveFeed() })
   const oauth = new FakeDiscordOAuth()
   const kv = new MemoryKeyValueStore(clock)
 
@@ -125,7 +126,8 @@ export async function startDashboardServer(port: number) {
     kv,
     web: {
       sessions: new FakePasskeySessions(),
-      assets: staticAssets({}),
+      // The real bundles: the dashboard's live script (/assets/live.js) runs in the browser.
+      assets: bundledAssets(),
       dashboard: { oauth, policies: policyPortFromCore(rolepay, { names: activity }), audit: auditPortFromCore(rolepay), payouts: payoutsPortFromCore(rolepay), policyKeys: policyKeysPortFromCore(rolepay) },
     },
     log: () => {},

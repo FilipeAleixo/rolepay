@@ -3,10 +3,10 @@
 // Runs -> a run -> Policies (core's real policy services on memory adapters, through the policy
 // seam) -> pause as the Treasurer -> veto an autopilot run -> write and approve a policy from the
 // web -> Funding (a source's deposit address and QR code, its deposit, a new source from the web)
-// -> Audit log -> CSV -> sign out. No dashboard page may run a script or trip the
-// Content-Security-Policy.
+// -> Audit log -> CSV -> sign out. Then a run page that updates live while a run is approved and
+// paid elsewhere. No dashboard page may trip the Content-Security-Policy.
 import { expect, test } from '@playwright/test'
-import { GUILD, TESS, startDashboardServer } from './dashboardServer.js'
+import { ALICE, GUILD, TESS, startDashboardServer } from './dashboardServer.js'
 
 const PORT = 8797
 
@@ -151,3 +151,32 @@ test('a treasurer signs in with Discord and walks Overview, Runs, Policies (paus
   await page.goto(`${server.url}/dashboard/${GUILD}`)
   await expect(page.getByRole('link', { name: 'Sign in with Discord' })).toBeVisible()
 })
+
+test('a run page updates live: approved and paid elsewhere, the status and the transaction appear with no reload', async ({ page }) => {
+  server.oauth.signInAs({ user: { id: TESS.id, name: 'tess_d' }, guilds: [{ id: GUILD, name: 'E2E guild' }] })
+  await page.goto(`${server.url}/dashboard`)
+  await page.getByRole('link', { name: 'Sign in with Discord' }).click()
+  await expect(page.getByRole('heading', { name: 'Your communities' })).toBeVisible()
+  // A run made by hand, waiting for approval.
+  const created = await server.rolepay.payRuns.create({ guildId: GUILD, createdBy: TESS.id, note: 'Live demo', lines: [{ discordUserId: ALICE.id, amount: 1_000_000n }] })
+  if (!created.ok) throw new Error(created.error.code)
+  const runId = created.value.id
+  await server.rolepay.payRuns.submit({ guildId: GUILD, runId, actor: TESS.id })
+  const stream = page.waitForResponse((r) => r.url().endsWith(`/dashboard/${GUILD}/live`))
+  await page.goto(`${server.url}/dashboard/${GUILD}/runs/${runId}`)
+  await expect(page.getByRole('heading', { name: new RegExp(`Run ${runId}`) })).toContainText('Waiting for approval')
+  expect((await stream).headers()['content-type']).toBe('text/event-stream; charset=utf-8')
+  // Mark this document: a reload would lose the mark.
+  await page.evaluate(() => {
+    ;(window as unknown as { liveMark: boolean }).liveMark = true
+  })
+
+  await server.rolepay.payRuns.approve({ guildId: GUILD, runId, actor: TESS.id, actorCanApprove: true })
+  await server.rolepay.payRuns.execute({ guildId: GUILD, runId })
+
+  await expect(page.getByRole('heading', { name: new RegExp(`Run ${runId}`) })).toContainText(/Paid/, { timeout: 10_000 })
+  await expect(page.getByText('Paid in block')).toBeVisible()
+  await expect(page.locator('a[href*="/tx/0x"]').first()).toBeVisible()
+  expect(await page.evaluate(() => (window as unknown as { liveMark?: boolean }).liveMark)).toBe(true)
+})
+
