@@ -40,6 +40,43 @@ describe('createRunExecutor', () => {
     expect((await h.rolepay.payRuns.get({ guildId: GUILD, runId: h.run.id })).ok && h.chain.landedTxCount).toBe(1)
   })
 
+  it("each receipt's 'Your account' fits how the payee is paid: the account page for a passkey, the explorer for their own wallet", async () => {
+    const h = await harness()
+    await h.setupCommunity()
+    await h.registerPayee(ALICE, '0x1111111111111111111111111111111111111111')
+    await h.registerWallet(BOB, '0x2222222222222222222222222222222222222222')
+    const run = await h.approvedRun()
+    const execute = createRunExecutor({ rolepay: h.rolepay, rest: h.rest, notices: new MemoryRunNotices(), network: 'moderato', now: () => h.clock.now(), sleep: h.sleep, accountUrl: 'https://web.rolepay.app/account' })
+    await execute(job(run.id))
+    const account = (userId: string) =>
+      (h.rest.dms.find((d) => d.userId === userId)?.message.components ?? [])
+        .flatMap((row) => (row as { components: { label: string; url?: string }[] }).components)
+        .find((b) => b.label === 'Your account')?.url
+    expect(account(ALICE)).toBe('https://web.rolepay.app/account')
+    expect(account(BOB)).toBe('https://explore.testnet.tempo.xyz/address/0x2222222222222222222222222222222222222222')
+    // Paid where the run said, whatever the kind: the wallet line went to the wallet.
+    const paid = await h.rolepay.payRuns.get({ guildId: GUILD, runId: run.id })
+    expect(paid.ok && paid.value.lines.map((l) => [l.payeeDiscordId, l.address])).toEqual([
+      [ALICE, '0x1111111111111111111111111111111111111111'],
+      [BOB, '0x2222222222222222222222222222222222222222'],
+    ])
+  })
+
+  it("a receipt for an address the payee has since moved from links the explorer: Rolepay no longer knows it is a passkey account", async () => {
+    const h = await ready()
+    await h.registerWallet(BOB, '0x4444444444444444444444444444444444444444') // re-claimed at a wallet after the run was made
+    const execute = createRunExecutor({ rolepay: h.rolepay, rest: h.rest, notices: new MemoryRunNotices(), network: 'moderato', now: () => h.clock.now(), sleep: h.sleep, accountUrl: 'https://web.rolepay.app/account' })
+    await execute(job(h.run.id))
+    const bob = h.rest.dms.find((d) => d.userId === BOB)?.message
+    const line = h.run.lines.find((l) => l.payeeDiscordId === BOB)
+    expect(line?.address).toBe('0x2222222222222222222222222222222222222222')
+    expect(text(bob)).toContain(`https://explore.testnet.tempo.xyz/address/${line?.address}`)
+    expect(text(bob)).not.toContain('web.rolepay.app/account')
+    expect(text(bob)).not.toMatch(/own wallet|passkey/) // it says nothing it does not know
+    // Alice did not move: her passkey account page, as before.
+    expect(text(h.rest.dms.find((d) => d.userId === ALICE)?.message)).toContain('web.rolepay.app/account')
+  })
+
   it('remembers where the review message is, for an update after a restart', async () => {
     const h = await ready()
     await h.execute(job(h.run.id))

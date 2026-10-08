@@ -2,6 +2,7 @@
 // setup -> claim links -> /rolepay new -> review -> Approve -> deferred -> queue -> core
 // -> fake chain -> webhook edit + DMs -> export. Only the Discord REST and the chain are fakes.
 import { buttonClick, slashCommand } from '@rolepay/discord/testing'
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 import { describe, expect, it, vi } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer, usd } from './support.js'
 
@@ -92,6 +93,34 @@ describe('pay run end to end through the HTTP endpoint', () => {
     expect(csv).toContain(`${runId},1,${ALICE},${ADDR.alice},10.000000`)
     expect(csv).toContain(`${runId},2,${BOB},${ADDR.bob},40.000000`)
     expect(csv).toMatch(/,paid,0x[0-9a-f]{64},/)
+  })
+
+  it("a payee who registers a wallet they already have (signed on the claim page) is paid there by a normal run, and the receipt links the explorer", async () => {
+    const s = await testServer()
+    await s.rolepay.communities.register({ guildId: GUILD, name: 'Mods guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: TREASURER_ROLE })
+    await s.rolepay.communities.provisionBotKey({ guildId: GUILD, limit: usd('100'), periodSeconds: 86_400, expiresAt: s.chain.time + 86_400 })
+    await s.rolepay.communities.authorizeBotKey({ guildId: GUILD, root: s.chain.rootSigner(TREASURY) })
+    const wallet = privateKeyToAccount(generatePrivateKey())
+    const reply = (await (await s.interact(slashCommand(SCOPE, 'payee', 'link', {}, { userId: ALICE }))).json()) as { data: { content: string } }
+    const url = /https:\/\/rolepay\.test(\/claim\/\S+)/.exec(reply.data.content)?.[1] as string
+    const post = (path: string, body: unknown) =>
+      s.app.request(path, { method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://rolepay.test' }, body: JSON.stringify(body) })
+    const { message } = (await (await post(`${url}/wallet/challenge`, { address: wallet.address })).json()) as { message: string }
+    expect(message.split('\n')[0]).toBe(`Rolepay on rolepay.test: pay me in Mods guild at ${wallet.address.toLowerCase()} on Tempo (chain 42431).`)
+    const claimed = await post(`${url}/wallet`, { message, signature: await wallet.signMessage({ message }) })
+    expect(await claimed.json()).toMatchObject({ ok: true, address: wallet.address.toLowerCase(), addressKind: 'external' })
+
+    const created = await s.interact(slashCommand(SCOPE, 'rolepay', 'new', { amount: '7', users: `<@${ALICE}>`, note: 'Bounty' }, ADMIN, 'tok-new'))
+    expect(created.status).toBe(200)
+    await s.drain()
+    const runId = /rolepay:approve:([^"]+)"/.exec(text(s.rest.lastEdit('tok-new')))?.[1] as string
+    await s.interact(buttonClick(SCOPE, `rolepay:approve:${runId}`, TREASURER, 'tok-approve'))
+    await s.drain()
+    expect(text(s.rest.lastEdit('tok-approve'))).toMatch(/"title":"Paid"/)
+    expect(s.chain.balance(TOKEN, wallet.address.toLowerCase())).toBe(usd('7'))
+    const receipt = text(s.rest.dms[0]?.message)
+    expect(receipt).toContain(`https://explore.testnet.tempo.xyz/address/${wallet.address.toLowerCase()}`)
+    expect(receipt).not.toContain('https://rolepay.test/account')
   })
 
   it('a crash after approval loses nothing: recovery reconciles, Retry finishes it, still one payment', async () => {

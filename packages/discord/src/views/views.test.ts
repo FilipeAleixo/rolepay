@@ -346,6 +346,23 @@ describe('receiptDm', () => {
     const without = receiptDm(r, line, { ...ctx, communityName: 'Test guild' })
     expect(text(without)).not.toContain('/account')
   })
+
+  it("for a payee paid at their own wallet, 'Your account' opens the address on the explorer, never the passkey account page", () => {
+    const r = paid()
+    const line = r.lines[1] as (typeof r.lines)[number]
+    const m = receiptDm(r, line, { ...ctx, communityName: 'Test guild', accountUrl: 'https://web.rolepay.app/account', addressKind: 'external' })
+    const buttons = (m.components ?? []).flatMap((row) => (row as { components: { label: string; url?: string }[] }).components)
+    expect(buttons.map((b) => [b.label, b.url])).toEqual([
+      ['View transaction', `https://explore.testnet.tempo.xyz/tx/${TX}`],
+      ['Your account', `https://explore.testnet.tempo.xyz/address/${line.address}`],
+    ])
+    expect(text(m)).not.toContain('/account')
+    expect(text(m)).not.toMatch(/passkey/)
+    expect(text(m)).toMatch(/your own wallet/)
+    // The same with no account page on the server: the explorer is always there.
+    const bare = receiptDm(r, line, { ...ctx, communityName: 'Test guild', addressKind: 'external' })
+    expect((bare.components ?? []).flatMap((row) => (row as { components: { label: string }[] }).components).map((b) => b.label)).toEqual(['View transaction', 'Your account'])
+  })
 })
 
 describe('explainError', () => {

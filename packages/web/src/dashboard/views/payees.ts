@@ -20,7 +20,8 @@ export function payeesBody(d: {
     return row(
       [
         person(p.discordUserId, d.names),
-        addressLink(d.explorer, p.address),
+        // Their own wallet: paid like anyone, but Rolepay cannot move or recover money there.
+        `${addressLink(d.explorer, p.address)}${p.addressKind === 'external' ? ' <span class="muted">own wallet</span>' : ''}`,
         money(t.thisPeriod, d.token),
         money(t.lastPeriod, d.token),
         money(t.allTime, d.token),

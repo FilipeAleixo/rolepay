@@ -1,7 +1,18 @@
 // A web app over the real core services on in-memory fakes, with fake passkey sessions and
 // a stub client bundle. No network, no browser.
 import { createRolepay } from '@rolepay/core'
-import { FakeActivityReader, FakeFundingChain, FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories, emptyCriteria } from '@rolepay/core/adapters'
+import {
+  FakeActivityReader,
+  FakeFundingChain,
+  FakePayoutChain,
+  FakeRunProposer,
+  ManualClock,
+  PlainKeyVault,
+  SequentialIds,
+  ViemMessageSignatures,
+  createMemoryRepositories,
+  emptyCriteria,
+} from '@rolepay/core/adapters'
 import { createWebApp } from '../src/index.js'
 import { FakePasskeySessions, staticAssets } from '../src/testing/index.js'
 
@@ -48,6 +59,8 @@ export function webHarness(opts: { mainnet?: boolean; discordAppId?: string; fun
     proposer,
     activity,
     ...(opts.funding === false ? {} : { fundingChain }),
+    // Real and offline: who signed a wallet claim.
+    signatures: new ViemMessageSignatures(),
   })
   const sessions = new FakePasskeySessions()
   const app = createWebApp({

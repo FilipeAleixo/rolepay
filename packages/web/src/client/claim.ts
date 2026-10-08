@@ -1,7 +1,10 @@
-// The recipient claim page: one passkey, one address, registered with the community.
+// The recipient claim page: one address, registered with the community. Either a passkey (its
+// account, from the session the server verified) or a wallet the payee already has (the address that
+// signed the server's message, which the server recovers).
 import { $, busy, explainPasskeyError, post, status } from './dom.js'
 import { passkeys } from './passkey.js'
 import { savePreference } from './payouts.js'
+import { WALLET_DECLINED, WalletError, connectWallet, explainWalletClaim, explainWalletError, injectedWallet, isUserRejection, signClaim } from './wallet.js'
 
 export type ClaimConfig = {
   page: 'claim'
@@ -27,6 +30,8 @@ export function startClaim(config: ClaimConfig) {
   const keys = passkeys(config.network)
   const create = $<HTMLButtonElement>('#create')
   const signin = $<HTMLButtonElement>('#signin')
+  const wallet = $<HTMLButtonElement>('#wallet')
+  const token = encodeURIComponent(config.token)
 
   const register = async (connect: () => Promise<string>) => {
     status('Waiting for your passkey...')
@@ -64,6 +69,36 @@ export function startClaim(config: ClaimConfig) {
     })
   })
 
-  create?.addEventListener('click', busy([create, signin], () => register(() => keys.create(config.passkeyName)), explainPasskeyError))
-  signin?.addEventListener('click', busy([create, signin], () => register(() => keys.signIn()), explainPasskeyError))
+  // A wallet they already have: connect (Tempo chain, selected account), ask the server for the
+  // message, have the wallet sign it, send both. The server registers whoever signed.
+  const useWallet = async () => {
+    const provider = injectedWallet()
+    if (!provider) throw new WalletError('no_wallet')
+    try {
+      status('Asking your wallet to connect to Tempo...')
+      const address = await connectWallet(provider, config.network)
+      const challenge = await post<{ message: string }>(`/claim/${token}/wallet/challenge`, { address })
+      if (!challenge.ok) return status(LINK_ERRORS[challenge.error.code] ?? explainWalletClaim(challenge.error.code), 'bad')
+      status('Sign the message in your wallet. It costs nothing and moves no money.')
+      const signature = await signClaim(provider, address, challenge.message)
+      status('Checking the signature...')
+      const r = await post<{ address: string }>(`/claim/${token}/wallet`, { message: challenge.message, signature })
+      if (!r.ok) return status(LINK_ERRORS[r.error.code] ?? explainWalletClaim(r.error.code), 'bad')
+      const shown = $('#wallet-address')
+      if (shown) shown.textContent = r.address
+      const explorer = $<HTMLAnchorElement>('#wallet-explorer')
+      if (explorer) explorer.href = `${config.explorerUrl}/address/${r.address}`
+      for (const el of document.querySelectorAll<HTMLElement>('[data-step="choose"]')) el.hidden = true
+      for (const el of document.querySelectorAll<HTMLElement>('[data-step="done-wallet"]')) el.hidden = false
+      status('Done. You will be paid at your wallet.', 'ok')
+    } catch (error) {
+      // Declining in the wallet is a choice, not a failure: said calmly, and nothing was registered.
+      if (isUserRejection(error)) return status(WALLET_DECLINED)
+      throw error
+    }
+  }
+
+  create?.addEventListener('click', busy([create, signin, wallet], () => register(() => keys.create(config.passkeyName)), explainPasskeyError))
+  signin?.addEventListener('click', busy([create, signin, wallet], () => register(() => keys.signIn()), explainPasskeyError))
+  wallet?.addEventListener('click', busy([create, signin, wallet], useWallet, explainWalletError))
 }
