@@ -76,13 +76,14 @@ const TRUST: ReadonlyArray<{ icon: IconName; bold: string; muted: string }> = [
 ]
 
 /**
- * By the numbers, as the README states them: the chain proofs it links on Moderato's explorer, the
- * default suite (rounded down, so it stays true as tests are added) and a warm AI proposal's cost.
+ * By the numbers, for a community deciding: one batched transaction per run (up to 50 lines), the
+ * network fee per payout on mainnet (about US$0.001 to an existing account, US$0.006 to a new one:
+ * apps/server/MAINNET.md), and what a recipient needs to be paid (a passkey, no wallet, no gas).
  */
 const PROOF: ReadonlyArray<{ value: string; label: string }> = [
-  { value: '10', label: 'chain proofs on Tempo testnet' },
-  { value: '1,800+', label: 'tests, no network needed' },
-  { value: '$0.003', label: 'per AI proposal' },
+  { value: '1', label: 'transaction for the whole run' },
+  { value: '< 1¢', label: 'in fees per payout' },
+  { value: '0', label: 'wallets or gas needed to get paid' },
 ]
 
 /** The payouts in the product shot. Made-up people. */

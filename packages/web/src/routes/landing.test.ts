@@ -60,8 +60,8 @@ describe('the home page (/)', () => {
     expect(hero(html)).toMatch(/<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction, and the bot key's budget for the period with its on-chain limit">/)
     expect(hero(html)).toContain('Paid in one transaction. Approved by <span class="at">@Treasurer</span>.')
     expect(t).toContain('On-chain limit')
-    // The numbers, as the README states them.
-    for (const n of ['10 chain proofs on Tempo testnet', '1,800+ tests, no network needed', '$0.003 per AI proposal']) expect(t).toContain(n)
+    // The numbers a community cares about (cost from apps/server/MAINNET.md).
+    for (const n of ['1 transaction for the whole run', '< 1¢ in fees per payout', '0 wallets or gas needed to get paid']) expect(t).toContain(n)
     expect(html).toContain('<h2 id="how-title">')
     expect(t).toContain('AI can draft a run. Only a person can approve it, and only the chain decides how much the bot can spend.')
     STEPS.forEach(([title, line], i) => {
