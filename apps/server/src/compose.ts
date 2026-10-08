@@ -79,6 +79,8 @@ const INTERACTION_RETRY_AFTER = '5'
  */
 export function vetoesAnnounced(port: PolicyPort, rolepay: Rolepay, announce: (events: SchedulerEvent[]) => Promise<void>): PolicyPort {
   return {
+    // Not a method, so it has to be carried over by hand: without it the dashboard refuses daily policies on the demo.
+    ...(port.dailySchedules === undefined ? {} : { dailySchedules: port.dailySchedules }),
     list: (i) => port.list(i),
     get: (i) => port.get(i),
     preview: (i) => port.preview(i),

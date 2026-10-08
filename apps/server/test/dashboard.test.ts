@@ -112,6 +112,15 @@ describe('restGuildMembers (the member view over the bot REST client)', () => {
 })
 
 describe('vetoesAnnounced (a dashboard veto reaches Discord too)', () => {
+  it('carries the port\'s dailySchedules flag, so the demo dashboard offers and accepts daily policies', () => {
+    const rolepay = {} as unknown as Rolepay
+    const on = new InMemoryPolicies()
+    on.dailySchedules = true
+    expect(vetoesAnnounced(on, rolepay, async () => {}).dailySchedules).toBe(true)
+    const off = new InMemoryPolicies()
+    expect(vetoesAnnounced(off, rolepay, async () => {}).dailySchedules).toBe(false)
+  })
+
   it('passes every call through to the port, and announces only a successful veto of a run a core policy made', async () => {
     const port = new InMemoryPolicies()
     const announced: SchedulerEvent[][] = []
