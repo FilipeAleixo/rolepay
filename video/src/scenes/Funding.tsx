@@ -16,8 +16,8 @@ export const FUNDING_FRAMES = sec(10)
  * is sent there is credited to the treasury inside the same transaction, the address holds
  * nothing, and Rolepay records the deposit under its source. The sources and amounts are the ones
  * packages/core/test/funding.chain.test.ts sent on Moderato (linked in the README): "Q4 bounty
- * sponsor: Acme DAO" (tag 1) received 1.25 AlphaUSD and "Judges pool" (tag 2) 2.5 AlphaUSD, so
- * the month reads 3.75 AlphaUSD from 2 sources. The address shows the TIP-1022 layout with the
+ * sponsor: Acme DAO" (tag 1) and "Judges pool" (tag 2) receive illustrative amounts (500 and 250 AlphaUSD;
+ * the chain test proved the mechanism with 1.25 and 2.5), so the month reads 750 AlphaUSD from 2 sources. The address shows the TIP-1022 layout with the
  * treasury's 4-byte masterId elided as dots: [masterId][fdfd...fdfd][6-byte tag].
  */
 
@@ -50,8 +50,8 @@ const INTO_X = TREASURY_X - 16
 const LIST = { x: 620, w: 1080, top: 594 }
 
 const SOURCES = [
-  { short: 'Acme DAO', sub: 'Q4 bounty sponsor', name: 'Q4 bounty sponsor: Acme DAO', tag: '000000000001', amount: '1.25 AlphaUSD' },
-  { short: 'Judges pool', sub: 'Funding source', name: 'Judges pool', tag: '000000000002', amount: '2.5 AlphaUSD' },
+  { short: 'Acme DAO', sub: 'Q4 bounty sponsor', name: 'Q4 bounty sponsor: Acme DAO', tag: '000000000001', amount: '500 AlphaUSD' },
+  { short: 'Judges pool', sub: 'Funding source', name: 'Judges pool', tag: '000000000002', amount: '250 AlphaUSD' },
 ] as const
 
 const flowPath = (y: number) => {
@@ -183,8 +183,8 @@ const Arrivals: React.FC<{ frame: number }> = ({ frame }) => (
 
 /** The dashboard's Funding page, in short: this month's total, then each deposit under its source. */
 const List: React.FC<{ frame: number }> = ({ frame }) => {
-  // The month's total counts up as each deposit is recorded: 1.25, then 3.75 (the chain test's sum).
-  const amount = 1.25 * progress(frame, ARRIVE[0], 14, EASE_IN_OUT) + 2.5 * progress(frame, ARRIVE[1], 14, EASE_IN_OUT)
+  // The month's total counts up as each deposit is recorded: 500, then 750 (illustrative amounts; the chain test proved the mechanism with 1.25 and 2.5).
+  const amount = 500 * progress(frame, ARRIVE[0], 14, EASE_IN_OUT) + 250 * progress(frame, ARRIVE[1], 14, EASE_IN_OUT)
   const sources = ARRIVE.filter((a) => frame >= a).length
   return (
     <div style={{ position: 'absolute', left: LIST.x, top: LIST.top, width: LIST.w, ...panel, borderRadius: 20, padding: '22px 28px 12px', boxSizing: 'border-box', ...enter(frame, T.list, { duration: 18, distance: 10 }) }}>
