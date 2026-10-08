@@ -67,6 +67,11 @@ export type PolicyMatch = {
   amount: bigint | null
   /** false: they match but have not linked a payout account (`/payee link`), so nothing is paid to them. */
   registered: boolean
+  /**
+   * The token they will receive, when it is not the payout token: their preferred stablecoin, bought
+   * on the exchange in the run's transaction (the community pays in preferred stablecoins). Absent: the payout token.
+   */
+  swappedTo?: string
 }
 
 export type PolicyNearMiss = { userId: string; metrics: Record<string, number>; missing: string }

@@ -179,6 +179,7 @@ describe('policyPortFromCore: who it applies to, when it cannot be worked out', 
     if (!p.ok) throw new Error(p.error.code)
     expect(p.value.total).toBe(usd('3'))
     expect(p.value.remainingBudget).toBeNull()
+    expect(p.value.matches.every((m) => m.swappedTo === undefined)).toBe(true) // preferred stablecoins off: the payout token
     expect(p.value.held).toContain("over the policy's cap per run (1 AlphaUSD)")
     expect(p.value.held).toContain('There is no active bot key')
   })
@@ -212,6 +213,8 @@ describe('policyPortFromCore: who it applies to, when it cannot be worked out', 
     const p = await w.port.preview({ guildId: GUILD, policyId: created.value.id })
     if (!p.ok) throw new Error(p.error.code)
     expect(p.value.total).toBe(usd('3'))
+    // The preview names the token the person will receive, as the run review will.
+    expect(p.value.matches.map((m) => [m.userId, m.swappedTo ?? null])).toEqual([['200000000000000011', '0x20c0000000000000000000000000000000000002']])
     expect(p.value.held).toBe(
       'The run pays 3 AlphaUSD, but with its swaps into the stablecoins people prefer counted at their most it could take 3.03 AlphaUSD, more than the bot key has left (3.01 AlphaUSD): it would be held, not partly paid.',
     )

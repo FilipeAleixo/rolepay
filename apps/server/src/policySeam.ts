@@ -311,6 +311,7 @@ export function policyPortFromCore(rolepay: Rolepay, opts: { names?: NameSource 
           reasons: [...m.reasons.map((reason) => describeMatch(criteria, [reason], n)), ...(m.capped && cap !== null ? [`capped at ${n.money(cap)}`] : [])],
           amount: m.amount,
           registered: m.registered,
+          ...(m.swapped ? { swappedTo: m.token } : {}),
         })),
         nearMisses,
         nextRunAt: v.nextRunAt,

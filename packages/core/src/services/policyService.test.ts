@@ -21,6 +21,7 @@ import {
   START_HERE,
   T0,
   TODAY_18,
+  TOKEN,
   TREASURER,
   TREASURER_TWO,
   WELCOME,
@@ -123,6 +124,36 @@ describe('PolicyService.preview: who it applies to right now', () => {
     expect(v.nearMisses).toEqual([])
     // Li answered 15 times but is not a Mod: not listed at all.
     expect(v.matches.some((m) => m.discordUserId === LI)).toBe(false)
+  })
+
+  describe('the token each person will receive (preferred stablecoins)', () => {
+    const BETA = '0x20c0000000000000000000000000000000000002'
+    async function preferring(opts: { switchOn: boolean }) {
+      const w = await policyWorld()
+      const community = await w.repos.communities.get(GUILD)
+      if (!community) throw new Error('no community')
+      await w.repos.communities.update({ ...community, preferredTokens: opts.switchOn })
+      const ana = await w.repos.payees.get(GUILD, ANA)
+      if (!ana) throw new Error('no payee')
+      await w.repos.payees.upsert({ ...ana, preferredToken: BETA })
+      const p = await w.draft()
+      const r = await w.rolepay.policies.preview({ guildId: GUILD, policyId: p.id })
+      if (!r.ok) throw new Error(JSON.stringify(r.error))
+      return Object.fromEntries(r.value.matches.map((m) => [m.discordUserId, [m.token, m.swapped]]))
+    }
+
+    it('with the switch on, a payee who chose BetaUSD receives BetaUSD (swapped); one without a preference, the payout token', async () => {
+      const tokens = await preferring({ switchOn: true })
+      expect(tokens[ANA]).toEqual([BETA, true])
+      expect(tokens[RUI]).toEqual([TOKEN, false])
+      expect(tokens[DAVE]).toEqual([TOKEN, false]) // not registered: nothing to prefer
+    })
+
+    it('with the switch off, the preference is ignored: everyone receives the payout token', async () => {
+      const tokens = await preferring({ switchOn: false })
+      expect(tokens[ANA]).toEqual([TOKEN, false])
+      expect(tokens[RUI]).toEqual([TOKEN, false])
+    })
   })
 
   it('people just below the line are listed with how far they are', async () => {

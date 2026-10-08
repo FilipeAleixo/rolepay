@@ -144,7 +144,10 @@ export function policyMessage(p: Policy, ctx: PolicyViewContext & { preview?: Po
   const pv = ctx.preview
   if (pv) {
     const payable = pv.matches.filter((m) => m.registered && m.amount !== null && m.amount > 0n)
-    const shown = payable.slice(0, SHOWN).map((m) => `${mention(m.discordUserId)}  ${money(m.amount as Micros, ctx.token)}${m.capped ? ' (capped)' : ''}  ·  ${m.reasonText}`)
+    // A payee paid in their preferred stablecoin reads as the run review shows it: "5 AlphaUSD → 5 BetaUSD (swapped)".
+    const shown = payable
+      .slice(0, SHOWN)
+      .map((m) => `${mention(m.discordUserId)}  ${money(m.amount as Micros, ctx.token)}${m.swapped ? ` → ${money(m.amount as Micros, m.token)} (swapped)` : ''}${m.capped ? ' (capped)' : ''}  ·  ${m.reasonText}`)
     fields.push({ name: 'Who it applies to right now', value: shown.length ? listField(shown, payable.length - shown.length) : 'Nobody matches yet in this period.' })
     const unregistered = pv.matches.filter((m) => !m.registered)
     if (unregistered.length) {

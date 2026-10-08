@@ -108,7 +108,9 @@ function previewSection(d: { preview: PolicyPreview | { error: string }; names: 
               metricWords(m.metrics),
               m.reasons.map((r) => esc(r)).join('<br>'),
               m.registered && m.amount !== null
-                ? money(m.amount, d.token)
+                ? m.swappedTo
+                  ? `${money(m.amount, d.token)} → ${money(m.amount, m.swappedTo)} (swapped)`
+                  : money(m.amount, d.token)
                 : `<span class="muted">${m.amount === null ? 'nothing' : money(m.amount, d.token)}, not paid until they run <code>/payee link</code></span>`,
             ],
             { numeric: [3] },

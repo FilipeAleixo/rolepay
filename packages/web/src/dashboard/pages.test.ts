@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GUILD, MEMBER, ROLE, TOKEN, TREASURER, TREASURY, dashboardHarness, identity, usd } from '../../test/dashboardHarness.js'
+import { preview } from '../../test/policyFixtures.js'
 
 const ALICE = { id: '200000000000000011', address: '0x1111111111111111111111111111111111111111' }
 const BOB = { id: '200000000000000012', address: '0x2222222222222222222222222222222222222222' }
@@ -423,3 +424,18 @@ describe('AI spend (read only, for every member)', () => {
     }
   })
 })
+
+describe('a policy page: the token each person receives', () => {
+  it('shows a payee paid in their preferred stablecoin as the run review does; the others in the payout token', async () => {
+    const h = await seeded()
+    const base = preview()
+    const BETA = '0x20c0000000000000000000000000000000000002'
+    const shown = preview({ matches: base.matches.map((m, i) => (i === 0 ? { ...m, swappedTo: BETA } : m)) })
+    const policyId = h.policies.seed(GUILD, { name: 'Help desk', instruction: 'Every Monday...' }, shown)
+    const { browser } = await h.signIn(identity(MEMBER))
+    const t = text(await (await browser.get(`/dashboard/${GUILD}/policies/${policyId}`)).text())
+    expect(t).toContain('12 AlphaUSD → 12 BetaUSD (swapped)')
+    expect(t).toMatch(/50 AlphaUSD (?!→)/)
+  })
+})
+

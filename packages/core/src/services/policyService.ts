@@ -2,7 +2,8 @@ import { z } from 'zod'
 import { POLICY_LIMITS, PROPOSAL_LIMITS } from '../constants/limits.js'
 import { TOKEN_SYMBOLS } from '../constants/tempo.js'
 import { type Community, canPropose } from '../domain/community.js'
-import { DiscordIdSchema } from '../domain/ids.js'
+import { lineSwapFor } from '../domain/delivery.js'
+import { type Address, DiscordIdSchema } from '../domain/ids.js'
 import { type Micros, formatAmount } from '../domain/money.js'
 import {
   type CompiledRule,
@@ -89,6 +90,13 @@ export type PolicyStateError =
 export type PolicySummary = { policy: Policy; nextRunAt: Date | null; lastRun: PolicyRun | null }
 export type PolicyDetail = PolicySummary & { versions: PolicyVersion[]; runs: PolicyRun[]; rule: string[] }
 
+/**
+ * One person the policy applies to, with the token they will receive: their preferred stablecoin
+ * when the community pays in preferred stablecoins and that token is allowed (`swapped`: the run buys
+ * it on the exchange, exactly as `PayRunService.create` decides), otherwise the payout token.
+ */
+export type PreviewMatch = PolicyMatch & { token: Address; swapped: boolean }
+
 /** "Who it applies to right now", the next run's total against the budget, and the rule in plain words. */
 export type PolicyPreview = {
   policyId: string
@@ -96,7 +104,7 @@ export type PolicyPreview = {
   /** The period in progress: from the last occurrence up to now. */
   window: { start: Date; end: Date }
   nextRunAt: Date
-  matches: PolicyMatch[]
+  matches: PreviewMatch[]
   nearMisses: { userId: string; condition: string; count: number; min: number; text: string }[]
   total: Micros
   /**
@@ -486,13 +494,23 @@ export class PolicyService {
     const budget = await this.deps.policyKeys.budget({ guildId: p.communityId, policyId: p.id })
     const remaining = budget.remaining
     const e = ev.value
-    const spend = await this.deps.payRuns.spendCap({ guildId: p.communityId, lines: e.lines })
+    const [spend, community, payees] = await Promise.all([
+      this.deps.payRuns.spendCap({ guildId: p.communityId, lines: e.lines }),
+      this.deps.communities.get(p.communityId),
+      this.deps.payees.list(p.communityId),
+    ])
+    if (!community) return err({ code: 'policy_not_found' })
+    const preferred = new Map(payees.map((x) => [x.discordUserId, x.preferredToken]))
+    const matches = e.matches.map((m): PreviewMatch => {
+      const swap = m.registered ? lineSwapFor(community, { preferredToken: preferred.get(m.discordUserId) ?? null }, m.amount ?? 0n, 0) : null
+      return { ...m, token: swap?.token ?? community.payoutToken, swapped: swap !== null }
+    })
     return ok({
       policyId: p.id,
       version: p.version,
       window: { start: window.start, end: window.end },
       nextRunAt: window.nextRunAt,
-      matches: e.matches,
+      matches,
       nearMisses: e.nearMisses,
       total: e.total,
       spend,

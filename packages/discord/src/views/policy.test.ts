@@ -60,8 +60,8 @@ const preview = (over: Partial<PolicyPreview> = {}): PolicyPreview => ({
   window: { start: T0, end: T0 },
   nextRunAt: new Date('2026-10-12T18:00:00Z'),
   matches: [
-    { discordUserId: ALICE, registered: true, metrics: metrics(70), amount: 50_000_000n, capped: true, reasons: [], reasonText: '70 replies' },
-    { discordUserId: CAROL, registered: false, metrics: metrics(4), amount: null, capped: false, reasons: [], reasonText: '4 replies' },
+    { discordUserId: ALICE, registered: true, metrics: metrics(70), amount: 50_000_000n, capped: true, reasons: [], reasonText: '70 replies', token: TOKEN, swapped: false },
+    { discordUserId: CAROL, registered: false, metrics: metrics(4), amount: null, capped: false, reasons: [], reasonText: '4 replies', token: TOKEN, swapped: false },
   ],
   nearMisses: [{ userId: BOB, condition: 'repliesIn', count: 2, min: 3, text: '2 replies (at least 3)' }],
   total: 50_000_000n,
@@ -143,8 +143,25 @@ describe('policyMessage', () => {
     expect(text(policyMessage(policy(), { token: TOKEN, approverRoleId: null }))).toContain('no approver role is set yet')
   })
 
+  it("shows the token each person receives: a payee paid in their preferred stablecoin reads as the run review does", () => {
+    const BETA = '0x20c0000000000000000000000000000000000002' as const
+    const m = text(
+      policyMessage(policy(), {
+        ...ctx,
+        preview: preview({
+          matches: [
+            { discordUserId: ALICE, registered: true, metrics: metrics(1), amount: 1_000_000n, capped: false, reasons: [], reasonText: '1 reply', token: BETA, swapped: true },
+            { discordUserId: BOB, registered: true, metrics: metrics(2), amount: 2_000_000n, capped: false, reasons: [], reasonText: '2 replies', token: TOKEN, swapped: false },
+          ],
+        }),
+      }),
+    )
+    expect(m).toContain(`<@${ALICE}>  1 AlphaUSD → 1 BetaUSD (swapped)  ·  1 reply`)
+    expect(m).toContain(`<@${BOB}>  2 AlphaUSD  ·  2 replies`)
+  })
+
   it('a long list is cut to fit Discord (1024 characters a field) and says how many more', () => {
-    const many = Array.from({ length: 60 }, (_, i) => ({ discordUserId: `2000000000000002${String(i).padStart(2, '0')}`, registered: true, metrics: metrics(5), amount: 5_000_000n, capped: false, reasons: [], reasonText: 'has @Mods; 5 replies to other people in #help (at least 1)' }))
+    const many = Array.from({ length: 60 }, (_, i) => ({ discordUserId: `2000000000000002${String(i).padStart(2, '0')}`, registered: true, metrics: metrics(5), amount: 5_000_000n, capped: false, reasons: [], reasonText: 'has @Mods; 5 replies to other people in #help (at least 1)', token: TOKEN, swapped: false }))
     const m = policyMessage(policy(), { ...ctx, preview: preview({ matches: many, nearMisses: [], problems: [], remaining: 100_000_000n }) })
     const field = m.embeds?.[0]?.fields?.find((f) => f.name === 'Who it applies to right now')
     expect(field?.value.length).toBeLessThanOrEqual(1024)
