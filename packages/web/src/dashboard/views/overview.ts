@@ -108,7 +108,7 @@ export function overviewBody(d: OverviewData): string {
     ? table('Recent runs', RUN_COLUMNS, runRows(d.community.id, d.recent, d.origins, d.names), { numeric: [3, 4] })
     : '<p class="muted">No runs yet. <code>/rolepay new</code> in Discord makes one.</p>'
   return `<h1>Overview</h1><p class="lede">The treasury, what the bot may spend, and what is coming.</p>
-${atAGlance({ key: d.key, payouts: d.payouts })}
-<div class="grid">${treasuryCard(d)}${keyCard(d)}${fundedCard(d.community.id, d.funding ?? null, d.community.payoutToken)}${upcomingCard(d)}${aiCard(d.aiSpend)}</div>
-<section class="card"><h2>Recent runs</h2>${recent}<p><a href="/dashboard/${g}/runs">All runs</a> · <a href="/dashboard/${g}/payees">Payees</a> · <a href="/dashboard/${g}/policies">Policies</a> · <a href="/dashboard/${g}/audit">Audit log</a></p></section>`
+<div data-live-region="glance">${atAGlance({ key: d.key, payouts: d.payouts })}</div>
+<div class="grid" data-live-region="cards">${treasuryCard(d)}${keyCard(d)}${fundedCard(d.community.id, d.funding ?? null, d.community.payoutToken)}${upcomingCard(d)}${aiCard(d.aiSpend)}</div>
+<section class="card" data-live-region="recent"><h2>Recent runs</h2>${recent}<p><a href="/dashboard/${g}/runs">All runs</a> · <a href="/dashboard/${g}/payees">Payees</a> · <a href="/dashboard/${g}/policies">Policies</a> · <a href="/dashboard/${g}/audit">Audit log</a></p></section>`
 }

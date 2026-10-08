@@ -5,7 +5,7 @@ import { INK_BASE, mark } from '../../views/theme.js'
  * The dashboard's only stylesheet, inline: the shared ink base (views/theme.ts) and the dashboard's
  * own rules. Exported so the server can allow exactly it in the Content-Security-Policy (by hash).
  * Dark only; no script is needed for anything on the dashboard (forms post and redirect back,
- * `<details>` expands).
+ * `<details>` expands). With JavaScript, a community's pages also update live (`/assets/live.js`).
  */
 export const DASHBOARD_STYLE = `${INK_BASE}
 body{font-size:14px}
@@ -205,13 +205,17 @@ export function shell(opts: {
           `<li><a href="/dashboard/${esc(community.id)}${s.path}"${s.id === community.section ? ' aria-current="page"' : ''}>${s.label}</a></li>`,
       ).join('')}</ul></nav>`
     : ''
+  // A community's pages update live: the small script (/assets/live.js) follows the community's event
+  // stream and re-reads the page's [data-live-region] parts. Without it, every page works as before.
+  const live = community ? ` data-live="/dashboard/${esc(community.id)}/live"` : ''
+  const script = community ? '<script type="module" src="/assets/live.js"></script>' : ''
   return `<!doctype html>
 <html lang="en">${head({ title: opts.title, style: DASHBOARD_STYLE })}
-<body><a class="skip" href="#main">Skip to content</a>
+<body${live}><a class="skip" href="#main">Skip to content</a>
 <header class="top"><div class="bar"><a class="brand" href="/dashboard">${mark(24)}Rolepay</a>${
     community ? `<span class="dot" aria-hidden="true">·</span><span class="community">${esc(community.name)}</span>` : ''
   }${opts.testnet ? '<span class="testnet">testnet</span>' : ''}<span class="spacer"></span>${who}</div>${nav}</header>
-<main id="main">${opts.body}</main></body></html>`
+<main id="main">${opts.body}</main>${script}</body></html>`
 }
 
 /** A short page with one message (signed out, an error, a refusal). */

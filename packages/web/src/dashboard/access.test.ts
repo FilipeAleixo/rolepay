@@ -4,7 +4,7 @@ import { GUILD, MEMBER, OTHER_GUILD, OUTSIDER, ROLE, TREASURER, dashboardHarness
 import { DASHBOARD_STYLE } from './views/layout.js'
 
 describe('dashboard security headers and errors', () => {
-  it('pages carry the strict CSP (the dashboard stylesheet allowed by its hash, no script), no-store and no framing; HSTS on https', async () => {
+  it('pages carry the strict CSP (the dashboard stylesheet allowed by its hash, scripts only from this origin), no-store and no framing; HSTS on https', async () => {
     const h = dashboardHarness({ origin: 'https://demo.rolepay.test' })
     await h.community()
     const { browser } = await h.signIn(identity(MEMBER))
@@ -16,7 +16,9 @@ describe('dashboard security headers and errors', () => {
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(res.headers.get('x-frame-options')).toBe('DENY')
     expect(res.headers.get('strict-transport-security')).toBe('max-age=31536000')
-    expect(await res.text()).not.toMatch(/<script/)
+    // One script, from this origin (the live updates), and no inline script at all.
+    const scripts = [...(await res.text()).matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)]
+    expect(scripts.map((m) => m[0])).toEqual(['<script type="module" src="/assets/live.js"></script>'])
   })
 
   it('pages use Referrer-Policy same-origin: under no-referrer a browser sends "Origin: null" on its own form posts, which the same-origin check refuses; nothing goes to other sites either way', async () => {

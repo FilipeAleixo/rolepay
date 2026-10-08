@@ -3,8 +3,8 @@
 // - dist/main.js: the server as one ES module. The workspace packages (@rolepay/*, TypeScript sources)
 //   are compiled into it; every npm package stays an import resolved from node_modules at runtime, so
 //   better-sqlite3's native addon and esbuild's binary load exactly as they do in development.
-// - dist/rolepay.js: the browser bundle for the claim and setup pages, built here once instead of on
-//   the first page request (main.ts serves this file when it is there).
+// - dist/rolepay.js: the browser bundle for the claim and setup pages, and dist/live.js, the dashboard's
+//   live updates, built here once instead of on the first page request (main.ts serves them when they are there).
 //
 // `pnpm dev` needs neither: tsx runs the sources and the client bundle is built on first request.
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -36,7 +36,10 @@ await build({
   plugins: [npmPackagesExternal],
   logLevel: 'warning',
 })
-const client = await bundledAssets().get('rolepay.js')
-if (!client) throw new Error('the client bundle came out empty')
-writeFileSync(join(DIST, 'rolepay.js'), client)
-console.log(`built dist/main.js and dist/rolepay.js in ${Date.now() - started} ms`)
+const assets = bundledAssets()
+for (const name of ['rolepay.js', 'live.js']) {
+  const client = await assets.get(name)
+  if (!client) throw new Error(`the client bundle ${name} came out empty`)
+  writeFileSync(join(DIST, name), client)
+}
+console.log(`built dist/main.js, dist/rolepay.js and dist/live.js in ${Date.now() - started} ms`)

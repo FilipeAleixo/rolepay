@@ -10,5 +10,14 @@ describe('the client bundle', () => {
     expect(js).toContain('rolepay-config')
     expect(await assets.get('rolepay.js')).toBe(js) // cached
     expect(await assets.get('other.js')).toBeNull()
+    expect(await assets.get('toString')).toBeNull()
+  }, 60_000)
+
+  it("builds the dashboard's live script on its own: small, no viem, no passkeys", async () => {
+    const js = await bundledAssets().get('live.js')
+    expect(js).toContain('data-live')
+    expect(js).toContain('EventSource')
+    expect(js?.length).toBeLessThan(10_000)
+    expect(js).not.toContain('rolepay-config')
   }, 60_000)
 })

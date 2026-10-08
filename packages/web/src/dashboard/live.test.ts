@@ -146,4 +146,19 @@ describe('GET /dashboard/:guildId/live', () => {
     open.push(sseReader(res))
     expect(res.headers.get('content-security-policy')).toBe(page.headers.get('content-security-policy'))
   })
+
+  it("marks the parts a page re-reads: the Overview's panels, and a run's status, facts and timeline", async () => {
+    const h = await seeded()
+    const run = await h.run([[ALICE.id, '1']], { pay: false })
+    const { browser } = await h.signIn(identity(MEMBER))
+    const overview = await (await browser.get(`/dashboard/${GUILD}`)).text()
+    expect(overview).toContain(`<body data-live="/dashboard/${GUILD}/live">`)
+    for (const region of ['glance', 'cards', 'recent']) expect(overview).toContain(`data-live-region="${region}"`)
+    const runPage = await (await browser.get(`/dashboard/${GUILD}/runs/${run.id}`)).text()
+    expect(runPage).toContain(`<div data-live-region="run" data-live-run="${run.id}"><h1>Run ${run.id}`)
+    // A page that is not a community's (the list of communities) has no stream and no script.
+    const home = await (await browser.get('/dashboard')).text()
+    expect(home).not.toContain('data-live')
+    expect(home).not.toContain('<script')
+  })
 })

@@ -156,9 +156,9 @@ export function runBody(d: {
     .map((e) => `<li>${e.text}<br><span class="small muted">${when(e.at)}</span></li>`)
     .join('')
   return `<p class="small"><a href="/dashboard/${g}/runs">All runs</a></p>
-<h1>Run ${esc(run.id)} ${runPill(run.status)}</h1>${d.notice ?? ''}${run.note ? `<p class="lede">${esc(run.note)}</p>` : ''}
+<div data-live-region="run" data-live-run="${esc(run.id)}"><h1>Run ${esc(run.id)} ${runPill(run.status)}</h1>${d.notice ?? ''}${run.note ? `<p class="lede">${esc(run.note)}</p>` : ''}
 <div class="grid"><section class="card"><h2>Summary</h2><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
 <p><a class="button secondary" href="/dashboard/${g}/runs/${encodeURIComponent(run.id)}/csv">Download CSV</a></p></section>${originCard}</div>
 <section class="card"><h2>Lines</h2>${lines}</section>
-<section class="card"><h2>Timeline</h2><ol class="timeline">${steps}</ol>${run.status === 'failed' && run.failure && !run.failure.retryable ? `<p>${pill('needs a person', 'bad')}</p>` : ''}</section>`
+<section class="card"><h2>Timeline</h2><ol class="timeline">${steps}</ol>${run.status === 'failed' && run.failure && !run.failure.retryable ? `<p>${pill('needs a person', 'bad')}</p>` : ''}</section></div>`
 }

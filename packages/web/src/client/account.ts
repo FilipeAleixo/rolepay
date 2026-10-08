@@ -2,6 +2,7 @@
 // send it on. The passkey signs in the browser and the transfer goes straight to Tempo: the
 // server serves this page and the passkey ceremony, nothing else.
 import { $, busy, displayMicros, explainPasskeyError, fill, formatMicros, show, status } from './dom.js'
+import { type EventSourceFactory, type EventSourceLike, countUp, follow, nextFrame, prefersReducedMotion } from './live.js'
 import { passkeys } from './passkey.js'
 import { loadPayouts, renderPayouts } from './payouts.js'
 import { checkSend, maxSendable } from './send.js'
@@ -17,6 +18,15 @@ export type AccountConfig = {
   tokens: { address: string; label: string }[]
 }
 
+/** One payment as /account/live sends it (the parts this page uses). */
+type Payment = { key: string; tokenAddress: string }
+
+/** The RPC may answer a moment behind the payment event: read again this often, this many times, until the balance moves. */
+const BALANCE_RETRY_MS = 750
+const BALANCE_TRIES = 4
+/** How long the gold glow stays on a balance that just grew. */
+const GLOW_MS = 1_600
+
 export function startAccount(config: AccountConfig) {
   const keys = passkeys(config.network)
   const sponsored = config.sponsorUrl !== null
@@ -28,6 +38,13 @@ export function startAccount(config: AccountConfig) {
   const selected = () => $<HTMLSelectElement>('#token')?.value ?? chain.feeToken
   const label = (token: string) => config.tokens.find((t) => t.address === token)?.label ?? token
   let address: string | null = null
+  /** Each shown balance's row and number, by token: what a payment counts up. */
+  const shown = new Map<string, { row: HTMLElement; amount: HTMLElement }>()
+  /** Received rows already on the page (run:line), so only new ones slide in. */
+  const known = new Set<string>()
+  let receivedRead = false
+  let live: EventSourceLike | null = null
+  let counting = Promise.resolve()
 
   async function open(account: string) {
     address = account.toLowerCase()
@@ -52,10 +69,85 @@ export function startAccount(config: AccountConfig) {
     const signin = $<HTMLButtonElement>('#payouts-signin')
     if (signin) signin.hidden = list !== null
     if (list) renderPayouts(box, list, status)
+    // The server knows this passkey (a session): what arrived, and what arrives from now on.
+    if (list) {
+      void received().catch(() => {})
+      followPayments()
+    }
   }
 
-  /** Every known token's balance; the ones held are listed (the usual payout token always). Built with the DOM, never HTML strings. */
-  async function refresh() {
+  /**
+   * The Received list, rendered by the server for the passkey session's own address (the page sends
+   * no address). Rows that were not on the page before slide in.
+   */
+  async function received() {
+    const box = $('#received')
+    if (!box) return
+    const res = await fetch('/account/received', { credentials: 'same-origin' })
+    if (!res.ok) return
+    box.innerHTML = await res.text()
+    show('[data-step="received"]', true)
+    for (const li of Array.from(box.querySelectorAll<HTMLElement>('li[data-key]'))) {
+      const key = li.getAttribute('data-key') ?? ''
+      if (receivedRead && !known.has(key)) li.classList.add('arrived')
+      known.add(key)
+    }
+    receivedRead = true
+  }
+
+  /** Payments to this account as they land (server-sent events), once per page. */
+  function followPayments() {
+    const Source = (globalThis as { EventSource?: EventSourceFactory }).EventSource
+    if (live || !Source) return
+    live = follow(
+      '/account/live',
+      { payment: (data) => void arrived(data as Payment) },
+      {
+        EventSource: Source,
+        // Back after a dropped connection: re-read what may have landed meanwhile.
+        onReconnect: () => {
+          void received().catch(() => {})
+          void refresh().catch(() => {})
+        },
+      },
+    )
+  }
+
+  /** A payment landed: the new row slides in, and the balance counts up to what the chain now says. */
+  async function arrived(p: Payment) {
+    await Promise.all([received().catch(() => {}), (counting = counting.then(() => countBalance(p.tokenAddress)).catch(() => {}))])
+  }
+
+  /** Reads the token's balance from the chain (so it is true even if the event raced it) and counts up to it. */
+  async function countBalance(token: string) {
+    if (!address) return
+    const account = address
+    const before = balances.get(token) ?? 0n
+    let after = before
+    for (let i = 0; i < BALANCE_TRIES; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, BALANCE_RETRY_MS))
+      after = await balanceOf(chain, token, account).catch(() => after)
+      if (after !== before) break
+    }
+    balances.set(token, after)
+    // A token this account did not hold yet: its row appears (at the old value), then counts up.
+    if (!shown.has(token)) await refresh(new Map([[token, before]]))
+    const el = shown.get(token)
+    if (!el) return
+    const reduced = prefersReducedMotion()
+    if (!reduced && after > before) {
+      el.row.classList.add('glow')
+      setTimeout(() => el.row.classList.remove('glow'), GLOW_MS)
+    }
+    await countUp(el.amount, before, after, { format: (m) => displayMicros(m.toString()), reducedMotion: reduced, frame: nextFrame })
+    describe()
+  }
+
+  /**
+   * Every known token's balance; the ones held are listed (the usual payout token always). Built with
+   * the DOM, never HTML strings. `showing` overrides what a row first shows (a balance about to count up).
+   */
+  async function refresh(showing: Map<string, bigint> = new Map()) {
     if (!address) return
     const account = address
     const rows = await Promise.all(
@@ -65,14 +157,17 @@ export function startAccount(config: AccountConfig) {
         return { t, balance }
       }),
     )
+    shown.clear()
     $('#balances')?.replaceChildren(
       ...rows
         .filter((r, i) => i === 0 || (r.balance ?? 0n) > 0n)
         .map((r) => {
           const p = document.createElement('p')
           const strong = document.createElement('strong')
-          strong.textContent = r.balance === null ? 'unknown' : displayMicros(r.balance.toString())
+          const value = showing.get(r.t.address) ?? r.balance
+          strong.textContent = value === null ? 'unknown' : displayMicros(value.toString())
           p.append(strong, ` ${r.t.label}`)
+          shown.set(r.t.address, { row: p, amount: strong })
           return p
         }),
     )

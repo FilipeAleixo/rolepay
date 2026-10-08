@@ -3,6 +3,7 @@
 // for a refused or cancelled send. The real passkey and chain path is the Playwright e2e
 // (apps/server/e2e/mainnetPath.spec.ts).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { FakeEventSource } from '../../test/fakeEventSource.js'
 
 const h = vi.hoisted(() => ({
   account: null as null | { address: string },
@@ -35,6 +36,29 @@ class El {
   className = ''
   disabled = false
   children: (El | string)[] = []
+  attrs: Record<string, string> = {}
+  classes = new Set<string>()
+  classList = { add: (c: string) => this.classes.add(c), remove: (c: string) => this.classes.delete(c) }
+  /** The list items a server fragment holds (one per data-key), kept between reads like real nodes. */
+  items: El[] = []
+  private html = ''
+  get innerHTML() {
+    return this.html
+  }
+  set innerHTML(v: string) {
+    this.html = v
+    this.items = [...v.matchAll(/data-key="([^"]+)"/g)].map((m) => {
+      const li = new El()
+      li.attrs['data-key'] = m[1] ?? ''
+      return li
+    })
+  }
+  querySelectorAll(_selector: string) {
+    return this.items
+  }
+  getAttribute(name: string) {
+    return this.attrs[name] ?? null
+  }
   private listeners = new Map<string, ((e: { preventDefault(): void }) => void)[]>()
   addEventListener(type: string, fn: (e: { preventDefault(): void }) => void) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), fn])
@@ -235,5 +259,83 @@ describe('the account page (browser code)', () => {
     await vi.waitFor(() => expect((ids.payouts as El).children).toHaveLength(3))
     expect((ids['payouts-signin'] as El).hidden).toBe(true)
     expect((ids.payouts as El).text).toContain('Mods guild pays you in AlphaUSD.')
+  })
+
+  describe('live: a payment lands while the page is open', () => {
+    const PAYOUTS = { ok: true, payouts: [] }
+    const row = (key: string) => `<li data-key="${key}"><strong>+1 AlphaUSD</strong><span> · from Mods · pay run ${key.split(':')[0]}, line 1</span></li>`
+    let receivedHtml = ''
+    let frames = 0
+    let reduced = false
+
+    beforeEach(() => {
+      receivedHtml = row('run_1:1')
+      frames = 0
+      reduced = false
+      vi.stubGlobal('fetch', async (url: string) => (url === '/account/payouts' ? new Response(JSON.stringify(PAYOUTS)) : new Response(receivedHtml)))
+      vi.stubGlobal('EventSource', FakeEventSource)
+      vi.stubGlobal('matchMedia', (q: string) => ({ matches: reduced && q.includes('reduce') }))
+      let now = 0
+      vi.stubGlobal('requestAnimationFrame', (step: (t: number) => void) => {
+        frames++
+        setTimeout(() => step((now += 100)), 0)
+      })
+    })
+
+    const amount = () => ((ids.balances as El).children[0] as El).children[0] as El
+    const balanceRow = () => (ids.balances as El).children[0] as El
+    async function opened() {
+      FakeEventSource.last = null
+      page('https://sponsor.moderato.tempo.xyz', ['payouts', 'payouts-signin', 'received'])
+      await vi.waitFor(() => expect(FakeEventSource.last?.url).toBe('/account/live'))
+      await vi.waitFor(() => expect((ids.received as El).items).toHaveLength(1))
+      await vi.waitFor(() => expect(amount().textContent).toBe('2'))
+      return FakeEventSource.last as unknown as FakeEventSource
+    }
+
+    it('counts the balance up from the old value to what the chain says, with a glow, and slides the new row in', async () => {
+      const source = await opened()
+      const shown: string[] = []
+      const el = amount()
+      let text = el.textContent
+      Object.defineProperty(el, 'textContent', { get: () => text, set: (v: string) => shown.push((text = v)) })
+      h.balances.set(ALPHA, 3_000_000n)
+      receivedHtml = row('run_2:1') + row('run_1:1')
+      source.emit('payment', { key: 'run_2:1', tokenAddress: ALPHA })
+      await vi.waitFor(() => expect(text).toBe('3'))
+      expect(frames).toBeGreaterThan(3)
+      expect(shown.length).toBeGreaterThan(3) // in between values, not one jump
+      expect(shown.some((v) => v !== '2' && v !== '3')).toBe(true)
+      expect(balanceRow().classes.has('glow')).toBe(true)
+      const [fresh, old] = (ids.received as El).items
+      expect([fresh?.attrs['data-key'], fresh?.classes.has('arrived')]).toEqual(['run_2:1', true])
+      expect([old?.attrs['data-key'], old?.classes.has('arrived')]).toEqual(['run_1:1', false])
+      expect((steps.received as El | undefined)?.hidden ?? false).toBe(false)
+    })
+
+    it('with reduced motion, just shows the new balance: no animation frames, no glow', async () => {
+      reduced = true
+      const source = await opened()
+      h.balances.set(ALPHA, 5_000_000n)
+      source.emit('payment', { key: 'run_2:1', tokenAddress: ALPHA })
+      await vi.waitFor(() => expect(amount().textContent).toBe('5'))
+      expect(frames).toBe(0)
+      expect(balanceRow().classes.has('glow')).toBe(false)
+    })
+
+    it('reads the balance again when the RPC answers behind the event, and shows a token it did not hold yet', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] })
+      try {
+        reduced = true
+        const source = await opened()
+        source.emit('payment', { key: 'run_2:1', tokenAddress: PATH })
+        await vi.advanceTimersByTimeAsync(100)
+        h.balances.set(PATH, 4_000_000n) // the chain catches up after the first read
+        await vi.advanceTimersByTimeAsync(2_000)
+        await vi.waitFor(() => expect((ids.balances as El).text).toBe('2 AlphaUSD4 pathUSD'))
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 })
