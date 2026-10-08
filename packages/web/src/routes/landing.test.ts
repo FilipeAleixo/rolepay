@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { webHarness } from '../../test/harness.js'
 import { BOT_PERMISSIONS, installUrl, landingPage } from '../views/landing.js'
-import { esc } from '../views/page.js'
+import { STYLE, esc } from '../views/page.js'
 
 const APP_ID = '500000000000000001'
+const INSTALL = `https://discord.com/oauth2/authorize?client_id=${APP_ID}&amp;scope=bot+applications.commands&amp;permissions=84992`
 const ENTITIES: Record<string, string> = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" }
 const text = (html: string) =>
   html
@@ -11,18 +12,34 @@ const text = (html: string) =>
     .replace(/<[^>]+>/g, ' ')
     .replace(/&(?:amp|lt|gt|quot|#39);/g, (e) => ENTITIES[e] as string)
     .replace(/\s+/g, ' ')
+/** One part of the page, by its opening tag. */
+const part = (html: string, open: RegExp, close: string) => {
+  const m = open.exec(html)
+  return m ? html.slice(m.index, html.indexOf(close, m.index)) : ''
+}
+const topBar = (html: string) => part(html, /<header class="topbar">/, '</header>')
+const hero = (html: string) => part(html, /<section class="hero"/, '</section>')
+const finalBand = (html: string) => part(html, /<section class="final"/, '</section>')
 
-/** What it does: six cards, each a title and one sentence. */
-const FEATURES = [
-  ['Pay runs in one transaction.', 'Mods, staff and bounty winners, paid in one batch with a memo on every line.'],
-  ['AI drafts, a human approves.', 'From a message, or a rule like \u201ceveryone who helped in #support this week\u201d. Nothing pays until the Treasurer approves.'],
-  ['Standing policies on autopilot.', 'Write the rule once. It runs on schedule, with a veto window and no AI at runtime.'],
-  ['No wallet needed.', 'Recipients get a Tempo account with a passkey: no seed phrase, no gas. Or they use a wallet they already have.'],
-  ['The stablecoin they choose.', "Swapped on Tempo's stablecoin exchange inside the same transaction."],
-  ['Funding with attribution.', 'Each sponsor gets its own deposit address. Every deposit is credited and labelled.'],
+/** How it works: four steps, a title and a line each. */
+const STEPS = [
+  ['Connect a treasury', "The community's own Tempo account, its root key a treasurer's passkey. Rolepay never holds the funds."],
+  ['Give the bot a budget', 'A key with an expiry, a spending limit per period and one allowed call. The chain enforces each one.'],
+  ['Pay', 'One run for a role or a list, approved with one button. Or a rule that runs on schedule, with a veto window.'],
+  ['Everyone sees it', 'A receipt by DM for each person, a live dashboard, and an audit log you can export as CSV.'],
 ] as const
 
-/** Why you can trust it: three rows, each a bold line and a muted one. */
+/** What it does: six lines, a bold lead and the rest. */
+const FEATURES = [
+  ['Pay runs in one transaction.', 'Mods, staff and bounty winners, with a memo on every line.'],
+  ['AI drafts, a human approves.', 'From a message, or a rule like “everyone who helped in #support this week”.'],
+  ['Standing policies on autopilot.', 'Write the rule once. No AI at runtime.'],
+  ['No wallet needed.', 'A passkey account: no seed phrase, no gas. Or a wallet they already have.'],
+  ['The stablecoin they choose.', "Swapped on Tempo's exchange inside the same transaction."],
+  ['Funding with attribution.', 'Each sponsor gets its own deposit address, every deposit labelled.'],
+] as const
+
+/** Why you can trust it: three points, a statement and its proof each. */
 const TRUST = [
   ["The community's own account holds the funds.", "Rolepay never does. Its root key is the treasurer's passkey."],
   ['The bot, and each policy, holds only a key with a limit the chain enforces.', 'Expiry, a spending limit per period, and one allowed call. Over the limit, Tempo refuses the whole batch.'],
@@ -30,51 +47,91 @@ const TRUST = [
 ] as const
 
 describe('the home page (/)', () => {
-  it('says what Rolepay is, what it does, why you can trust it, and where to go: the dashboard, the install link, the source', async () => {
+  it('says what Rolepay is with a picture of it, the numbers, how it works, what it does, why you can trust it, and where to go', async () => {
     const res = await webHarness({ discordAppId: APP_ID }).send('/')
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/text\/html/)
     const html = await res.text()
     const t = text(html)
-    expect(html).toMatch(/<h1 class="wordmark"><svg class="mark"[^>]*aria-hidden="true"[\s\S]*<\/svg>Rolepay<\/h1>/)
-    expect(t).toContain('Pay the people who run your community, from Discord, in stablecoins on Tempo.')
-    expect(html).toMatch(/<h2 id="what">What it does<\/h2>/)
-    for (const [title, line] of FEATURES) {
-      expect(html).toContain(`<h3>${esc(title)}</h3>`)
+    expect(html).toContain('<h1 id="hero-title">Pay the people who run your community.</h1>')
+    expect(t).toContain("From Discord, in stablecoins on Tempo. The money stays in the community's own account, and the bot can spend only what the chain allows.")
+    expect(html).toContain('<meta name="description" content="Pay the people who run your community, from Discord, in stablecoins on Tempo.">')
+    // The product shot: one image to assistive tech, a paid run and the budget with its on-chain limit.
+    expect(hero(html)).toMatch(/<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction, and the bot key's budget for the period with its on-chain limit">/)
+    expect(hero(html)).toContain('Paid in one transaction. Approved by <span class="at">@Treasurer</span>.')
+    expect(t).toContain('On-chain limit')
+    // The numbers, as the README states them.
+    for (const n of ['10 chain proofs on Tempo testnet', '1,800+ tests, no network needed', '$0.003 per AI proposal']) expect(t).toContain(n)
+    expect(html).toContain('<h2 id="how-title">')
+    expect(t).toContain('AI can draft a run. Only a person can approve it, and only the chain decides how much the bot can spend.')
+    STEPS.forEach(([title, line], i) => {
+      expect(html).toContain(`<span class="n" aria-hidden="true">0${i + 1}</span><div><h3>${esc(title)}</h3>`)
       expect(t).toContain(`${title} ${line}`)
+    })
+    expect(html).toContain('<h2 id="what">What it does</h2>')
+    for (const [lead, rest] of FEATURES) {
+      expect(html).toContain(`<strong>${esc(lead)}</strong>`)
+      expect(t).toContain(`${lead} ${rest}`)
     }
-    expect(html).toMatch(/<h2 id="trust">Why you can trust it<\/h2>/)
+    expect(html).toContain('<h2 id="trust">Why you can trust it</h2>')
     for (const [bold, muted] of TRUST) {
       expect(html).toContain(`<strong>${esc(bold)}</strong>`)
       expect(t).toContain(`${bold} ${muted}`)
     }
-    expect(html).toContain('<a class="button" href="/dashboard">Open the dashboard</a>')
-    expect(html).toContain(`href="https://discord.com/oauth2/authorize?client_id=${APP_ID}&amp;scope=bot+applications.commands&amp;permissions=84992"`)
+    expect(finalBand(html)).toContain(`<a class="button" href="${INSTALL}" rel="noreferrer">Add Rolepay to a server</a><a class="button secondary" href="/dashboard">Open the dashboard</a>`)
     expect(html).toContain('href="https://github.com/FilipeAleixo/rolepay"')
     expect(t).toContain("Built for Colosseum's Crypto World's Fair, Tempo track.")
     expect(t).toContain('Testnet demo')
     // Server-rendered and calm: no script of any kind, and no em dashes in the copy.
     expect(html).not.toMatch(/<script/)
-    expect(t).not.toContain('\u2014') // no em dash
+    expect(t).not.toContain('—') // no em dash
   })
 
-  it('reads in order without the pictures: one h1, the two section headings, a title per card, and every icon hidden from assistive tech', () => {
+  it('has a top bar: the mark and the name on the left; on the right the dashboard, quietly, then the gold "Add to Discord"', async () => {
+    const html = await (await webHarness({ discordAppId: APP_ID }).send('/')).text()
+    const bar = topBar(html)
+    expect(bar).toMatch(/^<header class="topbar"><div class="bar"><p class="logo"><svg class="mark" width="28" height="28" aria-hidden="true"[\s\S]*<\/svg><span>Rolepay<\/span><\/p>/)
+    expect(bar).toContain(`<nav aria-label="Main"><a class="quiet" href="/dashboard">Dashboard</a><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a></nav>`)
+    // The hero leads with the same action, plus a way down the page.
+    expect(hero(html)).toContain(`<p class="actions"><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a><a class="more" href="#how">How it works</a></p>`)
+    expect(html).toContain('<section class="how" id="how"')
+    // On a phone the bar keeps the mark, the name and the gold button; the dashboard link waits further down.
+    expect(STYLE).toMatch(/@media \(max-width:40rem\)\{\.topbar \.quiet\{display:none\}/)
+  })
+
+  it('reads in order without the pictures: one h1, a heading per section, a title per step, and every icon and light hidden from assistive tech', () => {
     const html = landingPage({ testnet: true })
     const headings = [...html.matchAll(/<h([1-6])[^>]*>/g)].map((m) => Number(m[1]))
-    expect(headings).toEqual([1, 2, 3, 3, 3, 3, 3, 3, 2])
-    expect(html).toMatch(/<section aria-labelledby="what">/)
-    expect(html).toMatch(/<section aria-labelledby="trust">/)
+    expect(headings).toEqual([1, 2, 3, 3, 3, 3, 2, 2, 2])
+    for (const id of ['hero-title', 'how-title', 'what', 'trust', 'final-title']) expect(html).toContain(`aria-labelledby="${id}"`)
+    expect(html).toContain('<div class="atmos" aria-hidden="true">')
     const svgs = [...html.matchAll(/<svg\b[^>]*>/g)].map((m) => m[0])
     for (const svg of svgs) {
       expect(svg).toContain('aria-hidden="true"')
       expect(svg).toContain('focusable="false"')
     }
-    // The line icons, one per card and per trust row: one 24 by 24 grid, one stroke weight, the gold from CSS (currentColor).
+    // The line icons, one per detail and per trust point: one 24 by 24 grid, one stroke weight, the colour from CSS.
     const icons = svgs.filter((svg) => !svg.includes('class="mark"'))
     expect(icons).toHaveLength(FEATURES.length + TRUST.length)
     for (const svg of icons) expect(svg).toMatch(/viewBox="0 0 24 24"[^>]*fill="none" stroke="currentColor" stroke-width="1.5"/)
     // The CSP allows the stylesheet by hash and nothing else: a style attribute would be refused.
     expect(html).not.toMatch(/\sstyle=/)
+  })
+
+  it('lets the light breathe only in CSS, on opacity and transform, and holds it still under reduced motion', () => {
+    const keyframes = [...STYLE.matchAll(/@keyframes (rp-breathe[\w-]*)\{([^@]*?)\}\}/g)]
+    expect(keyframes.map((k) => k[1])).toEqual(['rp-breathe', 'rp-breathe-cool'])
+    for (const [, , body] of keyframes) {
+      const properties = [...(body as string).matchAll(/([a-z-]+):/g)].map((m) => m[1])
+      expect(new Set(properties)).toEqual(new Set(['opacity', 'transform']))
+    }
+    // The animation is declared only for people who have not asked for less motion.
+    const animated = [...STYLE.matchAll(/animation:rp-breathe/g)].map((m) => m.index as number)
+    expect(animated.length).toBe(2)
+    const gate = STYLE.indexOf('@media (prefers-reduced-motion:no-preference){.glow')
+    expect(gate).toBeGreaterThan(-1)
+    for (const at of animated) expect(at).toBeGreaterThan(gate)
+    expect(STYLE.slice(gate, STYLE.indexOf('\n', gate))).toContain('animation:rp-breathe-cool')
   })
 
   it('shows the same page on testnet and mainnet, but for the testnet pill', () => {
@@ -83,11 +140,10 @@ describe('the home page (/)', () => {
     expect(testnet).toContain('<span class="testnet">Testnet demo</span>')
     expect(mainnet).not.toContain('Testnet')
     expect(mainnet).not.toContain('class="testnet"')
-    expect(testnet.replace('<p class="brand"><span class="testnet">Testnet demo</span></p>', '')).toBe(mainnet)
+    expect(testnet.replace('<p class="badge"><span class="testnet">Testnet demo</span></p>', '')).toBe(mainnet)
   })
 
   it('offers the install link only with a Discord application and ROLEPAY_PUBLIC_INSTALL on (by default on testnet, off on mainnet, where the pilot bot is private)', async () => {
-    const link = `href="https://discord.com/oauth2/authorize?client_id=${APP_ID}&amp;`
     const cases: Array<[Parameters<typeof webHarness>[0], boolean]> = [
       [{ discordAppId: APP_ID }, true],
       [{ discordAppId: APP_ID, publicInstall: false }, false],
@@ -95,16 +151,21 @@ describe('the home page (/)', () => {
       [{ mainnet: true, discordAppId: APP_ID, publicInstall: true }, true],
       [{ publicInstall: true }, false], // no application, nothing to install
     ]
+    const dashboard = '<a class="button" href="/dashboard">Open the dashboard</a>'
     for (const [opts, offered] of cases) {
       const html = await (await webHarness(opts).send('/')).text()
       const label = JSON.stringify(opts)
       if (offered) {
-        expect(html, label).toContain(`<a class="button secondary" ${link}`)
-        expect(html, label).toContain('Add Rolepay to a server')
+        expect(topBar(html), label).toContain(`<a class="quiet" href="/dashboard">Dashboard</a><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a>`)
+        expect(finalBand(html), label).toContain('Add Rolepay to a server')
       } else {
+        // The gold action becomes the dashboard everywhere, and nothing points at Discord's install page.
         expect(html, label).not.toContain('discord.com/oauth2')
+        expect(html, label).not.toContain('Add to Discord')
         expect(html, label).not.toContain('Add Rolepay to a server')
-        expect(html, label).toContain('<a class="button" href="/dashboard">Open the dashboard</a>')
+        expect(topBar(html), label).toContain(`<nav aria-label="Main">${dashboard}</nav>`)
+        expect(hero(html), label).toContain(`<p class="actions">${dashboard}<a class="more" href="#how">How it works</a></p>`)
+        expect(finalBand(html), label).toContain(`<nav class="cta" aria-label="Get started">${dashboard}<a class="source"`)
       }
     }
   })

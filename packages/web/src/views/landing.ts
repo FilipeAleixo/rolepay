@@ -16,6 +16,7 @@ export function installUrl(applicationId: string): string {
 
 export const SOURCE_URL = 'https://github.com/FilipeAleixo/rolepay'
 
+/** The page's description for search engines and link previews. */
 const TAGLINE = 'Pay the people who run your community, from Discord, in stablecoins on Tempo.'
 
 /**
@@ -40,29 +41,31 @@ const ICONS = {
   log: '<rect x="4.5" y="3.5" width="15" height="17" rx="2.6"/><path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h4.2"/>',
 } as const
 
-const icon = (name: keyof typeof ICONS) =>
-  `<span class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg></span>`
+type IconName = keyof typeof ICONS
 
-/** What it does: a card each, an icon, a title and one sentence. */
-const FEATURES: ReadonlyArray<{ icon: keyof typeof ICONS; title: string; line: string }> = [
-  { icon: 'coins', title: 'Pay runs in one transaction.', line: 'Mods, staff and bounty winners, paid in one batch with a memo on every line.' },
-  {
-    icon: 'spark',
-    title: 'AI drafts, a human approves.',
-    line: 'From a message, or a rule like “everyone who helped in #support this week”. Nothing pays until the Treasurer approves.',
-  },
-  { icon: 'clock', title: 'Standing policies on autopilot.', line: 'Write the rule once. It runs on schedule, with a veto window and no AI at runtime.' },
-  {
-    icon: 'fingerprint',
-    title: 'No wallet needed.',
-    line: 'Recipients get a Tempo account with a passkey: no seed phrase, no gas. Or they use a wallet they already have.',
-  },
-  { icon: 'swap', title: 'The stablecoin they choose.', line: "Swapped on Tempo's stablecoin exchange inside the same transaction." },
-  { icon: 'deposit', title: 'Funding with attribution.', line: 'Each sponsor gets its own deposit address. Every deposit is credited and labelled.' },
+const icon = (name: IconName, size: number) =>
+  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${ICONS[name]}</svg>`
+
+/** How it works: four steps, from the treasury to the record everyone can see. */
+const STEPS: ReadonlyArray<{ title: string; line: string }> = [
+  { title: 'Connect a treasury', line: "The community's own Tempo account, its root key a treasurer's passkey. Rolepay never holds the funds." },
+  { title: 'Give the bot a budget', line: 'A key with an expiry, a spending limit per period and one allowed call. The chain enforces each one.' },
+  { title: 'Pay', line: 'One run for a role or a list, approved with one button. Or a rule that runs on schedule, with a veto window.' },
+  { title: 'Everyone sees it', line: 'A receipt by DM for each person, a live dashboard, and an audit log you can export as CSV.' },
 ]
 
-/** Why you can trust it: the trust model, a bold line and a muted line each. */
-const TRUST: ReadonlyArray<{ icon: keyof typeof ICONS; bold: string; muted: string }> = [
+/** What it does, in detail: one line each. `cool` takes the second accent, for rhythm. */
+const FEATURES: ReadonlyArray<{ icon: IconName; title: string; line: string; cool?: boolean }> = [
+  { icon: 'coins', title: 'Pay runs in one transaction.', line: 'Mods, staff and bounty winners, with a memo on every line.' },
+  { icon: 'spark', title: 'AI drafts, a human approves.', line: 'From a message, or a rule like “everyone who helped in #support this week”.', cool: true },
+  { icon: 'clock', title: 'Standing policies on autopilot.', line: 'Write the rule once. No AI at runtime.' },
+  { icon: 'fingerprint', title: 'No wallet needed.', line: 'A passkey account: no seed phrase, no gas. Or a wallet they already have.' },
+  { icon: 'swap', title: 'The stablecoin they choose.', line: "Swapped on Tempo's exchange inside the same transaction.", cool: true },
+  { icon: 'deposit', title: 'Funding with attribution.', line: 'Each sponsor gets its own deposit address, every deposit labelled.' },
+]
+
+/** Why you can trust it: the trust model, a statement and its proof each. */
+const TRUST: ReadonlyArray<{ icon: IconName; bold: string; muted: string }> = [
   { icon: 'vault', bold: "The community's own account holds the funds.", muted: "Rolepay never does. Its root key is the treasurer's passkey." },
   {
     icon: 'key',
@@ -73,24 +76,72 @@ const TRUST: ReadonlyArray<{ icon: keyof typeof ICONS; bold: string; muted: stri
 ]
 
 /**
- * The home page at /: what Rolepay is, what it does, why you can trust it, and where to go next.
- * Server-rendered, no script. The same page on every network, but for the testnet pill. Without a
- * Discord application id there is no install link.
+ * By the numbers, as the README states them: the chain proofs it links on Moderato's explorer, the
+ * default suite (rounded down, so it stays true as tests are added) and a warm AI proposal's cost.
+ */
+const PROOF: ReadonlyArray<{ value: string; label: string }> = [
+  { value: '10', label: 'chain proofs on Tempo testnet' },
+  { value: '1,800+', label: 'tests, no network needed' },
+  { value: '$0.003', label: 'per AI proposal' },
+]
+
+/** The payouts in the product shot. Made-up people. */
+const PAYOUTS = [
+  ['@mira', '30'],
+  ['@kofi', '30'],
+  ['@ines', '40'],
+  ['@theo', '20'],
+] as const
+
+/**
+ * The product shot: a paid run as Discord shows it, and the bot key's budget as the dashboard's
+ * "At a glance" draws it, the limit a hard gold line. Static, and one image to assistive tech.
+ */
+const productShot = () => `<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction, and the bot key's budget for the period with its on-chain limit">
+<div class="msg"><p class="who">${mark(32)}<b>Rolepay</b><span class="app">App</span><span class="when">Today at 18:00</span></p>
+<div class="embed"><p class="e-title">Paid</p><p class="e-note">Weekly mods</p>
+<ul class="lines">${PAYOUTS.map(([who, amount]) => `<li><span class="at">${who}</span><span class="amt">${amount} USDC.e</span></li>`).join('')}</ul>
+<p class="e-status">Paid in one transaction. Approved by <span class="at">@Treasurer</span>.</p><p class="e-foot">Run 42</p></div></div>
+<div class="budget"><p class="b-label">Bot key, spent this period</p><p class="b-amount"><strong>120</strong> of 200 USDC.e</p>
+<div class="b-bar"><span class="b-fill"></span><span class="b-limit"></span></div>
+<p class="b-row"><span>Resets in 12 days</span><span class="b-lim">On-chain limit</span></p>
+<p class="b-cap">Over the limit, Tempo refuses the whole batch.</p></div>
+</div>`
+
+/**
+ * The home page at /: what Rolepay is (with a picture of it working), the numbers, how it works,
+ * the detail, why you can trust it, and where to go next. Server-rendered, no script; the light
+ * behind the hero breathes in CSS only and holds still under reduced motion. The same page on
+ * every network, but for the testnet pill. With a Discord application id (the server passes one
+ * only when ROLEPAY_PUBLIC_INSTALL is on) "Add to Discord" leads; without one, the dashboard does.
  */
 export function landingPage(opts: { testnet: boolean; discordAppId?: string | undefined }): string {
-  const install = opts.discordAppId ? `<a class="button secondary" href="${esc(installUrl(opts.discordAppId))}" rel="noreferrer">Add Rolepay to a server</a>` : ''
-  const features = FEATURES.map((f) => `<li>${icon(f.icon)}<h3>${esc(f.title)}</h3><p>${esc(f.line)}</p></li>`).join('')
-  const trust = TRUST.map((r) => `<li>${icon(r.icon)}<p><strong>${esc(r.bold)}</strong><span>${esc(r.muted)}</span></p></li>`).join('')
+  const href = opts.discordAppId ? esc(installUrl(opts.discordAppId)) : null
+  const dashboard = '<a class="button" href="/dashboard">Open the dashboard</a>'
+  const install = (label: string) => `<a class="button" href="${href}" rel="noreferrer">${label}</a>`
+  const bar = href ? `<a class="quiet" href="/dashboard">Dashboard</a>${install('Add to Discord')}` : dashboard
+  const hero = href ? install('Add to Discord') : dashboard
+  const final = href ? `${install('Add Rolepay to a server')}<a class="button secondary" href="/dashboard">Open the dashboard</a>` : dashboard
   return `<!doctype html>
 <html lang="en">${head({ title: 'Rolepay', style: STYLE, description: TAGLINE, index: true })}
-<body><main class="home">${opts.testnet ? '<p class="brand"><span class="testnet">Testnet demo</span></p>' : ''}
-<h1 class="wordmark">${mark(52)}Rolepay</h1>
-<p class="tagline">${TAGLINE}</p>
-<section aria-labelledby="what"><h2 id="what">What it does</h2>
-<ul class="features">${features}</ul></section>
-<section aria-labelledby="trust"><h2 id="trust">Why you can trust it</h2>
-<ul class="trust">${trust}</ul></section>
-<nav class="cta" aria-label="Get started"><a class="button" href="/dashboard">Open the dashboard</a>${install}<a class="source" href="${SOURCE_URL}" rel="noreferrer">Source on GitHub</a></nav>
-<p class="footnote">${esc("Built for Colosseum's Crypto World's Fair, Tempo track.")}</p>
+<body><div class="atmos" aria-hidden="true"><span class="glow warm"></span><span class="glow cool"></span></div>
+<header class="topbar"><div class="bar"><p class="logo">${mark(28)}<span>Rolepay</span></p><nav aria-label="Main">${bar}</nav></div></header>
+<main class="home">
+<section class="hero" aria-labelledby="hero-title"><div class="copy">${opts.testnet ? '<p class="badge"><span class="testnet">Testnet demo</span></p>' : ''}
+<h1 id="hero-title">Pay the people who run your community.</h1>
+<p class="sub">From Discord, in stablecoins on Tempo. The money stays in the community's own account, and the bot can spend only what the chain allows.</p>
+<p class="actions">${hero}<a class="more" href="#how">How it works</a></p></div>
+${productShot()}</section>
+<section class="proof" aria-label="By the numbers"><ul>${PROOF.map((p) => `<li><span class="num">${esc(p.value)}</span><span class="what">${esc(p.label)}</span></li>`).join('')}</ul></section>
+<section class="how" id="how" aria-labelledby="how-title"><div class="intro"><p class="kicker">How it works</p><h2 id="how-title">From your treasury to a paid batch, with a person approving what matters.</h2>
+<p class="lede">AI can draft a run. Only a person can approve it, and only the chain decides how much the bot can spend.</p></div>
+<ol class="steps">${STEPS.map((s, i) => `<li><span class="n" aria-hidden="true">0${i + 1}</span><div><h3>${esc(s.title)}</h3><p>${esc(s.line)}</p></div></li>`).join('')}</ol></section>
+<section class="details" aria-labelledby="what"><h2 id="what">What it does</h2>
+<ul class="features">${FEATURES.map((f) => `<li${f.cool ? ' class="cool"' : ''}>${icon(f.icon, 22)}<p><strong>${esc(f.title)}</strong> ${esc(f.line)}</p></li>`).join('')}</ul></section>
+<section class="trust" aria-labelledby="trust"><h2 id="trust">Why you can trust it</h2>
+<ul>${TRUST.map((r) => `<li><span class="ic">${icon(r.icon, 24)}</span><p><strong>${esc(r.bold)}</strong><span>${esc(r.muted)}</span></p></li>`).join('')}</ul></section>
+<section class="final" aria-labelledby="final-title"><h2 id="final-title">Pay your people from Discord.</h2>
+<nav class="cta" aria-label="Get started">${final}<a class="source" href="${SOURCE_URL}" rel="noreferrer">Source on GitHub</a></nav>
+<p class="footnote">${esc("Built for Colosseum's Crypto World's Fair, Tempo track.")}</p></section>
 </main></body></html>`
 }
