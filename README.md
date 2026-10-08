@@ -174,7 +174,7 @@ AI writes the rule once. Humans approve it. Code runs it. The chain caps it.
 - `apps/server`: the composition root (Hono).
 - `docs/ARCHITECTURE.md`: the design. `docs/THREAT-MODEL.md`: the threat model.
 
-See `docs/ARCHITECTURE.md` for the design and `apps/server/README.md` to run it (and, under "Deploying", how the hosted servers run on Fly.io). The testnet demo runs at `demo.rolepay.app`; mainnet is prepared for `app.rolepay.app` (USDC.e payouts, runbook in `apps/server/MAINNET.md`).
+See `docs/ARCHITECTURE.md` for the design and `apps/server/README.md` to run it (and, under "Deploying", how the hosted servers run on Fly.io). The testnet demo runs at `demo.rolepay.app`; mainnet is prepared for `web.rolepay.app` (USDC.e payouts, runbook in `apps/server/MAINNET.md`).
 
 Rolepay was called payrun while it was built. Settings, data and Discord messages from then keep working: see "Renamed from payrun" in `docs/ARCHITECTURE.md`.
 

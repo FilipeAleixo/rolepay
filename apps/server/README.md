@@ -2,7 +2,7 @@
 
 The Rolepay server: Hono on Node, the composition root over `@rolepay/core`, `@rolepay/discord` and `@rolepay/web`. It serves the Discord interactions endpoint (`POST /discord/interactions`), `GET /health`, the recipient claim page (`/claim/:token`), the treasurer setup page (`/setup/:token`), the payee's account page (`/account`: sign in with the passkey, see the balance, send it on), the passkey ceremonies (`/webauthn/*`), the client bundle (`/assets/rolepay.js`) and the web dashboard (`/dashboard`, with "Sign in with Discord" at `/auth/discord`), and runs the crash-recovery sweep and the policy scheduler every 30 seconds.
 
-Everything below is testnet (Moderato). Secrets go only in the repo-root `.env`, which is gitignored. Mainnet (real money, <https://app.rolepay.app>) has its own runbook: [`MAINNET.md`](MAINNET.md).
+Everything below is testnet (Moderato). Secrets go only in the repo-root `.env`, which is gitignored. Mainnet (real money, <https://web.rolepay.app>) has its own runbook: [`MAINNET.md`](MAINNET.md).
 
 ## One-time setup (about 20 minutes)
 
@@ -42,7 +42,7 @@ You need: the Discord desktop app, a private test server where you are the owner
 
 6. **Start a tunnel** in its own terminal: `ngrok http 8787` (if ngrok reports connection refused, use `ngrok http 127.0.0.1:8787`). It prints a forwarding URL such as `https://<name>.ngrok-free.app`. Put `PUBLIC_URL=https://<name>.ngrok-free.app` in `.env`.
    - A free ngrok account has one static domain, so the URL usually stays the same. If it ever changes, update `PUBLIC_URL`, restart the server and repeat step 8.
-   - Passkeys are bound to that tunnel host: one made on `https://<name>.ngrok-free.app` only works there. That is fine for testing. The hosted servers are `https://demo.rolepay.app` (the testnet demo for judges, live) and `https://app.rolepay.app` (mainnet, prepared: [`MAINNET.md`](MAINNET.md)); each is its own `PUBLIC_URL`, and passkeys bind to the host (or `ROLEPAY_RP_ID`) for good, so passkeys from the tunnel or the demo do not carry over to mainnet.
+   - Passkeys are bound to that tunnel host: one made on `https://<name>.ngrok-free.app` only works there. That is fine for testing. The hosted servers are `https://demo.rolepay.app` (the testnet demo for judges, live) and `https://web.rolepay.app` (mainnet, prepared: [`MAINNET.md`](MAINNET.md)); each is its own `PUBLIC_URL`, and passkeys bind to the host (or `ROLEPAY_RP_ID`) for good, so passkeys from the tunnel or the demo do not carry over to mainnet.
    - The first time a browser opens a tunnel page, ngrok shows a "You are about to visit" warning: press Visit Site. Discord's requests to the interactions endpoint are not affected.
    - For a demo with other people, run `ngrok http 8787 --inspect=false`: ngrok's local inspector (127.0.0.1:4040) otherwise records every request and response body, including the claim links `/payee link` returns. Rolepay answers each interaction ID once, so a replay from the inspector gets 409 and no new link, but the recorded responses would still show the links.
 
@@ -216,7 +216,7 @@ Rolepay runs on Fly.io as one always-on machine per network, built from the repo
 | App | Config | URL | Network | Status |
 | --- | --- | --- | --- | --- |
 | `rolepay-demo` | `fly.demo.toml` | <https://demo.rolepay.app> (also <https://rolepay-demo.fly.dev>) | Moderato testnet, for judges | live |
-| `rolepay-app` | `fly.app.toml` | <https://app.rolepay.app> | mainnet (USDC.e payouts, fees from a pathUSD fee budget) | prepared, not created: the steps are in [`MAINNET.md`](MAINNET.md) |
+| `rolepay-app` | `fly.app.toml` | <https://web.rolepay.app> | mainnet (USDC.e payouts, fees from a pathUSD fee budget) | prepared, not created: the steps are in [`MAINNET.md`](MAINNET.md) |
 
 The demo: region `iad` (Ashburn, Virginia; moved from `cdg` on 2026-10-07 to sit next to Discord, whose servers are in the US: each Discord-to-server hop took 1 to 3 s from Paris), one `shared-cpu-1x` machine with 512 MB and 512 MB of swap, never stopped (`min_machines_running = 1`, no auto-stop: Discord needs an answer within 3 seconds, so no cold starts), health checked on `GET /health`. The SQLite file is `/data/rolepay.db` on the encrypted 1 GB volume `rolepay_demo_data` (Fly snapshots it daily, five days kept). Memory: the compiled server uses about 130 MB (the client bundle is built with the image, so no page request starts esbuild), which leaves about 330 MB available. About US$4.20 a month for the machine (Fly's price, October 2026) plus US$0.15 for the volume; the shared IPv4 is free (no dedicated one).
 

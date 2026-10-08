@@ -1,4 +1,4 @@
-# Fly.io: the Rolepay MAINNET app, https://app.rolepay.app (Tempo mainnet, chain 4217). REAL MONEY.
+# Fly.io: the Rolepay MAINNET app, https://web.rolepay.app (Tempo mainnet, chain 4217). REAL MONEY.
 # Prepared, not created. The runbook is apps/server/MAINNET.md: the production Discord
 # application, the app and its volume, the secrets, DNS, the first deploy, funding the treasury and
 # how to stop everything. `apps/server/test/flyConfig.test.ts` checks this file parses into a safe
@@ -11,7 +11,7 @@
 #   fly apps create rolepay-app
 #   fly volumes create rolepay_app_data --app rolepay-app --region iad --size 1
 #   fly deploy -c fly.app.toml --local-only --ha=false
-#   fly certs add app.rolepay.app -a rolepay-app
+#   fly certs add web.rolepay.app -a rolepay-app
 
 app = "rolepay-app"
 # Ashburn, next to Discord's servers, as the demo since 2026-10-07: from Paris each Discord-to-server
@@ -31,9 +31,9 @@ swap_size_mb = 512
   # Never on mainnet (config refuses both off the Moderato testnet anyway).
   ROLEPAY_DEV_SHORTCUTS = "false"
   ROLEPAY_DEMO_CONTROLS = "false"
-  PUBLIC_URL = "https://app.rolepay.app"
+  PUBLIC_URL = "https://web.rolepay.app"
   # Its own passkey domain: passkeys from the demo never work here, and the reverse.
-  ROLEPAY_RP_ID = "app.rolepay.app"
+  ROLEPAY_RP_ID = "web.rolepay.app"
   HOST = "0.0.0.0"
   PORT = "8787"
   ROLEPAY_DB_PATH = "/data/rolepay.db"

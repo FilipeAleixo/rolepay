@@ -181,7 +181,7 @@ describe('parseServerConfig', () => {
 
   it('on mainnet the pages must be on https: a treasury passkey made on localhost would only ever work on that machine', () => {
     expect(() => parseServerConfig(env({ ...MAINNET, PUBLIC_URL: 'http://localhost:8787' }))).toThrow(/PUBLIC_URL.*https.*mainnet/)
-    expect(parseServerConfig(env({ ...MAINNET, PUBLIC_URL: 'https://app.rolepay.app' })).web).toMatchObject({ origin: 'https://app.rolepay.app', rpId: 'app.rolepay.app' })
+    expect(parseServerConfig(env({ ...MAINNET, PUBLIC_URL: 'https://web.rolepay.app' })).web).toMatchObject({ origin: 'https://web.rolepay.app', rpId: 'web.rolepay.app' })
   })
 
   it('the passkey domain is config only: the origin from PUBLIC_URL, the rpId its host unless ROLEPAY_RP_ID says otherwise', () => {

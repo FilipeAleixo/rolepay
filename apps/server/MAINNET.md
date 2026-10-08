@@ -1,6 +1,6 @@
 # Rolepay on mainnet: the pilot runbook
 
-This is how to bring up the production Rolepay at <https://app.rolepay.app> on Tempo mainnet and run a small real-money pilot: two or three people paid real stablecoins, from a treasury of about US$20 to 50. Everything in the repo is ready (`fly.app.toml`, the config guards, the pages); what is left are the steps only you can do: a Discord application, a Fly app, secrets, DNS, and funding.
+This is how to bring up the production Rolepay at <https://web.rolepay.app> on Tempo mainnet and run a small real-money pilot: two or three people paid real stablecoins, from a treasury of about US$20 to 50. Everything in the repo is ready (`fly.app.toml`, the config guards, the pages); what is left are the steps only you can do: a Discord application, a Fly app, secrets, DNS, and funding.
 
 **Time:** about 1.5 hours, most of it waiting on a build, a certificate and a bridge. Do steps 1 to 7 the day before the pilot, so the day itself is only the pay run (step 8).
 
@@ -40,7 +40,7 @@ A new application, never the dev one (`Rolepay Dev` stays with the demo).
    - **Public Bot: off** for the pilot, so only you can add it to a server.
    - Privileged Gateway Intents: **all three off** (Presence, Server Members, Message Content). Rolepay needs none: it looks members up one by one, and Message Content is only for `/rolepay propose source:`, which the pilot does not need.
 5. **OAuth2:**
-   - Redirects, **Add Redirect**: `https://app.rolepay.app/auth/discord/callback`, **Save Changes**. Discord refuses any redirect not listed here, character for character.
+   - Redirects, **Add Redirect**: `https://web.rolepay.app/auth/discord/callback`, **Save Changes**. Discord refuses any redirect not listed here, character for character.
    - Client Secret, **Reset Secret**, copy it. This is the dashboard's "Sign in with Discord" (scopes `identify guilds`, requested by Rolepay itself; nothing to set here).
 
 Keep the four values for step 2. The bot's invite link (step 5) asks for scopes `bot applications.commands` and permissions **84992** = View Channels (1024) + Send Messages (2048) + Embed Links (16384) + Read Message History (65536).
@@ -81,21 +81,21 @@ curl -s https://rolepay-app.fly.dev/health      # {"ok":true,"network":"mainnet"
 fly logs -a rolepay-app --no-tail | grep '"listening"'
 ```
 
-The `listening` line must say `"network":"mainnet"`, `"chainId":4217`, `"payoutToken":"0x20c000000000000000000000b9537d11c60e8b50"`, `"fees":"fee_budget 0x20c0000000000000000000000000000000000000"`, `"publicUrl":"https://app.rolepay.app"`, `"passkeyRpId":"app.rolepay.app"`. The server refuses to start if the RPC answers for another chain; a `chain_check_failed` line means the RPC did not answer at start (it keeps running; check <https://rpc.tempo.xyz>, then `fly apps restart rolepay-app`).
+The `listening` line must say `"network":"mainnet"`, `"chainId":4217`, `"payoutToken":"0x20c000000000000000000000b9537d11c60e8b50"`, `"fees":"fee_budget 0x20c0000000000000000000000000000000000000"`, `"publicUrl":"https://web.rolepay.app"`, `"passkeyRpId":"web.rolepay.app"`. The server refuses to start if the RPC answers for another chain; a `chain_check_failed` line means the RPC did not answer at start (it keeps running; check <https://rpc.tempo.xyz>, then `fly apps restart rolepay-app`).
 
 ## 4. DNS and the certificate (5 minutes, then a wait)
 
 ```bash
-fly certs add app.rolepay.app -a rolepay-app
+fly certs add web.rolepay.app -a rolepay-app
 ```
 
-Namecheap, Domain List, `rolepay.app`, **Manage**, **Advanced DNS**, **Add New Record**: type `CNAME Record`, host `app`, value `rolepay-app.fly.dev`, TTL Automatic, save. Then `fly certs show app.rolepay.app -a rolepay-app` until the certificate is issued, and `curl -s https://app.rolepay.app/health`.
+Namecheap, Domain List, `rolepay.app`, **Manage**, **Advanced DNS**, **Add New Record**: type `CNAME Record`, host `web`, value `rolepay-app.fly.dev`, TTL Automatic, save. Then `fly certs show web.rolepay.app -a rolepay-app` until the certificate is issued, and `curl -s https://web.rolepay.app/health`.
 
-**Wait for the certificate before any passkey step.** Passkeys bind to `app.rolepay.app` for good; the pages only work there (not on `rolepay-app.fly.dev`).
+**Wait for the certificate before any passkey step.** Passkeys bind to `web.rolepay.app` for good; the pages only work there (not on `rolepay-app.fly.dev`).
 
 ## 5. Point Discord at it, register the commands, invite the bot (5 minutes)
 
-1. Developer Portal, `Rolepay`, **General Information**, Interactions Endpoint URL: `https://app.rolepay.app/discord/interactions`, **Save Changes**. Discord sends a signed PING first; a red error means a wrong `DISCORD_PUBLIC_KEY` or the server is not up.
+1. Developer Portal, `Rolepay`, **General Information**, Interactions Endpoint URL: `https://web.rolepay.app/discord/interactions`, **Save Changes**. Discord sends a signed PING first; a red error means a wrong `DISCORD_PUBLIC_KEY` or the server is not up.
 2. Register the commands for the production application from this checkout, without touching `.env` (the real environment wins over `.env`, so the dev application there is untouched). The pilot server's ID: Discord, User Settings, Advanced, Developer Mode on, then right-click the server, Copy Server ID.
 
    ```zsh
@@ -139,10 +139,10 @@ Send a dollar first and check it arrives. Never send from an exchange or a netwo
 
 Before:
 
-- [ ] `curl -s https://app.rolepay.app/health` answers `"network":"mainnet"`.
+- [ ] `curl -s https://web.rolepay.app/health` answers `"network":"mainnet"`.
 - [ ] Treasury page: USDC.e at least the run's total, pathUSD at least 0.5, the key Active with enough left, its expiry date noted.
-- [ ] A one-dollar rehearsal: register yourself (`/payee link`, create a passkey), `/rolepay new amount:1 users:@you note:Rehearsal`, Approve, check the transaction, then send it on from <https://app.rolepay.app/account>. This proves the whole path with your own dollar.
-- [ ] Each payee ran `/payee link` and created a passkey on app.rolepay.app (a synced passkey is best). Tell them their money is theirs alone: they see it and send it on at <https://app.rolepay.app/account> with the same passkey; sending costs about a cent, taken from what they send.
+- [ ] A one-dollar rehearsal: register yourself (`/payee link`, create a passkey), `/rolepay new amount:1 users:@you note:Rehearsal`, Approve, check the transaction, then send it on from <https://web.rolepay.app/account>. This proves the whole path with your own dollar.
+- [ ] Each payee ran `/payee link` and created a passkey on web.rolepay.app (a synced passkey is best). Tell them their money is theirs alone: they see it and send it on at <https://web.rolepay.app/account> with the same passkey; sending costs about a cent, taken from what they send.
 
 The run:
 
@@ -167,7 +167,7 @@ From fastest to slowest:
 1. **Revoke the bot key** (the real stop, on chain): `/rolepay setup`, open the treasury page, sign in with the treasury passkey, **Revoke the bot key**. From then on the bot cannot move anything, whatever happens to the server. Every key still live on chain is listed with its own Revoke button.
 2. **Pause standing policies**, if any: `/rolepay policy pause policy:<name>` for each (or on the dashboard). Revoking the key already holds every policy run.
 3. **Scale to zero:** `fly scale count 0 -a rolepay-app`. Discord commands then fail; the volume keeps the database. Back with `fly scale count 1 -a rolepay-app`.
-4. **Take the money back:** the treasury is your passkey's account, so sign in at <https://app.rolepay.app/account> with the treasury passkey and send the USDC.e and pathUSD wherever you like (the fee comes out of the token sent; Max leaves 0.1 for it).
+4. **Take the money back:** the treasury is your passkey's account, so sign in at <https://web.rolepay.app/account> with the treasury passkey and send the USDC.e and pathUSD wherever you like (the fee comes out of the token sent; Max leaves 0.1 for it).
 5. If a secret leaked: Developer Portal, Bot, Reset Token, then `read -rs "BOT_TOKEN?Bot token: "; printf 'DISCORD_BOT_TOKEN=%s\n' "$BOT_TOKEN" | fly secrets import -a rolepay-app; unset BOT_TOKEN` (restarts the machine).
 
 Logs and state: `fly logs -a rolepay-app`, `fly status -a rolepay-app`, `fly ssh console -a rolepay-app` (the database is `/data/rolepay.db`), `fly volumes snapshots list rolepay_app_data -a rolepay-app` (daily, five days kept). Redeploy after a change: `fly deploy -c fly.app.toml --local-only --ha=false` (about 20 seconds without answers; the boot sweep finishes any payment in flight, nothing is paid twice).
@@ -175,7 +175,7 @@ Logs and state: `fly logs -a rolepay-app`, `fly status -a rolepay-app`, `fly ssh
 ## What is different from the testnet demo
 
 - **No sponsor and no faucet.** New communities start in fee budget mode with pathUSD, `/rolepay setup fees:sponsor` is refused, and the treasury page has no "Get testnet funds" button. Config refuses a mainnet server without `ROLEPAY_PAYOUT_TOKEN`, without `ROLEPAY_FEE_TOKEN` (when no sponsor is configured), with a fee token equal to the payout token, with a non-https `PUBLIC_URL`, or with the dev shortcuts or demo controls on.
-- **Its own passkey domain** (`app.rolepay.app`): passkeys from the demo never work here, and the reverse.
+- **Its own passkey domain** (`web.rolepay.app`): passkeys from the demo never work here, and the reverse.
 - **Explorer links** go to explore.tempo.xyz (checked: `/tx/<hash>` and `/address/<address>` resolve).
 - **Reconciliation** reads the memo events in windows of 10,000 blocks; the public mainnet RPC answered 50,000-block log queries and makes a block about every 0.6 seconds (checked 2026-10-07), so a run's 120-second deadline is about 200 blocks.
 

@@ -336,11 +336,11 @@ describe('receiptDm', () => {
   it('links the payee to their account page, where they see the balance and send it on (when the server has one)', () => {
     const r = paid()
     const line = r.lines[1] as (typeof r.lines)[number]
-    const m = receiptDm(r, line, { ...ctx, communityName: 'Test guild', accountUrl: 'https://app.rolepay.app/account' })
+    const m = receiptDm(r, line, { ...ctx, communityName: 'Test guild', accountUrl: 'https://web.rolepay.app/account' })
     const buttons = (m.components ?? []).flatMap((row) => (row as { components: { label: string; url?: string }[] }).components)
     expect(buttons.map((b) => [b.label, b.url])).toEqual([
       ['View transaction', `https://explore.testnet.tempo.xyz/tx/${TX}`],
-      ['Your account', 'https://app.rolepay.app/account'],
+      ['Your account', 'https://web.rolepay.app/account'],
     ])
     expect(text(m)).toMatch(/sign in with your passkey/)
     const without = receiptDm(r, line, { ...ctx, communityName: 'Test guild' })

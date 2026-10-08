@@ -19,8 +19,8 @@ type Passkey = string | { address: string; proof: 'login' | 'registration'; issu
 
 /** The pages as the mainnet server serves them: no sponsor, no faucet, the mainnet RPC and explorer. */
 const MAINNET_WEB = {
-  origin: 'https://app.rolepay.app',
-  rpId: 'app.rolepay.app',
+  origin: 'https://web.rolepay.app',
+  rpId: 'web.rolepay.app',
   network: 'mainnet',
   rpcUrl: 'https://rpc.tempo.xyz',
   sponsorUrl: null,

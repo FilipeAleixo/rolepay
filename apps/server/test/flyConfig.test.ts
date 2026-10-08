@@ -41,7 +41,7 @@ const SECRETS = {
   DISCORD_BOT_TOKEN: 'stand-in-bot-token',
 }
 
-describe('fly.app.toml (the mainnet app, https://app.rolepay.app)', () => {
+describe('fly.app.toml (the mainnet app, https://web.rolepay.app)', () => {
   const env = flyEnv('fly.app.toml')
   const config = () => parseServerConfig({ ...SECRETS, ...env })
 
@@ -49,7 +49,7 @@ describe('fly.app.toml (the mainnet app, https://app.rolepay.app)', () => {
     const c = config()
     expect(c.core).toMatchObject({ network: 'mainnet', chainId: 4217, rpcUrl: 'https://rpc.tempo.xyz', sponsorUrl: null, dbPath: '/data/rolepay.db' })
     expect(c.app).toMatchObject({ defaultPayoutToken: MAINNET_TOKENS.usdc_e, defaultFeeToken: MAINNET_TOKENS.path_usd, sponsor: false })
-    expect(c.web).toMatchObject({ origin: 'https://app.rolepay.app', rpId: 'app.rolepay.app', explorerUrl: 'https://explore.tempo.xyz' })
+    expect(c.web).toMatchObject({ origin: 'https://web.rolepay.app', rpId: 'web.rolepay.app', explorerUrl: 'https://explore.tempo.xyz' })
     expect(c.http).toEqual({ host: '0.0.0.0', port: 8787, clientIpHeader: 'fly-client-ip' })
   })
 
