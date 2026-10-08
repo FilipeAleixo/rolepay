@@ -100,8 +100,7 @@ const PAYOUTS = [
  * The product shot: a paid run as Discord shows it, and the bot key's budget as the dashboard's
  * "At a glance" draws it, the limit a hard gold line. Static, and one image to assistive tech.
  */
-const productShot = () => `<div class="shot" role="img" aria-label="A treasurer asks Rolepay in plain words to pay the people who answered questions in the help channel; the run, paid in one transaction; and the bot's allowance for the month with its on-chain limit">
-<div class="ask"><p class="cmd">/rolepay propose</p><p class="said">1 USDC.e for every question answered in <span class="ch">#help</span> this month, up to 40 each</p></div>
+const productShot = () => `<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction; the bot's allowance for the month with its on-chain limit; and the request it came from, in plain words, which Rolepay's AI turned into a rule before a treasurer approved it">
 <div class="msg"><p class="who">${mark(32)}<b>Rolepay</b><span class="app">App</span><span class="when">Today at 18:00</span></p>
 <div class="embed"><p class="e-title">Paid</p><p class="e-note">#help answers, September</p>
 <ul class="lines">${PAYOUTS.map(([who, amount]) => `<li><span class="at">${who}</span><span class="amt">${amount} USDC.e</span></li>`).join('')}</ul>
@@ -110,6 +109,7 @@ const productShot = () => `<div class="shot" role="img" aria-label="A treasurer 
 <div class="b-bar"><span class="b-fill"></span><span class="b-limit"></span></div>
 <p class="b-row"><span>Resets in 12 days</span><span class="b-lim">On-chain limit</span></p>
 <p class="b-cap">Over the limit, Tempo refuses the whole batch.</p></div>
+<div class="ask"><p class="cmd">${icon('spark', 15)}Drafted by Rolepay's AI from your words</p><p class="said">“1 USDC.e for every question answered in <span class="ch">#help</span> this month, up to 40 each”</p><p class="ai-foot">The AI turned this into a rule. Rolepay counted who matches, and nothing was paid until <span class="at">@Treasurer</span> approved.</p></div>
 </div>`
 
 /**
