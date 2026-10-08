@@ -14,6 +14,13 @@ const configScript = (config: unknown) =>
   `<script type="application/json" id="rolepay-config">${JSON.stringify(config, (_k, v) => (typeof v === 'bigint' ? v.toString() : v)).replaceAll('<', '\\u003c')}</script>`
 
 /**
+ * What the home page's small "Paid per week" picture shows, oldest week first (made-up USDC.e, on
+ * a scale of 0 to 100, so each is also its bar's height in percent; the last week is in progress).
+ * Here because the stylesheet draws the bars; the home page writes the total and the label from it.
+ */
+export const PAID_WEEKS: readonly number[] = [30, 45, 40, 70, 35, 60, 50, 25]
+
+/**
  * The pages' only stylesheet, inline: the shared ink base (theme.ts) and the rules for the claim,
  * setup, account and home pages. Exported so the server can allow exactly it in the CSP (by hash).
  */
@@ -130,6 +137,15 @@ noscript p{color:var(--muted)}
 .shot .b-row{display:flex;justify-content:space-between;gap:1rem;margin-top:.7rem;font-size:11.5px;color:var(--meta)}
 .shot .b-lim{font:500 9.5px/1.6 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
 .shot .b-cap{margin-top:.75rem;padding-top:.7rem;border-top:1px solid var(--line);font-size:12px;color:var(--soft)}
+/* Where each card lives, quietly, at the right end of its first row: "Discord" on the run, "Dashboard" on the allowance (its label breaks after "allowance" to leave the gap). */
+.shot .surface{flex:none;font:500 9.5px/1.5 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--muted)}
+.shot .who{flex-wrap:wrap;row-gap:.2rem}
+.shot .when{white-space:nowrap}
+.shot .who .surface{margin-left:auto;padding-left:.75rem}
+.shot .b-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
+.shot .b-head .b-label{max-width:11rem}
+@media (max-width:25rem){.shot .day{display:none}}
+@media (max-width:40rem){.shot .budget{width:88%}}
 
 
 
@@ -153,6 +169,59 @@ noscript p{color:var(--muted)}
 .home .steps li:first-child{border-top:0;padding-top:0}
 .home .steps .n{font:400 14px/1.9 var(--serif);letter-spacing:.06em;color:var(--accent-2);font-variant-numeric:lining-nums tabular-nums}
 .home .steps p{margin:0;font-size:15px;line-height:1.65;color:var(--soft);max-width:33rem}
+.home .places{padding:5.5rem 0 0}
+.home .places h2{max-width:15em}
+.home .places .lede{max-width:34rem}
+.home .panes{display:grid;gap:1.25rem;margin-top:2.25rem}
+.home .pane{position:relative;padding:1.6rem 1.3rem 1.4rem;border-radius:18px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.012) 70%);box-shadow:0 30px 70px -45px rgba(0,0,0,.95)}
+.home .pane::before{content:"";position:absolute;left:12%;right:12%;top:-1px;height:1px;background:linear-gradient(90deg,rgba(237,190,90,0),rgba(237,190,90,.55),rgba(237,190,90,0))}
+.home .pane.cool::before{background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent-2) 60%,transparent),transparent)}
+.home .pane h3{margin:0}
+.home .pane .where{margin:.2rem 0 0;font-size:14px;color:var(--meta)}
+.home .pane ul{margin-top:1.1rem}
+.home .pane li:first-child{border-top:0}
+.home .pane li{position:relative;padding:.75rem 0 .75rem 1.15rem;border-top:1px solid var(--line);font-size:14.5px;line-height:1.6;color:var(--soft)}
+.home .pane li::before{content:"";position:absolute;left:0;top:calc(.75rem + .8em - 2.5px);width:5px;height:5px;border-radius:50%;background:var(--gold)}
+.home .pane.cool li::before{background:var(--accent-2)}
+.home .pane .cmd{padding:0 .25em;border-radius:4px;white-space:nowrap;color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 10%,transparent)}
+.home .pane .also{margin:0;padding-top:1rem;border-top:1px solid var(--line);font-size:14.5px;line-height:1.6;color:var(--head)}
+.home .weeks{margin:1.25rem 0 0;padding:1rem 1.1rem .85rem;border-radius:14px;border:1px solid rgba(255,255,255,.075);background:linear-gradient(180deg,#18191E,#121317);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 24px 50px -30px rgba(0,0,0,.95)}
+.home .weeks p{margin:0}
+.home .wk-label{font:500 10px/1.5 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--meta)}
+.home .weeks .wk-amount{margin:.35rem 0 1.1rem;font-size:13px;color:var(--meta)}
+.home .wk-amount strong{margin-right:.3rem;font:400 26px/1 var(--serif);color:var(--head);font-variant-numeric:lining-nums}
+.home .wk-chart{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:.6rem}
+.home .wk-axis{position:relative;height:6.5rem;min-width:1.35rem}
+.home .wk-axis span{position:absolute;top:0;right:0;font:400 10px/1 var(--sans);color:var(--muted);font-variant-numeric:tabular-nums;transform:translateY(-50%)}
+.home .wk-axis span:nth-child(2){top:50%}.home .wk-axis span:nth-child(3){top:100%}
+.home .wk-bars{display:grid;grid-template-columns:repeat(${PAID_WEEKS.length},minmax(0,1fr));align-items:end;height:6.5rem;border-bottom:1px solid rgba(255,255,255,.16);background:linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)) 0 0/100% 1px no-repeat,linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)) 0 50%/100% 1px no-repeat}
+.home .wk-bars>span{position:relative;justify-self:center;width:min(20px,60%);border-radius:3px 3px 0 0;background:linear-gradient(180deg,rgba(237,190,90,.9),rgba(237,190,90,.55))}
+${PAID_WEEKS.map((v, i) => `.home .wk-bars>span:nth-child(${i + 1}){height:${v}%}`).join('')}
+.home .wk-bars .sofar{position:absolute;left:50%;bottom:100%;margin-bottom:.35rem;transform:translateX(-50%);font:400 10px/1 var(--sans);color:var(--soft);white-space:nowrap}
+.home .wk-ticks{grid-column:2;display:grid;grid-template-columns:repeat(${PAID_WEEKS.length},minmax(0,1fr));margin-top:.5rem;font:400 10.5px/1.4 var(--sans);color:var(--muted)}
+.home .wk-ticks span{grid-row:1;justify-self:center;white-space:nowrap}
+.home .wk-ticks span:nth-child(1){grid-column:2}.home .wk-ticks span:nth-child(2){grid-column:4}.home .wk-ticks span:nth-child(3){grid-column:5}.home .wk-ticks span:nth-child(4){grid-column:6}.home .wk-ticks span:nth-child(5){grid-column:8;justify-self:end}
+.home .wk-ticks .n{display:none}
+.home .pane .weeks+ul,.home .pane .dm+ul{margin-top:1rem}
+.home .dm{margin:1.25rem 0 0;padding:.95rem 1rem 1rem;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.022));box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 50px -30px rgba(0,0,0,.95)}
+.home .dm p{margin:0}
+.home .dm .who{display:flex;flex-wrap:wrap;align-items:center;gap:.2rem .5rem;margin-bottom:.6rem;font-size:13px;color:var(--meta)}
+.home .dm .who .mark{clip-path:circle(50%)}
+.home .dm .who b{font-weight:600;font-size:13.5px;color:var(--head)}
+.home .dm .app{padding:.3em .45em;border-radius:4px;font:600 8.5px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 16%,transparent)}
+.home .dm .when{font-size:11px;color:var(--muted)}
+.home .dm .embed{margin-left:2rem;padding:.65rem .85rem .75rem;border-left:3px solid var(--ok);border-radius:4px 8px 8px 4px;background:rgba(0,0,0,.22)}
+.home .dm .e-title{font:600 14px/1.4 var(--sans);color:var(--head)}
+.home .dm .e-note{margin-top:.15rem;font-size:12.5px;line-height:1.5;color:var(--soft)}
+.home .dm .e-note b{font-weight:600;color:var(--fg)}
+.home .dm .fields{display:flex;flex-wrap:wrap;gap:.4rem 1.5rem;margin-top:.6rem;font-size:12.5px;color:var(--fg);font-variant-numeric:tabular-nums}
+.home .dm .f-name{display:block;font-size:11.5px;font-weight:600;color:var(--soft)}
+.home .dm .links{display:flex;flex-wrap:wrap;gap:.45rem;margin:.6rem 0 0 2rem}
+.home .dm .links span{padding:.4rem .7rem;border-radius:4px;font-size:12px;font-weight:500;color:var(--fg);background:rgba(255,255,255,.08)}
+.home .dm .links span::after{content:"\\2197";margin-left:.4em;color:var(--muted)}
+@media (max-width:60rem){.home .wk-bars>span{width:min(14px,60%)}.home .wk-ticks .w{display:none}.home .wk-ticks .n{display:block}.home .dm .embed,.home .dm .links{margin-left:0}}
+@media (min-width:40rem){.home .panes{grid-template-columns:1fr 1fr}.home .pane{padding:1.9rem 1.75rem 1.6rem}}
+@media (min-width:60rem){.home .panes{grid-template-columns:minmax(0,5fr) minmax(0,7fr)}}
 .home .details{padding:5.5rem 0 0}
 .home .details h2{margin:0 0 1.75rem;font:500 10.5px/1.5 var(--sans);letter-spacing:.18em;text-transform:uppercase;color:var(--meta)}
 .home .groups{display:grid;gap:2.25rem}
