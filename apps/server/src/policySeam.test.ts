@@ -57,15 +57,26 @@ async function world(opts: { proposer?: FakeRunProposer | null; activity?: FakeA
 }
 
 describe('schedules between the dashboard (weekday 0 = Sunday) and core (weekday names)', () => {
-  it('map both ways, weekly and monthly', () => {
-    expect(toCoreSchedule(MONDAY)).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC' })
-    expect(toPortSchedule({ kind: 'weekly', weekday: 'sunday', hour: 9, timezone: 'Europe/Lisbon' })).toEqual({ kind: 'weekly', weekday: 0, hour: 9, timezone: 'Europe/Lisbon' })
-    const monthly = { kind: 'monthly' as const, day: 15, hour: 9, timezone: 'Europe/Lisbon' }
+  it('map both ways, weekly and monthly, with the minute (none from the dashboard is on the hour)', () => {
+    expect(toCoreSchedule(MONDAY)).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'UTC' })
+    expect(toCoreSchedule({ ...MONDAY, minute: 45 })).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 45, timezone: 'UTC' })
+    expect(toPortSchedule({ kind: 'weekly', weekday: 'sunday', hour: 9, minute: 30, timezone: 'Europe/Lisbon' })).toEqual({ kind: 'weekly', weekday: 0, hour: 9, minute: 30, timezone: 'Europe/Lisbon' })
+    const monthly = { kind: 'monthly' as const, day: 15, hour: 9, minute: 5, timezone: 'Europe/Lisbon' }
     expect(toPortSchedule(toCoreSchedule(monthly))).toEqual(monthly)
   })
 
+  it('a policy at a minute past the hour: the list and the next scheduled runs are at that minute', async () => {
+    const w = await world()
+    const created = await w.port.create({ guildId: GUILD, actor, draft: { name: 'Help desk', instruction: RULE, schedule: { ...MONDAY, minute: 30 } } })
+    if (!created.ok) throw new Error(created.error.code)
+    expect((await w.port.approve({ guildId: GUILD, policyId: created.value.policyId, actor, version: 1 })).ok).toBe(true)
+    const [listed] = await w.port.list({ guildId: GUILD })
+    expect([listed?.schedule, listed?.nextRunAt]).toEqual([{ ...MONDAY, minute: 30 }, new Date('2026-10-12T18:30:00Z')])
+    expect((await w.port.upcoming({ guildId: GUILD, limit: 5 })).map((u) => u.at)).toEqual([new Date('2026-10-12T18:30:00Z')])
+  })
+
   it('daily (the testnet demo controls) maps both ways too, and the port says whether core allows it', async () => {
-    const daily = { kind: 'daily' as const, hour: 18, timezone: 'UTC' }
+    const daily = { kind: 'daily' as const, hour: 18, minute: 0, timezone: 'UTC' }
     expect(toCoreSchedule(daily)).toEqual(daily)
     expect(toPortSchedule(daily)).toEqual(daily)
     expect((await world()).port.dailySchedules).toBe(false)

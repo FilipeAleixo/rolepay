@@ -115,6 +115,15 @@ describe('SchedulerService: propose mode', () => {
     expect((await w.rolepay.scheduler.tick()).events.map((e) => e.policyRun.periodEnd)).toEqual([new Date('2026-10-12T17:00:00Z')])
   })
 
+  it('runs at the minute its schedule names: Monday 18:30, over the week since the previous Monday 18:30', async () => {
+    const w = await policyWorld()
+    await w.active({ schedule: { ...MONDAYS, minute: 30 } })
+    w.travelTo(new Date('2026-10-12T18:29:59Z'))
+    expect((await w.rolepay.scheduler.tick()).events).toEqual([])
+    w.travelTo(new Date('2026-10-12T18:30:00Z'))
+    expect((await w.rolepay.scheduler.tick()).events.map((e) => [e.policyRun.periodStart, e.policyRun.periodEnd])).toEqual([[new Date('2026-10-05T18:30:00Z'), new Date('2026-10-12T18:30:00Z')]])
+  })
+
   it('a paused policy makes nothing, and resuming does not backfill the period it missed', async () => {
     const w = await policyWorld()
     const p = await w.active()

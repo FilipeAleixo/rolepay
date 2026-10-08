@@ -64,15 +64,18 @@ const notRegistered = (n: number) => `${people(n)} matched but ${n === 1 ? 'is' 
 const vetoWords = (minutes: number) => (minutes % 60 === 0 ? (minutes === 60 ? '1 hour' : `${minutes / 60} hours`) : minutes === 1 ? '1 minute' : `${minutes} minutes`)
 
 export function toPortSchedule(s: Schedule): PolicySchedule {
-  if (s.kind === 'daily') return { kind: 'daily', hour: s.hour, timezone: s.timezone }
-  return s.kind === 'weekly' ? { kind: 'weekly', weekday: WEEKDAYS.indexOf(s.weekday), hour: s.hour, timezone: s.timezone } : { kind: 'monthly', day: s.day, hour: s.hour, timezone: s.timezone }
+  const time = { hour: s.hour, minute: s.minute }
+  if (s.kind === 'daily') return { kind: 'daily', ...time, timezone: s.timezone }
+  return s.kind === 'weekly' ? { kind: 'weekly', weekday: WEEKDAYS.indexOf(s.weekday), ...time, timezone: s.timezone } : { kind: 'monthly', day: s.day, ...time, timezone: s.timezone }
 }
 
+/** The dashboard's schedule in core's terms; a schedule with no minute is on the hour. */
 export function toCoreSchedule(s: PolicySchedule): Schedule {
-  if (s.kind === 'daily') return { kind: 'daily', hour: s.hour, timezone: s.timezone }
+  const time = { hour: s.hour, minute: s.minute ?? 0 }
+  if (s.kind === 'daily') return { kind: 'daily', ...time, timezone: s.timezone }
   return s.kind === 'weekly'
-    ? { kind: 'weekly', weekday: WEEKDAYS[s.weekday] ?? 'monday', hour: s.hour, timezone: s.timezone }
-    : { kind: 'monthly', day: s.day, hour: s.hour, timezone: s.timezone }
+    ? { kind: 'weekly', weekday: WEEKDAYS[s.weekday] ?? 'monday', ...time, timezone: s.timezone }
+    : { kind: 'monthly', day: s.day, ...time, timezone: s.timezone }
 }
 
 /** The compiled rule as JSON: money (every bigint in it) as decimal text, dates as ISO strings. */

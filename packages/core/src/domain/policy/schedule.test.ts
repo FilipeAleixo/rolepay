@@ -1,29 +1,89 @@
 import { describe, expect, it } from 'vitest'
 import { type Schedule, ScheduleSchema, describeSchedule, isTimezone, nextOccurrence, occurrenceAtOrBefore, periodEnding, periodKey, quietWhenEmpty, scheduleAllowed } from './schedule.js'
 
-const weekly = (over: Partial<Extract<Schedule, { kind: 'weekly' }>> = {}): Schedule => ({ kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC', ...over })
-const monthly = (over: Partial<Extract<Schedule, { kind: 'monthly' }>> = {}): Schedule => ({ kind: 'monthly', day: 1, hour: 9, timezone: 'UTC', ...over })
+const weekly = (over: Partial<Extract<Schedule, { kind: 'weekly' }>> = {}): Schedule => ({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'UTC', ...over })
+const monthly = (over: Partial<Extract<Schedule, { kind: 'monthly' }>> = {}): Schedule => ({ kind: 'monthly', day: 1, hour: 9, minute: 0, timezone: 'UTC', ...over })
 const d = (iso: string) => new Date(iso)
 
 describe('schedule: the shape', () => {
-  it('accepts weekly (weekday and hour) and monthly (day and hour) in an IANA timezone, UTC by default', () => {
+  it('accepts weekly (weekday, hour and minute) and monthly (day, hour and minute) in an IANA timezone, UTC and minute 0 by default', () => {
     expect(ScheduleSchema.parse({ kind: 'weekly', weekday: 'monday', hour: 18 })).toEqual(weekly())
     expect(ScheduleSchema.parse({ kind: 'monthly', day: 31, hour: 0, timezone: 'Europe/Lisbon' })).toEqual(monthly({ day: 31, hour: 0, timezone: 'Europe/Lisbon' }))
+    expect(ScheduleSchema.parse({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 30 })).toEqual(weekly({ minute: 30 }))
+    expect(ScheduleSchema.parse({ kind: 'monthly', day: 1, hour: 9, minute: 59 })).toEqual(monthly({ minute: 59 }))
   })
 
-  it('refuses an unknown timezone, an hour past 23 and a day past 31', () => {
+  it('refuses an unknown timezone, an hour past 23, a minute past 59 (or a part of one) and a day past 31', () => {
     expect(ScheduleSchema.safeParse({ kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'Mars/Olympus' }).success).toBe(false)
     expect(ScheduleSchema.safeParse({ kind: 'weekly', weekday: 'monday', hour: 24 }).success).toBe(false)
+    expect(ScheduleSchema.safeParse({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 60 }).success).toBe(false)
+    expect(ScheduleSchema.safeParse({ kind: 'weekly', weekday: 'monday', hour: 18, minute: -1 }).success).toBe(false)
+    expect(ScheduleSchema.safeParse({ kind: 'daily', hour: 18, minute: 7.5 }).success).toBe(false)
     expect(ScheduleSchema.safeParse({ kind: 'monthly', day: 32, hour: 9 }).success).toBe(false)
     expect(ScheduleSchema.safeParse({ kind: 'monthly', day: 0, hour: 9 }).success).toBe(false)
     expect(isTimezone('America/New_York')).toBe(true)
     expect(isTimezone('')).toBe(false)
   })
 
-  it('says itself in plain words', () => {
+  it('a schedule stored before minutes existed (no minute in its JSON) reads as minute 0 and runs exactly as before', () => {
+    // As policies.schedule and policy_versions.schedule hold it.
+    const stored = ScheduleSchema.parse(JSON.parse('{"kind":"weekly","weekday":"monday","hour":18,"timezone":"Europe/Lisbon"}'))
+    expect(stored).toEqual(weekly({ timezone: 'Europe/Lisbon' }))
+    expect(nextOccurrence(stored, d('2026-10-14T00:00:00Z'))).toEqual(d('2026-10-19T17:00:00Z'))
+    expect(periodEnding(stored, d('2026-10-26T18:00:00Z'))).toEqual({ start: d('2026-10-19T17:00:00Z'), end: d('2026-10-26T18:00:00Z') })
+    expect(describeSchedule(stored)).toBe('every Monday at 18:00 (Europe/Lisbon)')
+  })
+
+  it('says itself in plain words, the time as HH:MM', () => {
     expect(describeSchedule(weekly())).toBe('every Monday at 18:00 (UTC)')
+    expect(describeSchedule(weekly({ minute: 30 }))).toBe('every Monday at 18:30 (UTC)')
     expect(describeSchedule(monthly({ day: 31, timezone: 'Europe/Lisbon' }))).toBe('every month on day 31 (the last day in shorter months) at 09:00 (Europe/Lisbon)')
-    expect(describeSchedule(monthly({ day: 15 }))).toBe('every month on day 15 at 09:00 (UTC)')
+    expect(describeSchedule(monthly({ day: 15, minute: 5 }))).toBe('every month on day 15 at 09:05 (UTC)')
+  })
+})
+
+describe('schedule: a minute past the hour', () => {
+  it('weekly in UTC: the occurrence is at that minute, not at the hour', () => {
+    const s = weekly({ minute: 30 })
+    expect(occurrenceAtOrBefore(s, d('2026-10-12T18:29:59Z'))).toEqual(d('2026-10-05T18:30:00Z'))
+    expect(nextOccurrence(s, d('2026-10-12T18:29:59Z'))).toEqual(d('2026-10-12T18:30:00Z'))
+    expect(occurrenceAtOrBefore(s, d('2026-10-12T18:30:00Z'))).toEqual(d('2026-10-12T18:30:00Z'))
+    expect(nextOccurrence(s, d('2026-10-12T18:30:00Z'))).toEqual(d('2026-10-19T18:30:00Z'))
+    expect(periodEnding(s, d('2026-10-12T18:30:00Z'))).toEqual({ start: d('2026-10-05T18:30:00Z'), end: d('2026-10-12T18:30:00Z') })
+    expect(periodKey(d('2026-10-12T18:30:00Z'))).toBe('2026-10-12T18:30:00.000Z')
+  })
+
+  it('in a timezone: Monday 18:45 in Lisbon is 17:45 UTC in summer time and 18:45 UTC in winter; Kolkata is half an hour off UTC', () => {
+    const s = weekly({ minute: 45, timezone: 'Europe/Lisbon' })
+    expect(nextOccurrence(s, d('2026-10-14T00:00:00Z'))).toEqual(d('2026-10-19T17:45:00Z'))
+    expect(nextOccurrence(s, d('2026-10-20T00:00:00Z'))).toEqual(d('2026-10-26T18:45:00Z'))
+    expect(periodEnding(s, d('2026-10-26T18:45:00Z'))).toEqual({ start: d('2026-10-19T17:45:00Z'), end: d('2026-10-26T18:45:00Z') })
+    // Monday 09:15 IST (UTC+05:30) is 03:45 UTC.
+    expect(nextOccurrence(weekly({ hour: 9, minute: 15, timezone: 'Asia/Kolkata' }), d('2026-10-14T00:00:00Z'))).toEqual(d('2026-10-19T03:45:00Z'))
+  })
+
+  it('next to daylight saving: a minute before the spring gap runs then; one inside it runs as far past the gap as it was into it; one the autumn repeats runs the first time', () => {
+    // New York skips 02:00-03:00 on Sunday 8 March 2026 and repeats 01:00-02:00 on Sunday 1 November 2026.
+    const before = weekly({ weekday: 'sunday', hour: 1, minute: 59, timezone: 'America/New_York' })
+    expect(nextOccurrence(before, d('2026-03-05T00:00:00Z'))).toEqual(d('2026-03-08T06:59:00Z')) // 01:59 EST
+    const inside = weekly({ weekday: 'sunday', hour: 2, minute: 30, timezone: 'America/New_York' })
+    expect(nextOccurrence(inside, d('2026-03-05T00:00:00Z'))).toEqual(d('2026-03-08T07:30:00Z')) // 03:30 EDT
+    expect(nextOccurrence(inside, d('2026-03-08T07:30:00Z'))).toEqual(d('2026-03-15T06:30:00Z')) // 02:30 EDT
+    const repeated = weekly({ weekday: 'sunday', hour: 1, minute: 30, timezone: 'America/New_York' })
+    const first = nextOccurrence(repeated, d('2026-10-30T00:00:00Z'))
+    expect(first).toEqual(d('2026-11-01T05:30:00Z')) // 01:30 EDT
+    expect(nextOccurrence(repeated, first)).toEqual(d('2026-11-08T06:30:00Z')) // 01:30 EST, a week and an hour later
+    // A daily one keeps one run a day across the gap.
+    const daily: Schedule = { kind: 'daily', hour: 2, minute: 30, timezone: 'America/New_York' }
+    expect([occurrenceAtOrBefore(daily, d('2026-03-08T07:29:59Z')), occurrenceAtOrBefore(daily, d('2026-03-08T07:30:00Z'))]).toEqual([d('2026-03-07T07:30:00Z'), d('2026-03-08T07:30:00Z')])
+  })
+
+  it('monthly: the last day of a short month, at that minute, as before', () => {
+    const s = monthly({ day: 31, hour: 9, minute: 15 })
+    expect(nextOccurrence(s, d('2026-10-31T09:15:00Z'))).toEqual(d('2026-11-30T09:15:00Z'))
+    expect(nextOccurrence(s, d('2027-01-31T09:15:00Z'))).toEqual(d('2027-02-28T09:15:00Z'))
+    expect(nextOccurrence(s, d('2028-01-31T09:15:00Z'))).toEqual(d('2028-02-29T09:15:00Z'))
+    expect(occurrenceAtOrBefore(s, d('2026-11-30T09:14:59Z'))).toEqual(d('2026-10-31T09:15:00Z'))
   })
 })
 
@@ -99,7 +159,7 @@ describe('schedule: monthly', () => {
 })
 
 describe('schedule: daily (the testnet demo controls only; the services refuse it elsewhere)', () => {
-  const daily = (over: Partial<Extract<Schedule, { kind: 'daily' }>> = {}): Schedule => ({ kind: 'daily', hour: 18, timezone: 'UTC', ...over })
+  const daily = (over: Partial<Extract<Schedule, { kind: 'daily' }>> = {}): Schedule => ({ kind: 'daily', hour: 18, minute: 0, timezone: 'UTC', ...over })
 
   it('exists only with the demo controls; its empty days are not announced (one line a day would be noise)', () => {
     expect(scheduleAllowed(daily(), { demoControls: false })).toBe(false)

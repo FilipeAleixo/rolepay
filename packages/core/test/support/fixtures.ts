@@ -201,7 +201,7 @@ export function policy(over: Partial<Policy> = {}): Policy {
       assumptions: ['"a week" means since the previous run'],
       amountsInInstruction: true,
     },
-    schedule: { kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'Europe/Lisbon' },
+    schedule: { kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'Europe/Lisbon' },
     caps: { perRun: 500_000_000n, perPerson: null },
     channelId: '700000000000000009',
     status: 'active',

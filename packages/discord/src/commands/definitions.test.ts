@@ -98,6 +98,7 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
       ['instruction', OptionType.String, true],
       ['schedule', OptionType.String, true],
       ['hour', OptionType.Integer, true],
+      ['minute', OptionType.Integer, false],
       ['weekday', OptionType.String, false],
       ['day', OptionType.Integer, false],
       ['timezone', OptionType.String, false],
@@ -105,6 +106,9 @@ describe('COMMAND_DEFINITIONS (the JSON registered with Discord)', () => {
       ['max_per_run', OptionType.String, false],
       ['max_per_person', OptionType.String, false],
     ])
+    // The minute past the hour: 0 to 59, 0 when left out.
+    const minute = policy?.options?.find((o) => o.name === 'new')?.options?.find((o) => o.name === 'minute') as (Def & { min_value?: number; max_value?: number }) | undefined
+    expect([minute?.min_value, minute?.max_value]).toEqual([0, 59])
     expect(opts('mode')).toEqual([
       ['policy', OptionType.String, true],
       ['mode', OptionType.String, true],

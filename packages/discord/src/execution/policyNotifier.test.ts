@@ -190,7 +190,7 @@ describe('createPolicyNotifier: telling the channel what the scheduler did', () 
   })
 
   it('a daily policy (the judge demo) says nothing on a day nobody matched: no run, no post; the audit log records it quietly', async () => {
-    const w = await world({ schedule: { kind: 'daily', hour: 18, timezone: 'UTC' } })
+    const w = await world({ schedule: { kind: 'daily', hour: 18, minute: 0, timezone: 'UTC' } })
     // The day to 7 October 18:00 has no answers in #help (they were on the 6th, before the 18:00 run).
     await w.travelTo(new Date('2026-10-07T18:00:00Z'))
     const report = await w.rolepay.scheduler.tick()

@@ -86,6 +86,22 @@ describe('/rolepay policy new', () => {
     expect(body(drafted).type).toBe(5)
     expect(text(a.rest.lastEdit('tok-writer'))).toContain('Policy draft: Help desk')
   })
+
+  it('minute names the time past the hour: the preview says 18:30 and the policy runs then; left out it is on the hour; past 59 never reaches the model', async () => {
+    const a = await ready()
+    const { shown, policyId } = await newPolicy(a, { minute: 30 })
+    expect(shown).toContain('every Monday at 18:30 (UTC)')
+    const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(p.ok && p.value.schedule).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 30, timezone: 'UTC' })
+    const onTheHour = await newPolicy(a)
+    const q = await a.rolepay.policies.get({ guildId: GUILD, policyId: onTheHour.policyId })
+    expect(q.ok && q.value.schedule).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'UTC' })
+    const asked = a.proposer.requests.length
+    const late = await a.send(slashCommand(SCOPE, 'rolepay', 'policy new', { ...NEW, minute: 60 }, treasurer))
+    expect(isEphemeral(late)).toBe(true)
+    expect(body(late).data?.content).toContain('minute')
+    expect(a.proposer.requests).toHaveLength(asked)
+  })
 })
 
 describe('/rolepay policy new schedule:daily (a demo control: the judge demo)', () => {
@@ -95,7 +111,7 @@ describe('/rolepay policy new schedule:daily (a demo control: the judge demo)', 
     expect(shown).toContain('every day at 18:00 (UTC)')
     expect(shown).toContain('First run after approval')
     const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
-    expect(p.ok && p.value.schedule).toEqual({ kind: 'daily', hour: 18, timezone: 'UTC' })
+    expect(p.ok && p.value.schedule).toEqual({ kind: 'daily', hour: 18, minute: 0, timezone: 'UTC' })
   })
 
   it('the judge rule: everyone who reacted ✅ to the welcome post and has never been paid; the preview says it for the rule and for each person', async () => {

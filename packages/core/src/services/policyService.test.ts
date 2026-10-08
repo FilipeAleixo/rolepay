@@ -496,8 +496,10 @@ describe('PolicyService: a daily schedule exists only with the testnet demo cont
     expect(d.ok && d.value.nextRunAt).toEqual(TODAY_18)
     expect(d.ok && d.value.rule[2]).toBe('When: every day at 18:00 (UTC), counting activity since the previous run.')
     expect((await w.rolepay.policies.nextRuns({ guildId: GUILD })).map((r) => r.at)).toEqual([TODAY_18])
-    const edited = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, schedule: { ...DAILY, hour: 9 } })
-    expect(edited.ok && edited.value.schedule).toEqual({ ...DAILY, hour: 9 })
+    const edited = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, schedule: { ...DAILY, hour: 9, minute: 30 } })
+    expect(edited.ok && edited.value.schedule).toEqual({ ...DAILY, hour: 9, minute: 30 })
+    const after = await w.rolepay.policies.detail({ guildId: GUILD, policyId: p.id })
+    expect(after.ok && [after.value.nextRunAt, after.value.rule[2]]).toEqual([new Date('2026-10-08T09:30:00Z'), 'When: every day at 09:30 (UTC), counting activity since the previous run.'])
   })
 
   it('a daily policy left over from a server that had them is not approved, resumed or listed with a next run by one that does not', async () => {

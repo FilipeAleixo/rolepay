@@ -34,6 +34,8 @@ const DraftForm = z.object({
     .max(MAX_INSTRUCTION, `The instruction is at most ${MAX_INSTRUCTION.toLocaleString('en-US')} characters.`),
   kind: z.enum(['daily', 'weekly', 'monthly'], 'Choose weekly or monthly.'),
   hour: z.coerce.number().int().min(0, 'The hour is 0 to 23.').max(23, 'The hour is 0 to 23.'),
+  // Absent (a page from before minutes): on the hour.
+  minute: z.coerce.number().int('The minute is 0 to 59.').min(0, 'The minute is 0 to 59.').max(59, 'The minute is 0 to 59.').default(0),
   timezone: z.string().trim().min(1).refine(validTimezone, 'Unknown timezone: use a name such as UTC or Europe/Lisbon.'),
 })
 /** Read only for the kinds that use them: a weekly form's day of the month (hidden, maybe stale) is never read, nor a monthly one's weekday. */
@@ -75,15 +77,16 @@ function draftFrom(form: Record<string, string>, opts: { daily: boolean }): { ok
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Some of the values were not valid.' }
   const f = parsed.data
   if (f.kind === 'daily' && !opts.daily) return { ok: false, error: DAILY_REFUSED }
-  if (f.kind === 'daily') return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'daily', hour: f.hour, timezone: f.timezone } } }
+  const time = { hour: f.hour, minute: f.minute, timezone: f.timezone }
+  if (f.kind === 'daily') return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'daily', ...time } } }
   if (f.kind === 'weekly') {
     const weekday = WeekdayField.safeParse(form.weekday)
     if (!weekday.success) return { ok: false, error: weekday.error.issues[0]?.message ?? 'Choose a day of the week.' }
-    return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'weekly', weekday: weekday.data, hour: f.hour, timezone: f.timezone } } }
+    return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'weekly', weekday: weekday.data, ...time } } }
   }
   const day = DayField.safeParse(form.day)
   if (!day.success) return { ok: false, error: day.error.issues[0]?.message ?? 'The day of the month is 1 to 28.' }
-  return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'monthly', day: day.data, hour: f.hour, timezone: f.timezone } } }
+  return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'monthly', day: day.data, ...time } } }
 }
 
 const formValues = (form: Record<string, string>): PolicyFormValues => ({
@@ -93,6 +96,7 @@ const formValues = (form: Record<string, string>): PolicyFormValues => ({
   weekday: form.weekday ?? '1',
   day: form.day ?? '1',
   hour: form.hour ?? '18',
+  minute: form.minute ?? '0',
   timezone: form.timezone ?? 'UTC',
   ...(form.mode === undefined ? {} : { mode: form.mode }),
   ...(form.vetoWindowMinutes === undefined ? {} : { vetoWindowMinutes: form.vetoWindowMinutes }),
@@ -219,6 +223,7 @@ export function policyRoutes(kit: DashboardKit): Hono {
       weekday: String(s.kind === 'weekly' ? s.weekday : 1),
       day: String(s.kind === 'monthly' ? s.day : 1),
       hour: String(s.hour),
+      minute: String(s.minute ?? 0),
       timezone: s.timezone,
       mode: p.mode,
       vetoWindowMinutes: String(p.vetoWindowMinutes),

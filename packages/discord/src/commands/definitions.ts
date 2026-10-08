@@ -55,6 +55,7 @@ const policyGroup = (opts: { demoControls: boolean }) => ({
           ],
         },
         { type: OptionType.Integer, name: 'hour', description: 'The hour it runs, 0 to 23, in the timezone (default UTC)', required: true, min_value: 0, max_value: 23 },
+        { type: OptionType.Integer, name: 'minute', description: 'Minutes past the hour, 0 to 59 (default 0)', min_value: 0, max_value: 59 },
         { type: OptionType.String, name: 'weekday', description: 'Weekly: the day it runs', choices: WEEKDAYS.map((d) => ({ name: capitalised(d), value: d })) },
         { type: OptionType.Integer, name: 'day', description: 'Monthly: the day of the month, 1 to 31 (the last day in shorter months)', min_value: 1, max_value: 31 },
         { type: OptionType.String, name: 'timezone', description: 'An IANA timezone such as Europe/Lisbon (default UTC)', max_length: 64 },

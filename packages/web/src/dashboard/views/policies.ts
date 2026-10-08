@@ -8,9 +8,9 @@ import { csrfField } from './layout.js'
 export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const pad = (n: number) => String(n).padStart(2, '0')
 
-/** "Every day at 18:00 (UTC)", "Every Monday at 18:00 (UTC)", "Monthly on day 1 at 09:00 (Europe/Lisbon)". */
+/** "Every day at 18:00 (UTC)", "Every Monday at 18:30 (UTC)", "Monthly on day 1 at 09:00 (Europe/Lisbon)". */
 export function scheduleWords(s: PolicySchedule): string {
-  const at = `${pad(s.hour)}:00 (${esc(s.timezone)})`
+  const at = `${pad(s.hour)}:${pad(s.minute ?? 0)} (${esc(s.timezone)})`
   if (s.kind === 'daily') return `Every day at ${at}`
   return s.kind === 'weekly' ? `Every ${WEEKDAYS[s.weekday] ?? '?'} at ${at}` : `Monthly on day ${s.day} at ${at}`
 }
@@ -346,12 +346,24 @@ ${versionsSection(d.versions, d.names, d.compiles ?? null)}`
 }
 
 /** A policy form's values as typed. `mode` and `vetoWindowMinutes`: the editor's, when an edit applies at once. */
-export type PolicyFormValues = { name: string; instruction: string; kind: string; weekday: string; day: string; hour: string; timezone: string; mode?: string; vetoWindowMinutes?: string }
+export type PolicyFormValues = {
+  name: string
+  instruction: string
+  kind: string
+  weekday: string
+  day: string
+  hour: string
+  minute: string
+  timezone: string
+  mode?: string
+  vetoWindowMinutes?: string
+}
 
 /**
- * The fields of the new and edit policy forms: name, instruction and the schedule. Each schedule field
- * says which kinds use it (`field-weekday`, `field-day`), and the stylesheet shows only the ones the
- * chosen kind uses (CSS `:has`, no script); the server reads only those too (`draftFrom`).
+ * The fields of the new and edit policy forms: name, instruction and the schedule (its time is an
+ * hour and a minute, which every kind uses). Each schedule field a kind may not use says which kinds
+ * use it (`field-weekday`, `field-day`), and the stylesheet shows only the ones the chosen kind uses
+ * (CSS `:has`, no script); the server reads only those too (`draftFrom`).
  */
 export function policyFormFields(v: PolicyFormValues, daily: boolean): string {
   const opt = (value: string, label: string, current: string) => `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`
@@ -362,6 +374,7 @@ export function policyFormFields(v: PolicyFormValues, daily: boolean): string {
 <div class="field field-weekday"><label for="weekday">Day of the week</label><select id="weekday" name="weekday">${WEEKDAYS.map((w, i) => opt(String(i), w, v.weekday)).join('')}</select></div>
 <div class="field field-day"><label for="day">Day of the month (1-28)</label><input id="day" name="day" type="number" min="1" max="28" value="${esc(v.day)}"></div>
 <div class="field"><label for="hour">Hour (0-23)</label><input id="hour" name="hour" type="number" min="0" max="23" value="${esc(v.hour)}"></div>
+<div class="field"><label for="minute">Minute (0-59)</label><input id="minute" name="minute" type="number" min="0" max="59" value="${esc(v.minute)}"></div>
 <div class="field"><label for="timezone">Timezone</label><input id="timezone" name="timezone" value="${esc(v.timezone)}"></div></div>`
 }
 

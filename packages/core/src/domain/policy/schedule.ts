@@ -1,12 +1,15 @@
 import { z } from 'zod'
 
 /**
- * When a standing policy runs: weekly (a weekday and an hour) or monthly (a day and an hour), in
- * the community's IANA timezone (UTC by default). Daily (an hour) exists for the testnet demo
+ * When a standing policy runs: weekly (a weekday and a time) or monthly (a day and a time), in
+ * the community's IANA timezone (UTC by default). The time is an hour and a minute; the minute is
+ * optional and 0 by default, so a schedule stored before minutes existed reads as on the hour and
+ * runs exactly as it did. Daily (a time) exists for the testnet demo
  * only: the policy and scheduler services refuse it unless the demo controls are on
  * (ROLEPAY_DEMO_CONTROLS, which config allows only on Moderato). Local times are turned into instants with the
- * runtime's timezone database (Intl), so daylight saving is handled: an hour that does not exist
- * (the spring gap) runs when the gap ends, and an hour that happens twice runs the first time.
+ * runtime's timezone database (Intl), so daylight saving is handled: a time that does not exist
+ * (the spring gap) runs as far past the gap's end as it was into it (with 02:00 to 03:00 skipped,
+ * 02:00 runs at 03:00 and 02:30 at 03:30), and a time that happens twice runs the first time.
  * Each run covers one period: from the previous occurrence to this one.
  */
 export const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const
@@ -24,13 +27,15 @@ export function isTimezone(tz: string): boolean {
 
 export const TimezoneSchema = z.string().min(1).max(64).refine(isTimezone, 'not a timezone (use an IANA name such as Europe/Lisbon, or UTC)')
 const Hour = z.number().int().min(0).max(23)
+/** Past the hour. Absent in schedules stored before minutes existed: those read as 0. */
+const Minute = z.number().int().min(0).max(59).default(0)
 
 export const ScheduleSchema = z.discriminatedUnion('kind', [
   /** The testnet demo only (see above): the shape is the same everywhere, the services gate it. */
-  z.object({ kind: z.literal('daily'), hour: Hour, timezone: TimezoneSchema.default('UTC') }),
-  z.object({ kind: z.literal('weekly'), weekday: z.enum(WEEKDAYS), hour: Hour, timezone: TimezoneSchema.default('UTC') }),
+  z.object({ kind: z.literal('daily'), hour: Hour, minute: Minute, timezone: TimezoneSchema.default('UTC') }),
+  z.object({ kind: z.literal('weekly'), weekday: z.enum(WEEKDAYS), hour: Hour, minute: Minute, timezone: TimezoneSchema.default('UTC') }),
   /** Days past the end of a shorter month run on its last day. */
-  z.object({ kind: z.literal('monthly'), day: z.number().int().min(1).max(31), hour: Hour, timezone: TimezoneSchema.default('UTC') }),
+  z.object({ kind: z.literal('monthly'), day: z.number().int().min(1).max(31), hour: Hour, minute: Minute, timezone: TimezoneSchema.default('UTC') }),
 ])
 export type Schedule = z.infer<typeof ScheduleSchema>
 
@@ -73,13 +78,19 @@ function offsetAt(ms: number, tz: string): number {
   return Date.UTC(w.y, w.m - 1, w.d, w.h, w.min, w.s) - Math.floor(ms / 1000) * 1000
 }
 
-/** The instant the wall clock in `tz` reads `date` at `hour`:00. Gap: when it ends. Overlap: the first time. */
-function atLocal(date: LocalDate, hour: number, tz: string): Date {
-  const guess = Date.UTC(date.y, date.m - 1, date.d, hour)
+/** A time of day on the wall clock. */
+type LocalTime = { hour: number; minute: number }
+
+/**
+ * The instant the wall clock in `tz` reads `date` at `time`. Gap: as far past its end as the time
+ * was into it (the later of the two offsets' readings). Overlap: the first time.
+ */
+function atLocal(date: LocalDate, time: LocalTime, tz: string): Date {
+  const guess = Date.UTC(date.y, date.m - 1, date.d, time.hour, time.minute)
   const candidates = [...new Set([guess - offsetAt(guess, tz), guess - offsetAt(guess - offsetAt(guess, tz), tz)])].sort((a, b) => a - b)
   const exact = candidates.find((c) => {
     const w = wall(new Date(c), tz)
-    return w.y === date.y && w.m === date.m && w.d === date.d && w.h === hour
+    return w.y === date.y && w.m === date.m && w.d === date.d && w.h === time.hour && w.min === time.minute
   })
   return new Date(exact ?? (candidates.at(-1) as number))
 }
@@ -112,33 +123,36 @@ function anchor(s: Schedule, t: Date): LocalDate {
       : s.kind === 'weekly'
         ? addDays(today, -((weekdayOf(today) - WEEKDAYS.indexOf(s.weekday) + 7) % 7))
         : { y: w.y, m: w.m, d: Math.min(s.day, daysIn(w.y, w.m)) }
-  return atLocal(date, s.hour, s.timezone) > t ? step(s, date, -1) : date
+  return atLocal(date, s, s.timezone) > t ? step(s, date, -1) : date
 }
 
 /** The latest occurrence at or before `t`. */
 export function occurrenceAtOrBefore(s: Schedule, t: Date): Date {
-  return atLocal(anchor(s, t), s.hour, s.timezone)
+  return atLocal(anchor(s, t), s, s.timezone)
 }
 
 /** The first occurrence strictly after `t`. */
 export function nextOccurrence(s: Schedule, t: Date): Date {
-  return atLocal(step(s, anchor(s, t), 1), s.hour, s.timezone)
+  return atLocal(step(s, anchor(s, t), 1), s, s.timezone)
 }
 
 /** The period a run at `occurrence` covers: from the occurrence before it, up to it. */
 export function periodEnding(s: Schedule, occurrence: Date): { start: Date; end: Date } {
-  return { start: atLocal(step(s, anchor(s, occurrence), -1), s.hour, s.timezone), end: occurrence }
+  return { start: atLocal(step(s, anchor(s, occurrence), -1), s, s.timezone), end: occurrence }
 }
 
 /** One run per policy per period: the period's end as an ISO instant names it. */
 export const periodKey = (occurrence: Date) => occurrence.toISOString()
 
 const capital = (w: string) => w[0]?.toUpperCase() + w.slice(1)
-const hh = (h: number) => `${String(h).padStart(2, '0')}:00`
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/** The schedule's time of day as HH:MM, for example "18:00" or "09:30". */
+const scheduleTime = (s: Pick<Schedule, 'hour' | 'minute'>) => `${pad(s.hour)}:${pad(s.minute)}`
 
 export function describeSchedule(s: Schedule): string {
-  if (s.kind === 'daily') return `every day at ${hh(s.hour)} (${s.timezone})`
-  if (s.kind === 'weekly') return `every ${capital(s.weekday)} at ${hh(s.hour)} (${s.timezone})`
+  if (s.kind === 'daily') return `every day at ${scheduleTime(s)} (${s.timezone})`
+  if (s.kind === 'weekly') return `every ${capital(s.weekday)} at ${scheduleTime(s)} (${s.timezone})`
   const short = s.day > 28 ? ' (the last day in shorter months)' : ''
-  return `every month on day ${s.day}${short} at ${hh(s.hour)} (${s.timezone})`
+  return `every month on day ${s.day}${short} at ${scheduleTime(s)} (${s.timezone})`
 }
