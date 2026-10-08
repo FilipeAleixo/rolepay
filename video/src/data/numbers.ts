@@ -1,19 +1,19 @@
 /**
  * The real numbers the "By the numbers" scene counts up to. Re-read them before a final render.
  *
- * Measured on main at 9ceb17a (2026-10-08) with `pnpm test` and `pnpm test:coverage` at the repo
- * root, and the same as the README's "How to verify it yourself": 1,734 tests in 145 files (core
- * 882, discord 416, web 292, server 144).
+ * Measured on main at baf7669 (2026-10-08) with `pnpm test` and `pnpm test:coverage` at the repo
+ * root, and the same as the README's "How to verify it yourself": 1,991 tests in 163 files (core
+ * 965, discord 463, web 396, server 167).
  */
-export const TESTS = { core: 882, discord: 416, web: 292, server: 144 } as const
+export const TESTS = { core: 965, discord: 463, web: 396, server: 167 } as const
 export const TOTAL_TESTS = TESTS.core + TESTS.discord + TESTS.web + TESTS.server
 
 /** Line coverage per package, from `pnpm test:coverage` (what CI runs, with a threshold per package). */
 export const LINE_COVERAGE = [
-  { pkg: 'core', pct: 95.72 },
-  { pkg: 'discord', pct: 96.91 },
-  { pkg: 'web', pct: 86.91 },
-  { pkg: 'server', pct: 85.78 },
+  { pkg: 'core', pct: 95.94 },
+  { pkg: 'discord', pct: 96.97 },
+  { pkg: 'web', pct: 88.83 },
+  { pkg: 'server', pct: 86.83 },
 ] as const
 
 /** `pnpm test:chain` on Moderato: 37 tests in 9 files (8 in packages/core/test, 1 in apps/server/test). */

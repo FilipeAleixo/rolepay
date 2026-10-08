@@ -147,7 +147,7 @@ Talking points, in your own words. Each is what the slot has to land, not a line
 - Mainnet: say exactly where the pilot stands on the day.
 - What is not done yet, specifically. The threat model's open items: a lying RPC (T3, and the deposit watcher's reads, T29), the setup page's code served by the same server (T15), and which key signs a run being the server's decision, with every key in one vault (T24).
 
-**Scene: by the numbers** (8 s): 1,734 tests, line coverage per package, 10 chain proofs (from 37 chain tests in 9 files), $0.003 per AI proposal. Silent is fine.
+**Scene: by the numbers** (8 s): 1,991 tests, line coverage per package, 10 chain proofs (from 37 chain tests in 9 files), $0.003 per AI proposal. Silent is fine.
 
 **End card** (5 s): demo.rolepay.app, the repository, "Built for Colosseum's Crypto World's Fair, Tempo track".
 
@@ -220,7 +220,7 @@ What to click, timed to each caption (seconds from the start of the clip).
 
 ## Before the final render
 
-- **The numbers** in `src/data/numbers.ts` are the ones measured on `main` at 9ceb17a and stated in the README: 1,734 tests (core 882, discord 416, web 292, server 144), line coverage core 95.72%, discord 96.91%, web 86.91%, server 85.78%, and `pnpm test:chain` at 37 tests in 9 files. The 10 chain proofs are the ones the README links on the explorer. Re-run `pnpm test` if more code lands.
+- **The numbers** in `src/data/numbers.ts` are the ones measured on `main` at baf7669 (8 October) and stated in the README: 1,991 tests (core 965, discord 463, web 396, server 167), line coverage core 95.94%, discord 96.97%, web 88.83%, server 86.83%, and `pnpm test:chain` at 37 tests in 9 files (last run before the bring-your-own-wallet chain test was added; re-run it before the final render to refresh this). The 10 chain proofs are the ones the README links on the explorer. Re-run `pnpm test` if more code lands.
 - **The cost**: the numbers scene says $0.003 per proposal and the AI scene's card shows $0.004 in its footer; the README's range is $0.003 to $0.004 with the prompt cache warm.
 - **Length**: open each film in the studio with every clip in place and check the duration (the corner warning appears past 3:00). The demo has 3.8 s to spare.
 - **The stills**: `npm run stills` writes one frame of every scene to `out/stills/`.
