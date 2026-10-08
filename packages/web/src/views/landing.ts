@@ -188,7 +188,8 @@ const productShot = () => `<div class="shot" role="img" aria-label="The three wa
 
 /**
  * The home page at /: what Rolepay is (with a picture of it working), what it replaces, how it works,
- * the two places it lives (Discord and the web), the detail, why you can trust it, and where to go next. Server-rendered, no script; the light
+ * the two places it lives (Discord and the web), the detail, why you can trust it, and where to go next, then a foot with the
+ * name and what it was built for. Server-rendered, no script; the light
  * behind the hero breathes in CSS only and holds still under reduced motion. The same page on
  * every network, but for the testnet pill. With a Discord application id (the server passes one
  * only when ROLEPAY_PUBLIC_INSTALL is on) "Add to Discord" leads; without one, the dashboard does.
@@ -247,7 +248,7 @@ ${paidWeeksMock()}
 <section class="trust" aria-labelledby="trust"><h2 id="trust">Why you can trust it</h2>
 <ul>${TRUST.map((r) => `<li><span class="ic">${icon(r.icon, 24)}</span><p><strong>${esc(r.bold)}</strong><span>${esc(r.muted)}</span></p></li>`).join('')}</ul></section>
 <section class="final" aria-labelledby="final-title"><h2 id="final-title">Pay your people from Discord.</h2>
-<nav class="cta" aria-label="Get started">${final}<a class="source" href="${SOURCE_URL}" rel="noreferrer">Source on GitHub</a></nav>
-<p class="footnote">${esc("Built for Colosseum's Crypto World's Fair, Tempo track.")}</p></section>
-</main></body></html>`
+<nav class="cta" aria-label="Get started">${final}<a class="source" href="${SOURCE_URL}" rel="noreferrer">Source on GitHub</a></nav></section>
+</main>
+<footer class="foot"><p class="logo">${mark(22)}<span>Rolepay</span></p><p class="footnote">${esc("Built for Colosseum's Crypto World's Fair, Tempo track.")}</p></footer></body></html>`
 }

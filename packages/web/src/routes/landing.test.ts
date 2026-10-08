@@ -151,6 +151,8 @@ describe('the home page (/)', () => {
     }
     expect(finalBand(html)).toContain(`<a class="button" href="${INSTALL}" rel="noreferrer">Add Rolepay to a server</a><a class="button secondary" href="/dashboard">Open the dashboard</a>`)
     expect(html).toContain('href="https://github.com/FilipeAleixo/rolepay"')
+    // The foot of the page, after main: the mark and the name again, and what it was built for.
+    expect(html).toMatch(/<\/main>\n<footer class="foot"><p class="logo"><svg class="mark" width="22" height="22" aria-hidden="true"[\s\S]*?<\/svg><span>Rolepay<\/span><\/p><p class="footnote">Built for Colosseum&#39;s Crypto World&#39;s Fair, Tempo track\.<\/p><\/footer><\/body><\/html>$/)
     expect(t).toContain("Built for Colosseum's Crypto World's Fair, Tempo track.")
     expect(t).toContain('Testnet demo')
     // Server-rendered and calm: no script of any kind, and no em dashes in the copy.
@@ -269,6 +271,22 @@ describe('the home page (/)', () => {
     expect(gate).toBeGreaterThan(-1)
     for (const at of animated) expect(at).toBeGreaterThan(gate)
     expect(STYLE.slice(gate, STYLE.indexOf('\n', gate))).toContain('animation:rp-breathe-cool')
+    // The point beside the payee's own page, where payments "show up live", breathes on opacity alone, and only for the same people.
+    const live = /@keyframes rp-live\{([^@]*?)\}\}/.exec(STYLE)
+    expect(new Set([...(live?.[1] ?? '').matchAll(/([a-z-]+):/g)].map((m) => m[1]))).toEqual(new Set(['opacity']))
+    expect([...STYLE.matchAll(/animation:rp-live/g)].map((m) => m.index as number)).toEqual([STYLE.indexOf('@media (prefers-reduced-motion:no-preference){.home .pane .also::before{animation:rp-live') + '@media (prefers-reduced-motion:no-preference){.home .pane .also::before{'.length])
+  })
+
+  it('sets the sections below the hero apart by space and type, not rules: no row of theirs draws a border, and no section is a card', () => {
+    const rules = [...STYLE.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selectors: (m[1] as string).split(',').map((s) => s.trim()), body: m[2] as string }))
+    // Elements, not the lights drawn with ::before and ::after (the threads, the points, the arc over the trust block).
+    const below = /^\.home (?:\.contrast|\.steps|\.how|\.places|\.panes|\.pane|\.details|\.groups|\.group|\.features|section\.trust|\.trust|\.final)\b(?!.*::)/
+    const ruled = rules.filter((r) => r.selectors.some((s) => below.test(s)) && /(?:^|;)border(?:-top|-bottom)?:(?!0)/.test(r.body))
+    expect(ruled.map((r) => r.selectors.join(','))).toEqual([])
+    // The pictures keep their own surfaces (they are pictures of Discord and the dashboard); the sections and columns around them have none.
+    const shells = /^\.home (?:\.contrast|\.how|\.places|\.panes|\.pane|\.details|\.groups|\.group|section\.trust|\.final)$/
+    const boxed = rules.filter((r) => r.selectors.some((s) => shells.test(s)) && /(?:^|;)(?:background|box-shadow|border(?:-radius)?):/.test(r.body))
+    expect(boxed.map((r) => r.selectors.join(','))).toEqual([])
   })
 
   it('shows the same page on testnet and mainnet, but for the testnet pill', () => {
