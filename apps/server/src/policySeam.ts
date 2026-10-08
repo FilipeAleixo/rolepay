@@ -127,7 +127,8 @@ function detailOf(p: Policy, nextRunAt: Date | null, names: Names): PolicyDetail
     createdAt: p.createdAt,
     approvedBy: p.approvedBy,
     approvedAt: p.approvedAt,
-    // In core an edit IS the policy until it is approved (the policy stops running meanwhile).
+    // In core an edit that waits for approval IS the policy until it is approved (it stops running
+    // meanwhile); one in force at once is approved already, so nothing waits.
     pendingVersion: p.status === 'draft' ? p.version : null,
   }
 }
@@ -214,8 +215,8 @@ const STATE_CODES = new Set(['policy_not_draft', 'policy_not_active', 'policy_no
 
 const actionError = (e: { code: string }): PolicyError => ({ code: STATE_CODES.has(e.code) ? 'illegal_state' : e.code })
 
-/** A refusal while compiling (create, or an edit with a new instruction): the form shows the message. */
-function compileError(e: { code: string; reason?: string; problem?: string }): PolicyError {
+/** A refusal while compiling (create, or an edit with a new instruction) or of an edit's values: the form shows the message. */
+function compileError(e: { code: string; reason?: string; problem?: string; min?: number; max?: number }): PolicyError {
   const failed = (why: string) => ({ code: 'could_not_compile', message: `The rule could not be compiled from that instruction: ${why}` })
   switch (e.code) {
     case 'could_not_propose':
@@ -234,6 +235,11 @@ function compileError(e: { code: string; reason?: string; problem?: string }): P
       return { code: e.code, message: 'Some of the values were not valid.' }
     case 'schedule_not_allowed':
       return { code: e.code, message: 'A daily schedule is a testnet demo control, off on this server: choose weekly or monthly.' }
+    case 'invalid_veto_window':
+      // This server's own range (an hour at least, or a minute with the testnet demo controls).
+      return typeof e.min === 'number' && typeof e.max === 'number'
+        ? { code: e.code, message: `Nothing was saved: a veto window here is at least ${vetoWords(e.min)} and at most ${vetoWords(e.max)}.` }
+        : { code: e.code }
     default:
       return actionError(e)
   }
@@ -359,13 +365,22 @@ export function policyPortFromCore(rolepay: Rolepay, opts: { names?: NameSource 
       return r.ok ? ok({ policyId: r.value.id }) : err(compileError(r.error as { code: string }))
     },
 
-    async edit({ guildId, policyId, actor, draft }) {
+    async edit({ guildId, policyId, actor, draft, mode, vetoWindowMinutes }) {
       const current = await policies.get({ guildId, policyId })
       if (!current.ok) return err({ code: 'policy_not_found' })
       // Only a new instruction is compiled again (one model call); a new name or schedule is not.
       const instruction = draft.instruction.trim() === current.value.instruction.trim() ? {} : { instruction: draft.instruction }
-      const r = await policies.edit({ ...caller(guildId, actor), policyId, name: draft.name, schedule: toCoreSchedule(draft.schedule), ...instruction })
-      return r.ok ? ok({ version: r.value.version }) : err(compileError(r.error as { code: string }))
+      const r = await policies.edit({
+        ...caller(guildId, actor),
+        policyId,
+        name: draft.name,
+        schedule: toCoreSchedule(draft.schedule),
+        ...instruction,
+        ...(mode === undefined ? {} : { mode }),
+        ...(vetoWindowMinutes === undefined ? {} : { vetoWindowMinutes }),
+      })
+      // Core leaves a policy approved before active or paused when the edit is in force at once, and makes it a draft when it waits.
+      return r.ok ? ok({ version: r.value.version, inForce: r.value.status !== 'draft' }) : err(compileError(r.error as { code: string }))
     },
 
     async approve({ guildId, policyId, actor, version }) {
@@ -438,8 +453,21 @@ export function auditSummary(e: AuditEvent, symbol: string): string {
       return `Wrote the policy as a draft (version ${version}).`
     case 'policy.compiled':
       return `Compiled the instruction once into a rule${d.amountsInInstruction === false ? '; it uses an amount the instruction does not state, so it cannot be approved' : ''}.`
-    case 'policy.edited':
-      return `Edited it: version ${version} waits for approval${d.recompiled ? ' (compiled again from a new instruction)' : ''}${d.autopilotOff ? '; autopilot is off' : ''}.`
+    case 'policy.edited': {
+      const again = d.recompiled ? ' (compiled again from a new instruction)' : ''
+      // An edit before edits could be in force has no `applied`: it waited for approval.
+      if (d.applied !== true) return `Edited it: version ${version} waits for approval${again}${d.autopilotOff ? '; autopilot is off' : ''}.`
+      const window = vetoWords(num('vetoWindowMinutes'))
+      const mode =
+        d.mode === 'autopilot'
+          ? d.previousMode === 'autopilot'
+            ? `; autopilot stays on, with a veto window of ${window}`
+            : `; autopilot is on: each run pays after a veto window of ${window} unless vetoed`
+          : d.autopilotOff
+            ? '; autopilot is off: each run waits for approval'
+            : ''
+      return `Edited and approved it at once: version ${version} is in force${again}${mode}.`
+    }
     case 'policy.approved':
       return `Approved version ${version}.`
     case 'policy.discarded':

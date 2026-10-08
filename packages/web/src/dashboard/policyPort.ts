@@ -53,7 +53,7 @@ export type PolicyDetail = PolicySummary & {
   createdAt: Date
   approvedBy: string | null
   approvedAt: Date | null
-  /** A newer version (an edit) waiting for approval, or null. */
+  /** A version waiting for approval (a new draft, or an edit that needs one), or null. */
   pendingVersion: number | null
 }
 
@@ -154,8 +154,14 @@ export interface PolicyPort {
 
   /** Compiles the instruction once (the AI) into a draft, which needs an approval to run. */
   create(input: { guildId: string; actor: PolicyActor; draft: PolicyDraft }): Promise<Result<{ policyId: string }, PolicyError>>
-  /** Recompiles into a new version, which needs a new approval. */
-  edit(input: Ref & { actor: PolicyActor; draft: PolicyDraft }): Promise<Result<{ version: number }, PolicyError>>
+  /**
+   * A new version (the instruction recompiled when it changed). From the approver role, on a policy
+   * approved before, with no separate approver required, it is in force at once (`inForce`): the
+   * policy keeps running and keeps its mode unless `mode` names one (`vetoWindowMinutes` with it,
+   * checked by the services). Otherwise it waits for an approval, the policy stops meanwhile, and a
+   * `mode` of autopilot is refused (`policy_not_approved`).
+   */
+  edit(input: Ref & { actor: PolicyActor; draft: PolicyDraft; mode?: PolicyMode; vetoWindowMinutes?: number }): Promise<Result<{ version: number; inForce: boolean }, PolicyError>>
   approve(input: Ref & { actor: PolicyActor; version: number }): Promise<Result<void, PolicyError>>
   /** Drops a version waiting for approval. */
   discard(input: Ref & { actor: PolicyActor; version: number }): Promise<Result<void, PolicyError>>

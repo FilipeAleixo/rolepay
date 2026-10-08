@@ -32,7 +32,8 @@ export const metricWords = (m: Record<string, number>) =>
 /** Messages after an action, by code. Codes outside these lists are never shown (nothing from the URL is echoed). */
 const DONE: Record<string, string> = {
   created: 'Created as a draft. Check who it applies to below, then approve it.',
-  edited: 'Recompiled. The new version waits for approval.',
+  edited: 'Saved. The new version waits for approval.',
+  applied: 'Saved. The new version is in force.',
   approved: 'Approved.',
   discarded: 'Discarded.',
   paused: 'Paused. No runs until it is resumed.',
@@ -63,7 +64,9 @@ export function vetoWords(minutes: number): string {
   return minutes === 1 ? '1 minute' : `${minutes} minutes`
 }
 
-export function notice(done: string | undefined, error: string | undefined): string {
+/** The message after an action. `version`: the policy's version now, which an edit in force names ("Version 5 is in force"). */
+export function notice(done: string | undefined, error: string | undefined, ctx: { version?: number } = {}): string {
+  if (done === 'applied' && ctx.version !== undefined) return `<p class="notice ok" role="status">Saved. Version ${ctx.version} is in force.</p>`
   if (done && DONE[done]) return `<p class="notice ok" role="status">${DONE[done]}</p>`
   if (error && /^[a-z_]{1,40}$/.test(error)) return `<p class="notice bad" role="alert">${ERRORS[error] ?? `That did not work (${error}).`}</p>`
   return ''
@@ -221,10 +224,11 @@ export type LatestPolicyRun = { run: Run; origin: RunOrigin | undefined } | null
 
 /**
  * The latest run this policy made: its status, and on autopilot the veto window ("pays in 0:42 unless
- * vetoed" with the dashboard's script), then paid or vetoed. A live region: the page re-reads it as
- * the run moves.
+ * vetoed" with the dashboard's script), then paid or vetoed. A run made by an earlier version (the
+ * policy was edited during its window) is never released by autopilot, and says so instead. A live
+ * region: the page re-reads it as the run moves.
  */
-function latestRunSection(guildId: string, latest: LatestPolicyRun): string {
+function latestRunSection(guildId: string, latest: LatestPolicyRun, version: number): string {
   const head = '<h2>Latest run</h2>'
   if (!latest) return `<section class="card" data-live-region="latest-run">${head}<p class="muted">No run yet. Its runs show here as they are made, paid or vetoed.</p></section>`
   const { run, origin: o } = latest
@@ -232,7 +236,9 @@ function latestRunSection(guildId: string, latest: LatestPolicyRun): string {
     o?.vetoedAt
       ? `Vetoed ${when(o.vetoedAt)}: nothing is paid.`
       : o?.mode === 'autopilot' && o.executesAt && !o.executedAt && run.status === 'pending_approval'
-        ? `Autopilot: ${paysUnlessVetoed(o.executesAt)}.`
+        ? o.vetoable && o.version !== version
+          ? `Autopilot will not pay it: version ${o.version} made it, and the policy has changed since. When its veto window ends it waits for a Treasurer's approval instead.`
+          : `Autopilot: ${paysUnlessVetoed(o.executesAt)}.`
         : run.paidAt
           ? `Paid ${when(run.paidAt)}.`
           : ''
@@ -241,20 +247,53 @@ function latestRunSection(guildId: string, latest: LatestPolicyRun): string {
   }${o ? `, ${esc(o.period)}` : ''}</p>${window ? `<p>${window}</p>` : ''}</section>`
 }
 
-/** The policy page's editor: the form's values, whether to offer daily runs, whether it starts open, and a refusal to show in it. */
-export type PolicyEditor = { values: PolicyFormValues; daily: boolean; open: boolean; error: string | null }
+/**
+ * What saving an edit does, as the policy services decide it (the page only says it): `now`, in
+ * force at once (the viewer holds the approver role, the policy was approved before, and the
+ * community does not require a separate approver); `second_approval`, it waits for another
+ * Treasurer (a separate approver is required); `approval`, it waits for an approval (a draft).
+ */
+export type EditApplies = 'now' | 'approval' | 'second_approval'
+
+/**
+ * The policy page's editor: the form's values, whether to offer daily runs, whether it starts open,
+ * a refusal to show in it, and what saving does (`applies`; the mode is offered only when it is `now`).
+ */
+export type PolicyEditor = { values: PolicyFormValues; daily: boolean; open: boolean; error: string | null; applies: EditApplies }
+
+const EDIT_WORDS: Record<EditApplies, string> = {
+  now: "Your change applies as soon as you save: the policy keeps running with it, and the new version is recorded as approved by you. With a new wording, Rolepay's AI compiles it once first.",
+  second_approval:
+    "This community requires a second person: the new version waits for another Treasurer to approve it here, and the policy does not run until then. With a new wording, Rolepay's AI compiles it once first.",
+  approval: "The new version waits for approval here, and the policy does not run until it is approved. With a new wording, Rolepay's AI compiles it once first.",
+}
+
+/**
+ * The mode an edit in force sets, pre-filled from the policy: propose or autopilot, and the veto
+ * window in minutes (the services check its range). The window shows only with autopilot chosen
+ * (CSS `:has`, no script), and the server reads it only then.
+ */
+function editModeFields(v: PolicyFormValues): string {
+  const auto = v.mode === 'autopilot'
+  return `<fieldset class="field"><legend>Mode</legend>
+<label><input type="radio" name="mode" value="propose"${auto ? '' : ' checked'}> Propose: each run waits for a Treasurer to approve it in Discord</label>
+<label><input type="radio" name="mode" value="autopilot"${auto ? ' checked' : ''}> Autopilot: each run pays after the veto window unless a Treasurer vetoes it</label>
+<div class="field-veto"><label for="editVetoWindowMinutes">Veto window (minutes: 60 is an hour, 1440 a day)</label><input id="editVetoWindowMinutes" name="vetoWindowMinutes" type="number" min="1" max="${POLICY_LIMITS.maxVetoMinutes}" value="${esc(v.vetoWindowMinutes ?? '')}"></div></fieldset>`
+}
 
 /**
  * Edit in place: a disclosure in the rule's panel with the same fields as a new policy, pre-filled.
- * Recompiling posts to `/edit` and comes back to this page with the new version waiting for approval.
- * No script: `<details>` opens it, and the schedule fields follow the chosen kind in CSS.
+ * Saving posts to `/edit` and comes back to this page: with the new version in force, or waiting
+ * for approval, as the words under the form say beforehand. No script: `<details>` opens it, and
+ * the schedule fields (and the veto window) follow what is chosen, in CSS.
  */
 function editorSection(base: string, csrf: string, e: PolicyEditor): string {
+  const now = e.applies === 'now'
   return `<details class="editor" id="editor"${e.open ? ' open' : ''}><summary>Edit</summary>${e.error ? `<p class="notice bad" role="alert">${esc(e.error)}</p>` : ''}
 <form method="post" action="${base}/edit">${csrfField(csrf)}
 ${policyFormFields(e.values, e.daily)}
-<p class="muted small">Rolepay's AI compiles the new wording once into a new version. It waits for approval here, and the policy does not run until it is approved.</p>
-<button type="submit">Recompile and preview</button></form></details>`
+${now ? editModeFields(e.values) : ''}<p class="muted small">${EDIT_WORDS[e.applies]}</p>
+<button type="submit">${now ? 'Save and apply' : 'Recompile and preview'}</button></form></details>`
 }
 
 export function policyBody(d: {
@@ -299,14 +338,15 @@ export function policyBody(d: {
 <div class="grid"><section class="card"><h2>The rule</h2><p>${esc(p.ruleInWords)}</p><h3>As written</h3><blockquote>${esc(p.instruction)}</blockquote>
 <details><summary>Exact filter</summary><pre>${esc(JSON.stringify(p.filter, null, 2))}</pre></details>${d.editor && p.status !== 'archived' ? editorSection(base, d.csrf, d.editor) : ''}</section>
 <section class="card"><h2>Settings</h2><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section></div>
-${d.latest === undefined ? '' : latestRunSection(d.guildId, d.latest)}
+${d.latest === undefined ? '' : latestRunSection(d.guildId, d.latest, p.version)}
 ${previewSection({ preview: d.preview, names: d.names, token: d.token })}
 ${d.budget ? budgetSection({ base, budget: d.budget, canAct: d.canAct, csrf: d.csrf, archived: p.status === 'archived' }) : ''}
 ${actions}
 ${versionsSection(d.versions, d.names, d.compiles ?? null)}`
 }
 
-export type PolicyFormValues = { name: string; instruction: string; kind: string; weekday: string; day: string; hour: string; timezone: string }
+/** A policy form's values as typed. `mode` and `vetoWindowMinutes`: the editor's, when an edit applies at once. */
+export type PolicyFormValues = { name: string; instruction: string; kind: string; weekday: string; day: string; hour: string; timezone: string; mode?: string; vetoWindowMinutes?: string }
 
 /**
  * The fields of the new and edit policy forms: name, instruction and the schedule. Each schedule field

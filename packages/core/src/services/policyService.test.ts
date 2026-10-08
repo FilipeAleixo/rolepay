@@ -232,15 +232,110 @@ describe('PolicyService.approve: only the current approver role activates a poli
   })
 })
 
-describe('PolicyService: edits make a new version that needs a new approval', () => {
-  it('recompiles, stops the policy until approved, switches autopilot off, and keeps the history', async () => {
+/** The audit event a policy's latest edit wrote: its details. */
+async function lastEdited(w: Awaited<ReturnType<typeof policyWorld>>) {
+  const r = await w.rolepay.audit.list({ guildId: GUILD, types: ['policy.edited'], limit: 1 })
+  if (!r.ok) throw new Error(r.error.code)
+  return r.value.events[0]?.details
+}
+
+const TWO_PER_ANSWER = 'Every Monday: 2 per answered question in #help, max 50 a week each, for Mods'
+const twoPerAnswer = () => helpDeskAnswer({ amount: { kind: 'perUnit', amount: '2', per: 'replies', cap: '50', total: '', splitBy: '' } })
+
+describe("PolicyService: an approver's edit of an approved policy is in force at once", () => {
+  it('stays active and on autopilot (now in the editor\'s name), and records the editor\'s approval on the policy and its version', async () => {
+    const w = await policyWorld()
+    const p = await w.active({}, { vetoWindowMinutes: 120 })
+    expect(p.autopilot?.enabledBy).toBe(TREASURER)
+    w.travel(60)
+    const at = new Date(T0.getTime() + 60_000)
+    w.proposer.onCriteria = twoPerAnswer
+    const r = await w.rolepay.policies.edit({ ...asTreasurer, actor: TREASURER_TWO, policyId: p.id, instruction: TWO_PER_ANSWER })
+    if (!r.ok) throw new Error(JSON.stringify(r.error))
+    expect(r.value).toMatchObject({
+      version: 2,
+      status: 'active',
+      mode: 'autopilot',
+      vetoWindowMinutes: 120,
+      autopilot: { enabledBy: TREASURER_TWO, enabledAt: at, approverRoleId: APPROVER },
+      approvedBy: TREASURER_TWO,
+      approvedAt: at,
+      activeSince: at,
+    })
+    expect(r.value.compiled.plan.rule).toMatchObject({ amount: usd(2) })
+    const d = await w.rolepay.policies.detail({ guildId: GUILD, policyId: p.id })
+    expect(d.ok && d.value.versions.map((v) => [v.version, v.authoredBy, v.approvedBy, v.approvedAt])).toEqual([
+      [1, TREASURER, TREASURER, T0],
+      [2, TREASURER_TWO, TREASURER_TWO, at],
+    ])
+    // It keeps running: the next Monday is still its next run, and the preview pays the new rule.
+    expect(d.ok && d.value.nextRunAt).toEqual(MONDAY)
+    const preview = await w.rolepay.policies.preview({ guildId: GUILD, policyId: p.id })
+    expect(preview.ok && [preview.value.version, preview.value.total]).toEqual([2, usd(50 + 24 + 4)])
+    expect(await types(w)).toEqual(['policy.created', 'policy.compiled', 'policy.approved', 'policy.mode_changed', 'policy.edited', 'policy.compiled'])
+    expect(await lastEdited(w)).toEqual({ recompiled: true, applied: true, mode: 'autopilot', previousMode: 'autopilot', autopilotOff: false, vetoWindowMinutes: 120, previous: 1 })
+  })
+
+  it('a schedule or cap change needs no model call, and is still a new version', async () => {
+    const w = await policyWorld()
+    const p = await w.active()
+    const r = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, schedule: { ...MONDAYS, weekday: 'friday' }, caps: { perRun: usd(100), perPerson: null } })
+    expect(r.ok && r.value).toMatchObject({ version: 2, status: 'active', mode: 'propose', approvedBy: TREASURER, schedule: { weekday: 'friday' }, caps: { perRun: usd(100) } })
+    expect(w.proposer.requests).toHaveLength(1)
+    const d = await w.rolepay.policies.detail({ guildId: GUILD, policyId: p.id })
+    expect(d.ok && d.value.nextRunAt).toEqual(new Date('2026-10-09T18:00:00Z'))
+  })
+
+  it('the edit can switch autopilot on or off, with the veto window checked as setMode checks it; a paused policy stays paused', async () => {
+    const w = await policyWorld()
+    const p = await w.active()
+    await w.rolepay.policies.pause({ ...asTreasurer, policyId: p.id })
+    expect(await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, name: 'Help desk, faster', mode: 'autopilot', vetoWindowMinutes: 30 })).toEqual({
+      ok: false,
+      error: { code: 'invalid_veto_window', min: 60, max: 10_080 },
+    })
+    expect(await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, mode: 'yolo' as 'autopilot' })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+    const unchanged = await w.rolepay.policies.get({ guildId: GUILD, policyId: p.id })
+    expect(unchanged.ok && [unchanged.value.version, unchanged.value.name]).toEqual([1, 'Help desk'])
+
+    const on = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, name: 'Help desk, faster', mode: 'autopilot', vetoWindowMinutes: 90 })
+    expect(on.ok && on.value).toMatchObject({ version: 2, status: 'paused', mode: 'autopilot', vetoWindowMinutes: 90, autopilot: { enabledBy: TREASURER, approverRoleId: APPROVER }, approvedBy: TREASURER })
+    expect(await lastEdited(w)).toMatchObject({ applied: true, mode: 'autopilot', previousMode: 'propose', autopilotOff: false, vetoWindowMinutes: 90 })
+    const off = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, mode: 'propose' })
+    expect(off.ok && off.value).toMatchObject({ version: 3, status: 'paused', mode: 'propose', autopilot: null, vetoWindowMinutes: 90 })
+    expect(await lastEdited(w)).toMatchObject({ applied: true, mode: 'propose', previousMode: 'autopilot', autopilotOff: true })
+    // Resuming runs the version the edit put in force.
+    const resumed = await w.rolepay.policies.resume({ ...asTreasurer, policyId: p.id })
+    expect(resumed.ok && [resumed.value.status, resumed.value.version, resumed.value.name]).toEqual(['active', 3, 'Help desk, faster'])
+  })
+
+  it('the checks approve makes still apply: a rule with an amount the instruction does not state saves nothing', async () => {
+    const w = await policyWorld()
+    const p = await w.active({}, { vetoWindowMinutes: 60 })
+    expect(await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, instruction: 'Every Monday: pay each Mod per answered question in #help' })).toEqual({
+      ok: false,
+      error: { code: 'policy_blocked', problems: ['amount_not_in_instruction'] },
+    })
+    const stored = await w.rolepay.policies.get({ guildId: GUILD, policyId: p.id })
+    expect(stored.ok && [stored.value.version, stored.value.status, stored.value.mode, stored.value.instruction]).toEqual([1, 'active', 'autopilot', INSTRUCTION])
+    const d = await w.rolepay.policies.detail({ guildId: GUILD, policyId: p.id })
+    expect(d.ok && d.value.versions.map((v) => v.version)).toEqual([1])
+    expect(await types(w)).toEqual(['policy.created', 'policy.compiled', 'policy.approved', 'policy.mode_changed'])
+  })
+})
+
+describe('PolicyService: any other edit waits for an approval (the policy stops, autopilot goes off)', () => {
+  it("a proposer's edit: recompiles, stops the policy until approved, switches autopilot off, and keeps the history", async () => {
     const w = await policyWorld()
     const p = await w.active({}, { vetoWindowMinutes: 120 })
     expect(p.mode).toBe('autopilot')
-    w.proposer.onCriteria = () => helpDeskAnswer({ amount: { kind: 'perUnit', amount: '2', per: 'replies', cap: '50', total: '', splitBy: '' } })
-    const r = await w.rolepay.policies.edit({ ...asWriter, policyId: p.id, instruction: 'Every Monday: 2 per answered question in #help, max 50 a week each, for Mods' })
+    // A proposer cannot switch autopilot on (or keep it) through an edit.
+    expect(await w.rolepay.policies.edit({ ...asWriter, policyId: p.id, name: 'x', mode: 'autopilot' })).toEqual({ ok: false, error: { code: 'policy_not_approved' } })
+    w.proposer.onCriteria = twoPerAnswer
+    const r = await w.rolepay.policies.edit({ ...asWriter, policyId: p.id, instruction: TWO_PER_ANSWER, vetoWindowMinutes: 5 })
     if (!r.ok) throw new Error(JSON.stringify(r.error))
-    expect(r.value).toMatchObject({ version: 2, status: 'draft', mode: 'propose', autopilot: null, approvedBy: null, activeSince: null })
+    // The veto window an edit that waits names is ignored: it is set when autopilot is switched on again.
+    expect(r.value).toMatchObject({ version: 2, status: 'draft', mode: 'propose', autopilot: null, approvedBy: null, activeSince: null, vetoWindowMinutes: 120 })
     expect(r.value.compiled.plan.rule).toMatchObject({ amount: usd(2) })
     expect(w.proposer.requests).toHaveLength(2)
     const d = await w.rolepay.policies.detail({ guildId: GUILD, policyId: p.id })
@@ -248,27 +343,43 @@ describe('PolicyService: edits make a new version that needs a new approval', ()
       [1, TREASURER, TREASURER],
       [2, WRITER, null],
     ])
+    expect(await lastEdited(w)).toEqual({ recompiled: true, applied: false, mode: 'propose', previousMode: 'autopilot', autopilotOff: true, vetoWindowMinutes: 120, previous: 1 })
     expect((await w.rolepay.policies.approve({ ...asTreasurer, policyId: p.id, version: 2 })).ok).toBe(true)
   })
 
-  it('a schedule or cap change needs no model call, but is still a new version', async () => {
+  it("four eyes: an approver's edit waits for a second approver, and cannot switch autopilot on", async () => {
+    const w = await policyWorld({ separateApprover: true })
+    const p = await w.draft()
+    await w.rolepay.policies.approve({ ...asTreasurer, actor: TREASURER_TWO, policyId: p.id, version: 1 })
+    await w.rolepay.policies.setMode({ ...asTreasurer, actor: TREASURER_TWO, policyId: p.id, mode: 'autopilot' })
+    expect(await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, name: 'x', mode: 'autopilot' })).toEqual({ ok: false, error: { code: 'policy_not_approved' } })
+    const r = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, name: 'Help desk, renamed' })
+    expect(r.ok && r.value).toMatchObject({ version: 2, status: 'draft', mode: 'propose', autopilot: null, approvedBy: null })
+    expect(await w.rolepay.policies.approve({ ...asTreasurer, policyId: p.id, version: 2 })).toEqual({ ok: false, error: { code: 'creator_cannot_approve' } })
+    expect((await w.rolepay.policies.approve({ ...asTreasurer, actor: TREASURER_TWO, policyId: p.id, version: 2 })).ok).toBe(true)
+  })
+
+  it('a draft never approved stays a draft: its first approval is still an explicit step after the preview', async () => {
     const w = await policyWorld()
-    const p = await w.active()
-    const r = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, schedule: { ...MONDAYS, weekday: 'friday' }, caps: { perRun: usd(100), perPerson: null } })
-    expect(r.ok && r.value).toMatchObject({ version: 2, status: 'draft', schedule: { weekday: 'friday' }, caps: { perRun: usd(100) } })
-    expect(w.proposer.requests).toHaveLength(1)
+    const p = await w.draft()
+    expect(await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, name: 'x', mode: 'autopilot' })).toEqual({ ok: false, error: { code: 'policy_not_approved' } })
+    const r = await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, name: 'Help desk, renamed', mode: 'propose' })
+    expect(r.ok && r.value).toMatchObject({ version: 2, status: 'draft', mode: 'propose', approvedBy: null, activeSince: null })
+    expect(await lastEdited(w)).toMatchObject({ applied: false, autopilotOff: false })
+    const d = await w.rolepay.policies.detail({ guildId: GUILD, policyId: p.id })
+    expect(d.ok && d.value.nextRunAt).toBeNull()
   })
 
   it('discarding an edit restores the approved version, paused; discarding a new draft archives it', async () => {
     const w = await policyWorld()
     const p = await w.active()
-    await w.rolepay.policies.edit({ ...asTreasurer, policyId: p.id, name: 'Help desk, double' })
+    await w.rolepay.policies.edit({ ...asWriter, policyId: p.id, name: 'Help desk, double' })
     const back = await w.rolepay.policies.discard({ ...asTreasurer, policyId: p.id })
     expect(back.ok && back.value).toMatchObject({ version: 1, status: 'paused', name: 'Help desk', approvedBy: TREASURER })
     const d = await w.rolepay.policies.detail({ guildId: GUILD, policyId: p.id })
-    expect(d.ok && d.value.versions.map((v) => [v.version, v.discardedBy])).toEqual([
-      [1, null],
-      [2, TREASURER],
+    expect(d.ok && d.value.versions.map((v) => [v.version, v.authoredBy, v.discardedBy])).toEqual([
+      [1, TREASURER, null],
+      [2, WRITER, TREASURER],
     ])
     const fresh = await w.draft()
     expect(await w.rolepay.policies.discard({ guildId: GUILD, actor: LI, actorRoleIds: [], policyId: fresh.id })).toEqual({ ok: false, error: { code: 'not_permitted' } })

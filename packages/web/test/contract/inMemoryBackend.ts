@@ -111,6 +111,12 @@ export const inMemoryBackend: PolicyBackendFactory = (clock) => ({
         ports.addEvent(GUILD, { at: clock.now(), type: 'policy_run.generated', actorId: TREASURER.id, policyId, runId, summary: "Made the period's run: 62 AlphaUSD for 2 people." })
         return runId
       },
+      async separateApprover() {
+        // The pages read the community from core; the port reads its own copy, as core reads the community.
+        const r = await h.rolepay.communities.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [ROLE] })
+        if (!r.ok) throw new Error(r.error.code)
+        ports.setSeparateApprover(GUILD, true)
+      },
       async releasedRun(policyId) {
         const runId = await linkedRun(policyId, { vetoable: false, executedAt: clock.now() })
         ports.addEvent(GUILD, { at: clock.now(), type: 'policy_run.generated', actorId: TREASURER.id, policyId, runId, summary: "Made the period's run: 62 AlphaUSD for 2 people." })

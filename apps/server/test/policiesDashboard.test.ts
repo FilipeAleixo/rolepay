@@ -254,4 +254,66 @@ describe('standing policies across Discord and the dashboard', () => {
     expect(csv.find((l) => l.includes(',policy_run.vetoed,'))).toContain(`,${TREASURER.userId},Tess,${policyId},Help desk,${firstRunId},`)
     expect(csv.find((l) => l.includes(',policy_run.released,'))).toContain(`,,Rolepay,${policyId},Help desk,${secondRunId},`)
   })
+
+  it("a Treasurer's edit on the dashboard while a run waits in its veto window: in force at once, autopilot kept; the old rule's run is not paid, and the policy page and Discord say why", async () => {
+    const oauth = new FakeDiscordOAuth()
+    const s = await testServer({ devShortcuts: false, demoControls: true, policySeam: true, dashboard: { oauth } })
+    await setUp(s)
+    const now = s.clock.now().getTime()
+    answers(s, ANA, [30, 40, 50].map((sec) => new Date(now - sec * 1000)))
+    // "1 per answer", or "2 per answer" once the instruction says so.
+    s.proposer.onCriteria = (r) =>
+      emptyCriteria(
+        { amount: { kind: 'perUnit', amount: /\b2 per\b/.test(r.instruction) ? '2' : '1', per: 'replies', cap: '50', total: '', splitBy: '' }, note: 'Help desk' },
+        { hasRole: ['R2'], activity: [{ metric: 'replies', channels: ['C1'], since: new Date(now - 7 * 86_400_000).toISOString().slice(0, 10), until: '', min: 1 }] },
+      )
+    const tomorrow = new Date(now + 26 * 3_600_000)
+    const options = { instruction: '1 per answered question in #help, max 50 a week each, for Mods', schedule: 'weekly', weekday: WEEKDAYS[tomorrow.getUTCDay()] as string, hour: tomorrow.getUTCHours(), name: 'Help desk' }
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'policy new', options, TREASURER, 'tok-policy'))
+    await s.drain()
+    const approveId = /policy:approve:pol_[A-Za-z0-9_]+:1/.exec(text(s.rest.lastEdit('tok-policy')))?.[0] as string
+    const policyId = approveId.split(':')[2] as string
+    await s.interact(buttonClick(SCOPE, approveId, TREASURER))
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'policy mode', { policy: policyId, mode: 'autopilot', veto_minutes: 5 }, TREASURER))
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'policy run_now', { policy: policyId }, TREASURER, 'tok-now'))
+    await s.drain()
+    const posted = s.rest.channelPosts.at(-1)
+    expect(text(posted?.message)).toContain('policy-run:veto:')
+    const [run] = await s.rolepay.policies.listRuns({ guildId: GUILD, policyId })
+    expect([run?.status, run?.policyVersion, run?.total]).toEqual(['scheduled', 1, usd('3')])
+
+    // Two minutes into the window, Tess doubles the rate on the dashboard and keeps autopilot: in force at once.
+    s.clock.advance(120)
+    s.chain.advance(120)
+    const tess = await dashboard(s, oauth, { id: TREASURER.userId, name: 'tess' })
+    const base = `/dashboard/${GUILD}/policies/${policyId}`
+    const form = { name: 'Help desk', instruction: '2 per answered question in #help, max 50 a week each, for Mods', kind: 'weekly', weekday: String(tomorrow.getUTCDay()), day: '1', hour: String(tomorrow.getUTCHours()), timezone: 'UTC', mode: 'autopilot', vetoWindowMinutes: '5' }
+    const saved = await tess.act(`${base}/edit`, form)
+    expect(saved.headers.get('location')).toBe(`${base}?done=applied`)
+    const policy = await s.rolepay.policies.get({ guildId: GUILD, policyId })
+    expect(policy.ok && [policy.value.status, policy.value.version, policy.value.mode, policy.value.vetoWindowMinutes, policy.value.approvedBy]).toEqual(['active', 2, 'autopilot', 5, TREASURER.userId])
+    const page = visible(await (await tess.get(`${base}?done=applied`)).text())
+    expect(page).toContain('Saved. Version 2 is in force.')
+    expect(page).toContain('2 AlphaUSD per reply to other people, at most 50 AlphaUSD each.')
+    expect(page).toContain('it would pay 6 AlphaUSD to 1 person')
+    // The run version 1 made: autopilot will not pay it, and the page says so instead of counting down.
+    const latest = page.slice(page.indexOf('Latest run'), page.indexOf('Next run', page.indexOf('Latest run')))
+    expect(latest).toContain('Autopilot will not pay it: version 1 made it, and the policy has changed since.')
+    expect(latest).not.toContain('unless vetoed')
+
+    // The window ends: the run is held, not paid under the old rule, and its message in Discord says why.
+    s.clock.advance(4 * 60)
+    s.chain.advance(4 * 60)
+    const report = await s.tickPolicies()
+    expect(report.events.map((e) => [e.kind, e.policyRun.hold?.code ?? null])).toEqual([['held', 'policy_changed']])
+    expect(s.chain.landedTxCount).toBe(0)
+    const edit = s.rest.channelEdits.at(-1)
+    expect(edit?.messageId).toBe(posted?.messageId)
+    expect(text(edit?.message)).toContain('The policy was edited after this run was made, so autopilot did not approve it.')
+    expect(text(edit?.message)).not.toContain('policy-run:veto:')
+
+    // The audit log says who edited it, that it is in force, and that autopilot stayed on.
+    const audit = visible(await (await tess.get(`/dashboard/${GUILD}/audit?policy=${policyId}`)).text())
+    expect(audit).toContain('Edited and approved it at once: version 2 is in force (compiled again from a new instruction); autopilot stays on, with a veto window of 5 minutes.')
+  })
 })

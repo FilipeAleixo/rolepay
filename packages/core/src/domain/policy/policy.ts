@@ -11,7 +11,8 @@ import { type Schedule, ScheduleSchema, describeSchedule, nextOccurrence, occurr
  * A standing policy: a rule the AI compiled ONCE from the treasurer's instruction (criteria
  * mode's filter and amount plan), approved by the approver role, then run by code on a schedule
  * with no AI at runtime. Each run goes through the normal pay run machinery and the bot key's
- * on-chain limit. Any edit makes a new version that needs a new approval.
+ * on-chain limit. Any edit makes a new version: an approver's edit of an approved policy is in
+ * force at once (unless the community requires a separate approver), any other waits for an approval.
  */
 export const PolicyIdSchema = z.string().regex(/^[A-Za-z0-9_]{1,40}$/)
 

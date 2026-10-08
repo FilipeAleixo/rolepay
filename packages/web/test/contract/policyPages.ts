@@ -41,6 +41,8 @@ export interface PolicyBackend {
   autopilotRun(policyId: string): Promise<string>
   /** An autopilot run of this policy that Rolepay itself released after its window: events with no actor. The pay run's ID. */
   releasedRun(policyId: string): Promise<string>
+  /** From now on the community requires a separate approver (four eyes): an edit then waits for another Treasurer. */
+  separateApprover(): Promise<void>
   /** An instruction this backend cannot compile. */
   readonly uncompilable: string
 }
@@ -203,17 +205,22 @@ export function policyPagesContract(name: string, factory: PolicyBackendFactory)
 
     it('shows the version history with approvals and what changed between versions', async () => {
       const { h, backend, policyId } = await setup()
+      // The Treasurer's edit is in force at once: version 2 is approved by them, version 1 replaced.
       const edited = await backend.policies.edit({ guildId: GUILD, policyId, actor, draft: { name: 'Weekly helpers', instruction: weekly.instruction, schedule: MONDAY } })
-      expect(edited).toEqual({ ok: true, value: { version: 2 } })
+      expect(edited).toEqual({ ok: true, value: { version: 2, inForce: true } })
       const { browser } = await h.signIn(identity(MEMBER))
       const html = await (await browser.get(`/dashboard/${GUILD}/policies/${policyId}`)).text()
       const versions = html.slice(html.indexOf('Version history'))
       const t = text(versions)
-      expect(t).toMatch(/Version 1.*approved by Tess/)
-      expect(t).toMatch(/Version 2.*waiting for approval/)
+      expect(t).toMatch(/Version 2 in force approved by Tess.*Version 1 replaced approved by Tess/)
       expect(versions).toContain('<span class="del">- Every Monday: 1 USDC')
       expect(versions).toContain('<span class="add">+ Every Monday: 2 USDC')
-      expect((await backend.policies.versions({ guildId: GUILD, policyId })).map((v) => v.status)).toEqual(['approved', 'pending'])
+      expect((await backend.policies.versions({ guildId: GUILD, policyId })).map((v) => v.status)).toEqual(['superseded', 'approved'])
+      // With four eyes on, the next edit waits for another Treasurer.
+      await backend.separateApprover()
+      expect(await backend.policies.edit({ guildId: GUILD, policyId, actor, draft: { name: 'Weekly helpers', instruction: MONDAY_RULE, schedule: MONDAY } })).toEqual({ ok: true, value: { version: 3, inForce: false } })
+      expect(text(await (await browser.get(`/dashboard/${GUILD}/policies/${policyId}`)).text())).toMatch(/Version 3 waiting for approval/)
+      expect((await backend.policies.versions({ guildId: GUILD, policyId })).map((v) => v.status)).toEqual(['superseded', 'approved', 'pending'])
     })
 
     it('shows actions to the Treasurer role only: approve a pending version, edit, pause, switch mode, archive', async () => {
@@ -223,7 +230,8 @@ export function policyPagesContract(name: string, factory: PolicyBackendFactory)
       for (const action of ['pause', 'mode', 'archive']) expect(active).toContain(`action="${base}/${action}"`)
       expect(active).not.toContain(`action="${base}/resume"`)
       expect(active).not.toContain(`action="${base}/approve"`)
-      // An edit is a new version waiting for approval: the policy stops running until it is approved.
+      // With four eyes on, an edit is a new version waiting for another Treasurer: the policy stops running until it is approved.
+      await backend.separateApprover()
       await backend.policies.edit({ guildId: GUILD, policyId, actor, draft: { name: 'Weekly helpers', instruction: 'Every Monday: 3 USDC per answered question in #help.', schedule: MONDAY } })
       const { browser: member } = await h.signIn(identity(MEMBER))
       const readOnly = await (await member.get(base)).text()
@@ -315,15 +323,21 @@ export function policyPagesContract(name: string, factory: PolicyBackendFactory)
     it('approves a pending version, and discards one (back to the last approved version, paused)', async () => {
       const { h, backend, policyId, base } = await setup()
       const { browser } = await h.signIn(identity(TREASURER))
-      expect((await browser.act(`${base}/edit`, weekly)).headers.get('location')).toBe(`${base}?done=edited`)
-      expect((await browser.act(`${base}/approve`, { version: '1' })).headers.get('location')).toBe(`${base}?error=version_mismatch`)
-      expect((await browser.act(`${base}/approve`, { version: '2' })).headers.get('location')).toBe(`${base}?done=approved`)
-      expect((await backend.policies.versions({ guildId: GUILD, policyId })).map((v) => v.status)).toEqual(['superseded', 'approved'])
-      await browser.act(`${base}/edit`, { ...weekly, instruction: 'Every Monday: 3 USDC per answered question in #help, max 50 a week each.' })
-      expect((await browser.act(`${base}/discard`, { version: '3' })).headers.get('location')).toBe(`${base}?done=discarded`)
+      // A draft never approved: an edit keeps it a draft, and its approval stays an explicit step.
+      const created = await backend.policies.create({ guildId: GUILD, actor, draft: { name: 'Monthly bounties', instruction: weekly.instruction, schedule: MONDAY } })
+      if (!created.ok) throw new Error(created.error.code)
+      const draft = `/dashboard/${GUILD}/policies/${created.value.policyId}`
+      expect((await browser.act(`${draft}/edit`, { ...weekly, name: 'Monthly bounties' })).headers.get('location')).toBe(`${draft}?done=edited`)
+      expect((await browser.act(`${draft}/approve`, { version: '1' })).headers.get('location')).toBe(`${draft}?error=version_mismatch`)
+      expect((await browser.act(`${draft}/approve`, { version: '2' })).headers.get('location')).toBe(`${draft}?done=approved`)
+      expect((await backend.policies.versions({ guildId: GUILD, policyId: created.value.policyId })).map((v) => v.status)).toEqual(['discarded', 'approved'])
+      // With four eyes on, an edit of the active policy waits; discarding it goes back to the approved version, paused.
+      await backend.separateApprover()
+      expect((await browser.act(`${base}/edit`, { ...weekly, instruction: 'Every Monday: 3 USDC per answered question in #help, max 50 a week each.' })).headers.get('location')).toBe(`${base}?done=edited`)
+      expect((await browser.act(`${base}/discard`, { version: '2' })).headers.get('location')).toBe(`${base}?done=discarded`)
       const after = await backend.policies.get({ guildId: GUILD, policyId })
-      expect(after.ok && [after.value.status, after.value.version]).toEqual(['paused', 2])
-      expect((await backend.policies.versions({ guildId: GUILD, policyId })).map((v) => v.status)).toEqual(['superseded', 'approved', 'discarded'])
+      expect(after.ok && [after.value.status, after.value.version]).toEqual(['paused', 1])
+      expect((await backend.policies.versions({ guildId: GUILD, policyId })).map((v) => v.status)).toEqual(['approved', 'discarded'])
       expect((await browser.act(`${base}/approve`, { version: 'x' })).status).toBe(400)
     })
 
@@ -339,8 +353,10 @@ export function policyPagesContract(name: string, factory: PolicyBackendFactory)
     })
 
     it('autopilot needs an approved policy', async () => {
-      const { h, backend, policyId, base } = await setup()
-      await backend.policies.edit({ guildId: GUILD, policyId, actor, draft: { name: 'Weekly helpers', instruction: weekly.instruction, schedule: MONDAY } })
+      const { h, backend } = await harness()
+      const created = await backend.policies.create({ guildId: GUILD, actor, draft: { name: 'Weekly helpers', instruction: weekly.instruction, schedule: MONDAY } })
+      if (!created.ok) throw new Error(created.error.code)
+      const base = `/dashboard/${GUILD}/policies/${created.value.policyId}`
       const { browser } = await h.signIn(identity(TREASURER))
       expect((await browser.act(`${base}/mode`, { mode: 'autopilot', vetoWindowHours: '2' })).headers.get('location')).toBe(`${base}?error=policy_not_approved`)
       expect(text(await (await browser.get(`${base}?error=policy_not_approved`)).text())).toMatch(/Approve the policy before switching on autopilot/)
@@ -355,7 +371,7 @@ export function policyPagesContract(name: string, factory: PolicyBackendFactory)
       expect(text(await (await browser.get(base)).text())).toMatch(/Archived policies do not change/)
     })
 
-    it('edits in place: the Treasurer opens the editor on the policy page, pre-filled, and recompiling comes back to it with the new version', async () => {
+    it('edits in place: the Treasurer opens the editor on the policy page, pre-filled, and saving comes back to it with the new version in force', async () => {
       const { h, base } = await setup()
       // The old edit page now opens the policy page with the editor open; a member gets the page without one.
       const { browser: member } = await h.signIn(identity(MEMBER))
@@ -371,10 +387,12 @@ export function policyPagesContract(name: string, factory: PolicyBackendFactory)
       const editor = open.slice(open.indexOf('id="editor"'), open.indexOf('</details>', open.indexOf('id="editor"')))
       expect(editor).toContain(esc(MONDAY_RULE))
       expect(editor).toMatch(/<option value="1" selected>Monday<\/option>/)
-      expect(editor).toContain('<button type="submit">Recompile and preview</button>')
+      expect(editor).toContain('<button type="submit">Save and apply</button>')
       const done = await browser.act(`${base}/edit`, weekly)
-      expect(done.headers.get('location')).toBe(`${base}?done=edited`)
-      expect(text(await (await browser.get(`${base}?done=edited`)).text())).toMatch(/Version 2 waits for approval/)
+      expect(done.headers.get('location')).toBe(`${base}?done=applied`)
+      const after = text(await (await browser.get(`${base}?done=applied`)).text())
+      expect(after).toContain('Saved. Version 2 is in force.')
+      expect(after).not.toMatch(/Version \d waits for approval/)
       // A refused edit comes back to the same page, the editor open with what was sent and why.
       const refused = await browser.act(`${base}/edit`, { ...weekly, name: '', instruction: 'Keep <this> wording' })
       expect(refused.status).toBe(400)
@@ -388,18 +406,110 @@ export function policyPagesContract(name: string, factory: PolicyBackendFactory)
       const { h, backend, policyId, base } = await setup()
       const { browser } = await h.signIn(identity(TREASURER))
       // Weekly: the day of the month (hidden on the page) is out of range and ignored.
-      expect((await browser.act(`${base}/edit`, { ...weekly, weekday: '3', day: '99' })).headers.get('location')).toBe(`${base}?done=edited`)
+      expect((await browser.act(`${base}/edit`, { ...weekly, weekday: '3', day: '99' })).headers.get('location')).toBe(`${base}?done=applied`)
       const weeklyNow = await backend.policies.versions({ guildId: GUILD, policyId })
       expect(weeklyNow.length).toBe(2)
       const asWeekly = await backend.policies.get({ guildId: GUILD, policyId })
       expect(asWeekly.ok && asWeekly.value.schedule).toEqual({ kind: 'weekly', weekday: 3, hour: 18, timezone: 'UTC' })
       // Monthly: the weekday (hidden) is junk and ignored; the day of the month is what counts.
-      expect((await browser.act(`${base}/edit`, { ...weekly, kind: 'monthly', weekday: 'x', day: '15' })).headers.get('location')).toBe(`${base}?done=edited`)
+      expect((await browser.act(`${base}/edit`, { ...weekly, kind: 'monthly', weekday: 'x', day: '15' })).headers.get('location')).toBe(`${base}?done=applied`)
       const asMonthly = await backend.policies.get({ guildId: GUILD, policyId })
       expect(asMonthly.ok && asMonthly.value.schedule).toEqual({ kind: 'monthly', day: 15, hour: 18, timezone: 'UTC' })
       // The field the kind does use is still checked.
       expect((await browser.act(`${base}/edit`, { ...weekly, kind: 'monthly', day: '31' })).status).toBe(400)
       expect((await browser.act(`${base}/edit`, { ...weekly, weekday: '9' })).status).toBe(400)
+    })
+
+    it("the Treasurer's edit is in force at once: the policy keeps running and its autopilot, and the page shows the new rule and who it applies to", async () => {
+      const { h, backend, policyId, base } = await setup()
+      expect((await backend.policies.setMode({ guildId: GUILD, policyId, actor, mode: 'autopilot', vetoWindowMinutes: 120 })).ok).toBe(true)
+      const { browser } = await h.signIn(identity(TREASURER))
+      const instruction = 'Every Monday: 2 USDC per answered question in #help, max 50 a week each.'
+      const res = await browser.act(`${base}/edit`, { ...weekly, instruction, mode: 'autopilot', vetoWindowMinutes: '120' })
+      expect(res.headers.get('location')).toBe(`${base}?done=applied`)
+      const p = await backend.policies.get({ guildId: GUILD, policyId })
+      if (!p.ok) throw new Error(p.error.code)
+      expect([p.value.status, p.value.mode, p.value.vetoWindowMinutes, p.value.version, p.value.approvedBy, p.value.pendingVersion, p.value.instruction]).toEqual([
+        'active',
+        'autopilot',
+        120,
+        2,
+        TREASURER.id,
+        null,
+        instruction,
+      ])
+      const html = await (await browser.get(`${base}?done=applied`)).text()
+      const t = text(html)
+      expect(t).toContain('Saved. Version 2 is in force.')
+      expect(t).toContain(instruction)
+      expect(html).toContain(esc(p.value.ruleInWords))
+      expect(t).toContain('Autopilot, veto window 2 hours')
+      expect(t).toMatch(/Version 2, approved by Tess/)
+      expect(html).not.toContain(`action="${base}/approve"`)
+      // Who the new rule applies to, worked out again.
+      const preview = await backend.policies.preview({ guildId: GUILD, policyId })
+      if (!preview.ok) throw new Error(preview.error.code)
+      expect(t).toContain(`${formatMoney(preview.value.total)} AlphaUSD`)
+      for (const m of preview.value.matches) for (const reason of m.reasons) expect(html).toContain(esc(reason))
+    })
+
+    it('the edit switches autopilot on or off; the veto window is read only with autopilot, and one the services refuse reopens the editor, nothing saved', async () => {
+      const { h, backend, policyId, base } = await setup()
+      const { browser } = await h.signIn(identity(TREASURER))
+      const mode = async () => {
+        const p = await backend.policies.get({ guildId: GUILD, policyId })
+        return p.ok && [p.value.mode, p.value.vetoWindowMinutes, p.value.version, p.value.name]
+      }
+      expect((await browser.act(`${base}/edit`, { ...weekly, mode: 'autopilot', vetoWindowMinutes: '90' })).headers.get('location')).toBe(`${base}?done=applied`)
+      expect(await mode()).toEqual(['autopilot', 90, 2, 'Weekly helpers'])
+      // Propose: the veto window (hidden on the page) is not read, junk included.
+      expect((await browser.act(`${base}/edit`, { ...weekly, mode: 'propose', vetoWindowMinutes: 'junk' })).headers.get('location')).toBe(`${base}?done=applied`)
+      expect(await mode()).toEqual(['propose', 90, 3, 'Weekly helpers'])
+      // Under an hour: the services refuse it, and the editor comes back open with what was sent and why.
+      const short = await browser.act(`${base}/edit`, { ...weekly, name: 'Faster helpers', mode: 'autopilot', vetoWindowMinutes: '30' })
+      expect(short.status).toBe(422)
+      const again = await short.text()
+      expect(again).toContain('<details class="editor" id="editor" open>')
+      expect(text(again)).toMatch(/Nothing was saved: .*veto window/)
+      expect(again).toContain('value="Faster helpers"')
+      expect(again).toContain('<input type="radio" name="mode" value="autopilot" checked>')
+      expect(await mode()).toEqual(['propose', 90, 3, 'Weekly helpers'])
+      // Out of the form's own range, or not a mode: refused before the services are asked.
+      expect((await browser.act(`${base}/edit`, { ...weekly, mode: 'autopilot', vetoWindowMinutes: '0' })).status).toBe(400)
+      expect((await browser.act(`${base}/edit`, { ...weekly, mode: 'yolo' })).status).toBe(400)
+      expect(await mode()).toEqual(['propose', 90, 3, 'Weekly helpers'])
+    })
+
+    it('the editor says beforehand what saving does, and offers the mode only where the edit applies at once', async () => {
+      const { h, backend, base } = await setup()
+      const { browser } = await h.signIn(identity(TREASURER))
+      const editorOf = async (path: string) => {
+        const html = await (await browser.get(`${path}?edit=1`)).text()
+        const at = html.indexOf('id="editor"')
+        return html.slice(at, html.indexOf('</details>', at))
+      }
+      // An approved policy: at once, with the mode pre-filled.
+      const now = await editorOf(base)
+      expect(now).toContain('<input type="radio" name="mode" value="propose" checked>')
+      expect(now).toContain('name="vetoWindowMinutes" type="number" min="1" max="10080" value="1440"')
+      expect(text(now)).toContain('Your change applies as soon as you save: the policy keeps running with it, and the new version is recorded as approved by you.')
+      expect(now).toContain('<button type="submit">Save and apply</button>')
+      // A draft: its first approval stays a step of its own.
+      const created = await backend.policies.create({ guildId: GUILD, actor, draft: { name: 'Monthly bounties', instruction: weekly.instruction, schedule: MONDAY } })
+      if (!created.ok) throw new Error(created.error.code)
+      const draft = await editorOf(`/dashboard/${GUILD}/policies/${created.value.policyId}`)
+      expect(draft).not.toContain('name="mode"')
+      expect(text(draft)).toContain('The new version waits for approval here, and the policy does not run until it is approved.')
+      expect(draft).toContain('<button type="submit">Recompile and preview</button>')
+      // Four eyes: another Treasurer approves the change.
+      await backend.separateApprover()
+      const four = await editorOf(base)
+      expect(four).not.toContain('name="mode"')
+      expect(text(four)).toContain('This community requires a second person: the new version waits for another Treasurer to approve it here, and the policy does not run until then.')
+      // Autopilot posted anyway (not from this page) is refused for an edit that waits: nothing is saved.
+      const forced = await browser.act(`${base}/edit`, { ...weekly, mode: 'autopilot', vetoWindowMinutes: '120' })
+      expect(forced.status).toBe(422)
+      expect(text(await forced.text())).toContain('Nothing was saved: autopilot can be switched on only for an approved policy')
     })
   })
 
