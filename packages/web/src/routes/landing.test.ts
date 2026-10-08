@@ -156,16 +156,18 @@ describe('the home page (/)', () => {
     expect(t).not.toContain('—') // no em dash
   })
 
-  it('has a top bar: the mark and the name on the left; on the right the dashboard, quietly, then the gold "Add to Discord"', async () => {
+  it('has a top bar: the mark and the name on the left; on the right the payee\'s account and the dashboard, quietly, then the gold "Add to Discord"', async () => {
     const html = await (await webHarness({ discordAppId: APP_ID }).send('/')).text()
     const bar = topBar(html)
     expect(bar).toMatch(/^<header class="topbar"><div class="bar"><p class="logo"><svg class="mark" width="28" height="28" aria-hidden="true"[\s\S]*<\/svg><span>Rolepay<\/span><\/p>/)
-    expect(bar).toContain(`<nav aria-label="Main"><a class="quiet" href="/dashboard">Dashboard</a><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a></nav>`)
+    expect(bar).toContain(`<nav aria-label="Main"><a class="quiet account" href="/account"><span class="wide">Your account</span><span class="narrow">Account</span></a><a class="quiet" href="/dashboard">Dashboard</a><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a></nav>`)
     // The hero leads with the same action, plus a way down the page.
     expect(hero(html)).toContain(`<p class="actions"><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a><a class="more" href="#how">How it works</a></p>`)
     expect(html).toContain('<section class="how" id="how"')
-    // On a phone the bar keeps the mark, the name and the gold button; the dashboard link waits further down.
-    expect(STYLE).toMatch(/@media \(max-width:40rem\)\{\.topbar \.quiet\{display:none\}/)
+    // On a phone the bar keeps the mark, the name, the payee's account and the gold button; the dashboard link waits further down.
+    expect(STYLE).toMatch(/@media \(max-width:40rem\)\{\.topbar \.quiet:not\(\.account\)\{display:none\}/)
+    // There the account link is the short "Account", on one line, so it fits beside the gold button at 375 px.
+    expect(STYLE).toContain('.topbar .wide{display:none}.topbar .narrow{display:inline}')
   })
 
   it('reads in order without the pictures: one h1, a heading per section, a title per step, and every icon and light hidden from assistive tech', () => {
@@ -247,7 +249,8 @@ describe('the home page (/)', () => {
         expect(html, label).not.toContain('discord.com/oauth2')
         expect(html, label).not.toContain('Add to Discord')
         expect(html, label).not.toContain('Add Rolepay to a server')
-        expect(topBar(html), label).toContain(`<nav aria-label="Main">${dashboard}</nav>`)
+        // In the bar it is the short "Dashboard", beside the payee's account, so both fit on a phone.
+        expect(topBar(html), label).toContain('<nav aria-label="Main"><a class="quiet account" href="/account"><span class="wide">Your account</span><span class="narrow">Account</span></a><a class="button" href="/dashboard">Dashboard</a></nav>')
         expect(hero(html), label).toContain(`<p class="actions">${dashboard}<a class="more" href="#how">How it works</a></p>`)
         expect(finalBand(html), label).toContain(`<nav class="cta" aria-label="Get started">${dashboard}<a class="source"`)
       }

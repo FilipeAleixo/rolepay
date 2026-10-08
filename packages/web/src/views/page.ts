@@ -82,6 +82,8 @@ noscript p{color:var(--muted)}
 .topbar nav{display:flex;align-items:center;gap:1.4rem}
 .topbar .quiet{font-size:13.5px;color:var(--soft);text-decoration:none}
 .topbar .quiet:hover{color:var(--fg)}
+.topbar nav a{white-space:nowrap}
+.topbar .narrow{display:none}
 .topbar .button,.home .button:not(.secondary){white-space:nowrap;box-shadow:0 12px 30px -16px rgba(237,190,90,.65)}
 .home{max-width:70rem;padding:0 1rem 2.5rem}
 .home section{margin:0;padding:0;border:0;border-radius:0;background:none;box-shadow:none}
@@ -255,7 +257,7 @@ ${PAID_WEEKS.map((v, i) => `.home .wk-bars>span:nth-child(${i + 1}){height:${v}%
 @media (min-width:40rem){.topbar .bar,.home{padding-left:1.5rem;padding-right:1.5rem}.home h2{font-size:36px}.home .hero h1{font-size:56px}.home .groups{grid-template-columns:1fr 1fr;column-gap:3.5rem}}
 @media (min-width:50rem){.home section.trust{padding:3rem 2.75rem 2.75rem}.home .trust ul{grid-template-columns:repeat(3,1fr);gap:2.75rem}.home .trust li{flex-direction:column;gap:1.1rem}}
 @media (min-width:60rem){.home .hero{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:4.5rem;padding:4.75rem 0 6rem}.home .hero h1{font-size:62px}.home .how{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:5rem;padding-top:8rem}.home .how .intro{position:sticky;top:3rem;align-self:start}.home .steps li{grid-template-columns:4rem minmax(0,1fr);padding:1.9rem 0}}
-@media (max-width:40rem){.topbar .quiet{display:none}.home .cta .button{flex:1 1 100%}}
+@media (max-width:40rem){.topbar .quiet:not(.account){display:none}.topbar nav{gap:1rem}.topbar .wide{display:none}.topbar .narrow{display:inline}.home .cta .button{flex:1 1 100%}}
 `
 
 /** The document head: the title, the favicon and font preloads, and one inline stylesheet (allowed by its hash). */

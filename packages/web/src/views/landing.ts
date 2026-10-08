@@ -198,7 +198,9 @@ export function landingPage(opts: { testnet: boolean; discordAppId?: string | un
   const href = opts.discordAppId ? esc(installUrl(opts.discordAppId)) : null
   const dashboard = '<a class="button" href="/dashboard">Open the dashboard</a>'
   const install = (label: string) => `<a class="button" href="${href}" rel="noreferrer">${label}</a>`
-  const bar = href ? `<a class="quiet" href="/dashboard">Dashboard</a>${install('Add to Discord')}` : dashboard
+  // The people being paid come back on their phones, so their account link stays when Dashboard folds away.
+  const account = '<a class="quiet account" href="/account"><span class="wide">Your account</span><span class="narrow">Account</span></a>'
+  const bar = href ? `${account}<a class="quiet" href="/dashboard">Dashboard</a>${install('Add to Discord')}` : `${account}<a class="button" href="/dashboard">Dashboard</a>`
   const hero = href ? install('Add to Discord') : dashboard
   const final = href ? `${install('Add Rolepay to a server')}<a class="button secondary" href="/dashboard">Open the dashboard</a>` : dashboard
   return `<!doctype html>
