@@ -21,29 +21,32 @@ const topBar = (html: string) => part(html, /<header class="topbar">/, '</header
 const hero = (html: string) => part(html, /<section class="hero"/, '</section>')
 const finalBand = (html: string) => part(html, /<section class="final"/, '</section>')
 
-/** How it works: four steps, a title and a line each. */
+/** How a pay run works: four steps, a title and a line each. */
 const STEPS = [
-  ['Connect a treasury', "The community's own Tempo account, its root key a treasurer's passkey. Rolepay never holds the funds."],
-  ['Give the bot a budget', 'A key with an expiry, a spending limit per period and one allowed call. The chain enforces each one.'],
-  ['Pay', 'One run for a role or a list, approved with one button. Or a rule that runs on schedule, with a veto window.'],
-  ['Everyone sees it', 'A receipt by DM for each person, a live dashboard, and an audit log you can export as CSV.'],
+  ['The community opens its own account', 'A treasurer creates it on Tempo with a passkey. The money stays there; Rolepay never holds it.'],
+  ['The bot gets an allowance', 'You choose how much it may spend each month, and until when. Tempo holds it to that, whatever happens to the bot.'],
+  ['You say who to pay', 'Pick a role or a list of people, or describe them in plain words. You see every name and amount before anything moves.'],
+  ['One approval pays everyone', 'One transaction, a memo on every line, a receipt in Discord for each person. Regular pay can run on its own, with time to stop each run.'],
 ] as const
 
-/** What it does: six lines, a bold lead and the rest. */
-const FEATURES = [
-  ['Pay runs in one transaction.', 'Mods, staff and bounty winners, with a memo on every line.'],
-  ['AI drafts, a human approves.', 'From a message, or a rule like “everyone who helped in #support this week”.'],
-  ['Standing policies on autopilot.', 'Write the rule once. No AI at runtime.'],
-  ['No wallet needed.', 'A passkey account: no seed phrase, no gas. Or a wallet they already have.'],
-  ['The stablecoin they choose.', "Swapped on Tempo's exchange inside the same transaction."],
-  ['Funding with attribution.', 'Each sponsor gets its own deposit address, every deposit labelled.'],
+/** Who it is for: the people you pay, then the treasurer, three lines each, a bold lead and the rest. */
+const FOR_PAYEES = [
+  ['No wallet to set up.', 'Their account is a passkey on their phone or laptop. Anyone with a wallet can use that instead.'],
+  ['Paid in the coin they prefer.', 'Someone who would rather hold another stablecoin gets it, swapped inside the same transaction.'],
+  ['A receipt every time.', 'Each payment arrives with a message in Discord and a link to the transaction.'],
 ] as const
+const FOR_TREASURER = [
+  ['Regular pay runs itself.', 'Write the rule once. It runs on schedule, and you can stop any run before it pays.'],
+  ['You know where money came from.', 'Each sponsor gets its own deposit address, so every deposit arrives labelled.'],
+  ['The budget in plain sight.', 'What the bot has left, the next runs and every payment, live on the dashboard.'],
+] as const
+const FEATURES = [...FOR_PAYEES, ...FOR_TREASURER]
 
 /** Why you can trust it: three points, a statement and its proof each. */
 const TRUST = [
-  ["The community's own account holds the funds.", "Rolepay never does. Its root key is the treasurer's passkey."],
-  ['The bot, and each policy, holds only a key with a limit the chain enforces.', 'Expiry, a spending limit per period, and one allowed call. Over the limit, Tempo refuses the whole batch.'],
-  ['Every run, approval and veto is in an audit log.', 'On the dashboard, exportable as CSV.'],
+  ["Your community's account holds the money.", "Rolepay never does. Only the treasurer's passkey controls the account."],
+  ['The bot can spend only its allowance.', 'Its key has an expiry, a limit per period and one allowed action. Ask for more and Tempo refuses the whole batch.'],
+  ['Every payment leaves a record.', 'Runs, approvals and vetoes are on the dashboard, and export to CSV.'],
 ] as const
 
 describe('the home page (/)', () => {
@@ -54,10 +57,11 @@ describe('the home page (/)', () => {
     const html = await res.text()
     const t = text(html)
     expect(html).toContain('<h1 id="hero-title">Pay the people who run your community.</h1>')
-    expect(t).toContain("From Discord, in stablecoins on Tempo. The money stays in the community's own account, and the bot can spend only what the chain allows.")
+    expect(t).toContain("Describe who to pay in plain words. Rolepay finds the people, a treasurer approves, and one transaction on Tempo pays them all from your community's own account.")
     expect(html).toContain('<meta name="description" content="Pay the people who run your community, from Discord, in stablecoins on Tempo.">')
-    // The product shot: one image to assistive tech, a paid run and the budget with its on-chain limit.
-    expect(hero(html)).toMatch(/<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction, and the bot key's budget for the period with its on-chain limit">/)
+    // The product shot: one image to assistive tech. A request in plain words, the run it became, paid, and the allowance with its on-chain limit.
+    expect(hero(html)).toContain('<div class="shot" role="img" aria-label="A treasurer asks Rolepay in plain words to pay the people who answered questions in the help channel; the run, paid in one transaction; and the bot\'s allowance for the month with its on-chain limit">')
+    expect(hero(html)).toContain('<p class="cmd">/rolepay propose</p><p class="said">1 USDC.e for every question answered in <span class="ch">#help</span> this month, up to 40 each</p>')
     expect(hero(html)).toContain('Paid in one transaction. Approved by <span class="at">@Treasurer</span>.')
     expect(t).toContain('On-chain limit')
     // What it replaces: today, and with Rolepay, row by row (screen readers hear which column each line is).
@@ -69,12 +73,15 @@ describe('the home page (/)', () => {
       ['Whoever holds the keys holds all the money', 'The bot can spend only what the chain allows'],
     ]) expect(html).toContain(`<li><p class="was"><span class="sr">Today: </span>${was}</p><p class="now"><span class="sr">With Rolepay: </span>${now}</p></li>`)
     expect(html).toContain('<h2 id="how-title">')
-    expect(t).toContain('AI can draft a run. Only a person can approve it, and only the chain decides how much the bot can spend.')
+    expect(html).toContain('<h2 id="how-title">How a pay run works</h2>')
+    expect(t).toContain('Four steps. You do the first two once.')
     STEPS.forEach(([title, line], i) => {
       expect(html).toContain(`<span class="n" aria-hidden="true">0${i + 1}</span><div><h3>${esc(title)}</h3>`)
       expect(t).toContain(`${title} ${line}`)
     })
-    expect(html).toContain('<h2 id="what">What it does</h2>')
+    expect(html).toContain('<h2 id="who">Who it is for</h2>')
+    expect(html).toContain('<h3>The people you pay</h3>')
+    expect(html).toContain('<h3>The treasurer</h3>')
     for (const [lead, rest] of FEATURES) {
       expect(html).toContain(`<strong>${esc(lead)}</strong>`)
       expect(t).toContain(`${lead} ${rest}`)
@@ -108,8 +115,8 @@ describe('the home page (/)', () => {
   it('reads in order without the pictures: one h1, a heading per section, a title per step, and every icon and light hidden from assistive tech', () => {
     const html = landingPage({ testnet: true })
     const headings = [...html.matchAll(/<h([1-6])[^>]*>/g)].map((m) => Number(m[1]))
-    expect(headings).toEqual([1, 2, 2, 3, 3, 3, 3, 2, 2, 2])
-    for (const id of ['hero-title', 'contrast-title', 'how-title', 'what', 'trust', 'final-title']) expect(html).toContain(`aria-labelledby="${id}"`)
+    expect(headings).toEqual([1, 2, 2, 3, 3, 3, 3, 2, 3, 3, 2, 2])
+    for (const id of ['hero-title', 'contrast-title', 'how-title', 'who', 'trust', 'final-title']) expect(html).toContain(`aria-labelledby="${id}"`)
     expect(html).toContain('<div class="atmos" aria-hidden="true">')
     const svgs = [...html.matchAll(/<svg\b[^>]*>/g)].map((m) => m[0])
     for (const svg of svgs) {
