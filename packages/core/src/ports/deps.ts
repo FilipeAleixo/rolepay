@@ -3,6 +3,7 @@ import type { Clock } from './clock.js'
 import type { FundingChain } from './fundingChain.js'
 import type { IdGenerator } from './idGenerator.js'
 import type { KeyVault } from './keyVault.js'
+import type { MessageSignatures } from './messageSignatures.js'
 import type { PayoutChain } from './payoutChain.js'
 import type { ActivityReader } from './activityReader.js'
 import type { ProposalLog } from './proposalLog.js'
@@ -70,4 +71,9 @@ export type RolepayDeps = {
    * reads nothing.
    */
   fundingChain?: FundingChain | null
+  /**
+   * "Use a wallet I already have" on the claim page: who signed a claim message (`ViemMessageSignatures`
+   * in production, offline). Without it, that path answers `not_configured` and only passkeys register.
+   */
+  signatures?: MessageSignatures | null
 }

@@ -56,6 +56,8 @@ export interface PayeesTable {
   address: string
   /** null = the community's payout token. */
   preferred_token: string | null
+  /** 0012: 'passkey' or 'external' (default 'passkey' for rows from before). */
+  address_kind: string
   registered_at: string
   updated_at: string
 }
@@ -69,6 +71,9 @@ export interface LinkTokensTable {
   consumed_at: string | null
   /** 0011: the member's Discord username (it names their passkey), null before. */
   discord_username: string | null
+  /** 0012: the live wallet nonce and when it was issued, null when there is none. */
+  wallet_nonce: string | null
+  wallet_nonce_at: string | null
 }
 
 export interface RunsTable {

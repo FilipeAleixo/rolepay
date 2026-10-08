@@ -133,6 +133,31 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       expect(await repo.getLinkToken('fp_unknown')).toBeNull()
     })
 
+    it("keeps one wallet nonce per live link: setting replaces it, taking clears it once and only for the nonce that is there", async () => {
+      await repo.insertLinkToken(f.linkToken())
+      expect(await repo.getLinkToken('fp_1')).toMatchObject({ walletNonce: null, walletNonceIssuedAt: null })
+      expect(await repo.setLinkNonce('fp_1', 'n1', f.at(1))).toBe(true)
+      expect(await repo.getLinkToken('fp_1')).toMatchObject({ walletNonce: 'n1', walletNonceIssuedAt: f.at(1) })
+      expect(await repo.setLinkNonce('fp_1', 'n2', f.at(2))).toBe(true)
+      expect(await repo.takeLinkNonce('fp_1', 'n1')).toBe(false)
+      expect(await repo.takeLinkNonce('fp_1', 'n2')).toBe(true)
+      expect(await repo.takeLinkNonce('fp_1', 'n2')).toBe(false)
+      expect(await repo.getLinkToken('fp_1')).toMatchObject({ walletNonce: null, walletNonceIssuedAt: null })
+      // Never on a spent or unknown link.
+      expect(await repo.consumeLinkToken('fp_1', f.at(3))).toBe(true)
+      expect(await repo.setLinkNonce('fp_1', 'n3', f.at(4))).toBe(false)
+      expect(await repo.setLinkNonce('fp_unknown', 'n3', f.at(4))).toBe(false)
+      expect(await repo.takeLinkNonce('fp_unknown', 'n3')).toBe(false)
+    })
+
+    it('keeps whether a payee is paid at a passkey account or at an external wallet, and changes it in place', async () => {
+      await repo.upsert(f.payee())
+      expect((await repo.get(f.GUILD, f.ALICE))?.addressKind).toBe('passkey')
+      await repo.upsert(f.payee({ address: f.ADDR.bob, addressKind: 'external', updatedAt: f.at(5) }))
+      expect(await repo.get(f.GUILD, f.ALICE)).toEqual(f.payee({ address: f.ADDR.bob, addressKind: 'external', updatedAt: f.at(5) }))
+      expect(await repo.listByAddress(f.ADDR.bob)).toEqual([f.payee({ address: f.ADDR.bob, addressKind: 'external', updatedAt: f.at(5) })])
+    })
+
     it('keeps the Discord username a link was issued to, or none', async () => {
       await repo.insertLinkToken(f.linkToken({ discordUsername: 'alice' }))
       await repo.insertLinkToken(f.linkToken({ tokenHash: 'fp_2' }))

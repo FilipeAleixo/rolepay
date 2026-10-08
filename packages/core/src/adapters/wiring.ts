@@ -6,7 +6,7 @@ import { AesGcmKeyVault, RandomIds, SystemClock } from './crypto/index.js'
 import { DailyCappedProposer } from './kv/proposerDailyCap.js'
 import { KvRunLeases } from './kv/runLeases.js'
 import { openSqliteDatabase } from './sqlite/index.js'
-import { TempoFundingChain, TempoPayoutChain } from './tempo/index.js'
+import { TempoFundingChain, TempoPayoutChain, ViemMessageSignatures } from './tempo/index.js'
 
 /**
  * The production adapters, opened from config: SQLite file, AES-256-GCM vault,
@@ -39,6 +39,8 @@ export async function openRolepayAdapters(
       swapMaxSlippageBps: config.swapMaxSlippageBps,
       // Read only: the registry and deposit events. Nothing is read until a community sets up deposit addresses.
       fundingChain: new TempoFundingChain({ network: config.network, rpcUrl: config.rpcUrl }),
+      // Offline: who signed a payee's wallet claim (secp256k1), for "use a wallet I already have".
+      signatures: new ViemMessageSignatures(),
     },
     /** Same database: passkey credentials and sessions, delivery markers. */
     kv: db.kv,

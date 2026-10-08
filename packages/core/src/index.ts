@@ -95,6 +95,9 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
       ids,
       clock,
       linkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
+      network,
+      signatures: deps.signatures ?? null,
+      audit,
     }),
     payRuns,
     proposals: new ProposalService({

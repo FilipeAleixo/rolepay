@@ -170,6 +170,7 @@ export class SqlitePayeeRepository implements PayeeRepository {
         community_id: p.communityId,
         discord_user_id: p.discordUserId,
         address: p.address,
+        address_kind: p.addressKind,
         preferred_token: p.preferredToken,
         registered_at: iso(p.registeredAt),
         updated_at: iso(p.updatedAt),
@@ -177,7 +178,7 @@ export class SqlitePayeeRepository implements PayeeRepository {
       .onConflict((oc) =>
         oc
           .columns(['community_id', 'discord_user_id'])
-          .doUpdateSet({ address: p.address, preferred_token: p.preferredToken, registered_at: iso(p.registeredAt), updated_at: iso(p.updatedAt) }),
+          .doUpdateSet({ address: p.address, address_kind: p.addressKind, preferred_token: p.preferredToken, registered_at: iso(p.registeredAt), updated_at: iso(p.updatedAt) }),
       )
       .execute()
   }
@@ -203,6 +204,8 @@ export class SqlitePayeeRepository implements PayeeRepository {
         expires_at: iso(t.expiresAt),
         consumed_at: isoOrNull(t.consumedAt),
         discord_username: t.discordUsername,
+        wallet_nonce: t.walletNonce,
+        wallet_nonce_at: isoOrNull(t.walletNonceIssuedAt),
       })
       .execute()
   }
@@ -218,6 +221,8 @@ export class SqlitePayeeRepository implements PayeeRepository {
       expiresAt: date(r.expires_at),
       consumedAt: dateOrNull(r.consumed_at),
       discordUsername: r.discord_username,
+      walletNonce: r.wallet_nonce,
+      walletNonceIssuedAt: dateOrNull(r.wallet_nonce_at),
     })
   }
 
@@ -230,6 +235,26 @@ export class SqlitePayeeRepository implements PayeeRepository {
       .executeTakeFirst()
     return res.numUpdatedRows === 1n
   }
+
+  async setLinkNonce(tokenHash: string, nonce: string, at: Date) {
+    const res = await this.db
+      .updateTable('link_tokens')
+      .set({ wallet_nonce: nonce, wallet_nonce_at: iso(at) })
+      .where('token_hash', '=', tokenHash)
+      .where('consumed_at', 'is', null)
+      .executeTakeFirst()
+    return res.numUpdatedRows === 1n
+  }
+
+  async takeLinkNonce(tokenHash: string, nonce: string) {
+    const res = await this.db
+      .updateTable('link_tokens')
+      .set({ wallet_nonce: null, wallet_nonce_at: null })
+      .where('token_hash', '=', tokenHash)
+      .where('wallet_nonce', '=', nonce)
+      .executeTakeFirst()
+    return res.numUpdatedRows === 1n
+  }
 }
 
 function toPayee(r: Selectable<Database['payees']>): Payee {
@@ -237,6 +262,7 @@ function toPayee(r: Selectable<Database['payees']>): Payee {
     communityId: r.community_id,
     discordUserId: r.discord_user_id,
     address: r.address,
+    addressKind: r.address_kind,
     preferredToken: r.preferred_token,
     registeredAt: date(r.registered_at),
     updatedAt: date(r.updated_at),

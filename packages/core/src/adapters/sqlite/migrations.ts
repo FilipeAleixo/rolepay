@@ -352,6 +352,15 @@ const migrations: Record<string, Migration> = {
       await db.schema.alterTable('link_tokens').addColumn('discord_username', 'text').execute()
     },
   },
+  '0012_address_kinds': {
+    async up(db: Kysely<unknown>) {
+      // "Use a wallet I already have". Columns only, so it applies to a database with data: every
+      // payee registered before is a passkey account ('passkey'), and no link has a wallet nonce yet.
+      await db.schema.alterTable('payees').addColumn('address_kind', 'text', (c) => c.notNull().defaultTo('passkey')).execute()
+      await db.schema.alterTable('link_tokens').addColumn('wallet_nonce', 'text').execute()
+      await db.schema.alterTable('link_tokens').addColumn('wallet_nonce_at', 'text').execute()
+    },
+  },
 }
 
 /** Every migration's name, in the order they run (tests build a database as an earlier release left it). */

@@ -10,6 +10,8 @@ const token: LinkToken = {
   expiresAt: new Date(t0.getTime() + 30 * 60_000),
   consumedAt: null,
   discordUsername: null,
+  walletNonce: null,
+  walletNonceIssuedAt: null,
 }
 
 describe('checkLinkToken', () => {
@@ -36,7 +38,7 @@ describe("DiscordUsernameSchema (the name a payee's passkey is labelled with)", 
   })
 
   it('a link stored before usernames were kept reads as no username', () => {
-    const { discordUsername: _, ...old } = token
-    expect(LinkTokenSchema.parse(old).discordUsername).toBeNull()
+    const { discordUsername: _, walletNonce: _n, walletNonceIssuedAt: _a, ...old } = token
+    expect(LinkTokenSchema.parse(old)).toMatchObject({ discordUsername: null, walletNonce: null, walletNonceIssuedAt: null })
   })
 })
