@@ -37,7 +37,7 @@ describe('every string a person or Discord controls is escaped (XSS)', () => {
     await h.deposit(source.depositAddress, '5')
 
     const { browser } = await h.signIn(identity({ id: TREASURER.id, name: `Tess ${EVIL}` }, [{ id: GUILD, name: `Listed ${EVIL}` }]))
-    const pages = ['/dashboard', `/dashboard/${GUILD}`, `/dashboard/${GUILD}/runs`, `/dashboard/${GUILD}/runs/${run.id}`, `/dashboard/${GUILD}/payees`, `/dashboard/${GUILD}/policies`, `/dashboard/${GUILD}/policies/${policyId}`, `/dashboard/${GUILD}/policies/${policyId}/edit`, `/dashboard/${GUILD}/audit`, `/dashboard/${GUILD}/funding`]
+    const pages = ['/dashboard', `/dashboard/${GUILD}`, `/dashboard/${GUILD}/runs`, `/dashboard/${GUILD}/runs/${run.id}`, `/dashboard/${GUILD}/payees`, `/dashboard/${GUILD}/policies`, `/dashboard/${GUILD}/policies/${policyId}`, `/dashboard/${GUILD}/policies/${policyId}?edit=1`, `/dashboard/${GUILD}/audit`, `/dashboard/${GUILD}/funding`]
     let escapedSeen = 0
     for (const path of pages) {
       const res = await browser.get(path)

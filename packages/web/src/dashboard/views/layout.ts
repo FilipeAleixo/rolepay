@@ -104,6 +104,12 @@ details>summary::before{content:"";display:inline-block;width:5px;height:5px;mar
 details[open]>summary::before{transform:rotate(135deg);margin-bottom:.2em}
 details>summary::-webkit-details-marker{display:none}
 details>summary{list-style:none}
+details.editor{margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--line)}
+details.editor>summary{display:inline-flex;align-items:center;min-height:2.25rem;padding:.4rem .95rem;border:1px solid rgba(255,255,255,.11);border-radius:10px;font:500 13px/1.25 var(--sans);color:var(--soft)}
+details.editor>summary:hover{border-color:rgba(255,255,255,.22);color:var(--fg)}
+details.editor[open]>summary{margin-bottom:1rem;color:var(--gold);border-color:rgba(237,190,90,.34)}
+details.editor form>button{margin-top:.25rem}
+form:has(select[name=kind] option[value=daily]:checked) .field-weekday,form:has(select[name=kind] option[value=daily]:checked) .field-day,form:has(select[name=kind] option[value=weekly]:checked) .field-day,form:has(select[name=kind] option[value=monthly]:checked) .field-weekday{display:none}
 ol.timeline{list-style:none;margin:0;padding:0 0 0 1.4rem;border-left:1px solid rgba(255,255,255,.1)}
 ol.timeline li{position:relative;padding:0 0 1.1rem;font-size:13.5px}
 ol.timeline li:last-child{padding-bottom:.1rem}

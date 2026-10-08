@@ -33,11 +33,12 @@ const DraftForm = z.object({
     .min(1, 'Write the instruction: who gets paid, how much, and when.')
     .max(MAX_INSTRUCTION, `The instruction is at most ${MAX_INSTRUCTION.toLocaleString('en-US')} characters.`),
   kind: z.enum(['daily', 'weekly', 'monthly'], 'Choose weekly or monthly.'),
-  weekday: z.coerce.number().int().min(0).max(6),
-  day: z.coerce.number().int().min(1, 'The day of the month is 1 to 28.').max(28, 'The day of the month is 1 to 28.'),
   hour: z.coerce.number().int().min(0, 'The hour is 0 to 23.').max(23, 'The hour is 0 to 23.'),
   timezone: z.string().trim().min(1).refine(validTimezone, 'Unknown timezone: use a name such as UTC or Europe/Lisbon.'),
 })
+/** Read only for the kinds that use them: a weekly form's day of the month (hidden, maybe stale) is never read, nor a monthly one's weekday. */
+const WeekdayField = z.coerce.number().int().min(0, 'Choose a day of the week.').max(6, 'Choose a day of the week.')
+const DayField = z.coerce.number().int().min(1, 'The day of the month is 1 to 28.').max(28, 'The day of the month is 1 to 28.')
 
 const ModeForm = z.object({ mode: z.enum(['propose', 'autopilot']), vetoWindowHours: z.coerce.number().int().min(1).max(168) })
 const VersionForm = z.object({ version: z.coerce.number().int().min(1) })
@@ -48,13 +49,15 @@ function draftFrom(form: Record<string, string>, opts: { daily: boolean }): { ok
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Some of the values were not valid.' }
   const f = parsed.data
   if (f.kind === 'daily' && !opts.daily) return { ok: false, error: DAILY_REFUSED }
-  const schedule: PolicyDraft['schedule'] =
-    f.kind === 'daily'
-      ? { kind: 'daily', hour: f.hour, timezone: f.timezone }
-      : f.kind === 'weekly'
-        ? { kind: 'weekly', weekday: f.weekday, hour: f.hour, timezone: f.timezone }
-        : { kind: 'monthly', day: f.day, hour: f.hour, timezone: f.timezone }
-  return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule } }
+  if (f.kind === 'daily') return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'daily', hour: f.hour, timezone: f.timezone } } }
+  if (f.kind === 'weekly') {
+    const weekday = WeekdayField.safeParse(form.weekday)
+    if (!weekday.success) return { ok: false, error: weekday.error.issues[0]?.message ?? 'Choose a day of the week.' }
+    return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'weekly', weekday: weekday.data, hour: f.hour, timezone: f.timezone } } }
+  }
+  const day = DayField.safeParse(form.day)
+  if (!day.success) return { ok: false, error: day.error.issues[0]?.message ?? 'The day of the month is 1 to 28.' }
+  return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'monthly', day: day.data, hour: f.hour, timezone: f.timezone } } }
 }
 
 const formValues = (form: Record<string, string>): PolicyFormValues => ({
@@ -151,13 +154,12 @@ export function policyRoutes(kit: DashboardKit): Hono {
     return redirect(`${base(a, created.value.policyId)}?done=created`, 303)
   })
 
-  app.get('/dashboard/:guildId/policies/:policyId', async (c) => {
-    const access = await communityAccess(kit, c)
-    if (!access.ok) return access.response
-    const a = access.value
-    const policies = port()
-    if (!policies) return notFound(a)
-    const ref = { guildId: a.community.id, policyId: c.req.param('policyId') }
+  /**
+   * A policy's page. For the Treasurer role it carries the inline editor: closed, open (`?edit=1`, the
+   * old /edit URL), or open with a refused edit's values and why (`edit`).
+   */
+  async function policyPage(a: CommunityAccess, policies: PolicyPort, policyId: string, opts: { notice: string; editOpen: boolean; edit?: { values: PolicyFormValues; error: string }; status?: number }) {
+    const ref = { guildId: a.community.id, policyId }
     const policy = await policies.get(ref)
     if (!policy.ok) return notFound(a)
     const [preview, versions, compiles, budget, latest] = await Promise.all([
@@ -173,46 +175,51 @@ export function policyRoutes(kit: DashboardKit): Hono {
       ...versions.flatMap((v) => [v.createdBy, v.approvedBy]),
       policy.value.approvedBy,
     ].filter((id): id is string => id !== null)
-    const body = policyBody({
-      guildId: a.community.id,
-      policy: policy.value,
-      preview: shown,
-      versions,
-      names: await kit.members.names(a.community.id, people, { limit: MAX_NAMED }),
-      token: a.community.payoutToken,
-      canAct: a.viewer.canAct,
-      csrf: a.viewer.csrf,
-      notice: notice(c.req.query('done'), c.req.query('error')),
-      compiles,
-      budget,
-      latest,
-    })
-    return page(a, policy.value.name, body)
-  })
-
-  app.get('/dashboard/:guildId/policies/:policyId/edit', async (c) => {
-    const access = await communityAccess(kit, c)
-    if (!access.ok) return access.response
-    const a = access.value
-    const policies = port()
-    if (!policies) return notFound(a)
-    if (!a.viewer.canAct) return refused(a)
-    const ref = { guildId: a.community.id, policyId: c.req.param('policyId') }
-    const policy = await policies.get(ref)
-    if (!policy.ok) return notFound(a)
-    const latest = (await policies.versions(ref)).at(-1)
     const p = policy.value
     const s = p.schedule
-    const values: PolicyFormValues = {
+    // The editor starts from the newest version's wording (a draft waiting for approval included).
+    const current: PolicyFormValues = {
       name: p.name,
-      instruction: latest?.instruction ?? p.instruction,
+      instruction: versions.at(-1)?.instruction ?? p.instruction,
       kind: s.kind,
       weekday: String(s.kind === 'weekly' ? s.weekday : 1),
       day: String(s.kind === 'monthly' ? s.day : 1),
       hour: String(s.hour),
       timezone: s.timezone,
     }
-    return form(a, { action: `${base(a, p.id)}/edit`, heading: `Edit ${p.name}`, submit: 'Recompile and preview', values, error: null })
+    const editor = a.viewer.canAct ? { values: opts.edit?.values ?? current, daily: daily(), open: opts.editOpen || !!opts.edit, error: opts.edit?.error ?? null } : null
+    const body = policyBody({
+      guildId: a.community.id,
+      policy: p,
+      preview: shown,
+      versions,
+      names: await kit.members.names(a.community.id, people, { limit: MAX_NAMED }),
+      token: a.community.payoutToken,
+      canAct: a.viewer.canAct,
+      csrf: a.viewer.csrf,
+      notice: opts.notice,
+      compiles,
+      budget,
+      latest,
+      editor,
+    })
+    return page(a, p.name, body, opts.status ?? 200)
+  }
+
+  app.get('/dashboard/:guildId/policies/:policyId', async (c) => {
+    const access = await communityAccess(kit, c)
+    if (!access.ok) return access.response
+    const a = access.value
+    const policies = port()
+    if (!policies) return notFound(a)
+    return policyPage(a, policies, c.req.param('policyId'), { notice: notice(c.req.query('done'), c.req.query('error')), editOpen: c.req.query('edit') === '1' })
+  })
+
+  /** The old edit page: the policy's page with its editor open (for anyone else, the page as they see it). */
+  app.get('/dashboard/:guildId/policies/:policyId/edit', async (c) => {
+    const access = await communityAccess(kit, c)
+    if (!access.ok) return access.response
+    return redirect(`${base(access.value, c.req.param('policyId'))}?edit=1#editor`, 302)
   })
 
   app.post('/dashboard/:guildId/policies/:policyId/edit', async (c) => {
@@ -222,11 +229,12 @@ export function policyRoutes(kit: DashboardKit): Hono {
     const policies = port()
     if (!policies) return notFound(a)
     const policyId = c.req.param('policyId')
-    const opts = { action: `${base(a, policyId)}/edit`, heading: 'Edit policy', submit: 'Recompile and preview', values: formValues(a.form) }
+    // A refused edit comes back to the policy's page, the editor open with what was sent and why.
+    const refusedEdit = (error: string, status: number) => policyPage(a, policies, policyId, { notice: '', editOpen: true, edit: { values: formValues(a.form), error }, status })
     const draft = draftFrom(a.form, { daily: daily() })
-    if (!draft.ok) return form(a, { ...opts, error: draft.error }, 400)
+    if (!draft.ok) return refusedEdit(draft.error, 400)
     const edited = await policies.edit({ guildId: a.community.id, policyId, actor: a.actor, draft: draft.draft })
-    if (!edited.ok && edited.error.code === 'could_not_compile') return form(a, { ...opts, error: compileError(edited.error) }, 422)
+    if (!edited.ok && edited.error.code === 'could_not_compile') return refusedEdit(compileError(edited.error), 422)
     return back(base(a, policyId), edited, 'edited')
   })
 

@@ -178,7 +178,7 @@ function actionsSection(d: { base: string; policy: PolicyDetail; csrf: string })
 <label><input type="radio" name="mode" value="autopilot"${p.mode === 'autopilot' ? ' checked' : ''}> Autopilot: each run pays after the veto window unless a Treasurer vetoes it</label>
 <label for="vetoWindowHours">Veto window (hours, at least 1)</label><input id="vetoWindowHours" name="vetoWindowHours" type="number" min="1" max="168" value="${Math.max(1, Math.round(p.vetoWindowMinutes / 60))}"></fieldset>
 <button type="submit" class="secondary">Save mode</button></form>`
-  return `<section class="card"><h2>Actions</h2>${pending}<div class="actions"><a class="button secondary" href="${base}/edit">Edit and recompile</a>${
+  return `<section class="card"><h2>Actions</h2>${pending}<div class="actions"><a class="button secondary" href="${base}?edit=1#editor">Edit and recompile</a>${
     p.status === 'active' ? post('pause', 'Pause', 'secondary') : ''
   }${p.status === 'paused' ? post('resume', 'Resume') : ''}${post('archive', 'Archive', 'danger')}</div>${mode}</section>`
 }
@@ -241,6 +241,22 @@ function latestRunSection(guildId: string, latest: LatestPolicyRun): string {
   }${o ? `, ${esc(o.period)}` : ''}</p>${window ? `<p>${window}</p>` : ''}</section>`
 }
 
+/** The policy page's editor: the form's values, whether to offer daily runs, whether it starts open, and a refusal to show in it. */
+export type PolicyEditor = { values: PolicyFormValues; daily: boolean; open: boolean; error: string | null }
+
+/**
+ * Edit in place: a disclosure in the rule's panel with the same fields as a new policy, pre-filled.
+ * Recompiling posts to `/edit` and comes back to this page with the new version waiting for approval.
+ * No script: `<details>` opens it, and the schedule fields follow the chosen kind in CSS.
+ */
+function editorSection(base: string, csrf: string, e: PolicyEditor): string {
+  return `<details class="editor" id="editor"${e.open ? ' open' : ''}><summary>Edit</summary>${e.error ? `<p class="notice bad" role="alert">${esc(e.error)}</p>` : ''}
+<form method="post" action="${base}/edit">${csrfField(csrf)}
+${policyFormFields(e.values, e.daily)}
+<p class="muted small">Rolepay's AI compiles the new wording once into a new version. It waits for approval here, and the policy does not run until it is approved.</p>
+<button type="submit">Recompile and preview</button></form></details>`
+}
+
 export function policyBody(d: {
   guildId: string
   policy: PolicyDetail
@@ -257,6 +273,11 @@ export function policyBody(d: {
   budget?: PolicyBudgetRead | null
   /** The latest run it made; undefined: not read on this server (no card). */
   latest?: LatestPolicyRun
+  /**
+   * The inline editor, for the Treasurer role (null or absent: no edit control). `open` shows it
+   * expanded (`?edit=1`, the old /edit URL, or a refused edit with its `error` and the values sent).
+   */
+  editor?: PolicyEditor | null
 }): string {
   const p = d.policy
   const g = esc(d.guildId)
@@ -276,7 +297,7 @@ export function policyBody(d: {
   return `<p class="small"><a href="/dashboard/${g}/policies">All policies</a></p>
 <h1>${esc(p.name)} ${statusPill(p.status)} ${modePill(p.mode)}</h1>${d.notice}${pending}
 <div class="grid"><section class="card"><h2>The rule</h2><p>${esc(p.ruleInWords)}</p><h3>As written</h3><blockquote>${esc(p.instruction)}</blockquote>
-<details><summary>Exact filter</summary><pre>${esc(JSON.stringify(p.filter, null, 2))}</pre></details></section>
+<details><summary>Exact filter</summary><pre>${esc(JSON.stringify(p.filter, null, 2))}</pre></details>${d.editor && p.status !== 'archived' ? editorSection(base, d.csrf, d.editor) : ''}</section>
 <section class="card"><h2>Settings</h2><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section></div>
 ${d.latest === undefined ? '' : latestRunSection(d.guildId, d.latest)}
 ${previewSection({ preview: d.preview, names: d.names, token: d.token })}
@@ -286,6 +307,23 @@ ${versionsSection(d.versions, d.names, d.compiles ?? null)}`
 }
 
 export type PolicyFormValues = { name: string; instruction: string; kind: string; weekday: string; day: string; hour: string; timezone: string }
+
+/**
+ * The fields of the new and edit policy forms: name, instruction and the schedule. Each schedule field
+ * says which kinds use it (`field-weekday`, `field-day`), and the stylesheet shows only the ones the
+ * chosen kind uses (CSS `:has`, no script); the server reads only those too (`draftFrom`).
+ */
+export function policyFormFields(v: PolicyFormValues, daily: boolean): string {
+  const opt = (value: string, label: string, current: string) => `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`
+  return `<div class="field"><label for="name">Name</label><input id="name" name="name" maxlength="${POLICY_LIMITS.maxNameLength}" required value="${esc(v.name)}"></div>
+<div class="field"><label for="instruction">Instruction</label><textarea id="instruction" name="instruction" maxlength="${PROPOSAL_LIMITS.maxInstructionLength}" required>${esc(v.instruction)}</textarea>
+<p class="muted small">For example: every Monday, 1 per answered question in #help, at most 50 a week each.</p></div>
+<div class="row"><div class="field"><label for="kind">Runs</label><select id="kind" name="kind">${daily || v.kind === 'daily' ? opt('daily', 'Daily (testnet demo)', v.kind) : ''}${opt('weekly', 'Weekly', v.kind)}${opt('monthly', 'Monthly', v.kind)}</select></div>
+<div class="field field-weekday"><label for="weekday">Day of the week</label><select id="weekday" name="weekday">${WEEKDAYS.map((w, i) => opt(String(i), w, v.weekday)).join('')}</select></div>
+<div class="field field-day"><label for="day">Day of the month (1-28)</label><input id="day" name="day" type="number" min="1" max="28" value="${esc(v.day)}"></div>
+<div class="field"><label for="hour">Hour (0-23)</label><input id="hour" name="hour" type="number" min="0" max="23" value="${esc(v.hour)}"></div>
+<div class="field"><label for="timezone">Timezone</label><input id="timezone" name="timezone" value="${esc(v.timezone)}"></div></div>`
+}
 
 export function policyFormBody(d: {
   guildId: string
@@ -298,19 +336,10 @@ export function policyFormBody(d: {
   /** Offer a daily schedule (the testnet demo controls). It is also shown when the policy already has one. */
   daily?: boolean
 }): string {
-  const v = d.values
-  const opt = (value: string, label: string, current: string) => `<option value="${esc(value)}"${value === current ? ' selected' : ''}>${esc(label)}</option>`
   return `<p class="small"><a href="/dashboard/${esc(d.guildId)}/policies">All policies</a></p><h1>${esc(d.heading)}</h1>
 <p class="lede">Write the rule in your own words. Rolepay's AI compiles it once into an exact filter and amounts; you then see who it applies to and approve it. Nothing runs before that.</p>
 ${d.error ? `<p class="notice bad" role="alert">${esc(d.error)}</p>` : ''}
 <form class="card" method="post" action="${esc(d.action)}">${csrfField(d.csrf)}
-<div class="field"><label for="name">Name</label><input id="name" name="name" maxlength="${POLICY_LIMITS.maxNameLength}" required value="${esc(v.name)}"></div>
-<div class="field"><label for="instruction">Instruction</label><textarea id="instruction" name="instruction" maxlength="${PROPOSAL_LIMITS.maxInstructionLength}" required>${esc(v.instruction)}</textarea>
-<p class="muted small">For example: every Monday, 1 per answered question in #help, at most 50 a week each.</p></div>
-<div class="row"><div class="field"><label for="kind">Runs</label><select id="kind" name="kind">${d.daily || v.kind === 'daily' ? opt('daily', 'Daily (testnet demo)', v.kind) : ''}${opt('weekly', 'Weekly', v.kind)}${opt('monthly', 'Monthly', v.kind)}</select></div>
-<div class="field"><label for="weekday">Day of the week (weekly)</label><select id="weekday" name="weekday">${WEEKDAYS.map((w, i) => opt(String(i), w, v.weekday)).join('')}</select></div>
-<div class="field"><label for="day">Day of the month (monthly, 1-28)</label><input id="day" name="day" type="number" min="1" max="28" value="${esc(v.day)}"></div>
-<div class="field"><label for="hour">Hour (0-23)</label><input id="hour" name="hour" type="number" min="0" max="23" value="${esc(v.hour)}"></div>
-<div class="field"><label for="timezone">Timezone</label><input id="timezone" name="timezone" value="${esc(v.timezone)}"></div></div>
+${policyFormFields(d.values, d.daily ?? false)}
 <button type="submit">${esc(d.submit)}</button></form>`
 }

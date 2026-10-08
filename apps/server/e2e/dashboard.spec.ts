@@ -113,6 +113,23 @@ test('a treasurer signs in with Discord and walks Overview, Runs, Policies (paus
   await expect(page.getByText('Approved.', { exact: true })).toBeVisible()
   expect(server.proposer.requests).toHaveLength(3)
 
+  // Edit in place: the editor opens in the rule's panel, pre-filled, and the schedule fields follow
+  // the kind with CSS alone; recompiling comes back to this page with the new version to approve.
+  await page.locator('#editor > summary').click()
+  const editor = page.locator('#editor')
+  await expect(editor.getByLabel('Name')).toHaveValue('Web bounties')
+  await expect(editor.getByLabel('Day of the week')).toBeVisible()
+  await expect(editor.getByLabel('Day of the month (1-28)')).toBeHidden()
+  await editor.getByLabel('Runs').selectOption('monthly')
+  await expect(editor.getByLabel('Day of the week')).toBeHidden()
+  await expect(editor.getByLabel('Day of the month (1-28)')).toBeVisible()
+  await editor.getByLabel('Runs').selectOption('weekly')
+  await editor.getByLabel('Instruction').fill('Every Monday: 3 USDC per answered question in #help, max 50 a week each.')
+  await editor.getByRole('button', { name: 'Recompile and preview' }).click()
+  await expect(page.getByText('Version 2 waits for approval.')).toBeVisible()
+  await expect(page.getByRole('cell', { name: '36 AlphaUSD' })).toBeVisible() // Alice: 12 answers at 3 each
+  await expect(page.getByRole('button', { name: 'Approve version 2' })).toBeVisible()
+
   // Funding: the source's deposit address with its QR code, its deposit with the transaction, then a new source.
   await nav().getByRole('link', { name: 'Funding' }).click()
   await expect(page.getByRole('heading', { name: 'Funding', exact: true })).toBeVisible()

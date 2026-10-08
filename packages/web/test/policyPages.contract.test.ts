@@ -45,7 +45,7 @@ describe('a daily schedule (the testnet demo controls only)', () => {
     expect(text(page)).toMatch(/Every day at 18:00 \(UTC\)/)
     expect(text(await (await browser.get(`/dashboard/${GUILD}/policies`)).text())).toMatch(/Judges Every day at 18:00 \(UTC\)/)
     // Editing it keeps the daily choice selected.
-    expect(await (await browser.get(`${location.split('?')[0]}/edit`)).text()).toContain('<option value="daily" selected>Daily (testnet demo)</option>')
+    expect(await (await browser.get(`${location.split('?')[0]}?edit=1`)).text()).toContain('<option value="daily" selected>Daily (testnet demo)</option>')
   })
 
   it('elsewhere the form offers weekly and monthly only, and a daily one posted anyway is refused in words before the services are asked', async () => {
