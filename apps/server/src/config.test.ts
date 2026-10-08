@@ -37,6 +37,7 @@ describe('parseServerConfig', () => {
       sponsorUrl: 'https://sponsor.moderato.tempo.xyz',
       explorerUrl: 'https://explore.testnet.tempo.xyz',
       discordAppId: '500000000000000001',
+      publicInstall: true,
       botKeyDefaults: { limit: 100_000_000n, periodSeconds: 30 * 86_400, validitySeconds: 30 * 86_400, feeBudget: 1_000_000n },
     })
     expect(c.app.defaultPayoutToken).toBe(TESTNET_TOKENS.alpha_usd)
@@ -48,6 +49,15 @@ describe('parseServerConfig', () => {
     expect(c.recoveryIntervalMs).toBe(30_000)
     expect(c.policies).toEqual({ schedulerIntervalMs: 30_000, minVetoMinutes: 60 })
     expect(c.fundingIntervalMs).toBe(30_000)
+  })
+
+  it("the home page's install link (ROLEPAY_PUBLIC_INSTALL): on by default on testnet, off by default on mainnet, where the pilot bot is private", () => {
+    expect(parseServerConfig(env()).web.publicInstall).toBe(true)
+    expect(parseServerConfig(env({ ROLEPAY_PUBLIC_INSTALL: 'false' })).web.publicInstall).toBe(false)
+    expect(parseServerConfig(env(MAINNET)).web.publicInstall).toBe(false)
+    expect(parseServerConfig(env({ ...MAINNET, ROLEPAY_PUBLIC_INSTALL: '' })).web.publicInstall).toBe(false) // blank is unset
+    expect(parseServerConfig(env({ ...MAINNET, ROLEPAY_PUBLIC_INSTALL: 'true' })).web.publicInstall).toBe(true)
+    expect(() => parseServerConfig(env({ ROLEPAY_PUBLIC_INSTALL: 'yes' }))).toThrow(/ROLEPAY_PUBLIC_INSTALL/)
   })
 
   it('deposit addresses: the watcher interval is configurable', () => {

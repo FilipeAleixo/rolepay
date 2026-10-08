@@ -46,6 +46,11 @@ const ServerEnvSchema = z.object({
   ROLEPAY_SCHEDULER_INTERVAL_SECONDS: z.coerce.number().int().positive().default(30),
   /** How often the deposit watcher reads new deposits to deposit addresses (only for communities that set them up). */
   ROLEPAY_FUNDING_INTERVAL_SECONDS: z.coerce.number().int().positive().default(30),
+  /**
+   * Whether the home page offers "Add to Discord" (the bot's install link). Default: on on testnet,
+   * off on mainnet, where the pilot bot is private and a stranger's install would end in a Discord error.
+   */
+  ROLEPAY_PUBLIC_INSTALL: z.enum(['true', 'false']).optional(),
 })
 
 export type ServerConfig = {
@@ -59,7 +64,7 @@ export type ServerConfig = {
   fundingIntervalMs: number
   /** Standing policies: the scheduler's interval, and the shortest veto window (1 minute with the testnet demo controls). */
   policies: { schedulerIntervalMs: number; minVetoMinutes: number }
-  /** The web pages: origin, passkey relying party, chain endpoints for the browser, the app id for the home page's install link. */
+  /** The web pages: origin, passkey relying party, chain endpoints for the browser, the app id and whether the home page offers its install link. */
   web: WebConfig
   /** The dashboard's Discord OAuth2 client: the app itself. `clientSecret` null = sign-in not configured. */
   dashboard: { clientId: string; clientSecret: string | null }
@@ -130,6 +135,7 @@ export function parseServerConfig(raw: Record<string, string | undefined>): Serv
       sponsorUrl: core.sponsorUrl,
       explorerUrl: core.explorerUrl,
       discordAppId: e.DISCORD_APP_ID,
+      publicInstall: e.ROLEPAY_PUBLIC_INSTALL === undefined ? testnet : e.ROLEPAY_PUBLIC_INSTALL === 'true',
       botKeyDefaults: { ...botKey, feeBudget: feeBudget.value },
     },
     dashboard: { clientId: e.DISCORD_APP_ID, clientSecret: e.ROLEPAY_DISCORD_CLIENT_SECRET ?? null },

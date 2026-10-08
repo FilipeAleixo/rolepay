@@ -65,13 +65,14 @@ describe('the home page (/)', () => {
     expect(html).toMatch(/<section aria-labelledby="what">/)
     expect(html).toMatch(/<section aria-labelledby="trust">/)
     const svgs = [...html.matchAll(/<svg\b[^>]*>/g)].map((m) => m[0])
-    expect(svgs).toHaveLength(1 + FEATURES.length + TRUST.length) // the mark, a line icon per card and per trust row
     for (const svg of svgs) {
       expect(svg).toContain('aria-hidden="true"')
       expect(svg).toContain('focusable="false"')
     }
-    // The line icons: one 24 by 24 grid, one stroke weight, the gold coming from CSS (currentColor).
-    for (const svg of svgs.slice(1)) expect(svg).toMatch(/viewBox="0 0 24 24"[^>]*fill="none" stroke="currentColor" stroke-width="1.5"/)
+    // The line icons, one per card and per trust row: one 24 by 24 grid, one stroke weight, the gold from CSS (currentColor).
+    const icons = svgs.filter((svg) => !svg.includes('class="mark"'))
+    expect(icons).toHaveLength(FEATURES.length + TRUST.length)
+    for (const svg of icons) expect(svg).toMatch(/viewBox="0 0 24 24"[^>]*fill="none" stroke="currentColor" stroke-width="1.5"/)
     // The CSP allows the stylesheet by hash and nothing else: a style attribute would be refused.
     expect(html).not.toMatch(/\sstyle=/)
   })
@@ -85,14 +86,26 @@ describe('the home page (/)', () => {
     expect(testnet.replace('<p class="brand"><span class="testnet">Testnet demo</span></p>', '')).toBe(mainnet)
   })
 
-  it('offers the install link only when a Discord application is configured, on either network', async () => {
-    for (const mainnet of [false, true]) {
-      const without = await (await webHarness({ mainnet }).send('/')).text()
-      expect(without, `mainnet ${mainnet}`).not.toContain('discord.com/oauth2')
-      expect(without).not.toContain('Add Rolepay to a server')
-      const withApp = await (await webHarness({ mainnet, discordAppId: APP_ID }).send('/')).text()
-      expect(withApp, `mainnet ${mainnet}`).toContain(`<a class="button secondary" href="https://discord.com/oauth2/authorize?client_id=${APP_ID}&amp;`)
-      expect(withApp).toContain('Add Rolepay to a server')
+  it('offers the install link only with a Discord application and ROLEPAY_PUBLIC_INSTALL on (by default on testnet, off on mainnet, where the pilot bot is private)', async () => {
+    const link = `href="https://discord.com/oauth2/authorize?client_id=${APP_ID}&amp;`
+    const cases: Array<[Parameters<typeof webHarness>[0], boolean]> = [
+      [{ discordAppId: APP_ID }, true],
+      [{ discordAppId: APP_ID, publicInstall: false }, false],
+      [{ mainnet: true, discordAppId: APP_ID }, false],
+      [{ mainnet: true, discordAppId: APP_ID, publicInstall: true }, true],
+      [{ publicInstall: true }, false], // no application, nothing to install
+    ]
+    for (const [opts, offered] of cases) {
+      const html = await (await webHarness(opts).send('/')).text()
+      const label = JSON.stringify(opts)
+      if (offered) {
+        expect(html, label).toContain(`<a class="button secondary" ${link}`)
+        expect(html, label).toContain('Add Rolepay to a server')
+      } else {
+        expect(html, label).not.toContain('discord.com/oauth2')
+        expect(html, label).not.toContain('Add Rolepay to a server')
+        expect(html, label).toContain('<a class="button" href="/dashboard">Open the dashboard</a>')
+      }
     }
   })
 

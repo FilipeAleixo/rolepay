@@ -61,6 +61,11 @@ describe('fly.app.toml (the mainnet app, https://web.rolepay.app)', () => {
     expect(env.ROLEPAY_DEV_SHORTCUTS ?? 'false').toBe('false')
   })
 
+  it('offers no install link on the home page: the pilot bot is private, so a stranger would get a Discord error', () => {
+    expect(config().web.publicInstall).toBe(false)
+    expect(env.ROLEPAY_PUBLIC_INSTALL ?? 'false').toBe('false')
+  })
+
   it('caps AI calls per day and suggests a small bot key for a small pilot treasury', () => {
     const c = config()
     expect(env.ROLEPAY_AI_DAILY_CAP).toBeDefined()
@@ -92,7 +97,7 @@ describe('fly.demo.toml (the testnet demo, https://demo.rolepay.app)', () => {
   it('parses into a Moderato server with the demo controls and without the dev shortcuts, on a passkey domain of its own', () => {
     const c = parseServerConfig({ ...SECRETS, ...flyEnv('fly.demo.toml') })
     expect(c.core).toMatchObject({ network: 'moderato', demoControls: true, devShortcuts: false })
-    expect(c.web).toMatchObject({ origin: 'https://demo.rolepay.app', rpId: 'demo.rolepay.app' })
+    expect(c.web).toMatchObject({ origin: 'https://demo.rolepay.app', rpId: 'demo.rolepay.app', publicInstall: true })
   })
 
   it('ticks the policy scheduler every 10 seconds, so a one-minute veto window pays soon after it ends; the default stays 30', () => {

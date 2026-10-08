@@ -169,7 +169,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
   app.get('/apple-touch-icon.png', (c) => c.body(APPLE_TOUCH_ICON_PNG, 200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' }))
 
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
-  app.route('/', landingRoutes({ testnet, discordAppId: config.discordAppId }))
+  app.route('/', landingRoutes({ testnet, discordAppId: config.publicInstall ? config.discordAppId : undefined }))
   app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain, origin: config.origin }))
   app.route('/', accountRoutes({ config, testnet, payees: deps.rolepay.payees, sessions: deps.sessions }))
   app.route('/', accountLiveRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, live }))
