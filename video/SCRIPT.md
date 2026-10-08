@@ -216,7 +216,7 @@ What to click, timed to each caption (seconds from the start of the clip).
 **demo-9-judge.mp4** (about 12 s). As a judge would, on the public demo with a fresh account.
 - 0.5 to 4 s, "Judges join the demo server and run `/payee link`": `#start-here`, the pinned welcome post, `/payee link`, the ephemeral link.
 - 4.5 to 7.5 s, "Create a passkey, react to the welcome post": open the link, **Create my passkey**, confirm; back in Discord, react ✅ to the welcome post.
-- 8 to 11.5 s, "Paid at the next daily run, *with nobody online*": `#payouts` at 18:00 UTC (19:00 in Lisbon; a recording of an earlier day is fine): the run with "pays at ... unless vetoed" (no button there: the Veto is in `#treasury`), then "Paid"; the DM receipt. Since step 3 the run is signed with the Judges policy's own key.
+- 8 to 11.5 s, "Paid at the next daily run, *with nobody online*": `#payouts` at 16:00 UTC (a recording of an earlier day is fine; the 2026-10-08 run, recorded at 15:00 UTC with the payee's account page beside it, shows the swap and the live count-up): the run with "pays at ... unless vetoed" (no button there: the Veto is in `#treasury`), then "Paid"; the DM receipt. Since step 3 the run is signed with the Judges policy's own key.
 
 ## Before the final render
 
