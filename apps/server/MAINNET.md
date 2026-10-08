@@ -96,7 +96,9 @@ Namecheap, Domain List, `rolepay.app`, **Manage**, **Advanced DNS**, **Add New R
 ## 5. Point Discord at it, register the commands, invite the bot (5 minutes)
 
 1. Developer Portal, `Rolepay`, **General Information**, Interactions Endpoint URL: `https://web.rolepay.app/discord/interactions`, **Save Changes**. Discord sends a signed PING first; a red error means a wrong `DISCORD_PUBLIC_KEY` or the server is not up.
-2. Register the commands for the production application from this checkout, without touching `.env` (the real environment wins over `.env`, so the dev application there is untouched). The pilot server's ID: Discord, User Settings, Advanced, Developer Mode on, then right-click the server, Copy Server ID.
+2. Invite the bot to the pilot server first (Discord answers 403 to a guild command registration for a server the application is not in): `open "https://discord.com/oauth2/authorize?client_id=$APP_ID&scope=bot+applications.commands&permissions=84992"`.
+
+3. Then register the commands for the production application from this checkout, without touching `.env` (the real environment wins over `.env`, so the dev application there is untouched). The pilot server's ID: Discord, User Settings, Advanced, Developer Mode on, then right-click the server, Copy Server ID.
 
    ```zsh
    read -rs "BOT_TOKEN?Production bot token: "; echo
@@ -106,8 +108,7 @@ Namecheap, Domain List, `rolepay.app`, **Manage**, **Advanced DNS**, **Add New R
    unset BOT_TOKEN
    ```
 
-   Expect `Registered 3 commands (guild <ID>)`: `/rolepay`, `/payee` and the message command Propose pay run, with no dev or demo options. (`DISCORD_DEV_GUILD_ID=` empty registers them globally instead.)
-3. Invite the bot to the pilot server: `open "https://discord.com/oauth2/authorize?client_id=$APP_ID&scope=bot+applications.commands&permissions=84992"`.
+   Expect `Registered 5 commands (guild <ID>)`: `/rolepay`, `/payee`, the message commands Draft pay run with AI and Pay the author, and the user command Pay with Rolepay, with no dev or demo options. A 401 means the token is wrong (a bot token is about 72 characters with two dots; 19 is the Application ID); after a Reset Token, update Fly too (`printf 'DISCORD_BOT_TOKEN=%s\n' "$BOT_TOKEN" | fly secrets import --app rolepay-app`). (`DISCORD_DEV_GUILD_ID=` empty registers them globally instead.)
 
 ## 6. Create the treasury and authorise the bot key (15 minutes)
 
