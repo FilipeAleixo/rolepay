@@ -1,7 +1,19 @@
 // A web app over the real core services on in-memory fakes, with fake passkey sessions and
 // a stub client bundle. No network, no browser.
 import { createRolepay } from '@rolepay/core'
-import { FakeActivityReader, FakeFundingChain, FakePayoutChain, FakeRunProposer, InProcessLiveFeed, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories, emptyCriteria } from '@rolepay/core/adapters'
+import {
+  FakeActivityReader,
+  FakeFundingChain,
+  FakePayoutChain,
+  FakeRunProposer,
+  InProcessLiveFeed,
+  ManualClock,
+  PlainKeyVault,
+  SequentialIds,
+  ViemMessageSignatures,
+  createMemoryRepositories,
+  emptyCriteria,
+} from '@rolepay/core/adapters'
 import { createWebApp } from '../src/index.js'
 import type { LiveStreamOptions } from '../src/live/streams.js'
 import { FakePasskeySessions, staticAssets } from '../src/testing/index.js'
@@ -51,6 +63,8 @@ export function webHarness(opts: { mainnet?: boolean; discordAppId?: string; fun
     proposer,
     activity,
     ...(opts.funding === false ? {} : { fundingChain }),
+    // Real and offline: who signed a wallet claim.
+    signatures: new ViemMessageSignatures(),
   })
   const sessions = new FakePasskeySessions()
   const app = createWebApp({
@@ -117,8 +131,9 @@ export async function registeredCommunity(h: ReturnType<typeof webHarness>, trea
   return r.value
 }
 
-export async function claimLink(h: ReturnType<typeof webHarness>, user = ALICE) {
-  const link = await h.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: user })
+/** A `/payee link` for `user`, issued as Discord would with their username (`null`: a link from before usernames were kept). */
+export async function claimLink(h: ReturnType<typeof webHarness>, user = ALICE, username: string | null = user === ALICE ? 'alice' : null) {
+  const link = await h.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: user, discordUsername: username })
   if (!link.ok) throw new Error(link.error.code)
   return link.value.token
 }

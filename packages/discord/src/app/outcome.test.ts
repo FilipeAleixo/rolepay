@@ -3,7 +3,7 @@ import type { BackgroundReport } from '../http/handler.js'
 import { FakeDiscordRest } from '../testing/fakeDiscordRest.js'
 import { type Outcome, renderLate, renderOutcome } from './outcome.js'
 
-const ctx = { applicationId: '500000000000000001', token: 'tok', guildId: '1094309218049937418', channelId: null, caller: { userId: '200000000000000001', roles: [], permissions: 0n } }
+const ctx = { applicationId: '500000000000000001', token: 'tok', guildId: '1094309218049937418', channelId: null, caller: { userId: '200000000000000001', username: null, roles: [], permissions: 0n } }
 
 async function render(outcome: Outcome) {
   const rest = new FakeDiscordRest()

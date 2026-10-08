@@ -28,6 +28,7 @@ export {
   type TempoFundingChainOptions,
   TempoPayoutChain,
   type TempoPayoutChainOptions,
+  ViemMessageSignatures,
   createTestnetTools,
   idempotentSend,
   rootSignerFromPrivateKey,

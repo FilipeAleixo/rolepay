@@ -22,6 +22,8 @@ describe('/payee link', () => {
     expect(token).toBeDefined()
     const described = await a.rolepay.payees.describeLink({ token: token as string })
     expect(described).toMatchObject({ ok: true, value: { guildId: GUILD, discordUserId: ALICE } })
+    // The username Discord signed into the interaction names their passkey on the claim page.
+    expect(described).toMatchObject({ ok: true, value: { discordUsername: 'user001' } })
     expect(text(body(d))).toMatch(/<t:\d+:R>/) // when it expires
     expect(text(body(d))).toMatch(/once/)
     expect(text(body(d))).toContain('/payee prefer') // where to choose the stablecoin they are paid in

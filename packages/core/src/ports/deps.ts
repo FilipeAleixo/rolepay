@@ -4,6 +4,7 @@ import type { FundingChain } from './fundingChain.js'
 import type { IdGenerator } from './idGenerator.js'
 import type { KeyVault } from './keyVault.js'
 import type { LiveFeed } from './liveFeed.js'
+import type { MessageSignatures } from './messageSignatures.js'
 import type { PayoutChain } from './payoutChain.js'
 import type { ActivityReader } from './activityReader.js'
 import type { ProposalLog } from './proposalLog.js'
@@ -76,4 +77,9 @@ export type RolepayDeps = {
    * (`InProcessLiveFeed` in production: one process). Without it, `live` subscriptions receive nothing.
    */
   live?: LiveFeed | null
+  /**
+   * "Use a wallet I already have" on the claim page: who signed a claim message (`ViemMessageSignatures`
+   * in production, offline). Without it, that path answers `not_configured` and only passkeys register.
+   */
+  signatures?: MessageSignatures | null
 }

@@ -77,7 +77,7 @@ async function world(opts: { ai?: boolean; proposer?: FakeRunProposer | null; li
   }
   chain.fund(TOKEN, TREASURY, usd(5000))
   for (const [i, id] of [ANA, RUI, LI, MALLORY].entries()) {
-    await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address: `0x${String(i + 1).repeat(40)}`, preferredToken: null, registeredAt: T0, updatedAt: T0 })
+    await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address: `0x${String(i + 1).repeat(40)}`, addressKind: 'passkey', preferredToken: null, registeredAt: T0, updatedAt: T0 })
   }
   return { clock, chain, repos, proposals, payRuns, communities, proposer: proposer as FakeRunProposer, activity, logs }
 }

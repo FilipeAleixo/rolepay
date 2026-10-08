@@ -1,7 +1,7 @@
-import { type Failure, type NetworkName, type PolicyRun, type Run, type RunLine, lineToken, swapLegs } from '@rolepay/core'
+import { type AddressKind, type Failure, type NetworkName, type PolicyRun, type Run, type RunLine, lineToken, swapLegs } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message } from '../api.js'
 import { type RunAction, encodeCustomId, encodeVetoButton } from '../components/customId.js'
-import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention, shortAddress, tokenLabel, txUrl } from './format.js'
+import { COLORS, NO_PINGS, addressUrl, count, escapeMarkdown, mention, money, relativeTime, roleMention, shortAddress, tokenLabel, txUrl } from './format.js'
 
 export type RunViewContext = {
   network: NetworkName
@@ -91,10 +91,20 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
 
 /**
  * The DM a payee gets once their line is paid. `accountUrl` is the server's account page, where
- * the payee signs in with their passkey to see the balance and send it on.
+ * the payee signs in with their passkey to see the balance and send it on. `addressKind` is how the
+ * line's address is registered: 'passkey' (the default) links that page; 'external' (the payee's own
+ * wallet, which Rolepay cannot move) links the address on the explorer instead; null (an address the
+ * payee has moved from since, so Rolepay no longer knows what it is) links the explorer and says no more.
  */
-export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; communityName: string | null; accountUrl?: string | null }): Message {
+export function receiptDm(
+  run: Run,
+  line: RunLine,
+  ctx: { network: NetworkName; communityName: string | null; accountUrl?: string | null; addressKind?: AddressKind | null },
+): Message {
   const tx = run.paidTxHash
+  const kind = ctx.addressKind === undefined ? 'passkey' : ctx.addressKind
+  const ownWallet = kind === 'external'
+  const accountUrl = kind === 'passkey' ? (ctx.accountUrl ?? null) : addressUrl(ctx.network, line.address)
   const embed: Embed = {
     title: `You were paid ${money(line.amount, lineToken(run, line))}`,
     color: COLORS.paid,
@@ -109,12 +119,16 @@ export function receiptDm(run: Run, line: RunLine, ctx: { network: NetworkName; 
       { name: 'To your account', value: shortAddress(line.address), inline: true },
       { name: 'Pay run', value: `${run.id}, line ${line.line}`, inline: true },
       ...(tx ? [{ name: 'Transaction', value: txUrl(ctx.network, tx) }] : []),
-      ...(ctx.accountUrl ? [{ name: 'Your money', value: `To see your balance or send it on, sign in with your passkey at ${ctx.accountUrl}` }] : []),
+      ...(ownWallet
+        ? [{ name: 'Your money', value: 'It is in your own wallet: move it with that wallet. Rolepay cannot move or recover money there.' }]
+        : kind === 'passkey' && accountUrl
+          ? [{ name: 'Your money', value: `To see your balance or send it on, sign in with your passkey at ${accountUrl}` }]
+          : []),
     ],
   }
   const link: Button[] = [
     ...(tx ? [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'View transaction', url: txUrl(ctx.network, tx) } as const] : []),
-    ...(ctx.accountUrl ? [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Your account', url: ctx.accountUrl } as const] : []),
+    ...(accountUrl ? [{ type: ComponentType.Button, style: ButtonStyle.Link, label: 'Your account', url: accountUrl } as const] : []),
   ]
   return { embeds: [embed], components: rows(link), allowed_mentions: NO_PINGS }
 }

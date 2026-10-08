@@ -1,6 +1,6 @@
 // Real core services on core's in-memory fakes, plus a fake Discord. Test-only: production
 // code in this package never imports @rolepay/core/adapters.
-import { type Rolepay, createRolepay, parseAmount } from '@rolepay/core'
+import { type Address, type MessageSignatures, type Rolepay, createRolepay, ok, parseAmount } from '@rolepay/core'
 import { FakeFundingChain, FakePayoutChain, FakeRunProposer, ManualClock, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { RestActivityReader } from '../src/adapters/restActivityReader.js'
 import { FakeDiscordRest, RecordingQueue } from '../src/testing/fakeDiscordRest.js'
@@ -13,6 +13,14 @@ export const usd = (s: string) => {
 }
 
 export type Harness = Awaited<ReturnType<typeof harness>>
+
+/**
+ * The Discord layer never sees a signature: this stand-in "recovers" the address the claim message
+ * names, so a test can register a payee at their own wallet. Core's own tests check real signatures.
+ */
+const trustingSignatures: MessageSignatures = {
+  recover: async (message) => ok((/ at (0x[0-9a-f]{40}) on Tempo /.exec(message)?.[1] ?? '0x0000000000000000000000000000000000000001') as Address),
+}
 
 /**
  * `proposer: null` = a server with no Anthropic API key. The activity reader is the real one, over the fake Discord.
@@ -39,6 +47,7 @@ export async function harness(opts: { proposer?: FakeRunProposer | null; demoCon
     minVetoMinutes: 1,
     demoControls: opts.demoControls ?? true,
     fundingChain,
+    signatures: trustingSignatures,
   })
   const queue = new RecordingQueue()
   /** Moves the service clock and chain time together, as real waiting would. */
@@ -67,6 +76,16 @@ export async function harness(opts: { proposer?: FakeRunProposer | null; demoCon
     const link = await rolepay.payees.issueLink({ guildId: GUILD, discordUserId: userId })
     if (!link.ok) throw new Error(link.error.code)
     const r = await rolepay.payees.register({ token: link.value.token, address })
+    if (!r.ok) throw new Error(r.error.code)
+  }
+
+  /** A payee paid at a wallet they already have (registered through the wallet claim, its signature taken as valid here). */
+  async function registerWallet(userId: string, address: string) {
+    const link = await rolepay.payees.issueLink({ guildId: GUILD, discordUserId: userId })
+    if (!link.ok) throw new Error(link.error.code)
+    const challenge = await rolepay.payees.walletChallenge({ token: link.value.token, address, origin: 'http://localhost:8787' })
+    if (!challenge.ok) throw new Error(challenge.error.code)
+    const r = await rolepay.payees.registerExternal({ token: link.value.token, message: challenge.value.message, signature: '0xsigned', origin: 'http://localhost:8787' })
     if (!r.ok) throw new Error(r.error.code)
   }
 
@@ -102,5 +121,5 @@ export async function harness(opts: { proposer?: FakeRunProposer | null; demoCon
     return r.value
   }
 
-  return { clock, chain, fundingChain, rolepay, rest, queue, sleep, setupCommunity, registerPayee, registerAll, approvedRun, setUpDepositAddresses, proposer: proposer as FakeRunProposer }
+  return { clock, chain, fundingChain, rolepay, rest, queue, sleep, setupCommunity, registerPayee, registerWallet, registerAll, approvedRun, setUpDepositAddresses, proposer: proposer as FakeRunProposer }
 }

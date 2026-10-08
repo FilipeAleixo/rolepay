@@ -36,7 +36,7 @@ async function world(opts: { live?: boolean } = {}) {
       [BOB, ADDR.bob],
     ] as const) {
       const now = clock.now()
-      await repos.payees.upsert({ communityId: guildId, discordUserId: user, address, preferredToken: null, registeredAt: now, updatedAt: now })
+      await repos.payees.upsert({ communityId: guildId, discordUserId: user, address, addressKind: 'passkey', preferredToken: null, registeredAt: now, updatedAt: now })
     }
   }
   /** Creates, submits, approves and executes a run paying Alice 1.5 and Bob 2. */

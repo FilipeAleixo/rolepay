@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { CommandType, ComponentType, InteractionType, OptionType } from '../api.js'
 import { DiscordMessageSchema, toSourceMessage } from '../wire.js'
 
-/** Who clicked or typed, as Discord vouches for them in the signed interaction. */
-export type Caller = { userId: string; roles: string[]; permissions: bigint }
+/** Who clicked or typed, as Discord vouches for them in the signed interaction. `username` is their Discord username, when Discord sent one. */
+export type Caller = { userId: string; username: string | null; roles: string[]; permissions: bigint }
 
 export type InteractionContext = {
   applicationId: string
@@ -45,7 +45,7 @@ const OptionSchema: z.ZodType<RawOption> = z.lazy(() =>
   }),
 )
 
-const UserSchema = z.object({ id: DiscordIdSchema })
+const UserSchema = z.object({ id: DiscordIdSchema, username: z.string().optional() })
 const MemberSchema = z.object({ user: UserSchema, roles: z.array(DiscordIdSchema), permissions: z.string().regex(/^\d+$/) })
 const common = {
   application_id: DiscordIdSchema,
@@ -132,7 +132,7 @@ export function parseInteraction(body: unknown): Result<ParsedInteraction, { cod
     token: i.token,
     guildId: i.guild_id ?? null,
     channelId: i.channel_id ?? null,
-    caller: { userId: callerUser.id, roles: i.member?.roles ?? [], permissions: i.member ? BigInt(i.member.permissions) : 0n },
+    caller: { userId: callerUser.id, username: callerUser.username ?? null, roles: i.member?.roles ?? [], permissions: i.member ? BigInt(i.member.permissions) : 0n },
   }
   if (i.type === InteractionType.MessageComponent) return ok({ kind: 'component', customId: i.data.custom_id, messageId: i.message?.id ?? null, ctx })
   if (i.type === InteractionType.ModalSubmit) return ok({ kind: 'modal', customId: i.data.custom_id, fields: modalFields(i.data.components), messageId: i.message?.id ?? null, ctx })

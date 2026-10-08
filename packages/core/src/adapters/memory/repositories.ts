@@ -94,6 +94,18 @@ export class MemoryPayeeRepository implements PayeeRepository {
     this.tokens.set(tokenHash, { ...t, consumedAt: at })
     return true
   }
+  async setLinkNonce(tokenHash: string, nonce: string, at: Date) {
+    const t = this.tokens.get(tokenHash)
+    if (!t || t.consumedAt !== null) return false
+    this.tokens.set(tokenHash, { ...t, walletNonce: nonce, walletNonceIssuedAt: at })
+    return true
+  }
+  async takeLinkNonce(tokenHash: string, nonce: string) {
+    const t = this.tokens.get(tokenHash)
+    if (!t || t.walletNonce !== nonce) return false
+    this.tokens.set(tokenHash, { ...t, walletNonce: null, walletNonceIssuedAt: null })
+    return true
+  }
 }
 
 export class MemoryRunRepository implements RunRepository {

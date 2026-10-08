@@ -36,6 +36,10 @@ export interface PayeeRepository {
   getLinkToken(tokenHash: string): Promise<LinkToken | null>
   /** Compare-and-set: true only for the one call that consumed an unconsumed token. */
   consumeLinkToken(tokenHash: string, at: Date): Promise<boolean>
+  /** The link's wallet nonce, replacing any before it. false (nothing stored) for an unknown or spent link. */
+  setLinkNonce(tokenHash: string, nonce: string, at: Date): Promise<boolean>
+  /** Compare-and-set: clears the link's wallet nonce and returns true only if it is `nonce` (single use, whatever comes next). */
+  takeLinkNonce(tokenHash: string, nonce: string): Promise<boolean>
 }
 
 export interface RunRepository {

@@ -7,7 +7,7 @@ import { DailyCappedProposer } from './kv/proposerDailyCap.js'
 import { KvRunLeases } from './kv/runLeases.js'
 import { InProcessLiveFeed } from './live/index.js'
 import { openSqliteDatabase } from './sqlite/index.js'
-import { TempoFundingChain, TempoPayoutChain } from './tempo/index.js'
+import { TempoFundingChain, TempoPayoutChain, ViemMessageSignatures } from './tempo/index.js'
 
 /**
  * The production adapters, opened from config: SQLite file, AES-256-GCM vault,
@@ -42,6 +42,8 @@ export async function openRolepayAdapters(
       fundingChain: new TempoFundingChain({ network: config.network, rpcUrl: config.rpcUrl }),
       // Every audit event to the pages that update live, in this process only (one server instance).
       live: new InProcessLiveFeed(),
+      // Offline: who signed a payee's wallet claim (secp256k1), for "use a wallet I already have".
+      signatures: new ViemMessageSignatures(),
     },
     /** Same database: passkey credentials and sessions, delivery markers. */
     kv: db.kv,

@@ -495,8 +495,13 @@ export function auditSummary(e: AuditEvent, symbol: string): string {
       const label = TOKEN_SYMBOLS[token] ?? `${token.slice(0, 6)}...${token.slice(-4)}`
       return `Received ${String(d.amount)} ${label} at the deposit address of funding source ${String(d.sourceId)}.`
     }
+    // Content-free on purpose: the kinds only, never the addresses.
+    case 'payee.address_changed':
+      return `Registered a new payout address through a new link: from ${ADDRESS_KIND_WORDS[String(d.fromKind)] ?? String(d.fromKind)} to ${ADDRESS_KIND_WORDS[String(d.toKind)] ?? String(d.toKind)}.`
   }
 }
+
+const ADDRESS_KIND_WORDS: Record<string, string> = { passkey: 'a Rolepay passkey account', external: 'their own wallet' }
 
 /** The dashboard's AuditPort over `rolepay.audit`. */
 export function auditPortFromCore(rolepay: Rolepay): AuditPort {

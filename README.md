@@ -9,7 +9,7 @@
   <a href="https://github.com/FilipeAleixo/rolepay/actions/workflows/ci.yml"><img src="https://github.com/FilipeAleixo/rolepay/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Rolepay pays the people who run a Discord community (moderators, staff, bounty winners) in stablecoins on [Tempo](https://tempo.xyz), from Discord. Today that often means one wallet send at a time, a spreadsheet, recipients who need gas, and no clean record. With Rolepay an admin creates a pay run for a role or a list of people, a treasurer approves it with one button, and everyone is paid in one batched transaction, each payout with a memo, exportable to CSV. Recipients sign up with a passkey: no wallet, no seed phrase, no gas. The money stays in the community's own Tempo account. The bot holds only a key that the chain itself limits.
+Rolepay pays the people who run a Discord community (moderators, staff, bounty winners) in stablecoins on [Tempo](https://tempo.xyz), from Discord. Today that often means one wallet send at a time, a spreadsheet, recipients who need gas, and no clean record. With Rolepay an admin creates a pay run for a role or a list of people, a treasurer approves it with one button, and everyone is paid in one batched transaction, each payout with a memo, exportable to CSV. Recipients sign up with a passkey (no wallet, no seed phrase, no gas), or with a wallet they already have on Tempo. The money stays in the community's own Tempo account. The bot holds only a key that the chain itself limits.
 
 ## For judges
 
@@ -36,6 +36,10 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 **Every standing policy can have its own on-chain budget.** Access keys are how you give software a budget it can't exceed, so every standing policy can get its own. Off by default: a policy pays from the bot key, like every other run. When an approver approves a policy, Rolepay offers "Give this policy its own budget": on the treasury page the treasurer's passkey authorises a second access key for that policy alone, with its own limit per period, its own expiry and the same one allowed call, signing what the page built from the form (one prompt; a tampered server answer gets nothing signed). From then on that policy's runs are signed with its key and nothing else, so a buggy or compromised policy can spend at most its own key's budget, whatever the bot key has left. Revoking it stops that policy alone; it never falls back to the bot key. `/rolepay policy show` says "Own budget: 20 of 30 AlphaUSD left this period (chain-enforced)", and the policy's dashboard page draws it from the chain.
 - Code: [`domain/policy/policyKey.ts`](packages/core/src/domain/policy/policyKey.ts) (`policySigner`), [`services/policyKeyService.ts`](packages/core/src/services/policyKeyService.ts), [`services/payRunService.ts`](packages/core/src/services/payRunService.ts) (`signingKey`), [`routes/policyBudget.ts`](packages/web/src/routes/policyBudget.ts), [`client/policyBudget.ts`](packages/web/src/client/policyBudget.ts)
 - Tests: [`test/policyKey.chain.test.ts`](packages/core/test/policyKey.chain.test.ts) on Moderato, one treasury with the bot key (3 a day) and a policy key (1.5 a day): [the policy's run paid with its own key](https://explore.testnet.tempo.xyz/tx/0xc2ec676226c64cf98263082649947c53c9c237970afde04741a8e59d44ea93c3), [a batch over its remaining limit reverted whole with `SpendingLimitExceeded`](https://explore.testnet.tempo.xyz/tx/0x14cd43914bd1c365f937dfeec3f2194a9f99fbcd36b635a7998b3a4451f4a00b) while [the bot key paid a batch of the same shape](https://explore.testnet.tempo.xyz/tx/0x725bcda5895d1fa25b971ffe336096325abe9433ad4e110627953d8d6e87be35), and after [the root revoked the policy key](https://explore.testnet.tempo.xyz/tx/0x20a1223dde0493cd532b6e670b85fc75b3e78f0b95398b52ba3a3937b89d133c) its transfer was refused with `KeyAlreadyRevoked` and [the bot key still paid](https://explore.testnet.tempo.xyz/tx/0x6cc05abcfbd531ff46a0fc31bf208d7843bbc94972fa23052a717803d6981ef7); [`e2e/policyBudget.spec.ts`](apps/server/e2e/policyBudget.spec.ts) (a real passkey, one prompt each to authorise and revoke, a tampered answer signs nothing); [`services/policyKeyExecution.test.ts`](packages/core/src/services/policyKeyExecution.test.ts) (which key signs which run, holds, recovery and retries per key); [`test/policyBudget.test.ts`](apps/server/test/policyBudget.test.ts) (the judge demo with its own budget, through Discord, the treasury page and the dashboard)
+
+**Bring your own Tempo address, proven by a signature.** A recipient who already has a wallet on Tempo can be paid there instead of creating a passkey: on the claim page, **Use a wallet I already have** asks the wallet in the page (`window.ethereum`, for example MetaMask) to switch to Tempo and sign one plain-English message naming the site, the chain, the community, the person, the address and a single-use nonce bound to the claim link. The server registers the address it recovers from the signature, never one the page sends, and refuses a replayed, edited or expired message. Runs, policies and preferred stablecoins pay it unchanged; its receipts link the address on the explorer, because Rolepay cannot move or recover money there. No new script origin: the CSP is the same.
+- Code: [`domain/walletClaim.ts`](packages/core/src/domain/walletClaim.ts), [`services/payeeService.ts`](packages/core/src/services/payeeService.ts) (`walletChallenge`, `registerExternal`), [`client/wallet.ts`](packages/web/src/client/wallet.ts)
+- Tests: [`services/payeeService.test.ts`](packages/core/src/services/payeeService.test.ts) (every refusal, the nonce taken once, the audited switch between a passkey and a wallet), [`routes/claimWallet.test.ts`](packages/web/src/routes/claimWallet.test.ts) (a viem account signs; tampering with any field fails), [`client/wallet.test.ts`](packages/web/src/client/wallet.test.ts) (a fake EIP-1193 wallet), [`e2e/ownWallet.spec.ts`](apps/server/e2e/ownWallet.spec.ts) (a real browser at 375 px, through to a paid run), [`test/externalAddress.chain.test.ts`](packages/core/test/externalAddress.chain.test.ts): [an own wallet paid by a run on Moderato](https://explore.testnet.tempo.xyz/tx/0x8a1248fa0eba6ce0427ceb9c9a65909bd4b14f6110374d398867e35bade298c9)
 
 **One transaction per run, one memo per line.** The memo carries the run ID and the line number, so "was line 3 of this run paid?" is one log query.
 - Code: [`tempo/encoding.ts`](packages/core/src/adapters/tempo/encoding.ts) (`buildBatchCalls`), [`domain/memo.ts`](packages/core/src/domain/memo.ts)
@@ -75,27 +79,27 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 ```bash
 pnpm install
 pnpm typecheck
-pnpm test            # 1,734 tests in 145 files, no network, no secrets
+pnpm test            # 1,804 tests in 152 files, no network, no secrets
 pnpm test:coverage   # what CI runs, with a threshold per package
 ```
 
-`pnpm test` runs 1,734 tests: core 882, discord 416, web 292, server 144. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
+`pnpm test` runs 1,804 tests: core 917, discord 419, web 322, server 146. They include the SQLite integration tests, the architecture guards and an in-process end to end over signed HTTP.
 
 Coverage from `pnpm test:coverage`:
 
 | Package | Lines | Statements | Functions | Branches |
 | --- | --- | --- | --- | --- |
-| `packages/core` | 95.72% | 92.62% | 95.67% | 84.18% |
-| `packages/discord` | 96.91% | 93.43% | 96.66% | 83.93% |
-| `packages/web` | 86.91% | 83.7% | 84.24% | 76.1% |
-| `apps/server` | 85.78% | 85.52% | 84.91% | 85.22% |
+| `packages/core` | 95.84% | 92.7% | 95.74% | 84.45% |
+| `packages/discord` | 96.92% | 93.44% | 96.66% | 84.01% |
+| `packages/web` | 87.79% | 84.45% | 84.55% | 76.55% |
+| `apps/server` | 85.84% | 85.58% | 84.91% | 85.39% |
 
-`packages/web` is lower because its browser code (`src/client/`, 32% of lines here) runs in the Playwright e2e, which these numbers do not count. Its server code is at 99% of lines.
+`packages/web` is lower because its browser code (`src/client/`, 34% of lines here, 65% of them covered by unit tests on fake DOMs and wallets) runs in the Playwright e2e, which these numbers do not count. Its server code is at 99% of lines.
 
 Opt-in suites, on Tempo's Moderato testnet:
 
-- `pnpm test:chain`: full pay runs at service level and over HTTP, the fee budget, an autopilot policy payout after a one-minute veto window, a policy with its own key next to the bot key, preferred stablecoins bought on the DEX in the same batch, deposit addresses (a passkey-like treasury registers, two deposits land with no sweep and are attributed), and the protocol tests above. It generates throwaway keys into the gitignored `.env`, funds them from the public faucet, and refuses any chain but Moderato. Three to four minutes.
-- `pnpm test:e2e`: Playwright in Chromium with a virtual passkey authenticator. The claim and treasurer flows on Moderato (the preferred stablecoin switch and a BetaUSD payout from a passkey treasury among them), a policy given its own budget with the passkey on Moderato, deposit addresses set up on the treasury page (the salt mined in the browser) on Moderato, the mainnet path rehearsed on Moderato with no sponsor, and the dashboard walk (no network). The first time, install the browser with `pnpm --filter @rolepay/server exec playwright install chromium`.
+- `pnpm test:chain`: full pay runs at service level and over HTTP, the fee budget, an autopilot policy payout after a one-minute veto window, a policy with its own key next to the bot key, preferred stablecoins bought on the DEX in the same batch, deposit addresses (a passkey-like treasury registers, two deposits land with no sweep and are attributed), a recipient's own wallet (an EOA registered by its signature, then paid by a run), and the protocol tests above. It generates throwaway keys into the gitignored `.env`, funds them from the public faucet, and refuses any chain but Moderato. Three to four minutes.
+- `pnpm test:e2e`: Playwright in Chromium with a virtual passkey authenticator. The claim and treasurer flows on Moderato (the preferred stablecoin switch and a BetaUSD payout from a passkey treasury among them), a policy given its own budget with the passkey on Moderato, deposit addresses set up on the treasury page (the salt mined in the browser) on Moderato, a recipient registering their own wallet at phone width with an injected test wallet and being paid on Moderato, the mainnet path rehearsed on Moderato with no sponsor, and the dashboard walk (no network). The first time, install the browser with `pnpm --filter @rolepay/server exec playwright install chromium`.
 
 Where the limit refusal is tested:
 
@@ -121,7 +125,7 @@ A demo runs on Tempo's Moderato testnet at <https://demo.rolepay.app>: test doll
 About two minutes of your time, as a recipient, with nobody else online:
 
 1. Join the demo Discord server and run `/payee link` in #start-here. Only you see the reply.
-2. Open the link and press **Create my passkey**, then confirm with your fingerprint or face. That is your Tempo account: no wallet, no seed phrase, nothing to install, no gas.
+2. Open the link and press **Create my passkey (no wallet needed)**, then confirm with your fingerprint or face. That is your Tempo account: no wallet, no seed phrase, nothing to install, no gas. Already have a wallet on Tempo, such as MetaMask? Press **Use a wallet I already have** instead and sign the message it shows (it costs nothing and moves no money): you are paid at that address.
 3. React ✅ to the welcome post in #start-here.
 4. Wait for the next daily run, at 18:00 UTC. A standing policy, "1 AlphaUSD to every registered payee who reacted ✅ to the welcome post and has never been paid", was written once with AI and approved by the treasurer; now code runs it with no AI and nobody online. The run is posted in #payouts with a one-minute veto window, then paid in one batched transaction, capped by the bot key's on-chain limit. You are paid once: after that you no longer match "never paid".
 5. You get a DM receipt with your amount and the transaction link, if your privacy settings for the demo server allow direct messages from server members (the payment lands either way). The transaction on Tempo's explorer shows everyone paid in one batch, each line with its memo.
@@ -170,7 +174,7 @@ AI writes the rule once. Humans approve it. Code runs it. The chain caps it.
 
 - `packages/core`: the domain (run state machine, money, memos, proposals), ports, adapters (Tempo, SQLite, key vault, Anthropic, in-memory fakes) and services, which are the only public interface.
 - `packages/discord`: the Discord adapter over HTTP interactions.
-- `packages/web`: the home page, the claim, treasurer setup and payee account pages (passkeys), and the web dashboard, in one dark design with the fonts served from the same origin.
+- `packages/web`: the home page, the claim (a passkey or the recipient's own wallet), treasurer setup and payee account pages (passkeys), and the web dashboard, in one dark design with the fonts served from the same origin.
 - `apps/server`: the composition root (Hono).
 - `docs/ARCHITECTURE.md`: the design. `docs/THREAT-MODEL.md`: the threat model.
 

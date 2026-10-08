@@ -364,6 +364,11 @@ describe('auditSummary: every event in plain words, from codes, counts and amoun
       'Received 1 0x20c0...0009 at the deposit address of funding source fsrc_1.',
     )
   })
+
+  it('a payee moving their pay: the kinds only, no address', () => {
+    expect(say('payee.address_changed', { fromKind: 'passkey', toKind: 'external' })).toBe('Registered a new payout address through a new link: from a Rolepay passkey account to their own wallet.')
+    expect(say('payee.address_changed', { fromKind: 'external', toKind: 'passkey' })).toBe('Registered a new payout address through a new link: from their own wallet to a Rolepay passkey account.')
+  })
 })
 
 describe('aiUsagePortFromCore: the AI spend, read from the rows core writes', () => {

@@ -170,7 +170,7 @@ export function createWebApp(deps: WebAppDeps): Hono {
 
   const chain = { network: config.network, explorerUrl: config.explorerUrl, testnet }
   app.route('/', landingRoutes({ testnet, discordAppId: config.discordAppId }))
-  app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))
+  app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain, origin: config.origin }))
   app.route('/', accountRoutes({ config, testnet, payees: deps.rolepay.payees, sessions: deps.sessions }))
   app.route('/', accountLiveRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, live }))
   app.route('/', setupRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))

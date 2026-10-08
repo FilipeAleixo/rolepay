@@ -14,7 +14,8 @@ import { type Database, openSqliteDatabase } from './index.js'
 import { MIGRATION_NAMES, migrateTo } from './migrations.js'
 import { SqlitePolicyKeyRepository } from './policyKeyRepository.js'
 import { SqliteAuditLog, SqlitePolicyRepository } from './policyRepositories.js'
-import { SqliteCommunityRepository, SqlitePayeeRepository, SqliteRunRepository } from './repositories.js'
+import { SqliteFundingRepository } from './fundingRepository.js'
+import { SqliteCommunityRepository, SqliteRunRepository } from './repositories.js'
 
 // Real SQLite on a temp file (not :memory:), so file-level behaviour is exercised too.
 const dir = mkdtempSync(join(tmpdir(), 'rolepay-sqlite-'))
@@ -219,13 +220,17 @@ describe('sqlite: migrations and persistence', () => {
     sqlite.pragma('foreign_keys = ON')
     const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
     await migrateTo(before as unknown as Kysely<unknown>, '0009_preferred_tokens')
-    // 0010 adds tables only, so today's repositories write these rows exactly as the 0009 release did.
+    // 0010 adds tables only, so today's repositories write these rows exactly as the 0009 release did,
+    // except the payee, whose table later releases widened (0012): it is written with 0009's columns.
     const BETA = '0x20c0000000000000000000000000000000000002'
     const community = f.community({ preferredTokens: true })
     const payee = f.payee({ preferredToken: BETA })
     const own = f.policyKey({ status: 'active', authorizedAt: f.at(2) })
     await new SqliteCommunityRepository(before).insert(community)
-    await new SqlitePayeeRepository(before).upsert(payee)
+    await before
+      .insertInto('payees')
+      .values({ community_id: payee.communityId, discord_user_id: payee.discordUserId, address: payee.address, preferred_token: BETA, registered_at: payee.registeredAt.toISOString(), updated_at: payee.updatedAt.toISOString() } as never)
+      .execute()
     await new SqliteRunRepository(before).insert(f.run())
     await new SqlitePolicyRepository(before).insert(f.policy(), f.policyVersion())
     await new SqlitePolicyKeyRepository(before).save(own)
@@ -250,6 +255,93 @@ describe('sqlite: migrations and persistence', () => {
     expect(await again.repositories.funding.getMaster(f.GUILD)).toEqual(f.depositMaster())
     expect(await again.repositories.funding.listDeposits(f.GUILD)).toEqual([f.deposit()])
     expect(await again.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(payee)
+  })
+
+  it("0011 keeps the payee's Discord username on claim links, applied to a database 0010 left with a community, a payee, a spent and a live link, a run and a funding source in it", async () => {
+    expect(MIGRATION_NAMES[MIGRATION_NAMES.indexOf('0011_link_usernames') - 1]).toBe('0010_funding')
+    const path = join(dir, 'before-0011.db')
+    const sqlite = new BetterSqlite3(path)
+    sqlite.pragma('foreign_keys = ON')
+    const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+    await migrateTo(before as unknown as Kysely<unknown>, '0010_funding')
+    await insertAsBefore0009(before, { payee: true })
+    // The link rows as the 0010 release wrote them (its columns only).
+    const linkRow = (hash: string, consumed: Date | null) => ({
+      token_hash: hash,
+      community_id: f.GUILD,
+      discord_user_id: f.ALICE,
+      created_at: f.T0.toISOString(),
+      expires_at: f.at(1800).toISOString(),
+      consumed_at: consumed?.toISOString() ?? null,
+    })
+    await before.insertInto('link_tokens').values([linkRow('fp_spent', f.at(5)), linkRow('fp_live', null)] as never).execute()
+    await new SqliteFundingRepository(before).insertSource(f.fundingSource())
+    const columns = (table: string) => (sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+    expect(columns('link_tokens')).not.toContain('discord_username')
+    await before.destroy()
+
+    const after = await openSqliteDatabase(path)
+    opened.push(after)
+    // The old links read as they were, with no username (the claim page falls back to the Discord ID).
+    expect(await after.repositories.payees.getLinkToken('fp_spent')).toEqual(f.linkToken({ tokenHash: 'fp_spent', consumedAt: f.at(5) }))
+    expect(await after.repositories.payees.getLinkToken('fp_live')).toEqual(f.linkToken({ tokenHash: 'fp_live' }))
+    expect(await after.repositories.payees.consumeLinkToken('fp_live', f.at(6))).toBe(true)
+    expect(await after.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(f.payee())
+    expect(await after.repositories.runs.get('run_fixture01')).toEqual(f.run())
+    expect(await after.repositories.funding.getSource(f.fundingSource().id)).toEqual(f.fundingSource())
+    // New links keep it.
+    await after.repositories.payees.insertLinkToken(f.linkToken({ tokenHash: 'fp_new', discordUsername: 'alice' }))
+    expect((await after.repositories.payees.getLinkToken('fp_new'))?.discordUsername).toBe('alice')
+  })
+
+  it("0012 records each payee's kind of address (passkey or their own wallet) and a link's wallet nonce, applied to a database 0010 left (the last release) with communities, payees, live links, a run, a policy and its own key, and a funding source", async () => {
+    expect(MIGRATION_NAMES.slice(MIGRATION_NAMES.indexOf('0010_funding'))).toEqual(['0010_funding', '0011_link_usernames', '0012_address_kinds'])
+    const path = join(dir, 'before-0012.db')
+    const sqlite = new BetterSqlite3(path)
+    sqlite.pragma('foreign_keys = ON')
+    const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+    await migrateTo(before as unknown as Kysely<unknown>, '0010_funding')
+    // Rows with 0010's columns only: a community, two payees (one who prefers a stablecoin), a run,
+    // a live and a spent link, a policy with its own key, a funding source.
+    await insertAsBefore0009(before, { payee: true })
+    const BETA = '0x20c0000000000000000000000000000000000002'
+    await before
+      .insertInto('payees')
+      .values({ community_id: f.GUILD, discord_user_id: f.BOB, address: f.ADDR.bob, preferred_token: BETA, registered_at: f.T0.toISOString(), updated_at: f.T0.toISOString() } as never)
+      .execute()
+    const linkRow = (hash: string, consumed: Date | null) => ({ token_hash: hash, community_id: f.GUILD, discord_user_id: f.ALICE, created_at: f.T0.toISOString(), expires_at: f.at(1800).toISOString(), consumed_at: consumed?.toISOString() ?? null })
+    await before.insertInto('link_tokens').values([linkRow('fp_live', null), linkRow('fp_spent', f.at(5))] as never).execute()
+    await new SqlitePolicyRepository(before).insert(f.policy(), f.policyVersion())
+    const own = f.policyKey({ status: 'active', authorizedAt: f.at(2) })
+    await new SqlitePolicyKeyRepository(before).save(own)
+    await new SqliteFundingRepository(before).insertSource(f.fundingSource())
+    const columns = (table: string) => (sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+    expect(columns('payees')).not.toContain('address_kind')
+    expect(columns('link_tokens')).not.toContain('wallet_nonce')
+    await before.destroy()
+
+    const after = await openSqliteDatabase(path)
+    opened.push(after)
+    // Everyone registered before is a passkey account; their stablecoin and dates are kept.
+    expect(await after.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(f.payee())
+    expect(await after.repositories.payees.get(f.GUILD, f.BOB)).toEqual(f.payee({ discordUserId: f.BOB, address: f.ADDR.bob, preferredToken: BETA }))
+    expect((await after.repositories.payees.list(f.GUILD)).map((p) => p.addressKind)).toEqual(['passkey', 'passkey'])
+    // The links read as before, with no nonce; the live one can take one, the spent one cannot.
+    expect(await after.repositories.payees.getLinkToken('fp_live')).toEqual(f.linkToken({ tokenHash: 'fp_live' }))
+    expect(await after.repositories.payees.setLinkNonce('fp_live', 'n1', f.at(10))).toBe(true)
+    expect(await after.repositories.payees.setLinkNonce('fp_spent', 'n1', f.at(10))).toBe(false)
+    expect(await after.repositories.payees.takeLinkNonce('fp_live', 'n1')).toBe(true)
+    // The rest is untouched.
+    expect(await after.repositories.runs.get('run_fixture01')).toEqual(f.run())
+    expect(await after.repositories.policies.get('pol_fixture01')).toEqual(f.policy())
+    expect(await after.repositories.policyKeys.get(own.address)).toEqual(own)
+    expect(await after.repositories.funding.getSource(f.fundingSource().id)).toEqual(f.fundingSource())
+    // A re-claim with a wallet switches the kind in place.
+    await after.repositories.payees.upsert(f.payee({ address: f.ADDR.carol, addressKind: 'external', updatedAt: f.at(20) }))
+    await after.close()
+    const again = await openSqliteDatabase(path)
+    opened.push(again)
+    expect(await again.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(f.payee({ address: f.ADDR.carol, addressKind: 'external', updatedAt: f.at(20) }))
   })
 
   it('keeps key-value records across reopen', async () => {

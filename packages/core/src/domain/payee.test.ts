@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type LinkToken, checkLinkToken } from './payee.js'
+import { DiscordUsernameSchema, type LinkToken, LinkTokenSchema, checkLinkToken } from './payee.js'
 
 const t0 = new Date('2026-10-06T12:00:00Z')
 const token: LinkToken = {
@@ -9,6 +9,9 @@ const token: LinkToken = {
   createdAt: t0,
   expiresAt: new Date(t0.getTime() + 30 * 60_000),
   consumedAt: null,
+  discordUsername: null,
+  walletNonce: null,
+  walletNonceIssuedAt: null,
 }
 
 describe('checkLinkToken', () => {
@@ -22,5 +25,20 @@ describe('checkLinkToken', () => {
 
   it('refuses at and after the expiry instant', () => {
     expect(checkLinkToken(token, token.expiresAt)).toEqual({ ok: false, error: { code: 'link_expired' } })
+  })
+})
+
+describe("DiscordUsernameSchema (the name a payee's passkey is labelled with)", () => {
+  it("accepts Discord's usernames: 2 to 32 lowercase letters, digits, underscores and periods", () => {
+    for (const name of ['al', 'alice', 'bob_99', 'carol.k', 'a'.repeat(32)]) expect(DiscordUsernameSchema.safeParse(name).success).toBe(true)
+  })
+
+  it('refuses anything else (a display name, a legacy name with a discriminator, brackets that could make two labels read alike)', () => {
+    for (const name of ['a', 'a'.repeat(33), 'Alice', 'alice bob', 'bob#1234', 'x) (y', '', 'émile']) expect(DiscordUsernameSchema.safeParse(name).success).toBe(false)
+  })
+
+  it('a link stored before usernames were kept reads as no username', () => {
+    const { discordUsername: _, walletNonce: _n, walletNonceIssuedAt: _a, ...old } = token
+    expect(LinkTokenSchema.parse(old)).toMatchObject({ discordUsername: null, walletNonce: null, walletNonceIssuedAt: null })
   })
 })

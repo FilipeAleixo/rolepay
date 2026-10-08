@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import { TESTNET_TOKENS, createRolepay, parseAmount } from '@rolepay/core'
 import { type KeyValueStore, type Rolepay } from '@rolepay/core'
-import { FakeFundingChain, FakePayoutChain, FakeRunProposer, InProcessLiveFeed, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, FakeRunProposer, InProcessLiveFeed, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, ViemMessageSignatures, createMemoryRepositories } from '@rolepay/core/adapters'
 import { RestActivityReader } from '@rolepay/discord'
 import { FakeDiscordRest, createTestSigner } from '@rolepay/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
@@ -81,6 +81,8 @@ export async function testServer(
       fundingChain,
       // Every audit event to the live pages, as main.ts wires it (openRolepayAdapters).
       live: feed,
+      // Real and offline: who signed a payee's wallet claim.
+      signatures: new ViemMessageSignatures(),
     })
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()

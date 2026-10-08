@@ -33,7 +33,7 @@ async function world(opts: { limit?: bigint; preferredTokens?: boolean; capBps?:
   const vault = new PlainKeyVault()
   const ids = new SequentialIds()
   const communities = new CommunityService({ communities: repos.communities, chain, vault, clock, network: 'moderato', ids, setupLinkTtlSeconds: 1800 })
-  const payees = new PayeeService({ communities: repos.communities, payees: repos.payees, vault, ids, clock, linkTtlSeconds: 1800 })
+  const payees = new PayeeService({ communities: repos.communities, payees: repos.payees, vault, ids, clock, linkTtlSeconds: 1800, network: 'moderato' })
   const payRuns = new PayRunService({
     runs: repos.runs,
     payees: repos.payees,
@@ -66,7 +66,7 @@ async function world(opts: { limit?: bigint; preferredTokens?: boolean; capBps?:
     [BO, ADDR.bo, null],
     [CY, ADDR.cy, THETA],
   ] as const) {
-    await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address, preferredToken, registeredAt: now, updatedAt: now })
+    await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address, addressKind: 'passkey', preferredToken, registeredAt: now, updatedAt: now })
   }
   return { clock, chain, repos, communities, payees, payRuns }
 }
@@ -294,7 +294,7 @@ describe("PayeeService: a payee's choice", () => {
 
   it('lists where an address is paid, with each community\'s choices, whether it is on, and the current choice', async () => {
     await w.communities.register({ guildId: OTHER_GUILD, name: 'Other', treasuryAddress: TREASURY, payoutToken: BETA, feeMode: 'sponsor' })
-    await w.repos.payees.upsert({ communityId: OTHER_GUILD, discordUserId: ANA, address: ADDR.ana, preferredToken: null, registeredAt: w.clock.now(), updatedAt: w.clock.now() })
+    await w.repos.payees.upsert({ communityId: OTHER_GUILD, discordUserId: ANA, address: ADDR.ana, addressKind: 'passkey', preferredToken: null, registeredAt: w.clock.now(), updatedAt: w.clock.now() })
     expect(await w.payees.registrations({ address: ADDR.ana.toUpperCase().replace('0X', '0x') })).toEqual([
       { guildId: GUILD, communityName: 'Mods', discordUserId: ANA, payoutToken: ALPHA, preferredToken: BETA, choices: [ALPHA, BETA, THETA], enabled: true },
       { guildId: OTHER_GUILD, communityName: 'Other', discordUserId: ANA, payoutToken: BETA, preferredToken: null, choices: [BETA, ALPHA, THETA], enabled: false },

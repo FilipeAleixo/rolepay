@@ -35,7 +35,7 @@ describe('parseInteraction', () => {
           token: 'tok',
           guildId: '1094309218049937418',
           channelId: '700000000000000001',
-          caller: { userId: '200000000000000001', roles: ['400000000000000001'], permissions: 32n },
+          caller: { userId: '200000000000000001', username: 'alice', roles: ['400000000000000001'], permissions: 32n },
         },
       },
     })

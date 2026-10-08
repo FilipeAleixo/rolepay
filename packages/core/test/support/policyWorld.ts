@@ -115,7 +115,7 @@ export async function policyWorld(
     if (!auth.ok) throw new Error(auth.error.code)
   }
   chain.fund(TOKEN, TREASURY, usd(5000))
-  for (const id of [ANA, RUI, LI, BIG]) await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address: addressOf(id), preferredToken: null, registeredAt: T0, updatedAt: T0 })
+  for (const id of [ANA, RUI, LI, BIG]) await repos.payees.upsert({ communityId: GUILD, discordUserId: id, address: addressOf(id), addressKind: 'passkey', preferredToken: null, registeredAt: T0, updatedAt: T0 })
 
   activity.roles = [
     { id: APPROVER, name: 'Treasurer' },
