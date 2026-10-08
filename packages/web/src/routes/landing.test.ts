@@ -177,7 +177,7 @@ describe('the home page (/)', () => {
     const gold = (part: string) => part.match(/class="button"/g)?.length ?? 0 // not "button cool", not "button secondary"
     // The hero: join the demo and get paid (gold), add the bot to your own server (the outline), the way down the page, then what to do once there.
     expect(hero(html)).toContain(
-      `<p class="actions"><a class="button" href="${INVITE}" rel="noreferrer">Join the demo and get paid</a><a class="button cool" href="${INSTALL}" rel="noreferrer">Add to your server</a></p><p class="hint">Run <code>/payee link</code>, react ✅ in #start-here, and the next daily run pays you a test dollar.</p><p class="down"><a class="more" href="#how">How it works</a></p>`,
+      `<p class="actions pair"><a class="button" href="${INVITE}" rel="noreferrer">Join the demo</a><a class="button cool" href="${INSTALL}" rel="noreferrer">Add to your server</a></p><p class="hint">Run <code>/payee link</code>, react ✅ in #start-here, and the next daily run pays you a test dollar.</p><p class="down"><a class="more" href="#how">How it works</a></p>`,
     )
     // The top bar keeps its links; "Add to Discord" takes the outline, since the hero's gold is on the same screen.
     expect(topBar(html)).toContain(`<nav aria-label="Main"><a class="quiet account" href="/account"><span class="wide">Payee account</span><span class="narrow">Account</span></a><a class="quiet" href="/dashboard">Treasury dashboard</a><a class="button cool" href="${INSTALL}" rel="noreferrer">Add to Discord</a></nav>`)

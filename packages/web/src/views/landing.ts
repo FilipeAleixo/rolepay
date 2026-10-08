@@ -209,7 +209,7 @@ export function landingPage(opts: { testnet: boolean; discordAppId?: string | un
   const bar = href
     ? `${account}<a class="quiet" href="/dashboard">Treasury dashboard</a>${install('Add to Discord', invite ? 'button cool' : 'button')}`
     : `${account}<a class="button" href="/dashboard"><span class="wide">Treasury dashboard</span><span class="narrow">Dashboard</span></a>`
-  const hero = invite ? `${join('Join the demo and get paid')}${install('Add to your server', 'button cool')}` : href ? install('Add to Discord') : dashboard
+  const hero = invite ? `${join('Join the demo')}${install('Add to your server', 'button cool')}` : href ? install('Add to Discord') : dashboard
   // What a visitor does once in the demo server (the Judges policy in apps/server/README.md pays them).
   // With the hint, "How it works" follows it, so the hint sits right under the button it explains.
   const hint = invite ? '<p class="hint">Run <code>/payee link</code>, react ✅ in #start-here, and the next daily run pays you a test dollar.</p>' : ''
@@ -226,7 +226,7 @@ export function landingPage(opts: { testnet: boolean; discordAppId?: string | un
 <section class="hero" aria-labelledby="hero-title"><div class="copy">${opts.testnet ? '<p class="badge"><span class="testnet">Testnet demo</span></p>' : ''}
 <h1 id="hero-title">Pay the people who run your community.</h1>
 <p class="sub">Pick a role, name the people, or describe them in plain words. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.</p>
-${invite ? `<p class="actions">${hero}</p>${hint}<p class="down"><a class="more" href="#how">How it works</a></p>` : `<p class="actions">${hero}<a class="more" href="#how">How it works</a></p>`}</div>
+${invite ? `<p class="actions pair">${hero}</p>${hint}<p class="down"><a class="more" href="#how">How it works</a></p>` : `<p class="actions">${hero}<a class="more" href="#how">How it works</a></p>`}</div>
 ${productShot()}</section>
 <section class="contrast" aria-labelledby="contrast-title"><h2 id="contrast-title" class="sr">Paying people today, and with Rolepay</h2><p class="cols" aria-hidden="true"><span>Today</span><span>With Rolepay</span></p><ul>${CONTRAST.map((r) => `<li><p class="was"><span class="sr">Today: </span>${esc(r.was)}</p><p class="now"><span class="sr">With Rolepay: </span>${esc(r.now)}</p></li>`).join('')}</ul></section>
 <section class="how" id="how" aria-labelledby="how-title"><div class="intro"><h2 id="how-title">How a pay run works</h2>

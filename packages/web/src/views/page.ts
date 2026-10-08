@@ -101,6 +101,8 @@ noscript p{color:var(--muted)}
 .home .hero .sub{margin:0 0 2.25rem;font-size:17px;line-height:1.65;color:var(--soft);max-width:30rem}
 .home .actions{display:flex;flex-wrap:wrap;align-items:center;gap:1rem 1.75rem;margin:0}
 .home .actions .button{margin:0;min-height:2.85rem;padding:.65rem 1.3rem;font-size:14px}
+.home .actions.pair{display:grid;grid-template-columns:repeat(2,minmax(0,13.5rem));gap:1rem}
+.home .actions.pair .button{justify-content:center;text-align:center}
 .home .more{font-size:14px;color:var(--soft);text-decoration:none}
 .home .more::after{content:"\\2193";margin-left:.45em;color:var(--accent-2)}
 .home .more:hover{color:var(--fg)}
@@ -266,7 +268,7 @@ ${PAID_WEEKS.map((v, i) => `.home .wk-bars>span:nth-child(${i + 1}){height:${v}%
 @media (min-width:40rem){.topbar .bar,.home{padding-left:1.5rem;padding-right:1.5rem}.home h2{font-size:36px}.home .hero h1{font-size:56px}.home .groups{grid-template-columns:1fr 1fr;column-gap:3.5rem}}
 @media (min-width:50rem){.home section.trust{padding:3rem 2.75rem 2.75rem}.home .trust ul{grid-template-columns:repeat(3,1fr);gap:2.75rem}.home .trust li{flex-direction:column;gap:1.1rem}}
 @media (min-width:60rem){.home .hero{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:4.5rem;padding:4.75rem 0 6rem}.home .hero h1{font-size:62px}.home .how{grid-template-columns:minmax(0,.85fr) minmax(0,1.15fr);gap:5rem;padding-top:8rem}.home .how .intro{position:sticky;top:3rem;align-self:start}.home .steps li{grid-template-columns:4rem minmax(0,1fr);padding:1.9rem 0}}
-@media (max-width:40rem){.topbar .quiet:not(.account){display:none}.topbar nav{gap:1rem}.topbar .wide{display:none}.topbar .narrow{display:inline}.home .cta .button{flex:1 1 100%}}
+@media (max-width:40rem){.topbar .quiet:not(.account){display:none}.topbar nav{gap:1rem}.topbar .wide{display:none}.topbar .narrow{display:inline}.home .cta .button{flex:1 1 100%}.home .actions.pair{grid-template-columns:minmax(0,1fr)}}
 `
 
 /** The document head: the title, the favicon and font preloads, and one inline stylesheet (allowed by its hash). */
