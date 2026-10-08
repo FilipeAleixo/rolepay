@@ -9,6 +9,8 @@ const h = vi.hoisted(() => ({
   account: null as null | { address: string },
   signIn: async (): Promise<string> => '',
   balances: new Map<string, bigint>(),
+  /** How many balances the page read from the chain. */
+  reads: 0,
   sent: [] as { chain: { sponsorUrl: string | null; feeToken: string }; token: string; to: string; amount: bigint }[],
 }))
 
@@ -16,7 +18,10 @@ vi.mock('./passkey.js', () => ({
   passkeys: () => ({ create: async () => '', signIn: () => h.signIn(), account: () => h.account, ready: async () => {} }),
 }))
 vi.mock('./tempo.js', () => ({
-  balanceOf: async (_c: unknown, token: string) => h.balances.get(token) ?? 0n,
+  balanceOf: async (_c: unknown, token: string) => {
+    h.reads++
+    return h.balances.get(token) ?? 0n
+  },
   sendToken: async (chain: { sponsorUrl: string | null; feeToken: string }, _from: unknown, token: string, to: string, amount: bigint) => {
     h.sent.push({ chain, token, to, amount })
     return '0xfeed'
@@ -79,12 +84,34 @@ class El {
 
 const ALPHA = '0x20c0000000000000000000000000000000000001'
 const PATH = '0x20c0000000000000000000000000000000000000'
+const BETA = '0x20c0000000000000000000000000000000000002'
+const THETA = '0x20c0000000000000000000000000000000000003'
 const ME = '0x7777777777777777777777777777777777777777'
 const TO = '0x1234567890123456789012345678901234567890'
+const GUILD = '1094309218049937418'
 const TOKENS = [
   { address: ALPHA, label: 'AlphaUSD' },
   { address: PATH, label: 'pathUSD' },
+  { address: BETA, label: 'BetaUSD' },
+  { address: THETA, label: 'ThetaUSD' },
 ]
+const CHOICES = [
+  { address: ALPHA, label: 'AlphaUSD' },
+  { address: BETA, label: 'BetaUSD' },
+  { address: THETA, label: 'ThetaUSD' },
+]
+/** One community that pays this account, as /account/payouts answers: AlphaUSD, preferred stablecoins on, no preference. */
+const payout = (over: Record<string, unknown> = {}) => ({
+  guildId: GUILD,
+  communityName: 'Mods guild',
+  payoutToken: { address: ALPHA, label: 'AlphaUSD' },
+  preferredToken: null as string | null,
+  enabled: true,
+  choices: CHOICES,
+  ...over,
+})
+/** Each balance row as a person reads it, the mark included ("0 BetaUSD preferred"). */
+const balanceRows = () => (ids.balances as El).children.map((c) => (typeof c === 'string' ? c : c.text))
 
 let ids: Record<string, El>
 let fields: Record<string, El>
@@ -130,6 +157,7 @@ beforeEach(() => {
   h.account = { address: ME }
   h.signIn = async () => ME
   h.balances = new Map([[ALPHA, 2_000_000n]])
+  h.reads = 0
   h.sent = []
   confirmAnswer = true
   vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -151,7 +179,7 @@ describe('the account page (browser code)', () => {
     await vi.waitFor(() => expect((ids.balances as El).children).toHaveLength(1))
     expect((fields.explorer as El).href).toBe(`https://explore.tempo.xyz/address/${ME}`)
     expect([(steps.signin as El).hidden, (steps.account as El).hidden, (steps.send as El).hidden]).toEqual([true, false, false])
-    // The usual payout token always; others only when held.
+    // What it holds (no passkey session yet, so no choices known); the other tokens at 0 stay out.
     expect((ids.balances as El).text).toBe('2 AlphaUSD')
     expect(prompted).toBe(false)
   })
@@ -261,18 +289,114 @@ describe('the account page (browser code)', () => {
     expect((ids.payouts as El).text).toContain('Mods guild pays you in AlphaUSD.')
   })
 
+  describe('the balances: every coin they are paid in, the one they prefer marked, and what they hold', () => {
+    let answer: unknown
+    let saved: unknown[]
+
+    beforeEach(() => {
+      saved = []
+      vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+        if (url !== '/account/preference') return new Response(JSON.stringify(answer))
+        const body = JSON.parse(String(init?.body)) as { token: string | null }
+        saved.push(body)
+        return new Response(JSON.stringify({ ok: true, preferredToken: body.token }))
+      })
+    })
+
+    const opened = (payouts: unknown[]) => {
+      answer = { ok: true, payouts }
+      page(null, ['payouts', 'payouts-signin'])
+    }
+    /** Picks `token` in the `n`th community's select under "How you are paid" (label, select, words: three children each). */
+    const choose = (n: number, token: string) => {
+      const select = (ids.payouts as El).children[n * 3 + 1] as El
+      select.value = token
+      select.fire('change')
+    }
+
+    it('a coin they chose shows even before they hold any, marked "preferred" in words; the payout token they hold none of does not', async () => {
+      h.balances = new Map()
+      opened([payout({ preferredToken: BETA })])
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 BetaUSD preferred']))
+      const mark = ((ids.balances as El).children[0] as El).children.at(-1) as El
+      expect([mark.className, mark.textContent]).toEqual(['pill', 'preferred'])
+    })
+
+    it('with no preference, the coin the community pays in, unmarked, even at 0 and even when it is not the usual one', async () => {
+      h.balances = new Map()
+      opened([payout({ payoutToken: { address: THETA, label: 'ThetaUSD' } })])
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 ThetaUSD']))
+    })
+
+    it('what they hold still shows, after the coin they prefer, in the page order', async () => {
+      h.balances = new Map([
+        [ALPHA, 2_000_000n],
+        [PATH, 500_000n],
+      ])
+      opened([payout({ preferredToken: BETA })])
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 BetaUSD preferred', '2 AlphaUSD', '0.5 pathUSD']))
+    })
+
+    it('while the community has preferred stablecoins off: their choice, marked, and the payout token it still pays them in', async () => {
+      h.balances = new Map()
+      opened([payout({ preferredToken: BETA, enabled: false })])
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 BetaUSD preferred', '0 AlphaUSD']))
+    })
+
+    it('two communities with different choices: each chosen coin is marked', async () => {
+      h.balances = new Map([[ALPHA, 2_000_000n]])
+      opened([payout({ preferredToken: THETA }), payout({ guildId: '1094309218049937419', communityName: 'Art club', preferredToken: BETA })])
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 BetaUSD preferred', '0 ThetaUSD preferred', '2 AlphaUSD']))
+    })
+
+    it('a new choice moves the row and its mark at once, without reading the chain again', async () => {
+      h.balances = new Map([[PATH, 1_000_000n]])
+      opened([payout({ preferredToken: BETA })])
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 BetaUSD preferred', '1 pathUSD']))
+      const reads = h.reads
+      choose(0, THETA)
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 ThetaUSD preferred', '1 pathUSD']))
+      choose(0, ALPHA) // the community's own coin: no preference any more
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 AlphaUSD', '1 pathUSD']))
+      expect(saved).toEqual([
+        { guildId: GUILD, token: THETA },
+        { guildId: GUILD, token: null },
+      ])
+      expect(h.reads).toBe(reads)
+    })
+
+    it('a choice the server refused leaves the balances as they were', async () => {
+      h.balances = new Map()
+      opened([payout({ preferredToken: BETA })])
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 BetaUSD preferred']))
+      vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ ok: false, error: { code: 'token_not_allowed' } })))
+      choose(0, THETA)
+      await vi.waitFor(() => expect(status()).toBe('Not saved: that community cannot pay in this token.'))
+      expect(balanceRows()).toEqual(['0 BetaUSD preferred'])
+    })
+
+    it('with no passkey session (no choices known) and nothing held: the usual payout token at 0, so the list is never empty', async () => {
+      h.balances = new Map()
+      answer = { ok: false, error: { code: 'no_passkey_session' } }
+      page(null, ['payouts', 'payouts-signin'])
+      await vi.waitFor(() => expect((ids['payouts-signin'] as El).hidden).toBe(false))
+      await vi.waitFor(() => expect(balanceRows()).toEqual(['0 AlphaUSD']))
+    })
+  })
+
   describe('live: a payment lands while the page is open', () => {
-    const PAYOUTS = { ok: true, payouts: [] }
+    let payouts: unknown = { ok: true, payouts: [] }
     const row = (key: string) => `<li data-key="${key}"><strong>+1 AlphaUSD</strong><span> · from Mods · pay run ${key.split(':')[0]}, line 1</span></li>`
     let receivedHtml = ''
     let frames = 0
     let reduced = false
 
     beforeEach(() => {
+      payouts = { ok: true, payouts: [] }
       receivedHtml = row('run_1:1')
       frames = 0
       reduced = false
-      vi.stubGlobal('fetch', async (url: string) => (url === '/account/payouts' ? new Response(JSON.stringify(PAYOUTS)) : new Response(receivedHtml)))
+      vi.stubGlobal('fetch', async (url: string) => (url === '/account/payouts' ? new Response(JSON.stringify(payouts)) : new Response(receivedHtml)))
       vi.stubGlobal('EventSource', FakeEventSource)
       vi.stubGlobal('matchMedia', (q: string) => ({ matches: reduced && q.includes('reduce') }))
       let now = 0
@@ -284,12 +408,13 @@ describe('the account page (browser code)', () => {
 
     const amount = () => ((ids.balances as El).children[0] as El).children[0] as El
     const balanceRow = () => (ids.balances as El).children[0] as El
-    async function opened() {
+    /** The page open and listening, its first balance row showing `first`. */
+    async function opened(first = '2') {
       FakeEventSource.last = null
       page('https://sponsor.moderato.tempo.xyz', ['payouts', 'payouts-signin', 'received'])
       await vi.waitFor(() => expect(FakeEventSource.last?.url).toBe('/account/live'))
       await vi.waitFor(() => expect((ids.received as El).items).toHaveLength(1))
-      await vi.waitFor(() => expect(amount().textContent).toBe('2'))
+      await vi.waitFor(() => expect(amount().textContent).toBe(first))
       return FakeEventSource.last as unknown as FakeEventSource
     }
 
@@ -336,6 +461,26 @@ describe('the account page (browser code)', () => {
       } finally {
         vi.useRealTimers()
       }
+    })
+
+    it('a payment in the coin they prefer counts up from 0 on the row already there, with a glow, and the mark stays', async () => {
+      payouts = { ok: true, payouts: [payout({ preferredToken: BETA })] }
+      const source = await opened('0')
+      const preferredRow = balanceRow()
+      expect(balanceRows()).toEqual(['0 BetaUSD preferred', '2 AlphaUSD'])
+      const shown: string[] = []
+      const el = amount()
+      let text = el.textContent
+      Object.defineProperty(el, 'textContent', { get: () => text, set: (v: string) => shown.push((text = v)) })
+      h.balances.set(BETA, 1_500_000n)
+      receivedHtml = row('run_2:1') + row('run_1:1')
+      source.emit('payment', { key: 'run_2:1', tokenAddress: BETA })
+      await vi.waitFor(() => expect(text).toBe('1.5'))
+      expect(shown.length).toBeGreaterThan(3) // counted, not one jump
+      expect(shown.some((v) => v !== '0' && v !== '1.5')).toBe(true)
+      expect(balanceRow()).toBe(preferredRow) // the same row, not a new one
+      expect(preferredRow.classes.has('glow')).toBe(true)
+      expect(balanceRows()).toEqual(['1.5 BetaUSD preferred', '2 AlphaUSD'])
     })
   })
 })

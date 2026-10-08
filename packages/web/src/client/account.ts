@@ -4,7 +4,7 @@
 import { $, busy, displayMicros, explainPasskeyError, fill, formatMicros, show, status } from './dom.js'
 import { type EventSourceFactory, type EventSourceLike, countUp, follow, nextFrame, prefersReducedMotion } from './live.js'
 import { passkeys } from './passkey.js'
-import { loadPayouts, renderPayouts } from './payouts.js'
+import { type Payout, coinsToList, loadPayouts, renderPayouts } from './payouts.js'
 import { checkSend, maxSendable } from './send.js'
 import { type ChainConfig, balanceOf, sendToken } from './tempo.js'
 
@@ -20,6 +20,7 @@ export type AccountConfig = {
 
 /** One payment as /account/live sends it (the parts this page uses). */
 type Payment = { key: string; tokenAddress: string }
+type Token = AccountConfig['tokens'][number]
 
 /** The RPC may answer a moment behind the payment event: read again this often, this many times, until the balance moves. */
 const BALANCE_RETRY_MS = 750
@@ -45,6 +46,13 @@ export function startAccount(config: AccountConfig) {
   let receivedRead = false
   let live: EventSourceLike | null = null
   let counting = Promise.resolve()
+  /** Where this account is paid, per community, once the server has said (it needs the passkey session): which balances to list and mark. */
+  let paidBy: Payout[] | null = null
+  /** The first read of it. The first balance rows wait for it, so they do not change a moment after they appear. */
+  let payoutsRead: Promise<void> = Promise.resolve()
+  /** Tokens whose last balance read failed: shown as "unknown", never as an old number. */
+  const unread = new Set<string>()
+  let balancesRead = false
 
   async function open(account: string) {
     address = account.toLowerCase()
@@ -53,7 +61,7 @@ export function startAccount(config: AccountConfig) {
     show('[data-step="signin"]', false)
     show('[data-step="account"]', true)
     show('[data-step="send"]', true)
-    void payouts().catch(() => {})
+    payoutsRead = payouts().catch(() => {})
     await refresh()
   }
 
@@ -68,12 +76,20 @@ export function startAccount(config: AccountConfig) {
     const list = await loadPayouts()
     const signin = $<HTMLButtonElement>('#payouts-signin')
     if (signin) signin.hidden = list !== null
-    if (list) renderPayouts(box, list, status)
-    // The server knows this passkey (a session): what arrived, and what arrives from now on.
+    if (list) renderPayouts(box, list, status, chose)
+    // The server knows this passkey (a session): the coins it is paid in, what arrived, and what arrives from now on.
     if (list) {
+      paidBy = list
+      listBalances()
       void received().catch(() => {})
       followPayments()
     }
+  }
+
+  /** A choice saved under "How you are paid": the balances follow at once, from what was already read. */
+  function chose(guildId: string, preferredToken: string | null) {
+    paidBy = paidBy?.map((p) => (p.guildId === guildId ? { ...p, preferredToken } : p)) ?? null
+    listBalances()
   }
 
   /**
@@ -130,7 +146,7 @@ export function startAccount(config: AccountConfig) {
       if (after !== before) break
     }
     balances.set(token, after)
-    // A token this account did not hold yet: its row appears (at the old value), then counts up.
+    // A token not listed yet (neither held nor paid in): its row appears (at the old value), then counts up.
     if (!shown.has(token)) await refresh(new Map([[token, before]]))
     const el = shown.get(token)
     if (!el) return
@@ -143,33 +159,57 @@ export function startAccount(config: AccountConfig) {
     describe()
   }
 
-  /**
-   * Every known token's balance; the ones held are listed (the usual payout token always). Built with
-   * the DOM, never HTML strings. `showing` overrides what a row first shows (a balance about to count up).
-   */
+  /** Reads every known token's balance from the chain, then lists them. `showing`: see listBalances. */
   async function refresh(showing: Map<string, bigint> = new Map()) {
     if (!address) return
     const account = address
-    const rows = await Promise.all(
-      config.tokens.map(async (t) => {
+    await Promise.all([
+      ...config.tokens.map(async (t) => {
         const balance = await balanceOf(chain, t.address, account).catch(() => null)
-        if (balance !== null) balances.set(t.address, balance)
-        return { t, balance }
+        if (balance === null) {
+          unread.add(t.address)
+          return
+        }
+        unread.delete(t.address)
+        balances.set(t.address, balance)
       }),
-    )
+      payoutsRead,
+    ])
+    balancesRead = true
+    listBalances(showing)
+  }
+
+  /**
+   * The balances, built with the DOM (never HTML strings): every coin a community pays this account
+   * in and every coin it chose, even at 0 (a chosen one marked "preferred", in words), then any other
+   * coin it holds. The chosen first, the page's token order otherwise. Never empty: with nothing else
+   * to list (no passkey session yet, nothing held), the usual payout token. `showing` overrides what a
+   * row first shows (a balance about to count up).
+   */
+  function listBalances(showing: Map<string, bigint> = new Map()) {
+    if (!balancesRead) return
+    const { listed, preferred } = coinsToList(paidBy ?? [])
+    const isPreferred = (t: Token) => preferred.has(t.address.toLowerCase())
+    const held = (t: Token) => !unread.has(t.address) && (balances.get(t.address) ?? 0n) > 0n
+    const rows = config.tokens.filter((t) => listed.has(t.address.toLowerCase()) || held(t))
+    const ordered = rows.length === 0 ? config.tokens.slice(0, 1) : [...rows.filter(isPreferred), ...rows.filter((t) => !isPreferred(t))]
     shown.clear()
     $('#balances')?.replaceChildren(
-      ...rows
-        .filter((r, i) => i === 0 || (r.balance ?? 0n) > 0n)
-        .map((r) => {
-          const p = document.createElement('p')
-          const strong = document.createElement('strong')
-          const value = showing.get(r.t.address) ?? r.balance
-          strong.textContent = value === null ? 'unknown' : displayMicros(value.toString())
-          p.append(strong, ` ${r.t.label}`)
-          shown.set(r.t.address, { row: p, amount: strong })
-          return p
-        }),
+      ...ordered.map((t) => {
+        const p = document.createElement('p')
+        const strong = document.createElement('strong')
+        const value = showing.get(t.address) ?? (unread.has(t.address) ? null : (balances.get(t.address) ?? 0n))
+        strong.textContent = value === null ? 'unknown' : displayMicros(value.toString())
+        p.append(strong, ` ${t.label}`)
+        if (isPreferred(t)) {
+          const mark = document.createElement('span')
+          mark.className = 'pill'
+          mark.textContent = 'preferred'
+          p.append(' ', mark)
+        }
+        shown.set(t.address, { row: p, amount: strong })
+        return p
+      }),
     )
     describe()
   }
