@@ -67,11 +67,12 @@ ul.received li.arrived{animation:rp-arrive .7s cubic-bezier(.2,.7,.2,1)}
 noscript p{color:var(--muted)}
 @media (min-width:40rem){main{padding-top:3.5rem}section{padding:1.5rem 1.6rem}}
 /* The home page. A breathing light behind the hero (opacity and transform only, still under reduced motion), the top bar, a product shot, then editorial sections. */
+/* The lights are scoped to .atmos: this stylesheet serves every page, and a bare .glow also took the account's balance row out of its card while a payment glowed. */
 .atmos{position:absolute;top:0;left:0;right:0;height:66rem;overflow:hidden;z-index:-1;pointer-events:none}
-.glow{position:absolute;display:block;border-radius:50%;opacity:.7}
-.glow.warm{left:-24rem;top:-26rem;width:72rem;height:54rem;background:radial-gradient(closest-side,rgba(237,190,90,.14),rgba(237,190,90,.05) 48%,rgba(237,190,90,0))}
-.glow.cool{right:-26rem;top:6rem;width:68rem;height:52rem;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent-2) 16%,transparent),color-mix(in srgb,var(--accent-2) 5%,transparent) 48%,transparent)}
-@media (prefers-reduced-motion:no-preference){.glow{will-change:opacity,transform}.glow.warm{animation:rp-breathe 9s ease-in-out infinite}.glow.cool{animation:rp-breathe-cool 9s ease-in-out -4.5s infinite}}
+.atmos .glow{position:absolute;display:block;border-radius:50%;opacity:.7}
+.atmos .glow.warm{left:-24rem;top:-26rem;width:72rem;height:54rem;background:radial-gradient(closest-side,rgba(237,190,90,.14),rgba(237,190,90,.05) 48%,rgba(237,190,90,0))}
+.atmos .glow.cool{right:-26rem;top:6rem;width:68rem;height:52rem;background:radial-gradient(closest-side,color-mix(in srgb,var(--accent-2) 16%,transparent),color-mix(in srgb,var(--accent-2) 5%,transparent) 48%,transparent)}
+@media (prefers-reduced-motion:no-preference){.atmos .glow{will-change:opacity,transform}.atmos .glow.warm{animation:rp-breathe 9s ease-in-out infinite}.atmos .glow.cool{animation:rp-breathe-cool 9s ease-in-out -4.5s infinite}}
 @keyframes rp-breathe{0%,100%{opacity:.55;transform:translate3d(0,0,0)}50%{opacity:.85;transform:translate3d(3%,2%,0)}}
 @keyframes rp-breathe-cool{0%,100%{opacity:.55;transform:translate3d(0,0,0)}50%{opacity:.85;transform:translate3d(-3%,-2%,0)}}
 .topbar{position:relative}
