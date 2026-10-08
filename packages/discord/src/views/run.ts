@@ -35,6 +35,12 @@ export type RunViewContext = {
    * run itself, so the status says so, and names who approved the policy version that made it.
    */
   released?: AutopilotRelease
+  /**
+   * The copy of a run in a public channel while its buttons are in the treasury channel: the same
+   * message without Approve, Cancel, Retry or Veto (a link to the transaction stays), so nobody there
+   * is offered a button only a Treasurer may press.
+   */
+  mirror?: boolean
 }
 
 /** Who approved the policy version that made a run autopilot released (null: not known any more). */
@@ -86,7 +92,8 @@ export function runMessage(run: Run, ctx: RunViewContext): Message {
     fields,
     footer: { text: `Run ${run.id}` },
   }
-  return { embeds: [embed], components: rows(buttonsFor(run, ctx)), allowed_mentions: NO_PINGS }
+  const buttons = buttonsFor(run, ctx)
+  return { embeds: [embed], components: rows(ctx.mirror ? buttons.filter((b) => b.style === ButtonStyle.Link) : buttons), allowed_mentions: NO_PINGS }
 }
 
 /**

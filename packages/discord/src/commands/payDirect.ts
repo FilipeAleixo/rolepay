@@ -1,6 +1,7 @@
 import { type Community, type Rolepay, parseLooseAmount } from '@rolepay/core'
 import type { GuildContext, MessageCommandHandler, ModalHandler, UserCommandHandler } from '../app/handlers.js'
 import { type Outcome, ephemeralReply } from '../app/outcome.js'
+import { answerForNewRun } from '../app/treasury.js'
 import { type PayTarget, decodePayModalId } from '../components/customId.js'
 import { explainError } from '../views/errors.js'
 import { PAY_REFUSED, amountRefused, noteWithLink, payModal } from '../views/pay.js'
@@ -52,10 +53,12 @@ export const payMemberCommand: UserCommandHandler = async ({ target, ctx }, { ro
 
 /**
  * The form sent: a one-line run for that person, created and submitted like /rolepay new, and its
- * review posted publicly for the Treasurer to approve (approval unchanged). The link to the message
+ * review posted publicly for the Treasurer to approve (approval unchanged; with a treasury channel,
+ * there, as for /rolepay new). The link to the message
  * goes into the run's note. Every rule is checked again here, from this interaction.
  */
-export const payModalSubmit: ModalHandler = async ({ id, fields, ctx }, { rolepay, config }) => {
+export const payModalSubmit: ModalHandler = async ({ id, fields, ctx }, deps) => {
+  const { rolepay, config } = deps
   const target = decodePayModalId(id)
   if (!target) return ephemeralReply('Sorry, I do not know that form. It may be from an older version.')
   const guard = await requireOperator(ctx, rolepay, ACTION)
@@ -72,7 +75,9 @@ export const payModalSubmit: ModalHandler = async ({ id, fields, ctx }, { rolepa
   if (!created.ok) return ephemeralReply(explainError(created.error, { token: community.payoutToken }))
   const submitted = await rolepay.payRuns.submit({ guildId: ctx.guildId, runId: created.value.id, actor: caller })
   if (!submitted.ok) return ephemeralReply(explainError(submitted.error))
-  return { kind: 'reply', ephemeral: false, message: runMessage(submitted.value, { network: config.network, approverRoleId: community.approverRoleId }) }
+  const view = (mirror: boolean) => runMessage(submitted.value, { network: config.network, approverRoleId: community.approverRoleId, mirror })
+  const answer = await answerForNewRun(deps, { community, runId: submitted.value.id, view, channelId: ctx.channelId })
+  return { kind: 'reply', ephemeral: answer.privately, message: answer.message }
 }
 
 /** What was typed; for an author, followed by the link to their message. */

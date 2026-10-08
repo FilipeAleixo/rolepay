@@ -205,3 +205,20 @@ describe('Apps > Pay with Rolepay (a user command, on a member)', () => {
     expect(await latestRun(a)).toBeUndefined()
   })
 })
+
+describe('the pay form with a treasury channel', () => {
+  it('the review with Approve goes to the treasury channel, this channel gets it without buttons, and the caller alone is told', async () => {
+    const TREASURY_CHANNEL = '700000000000000009'
+    const a = await ready()
+    await a.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], channelId: TREASURY_CHANNEL })
+    const sent = await a.send(modalSubmit(SCOPE, formId, { amount: '25', note: 'For this message' }, treasurer))
+    expect(isEphemeral(sent)).toBe(true)
+    expect(text(body(sent))).toContain('A Treasurer approves it in the treasury channel')
+    const r = await latestRun(a)
+    expect(a.rest.channelPosts.map((p) => [p.channelId, text(p.message).includes(`rolepay:approve:${r?.id}`)])).toEqual([
+      [TREASURY_CHANNEL, true],
+      [CHANNEL, false],
+    ])
+    expect(text(a.rest.channelPosts[1]?.message)).toContain(`<@${ALICE}>  25 AlphaUSD`)
+  })
+})

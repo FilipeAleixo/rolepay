@@ -32,3 +32,20 @@ export type GuildMember = { roles: string[]; name: string | null }
 export interface GuildMembers {
   member(guildId: string, userId: string): Promise<GuildMember | null>
 }
+
+/** A server's text channel as the bot sees it, and whether @everyone can see it (the treasury channel should be private). */
+export type GuildChannel = { id: string; name: string; everyoneCanView: boolean }
+
+/**
+ * The server's text channels, and posting in one, as the bot (Discord REST): for the treasury channel
+ * setting on the Overview. The apps/server implementation reads Discord; a fake in `@rolepay/web/testing`.
+ */
+export interface GuildChannels {
+  /** Text channels only, in Discord's order. null: Discord did not answer. */
+  textChannels(guildId: string): Promise<GuildChannel[] | null>
+  /**
+   * Posts Rolepay's confirmation in the channel (what it will post there), which also proves Rolepay
+   * can post there. `cannot_post`: no access, no permission to send messages, or the channel is gone.
+   */
+  confirm(channelId: string): Promise<Result<void, { code: 'cannot_post' | 'unavailable' }>>
+}

@@ -228,7 +228,8 @@ describe('pay run end to end through the HTTP endpoint', () => {
     expect(s.logs.find((l) => l.event === 'job')?.fields).toMatchObject({ runId, status: 'paid', checks: 1, contended: 0 })
     const review = s.logs.find((l) => l.event === 'deferred' && l.fields?.name === 'rolepay new')?.fields
     expect(review).toMatchObject({ kind: 'command', ok: true })
-    expect(Object.keys((review?.phases ?? {}) as Record<string, number>).sort()).toEqual(['db', 'reply', 'work'])
+    // `discord`: with no treasury channel set, Rolepay looks for a channel named "treasury" before posting the review.
+    expect(Object.keys((review?.phases ?? {}) as Record<string, number>).sort()).toEqual(['db', 'discord', 'reply', 'work'])
   })
 
   it('with the production default (no ROLEPAY_DEV_SHORTCUTS), Discord cannot register a treasury or issue a key', async () => {

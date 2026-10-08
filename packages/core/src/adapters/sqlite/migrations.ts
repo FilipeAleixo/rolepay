@@ -361,6 +361,15 @@ const migrations: Record<string, Migration> = {
       await db.schema.alterTable('link_tokens').addColumn('wallet_nonce_at', 'text').execute()
     },
   },
+  '0013_treasury_channel': {
+    async up(db: Kysely<unknown>) {
+      // The treasury channel, where Rolepay posts what only a Treasurer can act on. Columns only, so it
+      // applies to a database with data: every community has none yet, and nobody chose ('unset', so
+      // Rolepay may look for a channel named "treasury").
+      await db.schema.alterTable('communities').addColumn('treasury_channel_id', 'text').execute()
+      await db.schema.alterTable('communities').addColumn('treasury_channel_source', 'text', (c) => c.notNull().defaultTo('unset')).execute()
+    },
+  },
 }
 
 /** Every migration's name, in the order they run (tests build a database as an earlier release left it). */

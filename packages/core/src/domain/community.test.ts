@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { STABLECOIN_DEX_ADDRESS, SWAP_EXACT_AMOUNT_OUT_SIGNATURE, TRANSFER_WITH_MEMO_SIGNATURE } from '../constants/tempo.js'
-import { type KeyPolicy, type KeyState, canPropose, checkKeyForRun, keyAuthorization, preferredTokenGrants } from './community.js'
+import { type KeyPolicy, type KeyState, canPropose, checkKeyForRun, findTreasuryChannel, keyAuthorization, mayFindTreasuryChannel, preferredTokenGrants } from './community.js'
 
 const TOKEN = '0x20c0000000000000000000000000000000000001'
 const FEE_TOKEN = '0x20c0000000000000000000000000000000000000'
@@ -33,6 +33,30 @@ describe('canPropose (who may ask the AI for a pay run proposal)', () => {
 
   it('nobody may in a community with no approver role (its runs could never be approved)', () => {
     expect(canPropose({ approverRoleId: null, proposerRoleId: PROPOSERS }, [PROPOSERS])).toBe(false)
+  })
+})
+
+describe('the treasury channel found by its name', () => {
+  const C = (id: string, name: string | null) => ({ id, name })
+
+  it('is a channel called exactly "treasury", in any case; the first one in Discord order wins', () => {
+    expect(findTreasuryChannel([C('1', 'payouts'), C('2', 'Treasury'), C('3', 'treasury')])).toEqual(C('2', 'Treasury'))
+    expect(findTreasuryChannel([C('1', 'TREASURY')])).toEqual(C('1', 'TREASURY'))
+  })
+
+  it('is never a channel whose name only contains it, or a channel with no name', () => {
+    expect(findTreasuryChannel([C('1', 'treasury-old'), C('2', 'the-treasury'), C('3', 'treasury '), C('4', null)])).toBeNull()
+    expect(findTreasuryChannel([])).toBeNull()
+  })
+
+  it('is looked for while nobody chose one, or when the channel set is gone; never over a choice of none', () => {
+    expect(mayFindTreasuryChannel({ treasuryChannelId: null, treasuryChannelSource: 'unset' }, null)).toBe(true)
+    expect(mayFindTreasuryChannel({ treasuryChannelId: null, treasuryChannelSource: 'chosen' }, null)).toBe(false)
+    expect(mayFindTreasuryChannel({ treasuryChannelId: '700000000000000009', treasuryChannelSource: 'chosen' }, null)).toBe(false)
+    expect(mayFindTreasuryChannel({ treasuryChannelId: '700000000000000009', treasuryChannelSource: 'chosen' }, '700000000000000009')).toBe(true)
+    expect(mayFindTreasuryChannel({ treasuryChannelId: '700000000000000009', treasuryChannelSource: 'found' }, '700000000000000009')).toBe(true)
+    // Someone chose another channel in between: the gone one is not the setting any more.
+    expect(mayFindTreasuryChannel({ treasuryChannelId: '700000000000000008', treasuryChannelSource: 'chosen' }, '700000000000000009')).toBe(false)
   })
 })
 

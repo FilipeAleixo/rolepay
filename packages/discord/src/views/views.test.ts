@@ -264,7 +264,7 @@ describe('run notes are shown as text, never as Discord markdown (L6)', () => {
   it('on the run message, in the receipt DM, and in the status list', () => {
     escaped(runMessage(r, ctx).embeds?.[0]?.description ?? '')
     escaped(receiptDm(r, r.lines[0] as (typeof r.lines)[number], { ...ctx, communityName: 'Test guild' }).embeds?.[0]?.description ?? '')
-    const community = { id: GUILD, name: 'g', network: 'moderato', treasuryAddress: TOKEN, payoutToken: TOKEN, feeMode: 'sponsor', feeToken: null, approverRoleId: null, requireSeparateApprover: false, aiProposals: false, proposerRoleId: null, preferredTokens: false, createdAt: T0, updatedAt: T0 } as const
+    const community = { id: GUILD, name: 'g', network: 'moderato', treasuryAddress: TOKEN, payoutToken: TOKEN, feeMode: 'sponsor', feeToken: null, approverRoleId: null, requireSeparateApprover: false, aiProposals: false, proposerRoleId: null, preferredTokens: false, treasuryChannelId: null, treasuryChannelSource: 'unset', createdAt: T0, updatedAt: T0 } as const
     const recent = statusMessage({ community, runs: [r], key: null }).embeds?.[0]?.fields?.find((f) => f.name === 'Recent runs')?.value ?? ''
     expect(recent).toContain('Claim your bonus')
     escaped(recent)

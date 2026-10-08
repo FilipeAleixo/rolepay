@@ -1,5 +1,5 @@
 import type { Kysely, Selectable } from 'kysely'
-import { type BotKey, BotKeySchema, type Community, CommunitySchema, type SetupLink, SetupLinkSchema } from '../../domain/community.js'
+import { type BotKey, BotKeySchema, type Community, CommunitySchema, type SetupLink, SetupLinkSchema, type TreasuryChannel } from '../../domain/community.js'
 import { type LinkToken, LinkTokenSchema, type Payee, PayeeSchema } from '../../domain/payee.js'
 import { err, ok } from '../../domain/result.js'
 import { type Run, RunSchema, type RunStatus } from '../../domain/run.js'
@@ -34,8 +34,22 @@ export class SqliteCommunityRepository implements CommunityRepository {
   }
 
   async update(c: Community) {
-    const { id, ...rest } = communityRow(c)
+    // The treasury channel is left as stored: only setTreasuryChannel changes it.
+    const { id, treasury_channel_id: _id, treasury_channel_source: _source, ...rest } = communityRow(c)
     await this.db.updateTable('communities').set(rest).where('id', '=', id).execute()
+  }
+
+  async setTreasuryChannel(communityId: string, next: TreasuryChannel & { at: Date }, expected?: TreasuryChannel) {
+    let q = this.db
+      .updateTable('communities')
+      .set({ treasury_channel_id: next.channelId, treasury_channel_source: next.source, updated_at: iso(next.at) })
+      .where('id', '=', communityId)
+    if (expected) {
+      q = q.where('treasury_channel_source', '=', expected.source)
+      q = expected.channelId === null ? q.where('treasury_channel_id', 'is', null) : q.where('treasury_channel_id', '=', expected.channelId)
+    }
+    const r = await q.executeTakeFirst()
+    return Number(r.numUpdatedRows) > 0
   }
 
   async saveBotKey(k: BotKey) {
@@ -112,6 +126,8 @@ function communityRow(c: Community) {
     ai_proposals: c.aiProposals ? 1 : 0,
     proposer_role_id: c.proposerRoleId,
     preferred_tokens: c.preferredTokens ? 1 : 0,
+    treasury_channel_id: c.treasuryChannelId,
+    treasury_channel_source: c.treasuryChannelSource,
     created_at: iso(c.createdAt),
     updated_at: iso(c.updatedAt),
   }
@@ -131,6 +147,8 @@ function toCommunity(r: Selectable<Database['communities']>): Community {
     aiProposals: r.ai_proposals === 1,
     proposerRoleId: r.proposer_role_id,
     preferredTokens: r.preferred_tokens === 1,
+    treasuryChannelId: r.treasury_channel_id,
+    treasuryChannelSource: r.treasury_channel_source,
     createdAt: date(r.created_at),
     updatedAt: date(r.updated_at),
   })

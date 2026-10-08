@@ -31,9 +31,42 @@ export function repositoryContracts(name: string, make: RepoFactory) {
         aiProposals: true,
         proposerRoleId: '400000000000000003',
         preferredTokens: true,
+        treasuryChannelId: '700000000000000005',
+        treasuryChannelSource: 'chosen',
       })
       expect(await repo.insert(c)).toEqual({ ok: true, value: undefined })
       expect(await repo.get(f.GUILD)).toEqual(c)
+    })
+
+    it('a new community has no treasury channel, and nobody chose (Rolepay may look for #treasury)', async () => {
+      await repo.insert(f.community())
+      expect(await repo.get(f.GUILD)).toMatchObject({ treasuryChannelId: null, treasuryChannelSource: 'unset' })
+    })
+
+    it('sets the treasury channel; update (any other setting) leaves it as stored', async () => {
+      await repo.insert(f.community())
+      expect(await repo.setTreasuryChannel(f.GUILD, { channelId: '700000000000000005', source: 'chosen', at: f.at(3) })).toBe(true)
+      expect(await repo.get(f.GUILD)).toMatchObject({ treasuryChannelId: '700000000000000005', treasuryChannelSource: 'chosen', updatedAt: f.at(3) })
+      // A settings change read before the channel was set does not put the old channel back.
+      await repo.update(f.community({ name: 'Renamed', updatedAt: f.at(5) }))
+      expect(await repo.get(f.GUILD)).toMatchObject({ name: 'Renamed', treasuryChannelId: '700000000000000005', treasuryChannelSource: 'chosen' })
+      // None, chosen by a Treasurer.
+      expect(await repo.setTreasuryChannel(f.GUILD, { channelId: null, source: 'chosen', at: f.at(6) })).toBe(true)
+      expect(await repo.get(f.GUILD)).toMatchObject({ treasuryChannelId: null, treasuryChannelSource: 'chosen' })
+      expect(await repo.setTreasuryChannel(f.OTHER_GUILD, { channelId: null, source: 'chosen', at: f.at(6) })).toBe(false)
+    })
+
+    it('sets it by compare-and-set: a channel found by name never overwrites a choice made in between', async () => {
+      await repo.insert(f.community())
+      const unset = { channelId: null, source: 'unset' } as const
+      expect(await repo.setTreasuryChannel(f.GUILD, { channelId: '700000000000000005', source: 'found', at: f.at(1) }, unset)).toBe(true)
+      // Second finder, same expectation: the setting moved, so nothing changes.
+      expect(await repo.setTreasuryChannel(f.GUILD, { channelId: '700000000000000006', source: 'found', at: f.at(2) }, unset)).toBe(false)
+      expect(await repo.get(f.GUILD)).toMatchObject({ treasuryChannelId: '700000000000000005', treasuryChannelSource: 'found', updatedAt: f.at(1) })
+      // A Treasurer chooses none; a finder that saw the found channel gone does not undo it.
+      await repo.setTreasuryChannel(f.GUILD, { channelId: null, source: 'chosen', at: f.at(3) })
+      expect(await repo.setTreasuryChannel(f.GUILD, { channelId: '700000000000000006', source: 'found', at: f.at(4) }, { channelId: '700000000000000005', source: 'found' })).toBe(false)
+      expect(await repo.get(f.GUILD)).toMatchObject({ treasuryChannelId: null, treasuryChannelSource: 'chosen' })
     })
 
     it('refuses a second insert for the same guild', async () => {

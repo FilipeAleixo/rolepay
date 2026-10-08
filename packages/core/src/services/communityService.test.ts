@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { FakePayoutChain } from '../adapters/memory/fakeChain.js'
-import { MemoryCommunityRepository } from '../adapters/memory/repositories.js'
+import { MemoryAuditLog, MemoryCommunityRepository, MemoryPolicyRunRepository } from '../adapters/memory/repositories.js'
 import { ManualClock, PlainKeyVault, SequentialIds } from '../adapters/memory/support.js'
 import { TRANSFER_WITH_MEMO_SIGNATURE } from '../constants/tempo.js'
+import { AuditTrail } from './auditTrail.js'
 import { CommunityService } from './communityService.js'
 
 const GUILD = '1094309218049937418'
@@ -448,6 +449,102 @@ describe('CommunityService', () => {
 
     it('says community_not_found for an unknown guild', async () => {
       expect(await svc.treasuryBalance({ guildId: GUILD })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+    })
+  })
+
+  describe('the treasury channel', () => {
+    const ROLE = '400000000000000001'
+    const TREASURER = '300000000000000001'
+    const ADMIN = '300000000000000002'
+    const PRIVATE = '700000000000000005'
+    const TREASURY_BY_NAME = '700000000000000006'
+    let log: MemoryAuditLog
+    let withAudit: CommunityService
+    const chooser = (channelId: string | null, over: Record<string, unknown> = {}) => ({ guildId: GUILD, actor: TREASURER, actorRoleIds: [ROLE], channelId, ...over })
+    const events = async () =>
+      (await log.query({ guildId: GUILD, types: [], actor: null, policyId: null, runId: null, since: null, until: null, before: null, limit: 50 })).reverse().map((e) => [e.type, e.actor, e.details])
+
+    beforeEach(async () => {
+      log = new MemoryAuditLog()
+      const audit = new AuditTrail({ log, policyRuns: new MemoryPolicyRunRepository(), clock })
+      withAudit = new CommunityService({ communities, chain, vault, clock, network: 'moderato', ids: new SequentialIds(), setupLinkTtlSeconds: 1800, audit })
+      await withAudit.register({ guildId: GUILD, name: 'Mods guild', treasuryAddress: TREASURY, payoutToken: TOKEN, feeMode: 'sponsor', approverRoleId: ROLE })
+    })
+
+    it('a new community has none, and nobody chose one yet', async () => {
+      expect(await withAudit.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: null, treasuryChannelSource: 'unset' } })
+    })
+
+    it('a member with the CURRENT approver role chooses it, or none; each choice is audited with the one before', async () => {
+      clock.advance(60)
+      expect(await withAudit.setTreasuryChannel(chooser(PRIVATE))).toMatchObject({ ok: true, value: { treasuryChannelId: PRIVATE, treasuryChannelSource: 'chosen', updatedAt: clock.now() } })
+      expect(await withAudit.setTreasuryChannel(chooser(null))).toMatchObject({ ok: true, value: { treasuryChannelId: null, treasuryChannelSource: 'chosen' } })
+      // The same choice again changes nothing and writes nothing.
+      expect(await withAudit.setTreasuryChannel(chooser(null))).toMatchObject({ ok: true, value: { treasuryChannelId: null, treasuryChannelSource: 'chosen' } })
+      expect(await events()).toEqual([
+        ['community.treasury_channel_chosen', TREASURER, { channelId: PRIVATE, previous: null }],
+        ['community.treasury_channel_chosen', TREASURER, { channelId: null, previous: PRIVATE }],
+      ])
+    })
+
+    it('Manage Server alone, another role, or no approver role at all: refused, nothing changes', async () => {
+      expect(await withAudit.setTreasuryChannel(chooser(PRIVATE, { actor: ADMIN, actorRoleIds: [] }))).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await withAudit.setTreasuryChannel(chooser(PRIVATE, { actor: ADMIN, actorRoleIds: ['400000000000000009'] }))).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      await withAudit.setApproverRole({ guildId: GUILD, approverRoleId: null, actorRoleIds: [ROLE] })
+      expect(await withAudit.setTreasuryChannel(chooser(PRIVATE))).toEqual({ ok: false, error: { code: 'not_permitted' } })
+      expect(await withAudit.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: null, treasuryChannelSource: 'unset' } })
+      expect(await events()).toEqual([])
+    })
+
+    it('refuses a malformed channel or actor, and an unknown community', async () => {
+      expect(await withAudit.setTreasuryChannel(chooser('general'))).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await withAudit.setTreasuryChannel(chooser(PRIVATE, { actor: 'me' }))).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await withAudit.setTreasuryChannel(chooser(PRIVATE, { guildId: '1094309218049937419' }))).toEqual({ ok: false, error: { code: 'community_not_found' } })
+    })
+
+    it('Rolepay takes a channel found by its name once, while nobody chose; audited with Rolepay as the actor', async () => {
+      expect(await withAudit.useFoundTreasuryChannel({ guildId: GUILD, channelId: TREASURY_BY_NAME, replacing: null })).toMatchObject({
+        ok: true,
+        value: { treasuryChannelId: TREASURY_BY_NAME, treasuryChannelSource: 'found' },
+      })
+      // Found already: a second finder (another instance, the dashboard) changes nothing.
+      expect(await withAudit.useFoundTreasuryChannel({ guildId: GUILD, channelId: PRIVATE, replacing: null })).toEqual({ ok: false, error: { code: 'not_looking' } })
+      expect(await events()).toEqual([['community.treasury_channel_found', null, { channelId: TREASURY_BY_NAME, replaced: null }]])
+      // A Treasurer's choice wins over it.
+      await withAudit.setTreasuryChannel(chooser(PRIVATE))
+      expect(await withAudit.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: PRIVATE, treasuryChannelSource: 'chosen' } })
+    })
+
+    it('never over a choice of none; only over a channel set when Rolepay saw it gone', async () => {
+      await withAudit.setTreasuryChannel(chooser(null))
+      expect(await withAudit.useFoundTreasuryChannel({ guildId: GUILD, channelId: TREASURY_BY_NAME, replacing: null })).toEqual({ ok: false, error: { code: 'not_looking' } })
+      await withAudit.setTreasuryChannel(chooser(PRIVATE))
+      // The chosen channel still works as far as anyone knows: a lookup that did not see it gone changes nothing.
+      expect(await withAudit.useFoundTreasuryChannel({ guildId: GUILD, channelId: TREASURY_BY_NAME, replacing: null })).toEqual({ ok: false, error: { code: 'not_looking' } })
+      // Rolepay could not post there any more (deleted, or access removed): the channel named treasury replaces it.
+      expect(await withAudit.useFoundTreasuryChannel({ guildId: GUILD, channelId: TREASURY_BY_NAME, replacing: PRIVATE })).toMatchObject({ ok: true, value: { treasuryChannelId: TREASURY_BY_NAME, treasuryChannelSource: 'found' } })
+      expect((await events()).at(-1)).toEqual(['community.treasury_channel_found', null, { channelId: TREASURY_BY_NAME, replaced: PRIVATE }])
+      expect(await withAudit.useFoundTreasuryChannel({ guildId: GUILD, channelId: 'nope', replacing: null })).toMatchObject({ ok: false, error: { code: 'invalid_input' } })
+      expect(await withAudit.useFoundTreasuryChannel({ guildId: '1094309218049937419', channelId: TREASURY_BY_NAME, replacing: null })).toEqual({ ok: false, error: { code: 'community_not_found' } })
+    })
+
+    it('a choice made between a lookup reading the setting and taking the channel wins (compare-and-set)', async () => {
+      const real = communities.setTreasuryChannel.bind(communities)
+      // The Treasurer saves "none" just before the found channel is written.
+      communities.setTreasuryChannel = async (id, next, expected) => {
+        if (next.source === 'found') await real(id, { channelId: null, source: 'chosen', at: clock.now() })
+        return real(id, next, expected)
+      }
+      expect(await withAudit.useFoundTreasuryChannel({ guildId: GUILD, channelId: TREASURY_BY_NAME, replacing: null })).toEqual({ ok: false, error: { code: 'concurrent_update' } })
+      expect(await withAudit.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: null, treasuryChannelSource: 'chosen' } })
+      expect(await events()).toEqual([])
+    })
+
+    it('other settings leave it alone', async () => {
+      await withAudit.setTreasuryChannel(chooser(PRIVATE))
+      await withAudit.setName({ guildId: GUILD, name: 'Renamed' })
+      await withAudit.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [ROLE] })
+      expect(await withAudit.get(GUILD)).toMatchObject({ ok: true, value: { name: 'Renamed', requireSeparateApprover: true, treasuryChannelId: PRIVATE, treasuryChannelSource: 'chosen' } })
     })
   })
 })

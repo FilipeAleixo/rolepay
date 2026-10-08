@@ -75,10 +75,17 @@ export type RunMessageRef = { channelId: string; messageId: string | null }
  * What Rolepay has told people about a run, kept outside the process (the server's database),
  * so the recovery sweep can finish the story after a restart: where the review message is,
  * and whether the receipts went out. Receipts go out at most once per run.
+ *
+ * With a treasury channel, a run has two messages: the one with the buttons (`message`, in the
+ * treasury channel) and its copy without them (`mirror`, where the run would have gone: the policy's
+ * channel, or where the command ran). Every update goes to both.
  */
 export interface RunNotices {
   rememberMessage(runId: string, ref: RunMessageRef): Promise<void>
   message(runId: string): Promise<RunMessageRef | null>
+  /** The copy without the buttons; null forgets it (the copy took the buttons over: its treasury message is gone). */
+  rememberMirror(runId: string, ref: RunMessageRef | null): Promise<void>
+  mirror(runId: string): Promise<RunMessageRef | null>
   /** True exactly once per run: whoever gets true sends the receipts. */
   claimReceipts(runId: string): Promise<boolean>
 }
@@ -120,7 +127,8 @@ export interface PendingSources {
 /**
  * Tells a community what the policy scheduler did: posts each new policy run in the policy's
  * channel (the review embed in propose mode, the veto message in autopilot, held and empty
- * notices) and updates those messages when autopilot releases, holds or pays them.
+ * notices), with a treasury channel the version with the buttons there, and updates those messages
+ * when autopilot releases, holds or pays them.
  */
 export interface PolicyAnnouncer {
   announce(events: readonly SchedulerEvent[]): Promise<void>

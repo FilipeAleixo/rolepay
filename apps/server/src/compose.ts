@@ -7,6 +7,7 @@ import {
   KvRunNotices,
   type MemberDirectory,
   RestMemberDirectory,
+  type TreasuryEvent,
   createDiscordInteractions,
   createPolicyNotifier,
   createRecoveryNotifier,
@@ -137,9 +138,14 @@ export function composeServer(deps: ServerDeps) {
     { onError: (error, job) => log('job_error', { runId: job.runId, ...errorFields(error) }) },
   )
 
+  // The treasury channel, for the log: Rolepay found #treasury, or could not post where it was set
+  // (the message then went to the channel it would have gone to, with its buttons). IDs and codes only.
+  const onTreasury = (event: TreasuryEvent) => log('treasury_channel', event)
+
   // Tells each policy's channel what the scheduler did (and edits those messages later), sharing
-  // the run message records with the executor and the recovery sweep.
-  const policyNotifier = createPolicyNotifier({ rolepay, rest, notices, network: config.core.network, accountUrl, onError: (error) => log('policy_notify_error', errorFields(error)) })
+  // the run message records with the executor and the recovery sweep. With a treasury channel, what
+  // needs a Treasurer goes there with its buttons, the policy's channel gets it without them.
+  const policyNotifier = createPolicyNotifier({ rolepay, rest, notices, network: config.core.network, accountUrl, onTreasury, onError: (error) => log('policy_notify_error', errorFields(error)) })
   /** One scheduler pass and its announcement: what the interval runs (and the tests call). */
   const tickPolicies = async () => {
     const report = await rolepay.scheduler.tick()
@@ -166,6 +172,9 @@ export function composeServer(deps: ServerDeps) {
       clock: deps.clock,
       config: config.app,
       announcer: policyNotifier,
+      // The same run message records: a run made here goes to the treasury channel, and a button there updates both messages.
+      notices,
+      onTreasury,
       onError: (error) => log('interaction_error', errorFields(error)),
     },
     waitUntil,

@@ -1,4 +1,4 @@
-import { RUN_STATUSES, type Run, type RunStatus } from '@rolepay/core'
+import { DiscordIdSchema, RUN_STATUSES, type Run, type RunStatus } from '@rolepay/core'
 import { Hono } from 'hono'
 import { actionAccess, communityAccess } from '../access.js'
 import { type DashboardKit, html, redirect } from '../kit.js'
@@ -9,6 +9,8 @@ import { type ChainRead, overviewBody } from '../views/overview.js'
 import { type PayeeTotals, payeesBody } from '../views/payees.js'
 import { notice } from '../views/policies.js'
 import { releasedOnAutopilot, runBody, runsBody } from '../views/runs.js'
+import { treasuryChannelNotice } from '../views/treasuryChannel.js'
+import { readChannels, treasuryChannelState } from '../treasuryChannel.js'
 import type { CommunityAccess } from '../access.js'
 
 /** How many runs a page reads to filter and total in memory. A repository query can replace this when communities have more. */
@@ -75,7 +77,7 @@ export function communityRoutes(kit: DashboardKit): Hono {
     if (!access.ok) return access.response
     const a = access.value
     const guildId = a.community.id
-    const [balance, key, recent, upcoming, aiSpend, payouts, funding] = await Promise.all([
+    const [balance, key, recent, upcoming, aiSpend, payouts, funding, treasury] = await Promise.all([
       chainRead(async () => {
         const r = await kit.rolepay.communities.treasuryBalance({ guildId })
         return r.ok ? { ok: true as const, value: r.value.balance } : r
@@ -86,10 +88,57 @@ export function communityRoutes(kit: DashboardKit): Hono {
       kit.aiUsage ? kit.aiUsage.spend({ guildId }) : Promise.resolve(null),
       kit.payouts ? kit.payouts.paidByWeek({ guildId }) : Promise.resolve(null),
       kit.rolepay.funding.month({ guildId }),
+      // For a Treasurer this may pick a channel named "treasury" (nobody chose one yet): as Discord's side does.
+      treasuryChannelState(kit, a),
     ])
     const runOrigins = await origins(guildId, recent)
-    const body = overviewBody({ community: a.community, explorer, balance, key, upcoming, recent, origins: runOrigins, names: await names(guildId, peopleIn(recent)), aiSpend, payouts, funding })
+    const body = overviewBody({
+      community: a.community,
+      explorer,
+      balance,
+      key,
+      upcoming,
+      recent,
+      origins: runOrigins,
+      names: await names(guildId, peopleIn(recent)),
+      aiSpend,
+      payouts,
+      funding,
+      treasury: { state: treasury, canAct: a.viewer.canAct, csrf: a.viewer.csrf, notice: treasuryChannelNotice(c.req.query('done'), c.req.query('error')) },
+    })
     return page(a, 'overview', 'Overview', body)
+  })
+
+  /**
+   * The treasury channel (the Treasurer role, gated like every action: CSRF, roles read fresh, core
+   * checks them again). A channel must be one of this server's text channels, as the bot reads them
+   * now, and Rolepay must be able to post there: it posts its confirmation first and saves nothing if
+   * that fails. "none" chooses no channel (and stops Rolepay looking for one named "treasury").
+   */
+  app.post('/dashboard/:guildId/treasury-channel', async (c) => {
+    const access = await actionAccess(kit, c)
+    if (!access.ok) return access.response
+    const a = access.value
+    const guildId = a.community.id
+    const back = (query: string) => redirect(`/dashboard/${guildId}?${query}#treasury-channel`, 303)
+    const choice = a.form.channel ?? ''
+    const save = (channelId: string | null) => kit.rolepay.communities.setTreasuryChannel({ guildId, actor: a.actor.id, actorRoleIds: a.actor.roleIds, channelId })
+    if (choice === 'none') {
+      const r = await save(null)
+      return back(r.ok ? 'done=treasury_none' : `error=${encodeURIComponent(r.error.code)}`)
+    }
+    if (!DiscordIdSchema.safeParse(choice).success) return back('error=invalid_input')
+    if (!kit.channels) return back('error=not_available')
+    const channels = await readChannels(kit, guildId)
+    if (!channels) return back('error=unavailable')
+    // Only this server's text channels: never post into a channel ID the form made up.
+    const channel = channels.find((x) => x.id === choice)
+    if (!channel) return back('error=unknown_channel')
+    const confirmed = await kit.channels.confirm(channel.id)
+    if (!confirmed.ok) return back(`error=${confirmed.error.code}`)
+    const r = await save(channel.id)
+    if (!r.ok) return back(`error=${encodeURIComponent(r.error.code)}`)
+    return back(channel.everyoneCanView ? 'done=treasury_set_public' : 'done=treasury_set')
   })
 
   app.get('/dashboard/:guildId/runs', async (c) => {

@@ -101,6 +101,29 @@ async function insertAsBefore0009(db: Kysely<Database>, data: { payee?: boolean 
   }
 }
 
+/** A community as a release before 0013 wrote it (no treasury channel columns). */
+async function insertCommunityAsBefore0013(db: Kysely<Database>, c: ReturnType<typeof f.community>) {
+  await db
+    .insertInto('communities')
+    .values({
+      id: c.id,
+      name: c.name,
+      network: c.network,
+      treasury_address: c.treasuryAddress,
+      payout_token: c.payoutToken,
+      fee_mode: c.feeMode,
+      fee_token: c.feeToken,
+      approver_role_id: c.approverRoleId,
+      require_separate_approver: c.requireSeparateApprover ? 1 : 0,
+      ai_proposals: c.aiProposals ? 1 : 0,
+      proposer_role_id: c.proposerRoleId,
+      preferred_tokens: c.preferredTokens ? 1 : 0,
+      created_at: c.createdAt.toISOString(),
+      updated_at: c.updatedAt.toISOString(),
+    } as never)
+    .execute()
+}
+
 describe('sqlite: migrations and persistence', () => {
   it('migrates idempotently and keeps data across reopen', async () => {
     const path = join(dir, 'reopen.db')
@@ -243,12 +266,13 @@ describe('sqlite: migrations and persistence', () => {
     const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
     await migrateTo(before as unknown as Kysely<unknown>, '0009_preferred_tokens')
     // 0010 adds tables only, so today's repositories write these rows exactly as the 0009 release did,
-    // except the payee, whose table later releases widened (0012): it is written with 0009's columns.
+    // except the community and the payee, whose tables later releases widened (0013, 0012): they are
+    // written with 0009's columns.
     const BETA = '0x20c0000000000000000000000000000000000002'
     const community = f.community({ preferredTokens: true })
     const payee = f.payee({ preferredToken: BETA })
     const own = f.policyKey({ status: 'active', authorizedAt: f.at(2) })
-    await new SqliteCommunityRepository(before).insert(community)
+    await insertCommunityAsBefore0013(before, community)
     await before
       .insertInto('payees')
       .values({ community_id: payee.communityId, discord_user_id: payee.discordUserId, address: payee.address, preferred_token: BETA, registered_at: payee.registeredAt.toISOString(), updated_at: payee.updatedAt.toISOString() } as never)
@@ -317,7 +341,7 @@ describe('sqlite: migrations and persistence', () => {
   })
 
   it("0012 records each payee's kind of address (passkey or their own wallet) and a link's wallet nonce, applied to a database 0010 left (the last release) with communities, payees, live links, a run, a policy and its own key, and a funding source", async () => {
-    expect(MIGRATION_NAMES.slice(MIGRATION_NAMES.indexOf('0010_funding'))).toEqual(['0010_funding', '0011_link_usernames', '0012_address_kinds'])
+    expect(MIGRATION_NAMES.slice(MIGRATION_NAMES.indexOf('0010_funding'), MIGRATION_NAMES.indexOf('0012_address_kinds') + 1)).toEqual(['0010_funding', '0011_link_usernames', '0012_address_kinds'])
     const path = join(dir, 'before-0012.db')
     const sqlite = new BetterSqlite3(path)
     sqlite.pragma('foreign_keys = ON')
@@ -364,6 +388,54 @@ describe('sqlite: migrations and persistence', () => {
     const again = await openSqliteDatabase(path)
     opened.push(again)
     expect(await again.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(f.payee({ address: f.ADDR.carol, addressKind: 'external', updatedAt: f.at(20) }))
+  })
+
+  it('0013 adds the treasury channel to a database 0012 left (the last release), with communities, payees, a run, a policy and its own key, and a funding source: none set, nobody chose, everything else as before', async () => {
+    expect(MIGRATION_NAMES.at(-1)).toBe('0013_treasury_channel')
+    expect(MIGRATION_NAMES[MIGRATION_NAMES.indexOf('0013_treasury_channel') - 1]).toBe('0012_address_kinds')
+    const path = join(dir, 'before-0013.db')
+    const sqlite = new BetterSqlite3(path)
+    sqlite.pragma('foreign_keys = ON')
+    const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+    await migrateTo(before as unknown as Kysely<unknown>, '0012_address_kinds')
+    // Two communities with 0012's columns: one with every setting on, one plain.
+    const busy = f.community({ approverRoleId: '400000000000000001', requireSeparateApprover: true, aiProposals: true, proposerRoleId: '400000000000000003', preferredTokens: true })
+    const plain = f.community({ id: f.OTHER_GUILD, name: null })
+    await insertCommunityAsBefore0013(before, busy)
+    await insertCommunityAsBefore0013(before, plain)
+    // The other tables have not changed since 0012, so today's repositories write them as that release did.
+    const payee = f.payee({ addressKind: 'external' })
+    await new SqliteRunRepository(before).insert(f.run())
+    await before
+      .insertInto('payees')
+      .values({ community_id: payee.communityId, discord_user_id: payee.discordUserId, address: payee.address, preferred_token: null, address_kind: 'external', registered_at: payee.registeredAt.toISOString(), updated_at: payee.updatedAt.toISOString() } as never)
+      .execute()
+    await new SqlitePolicyRepository(before).insert(f.policy(), f.policyVersion())
+    const own = f.policyKey({ status: 'active', authorizedAt: f.at(2) })
+    await new SqlitePolicyKeyRepository(before).save(own)
+    await new SqliteFundingRepository(before).insertSource(f.fundingSource())
+    const columns = (table: string) => (sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+    expect(columns('communities')).not.toContain('treasury_channel_id')
+    await before.destroy()
+
+    const after = await openSqliteDatabase(path)
+    opened.push(after)
+    // No treasury channel, and nobody chose one: Rolepay may look for #treasury. Every other setting is kept.
+    expect(await after.repositories.communities.get(f.GUILD)).toEqual(busy)
+    expect(await after.repositories.communities.get(f.OTHER_GUILD)).toEqual(plain)
+    expect(await after.repositories.communities.get(f.GUILD)).toMatchObject({ treasuryChannelId: null, treasuryChannelSource: 'unset' })
+    expect(await after.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(payee)
+    expect(await after.repositories.runs.get('run_fixture01')).toEqual(f.run())
+    expect(await after.repositories.policies.get('pol_fixture01')).toEqual(f.policy())
+    expect(await after.repositories.policyKeys.get(own.address)).toEqual(own)
+    expect(await after.repositories.funding.getSource(f.fundingSource().id)).toEqual(f.fundingSource())
+    // The new columns take the setting, and keep it across a reopen.
+    expect(await after.repositories.communities.setTreasuryChannel(f.GUILD, { channelId: '700000000000000005', source: 'found', at: f.at(9) }, { channelId: null, source: 'unset' })).toBe(true)
+    await after.close()
+    const again = await openSqliteDatabase(path)
+    opened.push(again)
+    expect(await again.repositories.communities.get(f.GUILD)).toEqual({ ...busy, treasuryChannelId: '700000000000000005', treasuryChannelSource: 'found', updatedAt: f.at(9) })
+    expect(await again.repositories.communities.get(f.OTHER_GUILD)).toEqual(plain)
   })
 
   it('keeps key-value records across reopen', async () => {

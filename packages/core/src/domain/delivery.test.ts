@@ -29,6 +29,8 @@ const community = (over: Partial<Community> = {}): Community => ({
   aiProposals: false,
   proposerRoleId: null,
   preferredTokens: true,
+  treasuryChannelId: null,
+  treasuryChannelSource: 'unset',
   createdAt: T0,
   updatedAt: T0,
   ...over,
