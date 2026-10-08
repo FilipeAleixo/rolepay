@@ -97,19 +97,24 @@ const PAYOUTS = [
 ] as const
 
 /**
- * The product shot: a paid run as Discord shows it, and the bot key's budget as the dashboard's
- * "At a glance" draws it, the limit a hard gold line. Static, and one image to assistive tech.
+ * The product shot: a paid run as Discord shows it, the bot key's budget as the dashboard's
+ * "At a glance" draws it (the limit a hard gold line), and the three ways to say who to pay, the
+ * AI's way last and the only one in the accent. Static, and one image to assistive tech.
  */
-const productShot = () => `<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction; the bot's allowance for the month with its on-chain limit; and the request it came from, in plain words, which Rolepay's AI turned into a rule before a treasurer approved it">
+const productShot = () => `<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction; the bot's allowance for the month with its on-chain limit; and the three ways to say who to pay: a role, people you pick, or plain words that Rolepay's AI drafts into a list">
 <div class="msg"><p class="who">${mark(32)}<b>Rolepay</b><span class="app">App</span><span class="when">Today at 18:00</span></p>
-<div class="embed"><p class="e-title">Paid</p><p class="e-note">#help answers, September</p>
+<div class="embed"><p class="e-title">Paid</p><p class="e-note">September</p>
 <ul class="lines">${PAYOUTS.map(([who, amount]) => `<li><span class="at">${who}</span><span class="amt">${amount} USDC.e</span></li>`).join('')}</ul>
 <p class="e-status">Paid in one transaction. Approved by <span class="at">@Treasurer</span>.</p><p class="e-foot">Run 42</p></div></div>
 <div class="budget"><p class="b-label">The bot's allowance this month</p><p class="b-amount"><strong>120</strong> of 200 USDC.e</p>
 <div class="b-bar"><span class="b-fill"></span><span class="b-limit"></span></div>
 <p class="b-row"><span>Resets in 12 days</span><span class="b-lim">On-chain limit</span></p>
 <p class="b-cap">Over the limit, Tempo refuses the whole batch.</p></div>
-<div class="ask"><p class="cmd">${icon('spark', 15)}Drafted by Rolepay's AI from your words</p><p class="said">“1 USDC.e for every question answered in <span class="ch">#help</span> this month, up to 40 each”</p><p class="ai-foot">The AI turned this into a rule. Rolepay counted who matches, and nothing was paid until <span class="at">@Treasurer</span> approved.</p></div>
+<div class="ways"><p class="w-label">Who to pay</p><ul>
+<li><span class="w-what"><span class="at">@Moderators</span></span><span class="w-how">a role</span></li>
+<li><span class="w-what">${PAYOUTS.map(([who]) => `<span class="at">${who}</span>`).join(' ')}</span><span class="w-how">people you pick</span></li>
+<li class="ai"><span class="w-what">${icon('spark', 15)}“1 USDC.e per question answered in <span class="ch">#help</span> this month, up to 40 each”</span><span class="w-how">in plain words, drafted by AI</span></li></ul>
+<p class="ai-foot">The AI only drafts the list. You see every name before anything is paid.</p></div>
 </div>`
 
 /**
@@ -134,7 +139,7 @@ export function landingPage(opts: { testnet: boolean; discordAppId?: string | un
 <main class="home">
 <section class="hero" aria-labelledby="hero-title"><div class="copy">${opts.testnet ? '<p class="badge"><span class="testnet">Testnet demo</span></p>' : ''}
 <h1 id="hero-title">Pay the people who run your community.</h1>
-<p class="sub">Describe who to pay in plain words. Rolepay finds the people, a treasurer approves, and one transaction on Tempo pays them all from your community's own account.</p>
+<p class="sub">Pick a role, name the people, or describe them in plain words. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.</p>
 <p class="actions">${hero}<a class="more" href="#how">How it works</a></p></div>
 ${productShot()}</section>
 <section class="contrast" aria-labelledby="contrast-title"><h2 id="contrast-title" class="sr">Paying people today, and with Rolepay</h2><p class="cols" aria-hidden="true"><span>Today</span><span>With Rolepay</span></p><ul>${CONTRAST.map((r) => `<li><p class="was"><span class="sr">Today: </span>${esc(r.was)}</p><p class="now"><span class="sr">With Rolepay: </span>${esc(r.now)}</p></li>`).join('')}</ul></section>

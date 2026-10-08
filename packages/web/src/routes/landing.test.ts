@@ -57,13 +57,18 @@ describe('the home page (/)', () => {
     const html = await res.text()
     const t = text(html)
     expect(html).toContain('<h1 id="hero-title">Pay the people who run your community.</h1>')
-    expect(t).toContain("Describe who to pay in plain words. Rolepay finds the people, a treasurer approves, and one transaction on Tempo pays them all from your community's own account.")
+    expect(t).toContain("Pick a role, name the people, or describe them in plain words. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.")
     expect(html).toContain('<meta name="description" content="Pay the people who run your community, from Discord, in stablecoins on Tempo.">')
-    // The product shot: one image to assistive tech. A request in plain words, the run it became, paid, and the allowance with its on-chain limit.
-    expect(hero(html)).toContain('<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction; the bot\'s allowance for the month with its on-chain limit; and the request it came from, in plain words, which Rolepay\'s AI turned into a rule before a treasurer approved it">')
-    // The AI card comes last: where the run came from, said as what it is.
-    expect(text(hero(html))).toContain("Drafted by Rolepay's AI from your words “1 USDC.e for every question answered in #help this month, up to 40 each” The AI turned this into a rule. Rolepay counted who matches, and nothing was paid until @Treasurer approved.")
-    expect(hero(html).indexOf('class="ask"')).toBeGreaterThan(hero(html).indexOf('class="budget"'))
+    // The product shot: one image to assistive tech. The run, paid, the allowance with its on-chain limit, and the three ways to say who to pay.
+    expect(hero(html)).toContain('<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction; the bot\'s allowance for the month with its on-chain limit; and the three ways to say who to pay: a role, people you pick, or plain words that Rolepay\'s AI drafts into a list">')
+    expect(hero(html)).toContain('<p class="e-title">Paid</p><p class="e-note">September</p>')
+    // The "Who to pay" card comes last: a role, people you pick, or plain words. The AI is one of the three, and only drafts.
+    expect(text(hero(html))).toContain('Who to pay @Moderators a role @mira @kofi @ines @theo people you pick “1 USDC.e per question answered in #help this month, up to 40 each” in plain words, drafted by AI The AI only drafts the list. You see every name before anything is paid.')
+    expect(hero(html).indexOf('class="ways"')).toBeGreaterThan(hero(html).indexOf('class="budget"'))
+    // Only the plain-words row carries the accent, and the spark sits on it, not on the card's label.
+    expect(hero(html).match(/<li class="ai">/g)).toHaveLength(1)
+    expect(part(hero(html), /<li class="ai">/, '</li>')).toContain('<svg')
+    expect(part(hero(html), /<p class="w-label">/, '</p>')).not.toContain('<svg')
     expect(hero(html)).toContain('Paid in one transaction. Approved by <span class="at">@Treasurer</span>.')
     expect(t).toContain('On-chain limit')
     // What it replaces: today, and with Rolepay, row by row (screen readers hear which column each line is).
@@ -127,7 +132,7 @@ describe('the home page (/)', () => {
     }
     // The line icons, one per detail and per trust point: one 24 by 24 grid, one stroke weight, the colour from CSS.
     const icons = svgs.filter((svg) => !svg.includes('class="mark"'))
-    expect(icons).toHaveLength(FEATURES.length + TRUST.length + 1) // plus the spark on the AI card
+    expect(icons).toHaveLength(FEATURES.length + TRUST.length + 1) // plus the spark on the plain-words row
     for (const svg of icons) expect(svg).toMatch(/viewBox="0 0 24 24"[^>]*fill="none" stroke="currentColor" stroke-width="1.5"/)
     // The CSP allows the stylesheet by hash and nothing else: a style attribute would be refused.
     expect(html).not.toMatch(/\sstyle=/)
