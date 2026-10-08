@@ -61,7 +61,7 @@ describe('confirmTreasuryChannel', () => {
     const rest = new FakeDiscordRest()
     expect(await confirmTreasuryChannel(rest, '700000000000000009')).toEqual({ ok: true, value: undefined })
     expect(rest.channelPosts).toEqual([
-      { channelId: '700000000000000009', message: { content: 'Rolepay will post here what needs a Treasurer: runs to approve, runs you can veto, and runs it holds.', allowed_mentions: { parse: [] } } },
+      { channelId: '700000000000000009', message: { content: 'Rolepay will post here what needs a Treasurer: policies and runs to approve, runs you can veto, and runs it holds.', allowed_mentions: { parse: [] } } },
     ])
     rest.closedChannels.set('700000000000000008', 'forbidden')
     expect(await confirmTreasuryChannel(rest, '700000000000000008')).toEqual({ ok: false, error: { code: 'forbidden' } })

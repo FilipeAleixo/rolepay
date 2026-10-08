@@ -39,7 +39,7 @@ describe('the treasury channel on the Overview', () => {
     expect(html).toContain('<option value="none">None: post in each policy&#39;s own channel</option>')
     expect(html).toContain(`<option value="${PAYOUTS.id}">#payouts (everyone can see it)</option>`)
     expect(html).toContain(`<option value="${PRIVATE.id}">#money-team</option>`)
-    expect(t).toContain('runs to approve, runs you can veto, and runs it holds')
+    expect(t).toContain('policies and runs to approve, runs you can veto, and runs it holds')
     expect(t).toContain('Make it visible only to the Treasurer role and Rolepay')
     expect(h.channels.posts).toEqual([])
     expect(await setting(h)).toEqual({ channelId: null, source: 'unset' })

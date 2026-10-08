@@ -72,13 +72,21 @@ export type ExecutionJob = {
 export type RunMessageRef = { channelId: string; messageId: string | null }
 
 /**
+ * A policy's preview posted with a treasury channel: its message with Approve policy and Discard (in
+ * the treasury channel), its copy without them where `/rolepay policy new` was typed (null: the copy
+ * could not be posted), and the version both show.
+ */
+export type PolicyPreviewMessages = { version: number; message: RunMessageRef; mirror: RunMessageRef | null }
+
+/**
  * What Rolepay has told people about a run, kept outside the process (the server's database),
  * so the recovery sweep can finish the story after a restart: where the review message is,
  * and whether the receipts went out. Receipts go out at most once per run.
  *
  * With a treasury channel, a run has two messages: the one with the buttons (`message`, in the
  * treasury channel) and its copy without them (`mirror`, where the run would have gone: the policy's
- * channel, or where the command ran). Every update goes to both.
+ * channel, or where the command ran). Every update goes to both. A policy's preview has two the same
+ * way (`policyPreview`), updated when the policy is approved, discarded, edited or archived.
  */
 export interface RunNotices {
   rememberMessage(runId: string, ref: RunMessageRef): Promise<void>
@@ -88,6 +96,9 @@ export interface RunNotices {
   mirror(runId: string): Promise<RunMessageRef | null>
   /** True exactly once per run: whoever gets true sends the receipts. */
   claimReceipts(runId: string): Promise<boolean>
+  /** A policy preview's two messages; null forgets them (the version they show was discarded, replaced or archived). */
+  rememberPolicyPreview(policyId: string, preview: PolicyPreviewMessages | null): Promise<void>
+  policyPreview(policyId: string): Promise<PolicyPreviewMessages | null>
 }
 
 /**

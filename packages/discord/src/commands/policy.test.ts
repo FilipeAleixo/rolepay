@@ -2,6 +2,7 @@ import { emptyCriteria } from '@rolepay/core/adapters'
 import { describe, expect, it } from 'vitest'
 import { SCOPE, appHarness, body, isEphemeral, text } from '../../test/app.js'
 import { ADMIN, ALICE, BOB, CAROL, CHANNEL, GUILD, MODS_ROLE, TREASURER, TREASURER_ROLE, TREASURY } from '../../test/fixtures.js'
+import { updatePolicyMessages } from '../app/treasury.js'
 import { autocomplete, buttonClick, slashCommand } from '../testing/interactions.js'
 import { wireMessage } from '../testing/messages.js'
 
@@ -236,6 +237,189 @@ describe('the preview buttons', () => {
     expect(text(body(d).data)).toContain('Discarded')
     const p = await a.rolepay.policies.get({ guildId: GUILD, policyId })
     expect(p.ok && p.value.status).toBe('archived')
+  })
+})
+
+describe('/rolepay policy new with a treasury channel', () => {
+  const TREASURY_CHANNEL = '700000000000000009'
+  const posts = (a: Harness, channelId: string) => a.rest.channelPosts.filter((p) => p.channelId === channelId)
+  const setTreasury = (a: Harness, channelId: string) => a.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], channelId })
+
+  /** /rolepay policy new from the proposer role with a treasury channel set: the preview's two messages and the policy. */
+  async function routed(a: Harness) {
+    await setTreasury(a, TREASURY_CHANNEL)
+    const d = await a.send(slashCommand(SCOPE, 'rolepay', 'policy new', NEW, writer, 'tok-routed'))
+    expect(body(d)).toEqual({ type: 5, data: {} }) // public deferral, as always
+    const [there] = posts(a, TREASURY_CHANNEL)
+    const [here] = posts(a, CHANNEL)
+    return { there, here, policyId: /policy:approve:(pol_[A-Za-z0-9_]+):1/.exec(text(there?.message))?.[1] as string }
+  }
+
+  it('the preview with Approve policy and Discard goes to the treasury channel, this channel gets it without them and with its status, and only the author is told', async () => {
+    const a = await ready()
+    const { there, here, policyId } = await routed(a)
+    expect(policyId).toMatch(/^pol_/)
+    expect(text(there?.message)).toContain(`policy:discard:${policyId}:1`)
+    expect(text(here?.message)).toContain('Policy draft: Help desk')
+    expect(text(here?.message)).toContain(`<@${ALICE}>  3 AlphaUSD`)
+    expect(text(here?.message)).toContain(`Waiting for a member with <@&${TREASURER_ROLE}> to approve.`)
+    expect(here?.message.components).toEqual([])
+    expect(text(here?.message)).not.toContain(TREASURY_CHANNEL)
+    // The "thinking..." placeholder is removed; the author alone reads where it went.
+    expect(a.rest.deletes.map((x) => x.token)).toEqual(['tok-routed'])
+    const told = a.rest.followUps.at(-1)?.message
+    expect(told?.content).toBe('Posted. A Treasurer approves it in the treasury channel; this channel shows the policy without its buttons.')
+    expect((told?.flags ?? 0) & 64).toBe(64)
+    expect(await a.notices.policyPreview(policyId)).toEqual({ version: 1, message: { channelId: TREASURY_CHANNEL, messageId: there?.messageId }, mirror: { channelId: CHANNEL, messageId: here?.messageId } })
+  })
+
+  it('approved in the treasury channel: the copy here says who approved it and when, at once, still without buttons', async () => {
+    const a = await ready()
+    const { there, here, policyId } = await routed(a)
+    const refused = await a.send(buttonClick({ guildId: GUILD, channelId: TREASURY_CHANNEL, messageId: there?.messageId }, `policy:approve:${policyId}:1`, writer))
+    expect(isEphemeral(refused)).toBe(true)
+    expect(a.rest.channelEdits).toEqual([])
+    const approved = await a.send(buttonClick({ guildId: GUILD, channelId: TREASURY_CHANNEL, messageId: there?.messageId }, `policy:approve:${policyId}:1`, treasurer))
+    expect(body(approved).type).toBe(7)
+    expect(text(body(approved).data)).toContain(`Active. Approved by <@${TREASURER}>`)
+    // Only the copy is edited as the bot: the message pressed was updated by the answer itself.
+    expect(a.rest.channelEdits.map((e) => [e.channelId, e.messageId])).toEqual([[CHANNEL, here?.messageId]])
+    const copy = a.rest.channelEdits[0]?.message
+    expect(text(copy)).toContain('Policy: Help desk')
+    expect(text(copy)).toContain(`Active. Approved by <@${TREASURER}> <t:${Math.floor(a.clock.now().getTime() / 1000)}:R>, version 1.`)
+    expect(copy?.components).toEqual([])
+    // Still remembered: an edit on the dashboard later says it was replaced.
+    expect((await a.notices.policyPreview(policyId))?.version).toBe(1)
+  })
+
+  it('discarded in the treasury channel: the copy here says who discarded it, and the preview is forgotten', async () => {
+    const a = await ready()
+    const { there, here, policyId } = await routed(a)
+    await a.send(buttonClick({ guildId: GUILD, channelId: TREASURY_CHANNEL, messageId: there?.messageId }, `policy:discard:${policyId}:1`, treasurer))
+    expect(a.rest.channelEdits.map((e) => [e.channelId, e.messageId])).toEqual([[CHANNEL, here?.messageId]])
+    expect(text(a.rest.channelEdits[0]?.message)).toContain(`Discarded by <@${TREASURER}>.`)
+    expect(await a.notices.policyPreview(policyId)).toBeNull()
+  })
+
+  it('approved from the private answer of /rolepay policy show: both of its messages say so', async () => {
+    const a = await ready()
+    const { there, here, policyId } = await routed(a)
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy show', { policy: policyId }, treasurer, 'tok-show'))
+    expect(text(a.rest.lastEdit('tok-show'))).toContain(`policy:approve:${policyId}:1`)
+    await a.send(buttonClick({ guildId: GUILD, channelId: CHANNEL, messageId: '810000000000000077' }, `policy:approve:${policyId}:1`, treasurer))
+    expect(a.rest.channelEdits.map((e) => [e.channelId, e.messageId])).toEqual([
+      [TREASURY_CHANNEL, there?.messageId],
+      [CHANNEL, here?.messageId],
+    ])
+    for (const e of a.rest.channelEdits) expect([e.channelId, text(e.message)]).toEqual([e.channelId, expect.stringContaining(`Active. Approved by <@${TREASURER}>`)])
+    expect(text(a.rest.channelEdits[0]?.message)).not.toContain('policy:approve')
+  })
+
+  it('changed on the dashboard: approved, then edited (replaced by version 2), both messages follow; discarded or archived there too', async () => {
+    const a = await ready()
+    const { there, here, policyId } = await routed(a)
+    const deps = { rolepay: a.rolepay, rest: a.rest, notices: a.notices, now: () => a.clock.now() }
+    const actor = { guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE] }
+    const edited = (messageId: string | undefined) => a.rest.channelEdits.filter((e) => e.messageId === messageId).at(-1)?.message
+
+    expect((await a.rolepay.policies.approve({ ...actor, policyId, version: 1 })).ok).toBe(true)
+    await updatePolicyMessages(deps, { guildId: GUILD, policyId, kind: 'approved', by: TREASURER })
+    expect(text(edited(there?.messageId))).toContain(`Active. Approved by <@${TREASURER}>`)
+    expect(text(edited(here?.messageId))).toContain(`Active. Approved by <@${TREASURER}>`)
+
+    expect((await a.rolepay.policies.edit({ ...actor, policyId, name: 'Help desk, renamed' })).ok).toBe(true)
+    await updatePolicyMessages(deps, { guildId: GUILD, policyId, kind: 'edited', by: TREASURER })
+    for (const id of [there?.messageId, here?.messageId]) {
+      expect(text(edited(id))).toContain('Replaced: Help desk, renamed')
+      expect(text(edited(id))).toContain(`Version 1 was replaced by version 2, edited by <@${TREASURER}>.`)
+      expect(edited(id)?.components).toEqual([])
+    }
+    // Settled: nothing later reaches these messages.
+    expect(await a.notices.policyPreview(policyId)).toBeNull()
+    const before = a.rest.channelEdits.length
+    await a.rolepay.policies.archive({ ...actor, policyId })
+    await updatePolicyMessages(deps, { guildId: GUILD, policyId, kind: 'archived', by: TREASURER })
+    expect(a.rest.channelEdits).toHaveLength(before)
+
+    for (const kind of ['discarded', 'archived'] as const) {
+      const b = await ready()
+      const two = await routed(b)
+      const done = kind === 'discarded' ? await b.rolepay.policies.discard({ ...actor, policyId: two.policyId }) : await b.rolepay.policies.archive({ ...actor, policyId: two.policyId })
+      expect(done.ok).toBe(true)
+      await updatePolicyMessages({ ...deps, rolepay: b.rolepay, rest: b.rest, notices: b.notices }, { guildId: GUILD, policyId: two.policyId, kind, by: TREASURER })
+      const says = kind === 'discarded' ? `Discarded by <@${TREASURER}>.` : 'Archived. It never runs again.'
+      expect([kind, b.rest.channelEdits.map((e) => [e.messageId, text(e.message).includes(says), text(e.message).includes('policy:approve')])]).toEqual([
+        kind,
+        [
+          [two.there?.messageId, true, false],
+          [two.here?.messageId, true, false],
+        ],
+      ])
+      expect(await b.notices.policyPreview(two.policyId)).toBeNull()
+    }
+  })
+
+  it('without a treasury channel: the preview with Approve policy and Discard stays in this channel, as always, and nothing is remembered', async () => {
+    const a = await ready()
+    const { shown, policyId } = await newPolicy(a)
+    expect(shown).toContain(`policy:approve:${policyId}:1`)
+    expect(shown).toContain(`policy:discard:${policyId}:1`)
+    expect(a.rest.channelPosts).toEqual([])
+    expect(a.rest.followUps).toEqual([])
+    expect(await a.notices.policyPreview(policyId)).toBeNull()
+    // A change on the dashboard has nothing in Discord to update.
+    await a.rolepay.policies.approve({ guildId: GUILD, actor: TREASURER, actorRoleIds: [TREASURER_ROLE], policyId, version: 1 })
+    await updatePolicyMessages({ rolepay: a.rolepay, rest: a.rest, notices: a.notices, now: () => a.clock.now() }, { guildId: GUILD, policyId, kind: 'approved', by: TREASURER })
+    expect(a.rest.channelEdits).toEqual([])
+  })
+
+  it('typed in the treasury channel itself: one preview there, with its buttons, as always', async () => {
+    const a = await ready()
+    await setTreasury(a, CHANNEL)
+    const { shown } = await newPolicy(a)
+    expect(shown).toContain('policy:approve:')
+    expect(a.rest.channelPosts).toEqual([])
+  })
+
+  it('Rolepay cannot post in the treasury channel: the preview with its buttons is the answer here, as without one, and that is reported', async () => {
+    const a = await ready()
+    await setTreasury(a, TREASURY_CHANNEL)
+    a.rest.closedChannels.set(TREASURY_CHANNEL, 'forbidden')
+    const { shown, policyId } = await newPolicy(a)
+    expect(shown).toContain(`policy:approve:${policyId}:1`)
+    expect(a.rest.channelPosts).toEqual([])
+    expect(a.treasuryEvents).toEqual([{ kind: 'unavailable', guildId: GUILD, channelId: TREASURY_CHANNEL, reason: 'forbidden' }])
+    expect(await a.notices.policyPreview(policyId)).toBeNull()
+  })
+
+  it('Rolepay cannot post its copy here: the answer is the copy, without buttons (they are in the treasury channel)', async () => {
+    const a = await ready()
+    await setTreasury(a, TREASURY_CHANNEL)
+    a.rest.closedChannels.set(CHANNEL, 'forbidden')
+    const d = await a.send(slashCommand(SCOPE, 'rolepay', 'policy new', NEW, writer, 'tok-nocopy'))
+    expect(body(d).type).toBe(5)
+    const there = posts(a, TREASURY_CHANNEL)[0]
+    expect(text(there?.message)).toContain('policy:approve:')
+    const answer = text(a.rest.lastEdit('tok-nocopy'))
+    expect(answer).toContain('Policy draft: Help desk')
+    expect(answer).not.toContain('policy:approve:')
+    const policyId = /policy:approve:(pol_[A-Za-z0-9_]+):1/.exec(text(there?.message))?.[1] as string
+    expect(await a.notices.policyPreview(policyId)).toEqual({ version: 1, message: { channelId: TREASURY_CHANNEL, messageId: there?.messageId }, mirror: null })
+  })
+
+  it('with none set, a channel named "treasury" is found, confirmed and used for the preview', async () => {
+    const a = await ready()
+    a.rest.channels.set(GUILD, [
+      { id: HELP, name: 'help', type: 0 },
+      { id: TREASURY_CHANNEL, name: 'treasury', type: 0 },
+    ])
+    await a.send(slashCommand(SCOPE, 'rolepay', 'policy new', NEW, writer, 'tok-found'))
+    expect(posts(a, TREASURY_CHANNEL).map((p) => p.message.content ?? (text(p.message).includes('policy:approve:') ? 'preview' : '?'))).toEqual([
+      'Rolepay will post here what needs a Treasurer: policies and runs to approve, runs you can veto, and runs it holds.',
+      'preview',
+    ])
+    expect(posts(a, CHANNEL)[0]?.message.components).toEqual([])
+    expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: TREASURY_CHANNEL, treasuryChannelSource: 'found' } })
   })
 })
 

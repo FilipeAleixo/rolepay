@@ -6,12 +6,14 @@ import {
   KvPendingSources,
   KvRunNotices,
   type MemberDirectory,
+  type PolicyChange,
   RestMemberDirectory,
   type TreasuryEvent,
   createDiscordInteractions,
   createPolicyNotifier,
   createRecoveryNotifier,
   createRunExecutor,
+  updatePolicyMessages,
 } from '@rolepay/discord'
 import { type Assets, type PasskeySessions, type PolicyPort, type RateLimiter, TokenBucketLimiter, createWebApp } from '@rolepay/web'
 import { Hono } from 'hono'
@@ -106,6 +108,42 @@ export function vetoesAnnounced(port: PolicyPort, rolepay: Rolepay, announce: (e
       }
       return r
     },
+  }
+}
+
+/**
+ * The dashboard's policy port, with each successful approval, discard, edit and archive shown in
+ * Discord: a policy whose preview went to the treasury channel (`/rolepay policy new` with one) has
+ * both of its messages updated, as its buttons there would (`updatePolicyMessages`). Nothing else is
+ * posted; a policy without such a preview is left alone.
+ */
+export function policyChangesShown(port: PolicyPort, show: (change: PolicyChange) => Promise<void>): PolicyPort {
+  /** Runs the action, and on success shows it, by whoever did it. */
+  const shown =
+    <I extends { guildId: string; policyId: string; actor: { id: string } }, R extends { ok: boolean }>(kind: PolicyChange['kind'], act: (input: I) => Promise<R>) =>
+    async (input: I): Promise<R> => {
+      const r = await act(input)
+      if (r.ok) await show({ guildId: input.guildId, policyId: input.policyId, kind, by: input.actor.id })
+      return r
+    }
+  return {
+    // Not a method, so it has to be carried over by hand (as in vetoesAnnounced).
+    ...(port.dailySchedules === undefined ? {} : { dailySchedules: port.dailySchedules }),
+    list: (i) => port.list(i),
+    get: (i) => port.get(i),
+    preview: (i) => port.preview(i),
+    versions: (i) => port.versions(i),
+    upcoming: (i) => port.upcoming(i),
+    runOrigins: (i) => port.runOrigins(i),
+    create: (i) => port.create(i),
+    edit: shown('edited', (i) => port.edit(i)),
+    approve: shown('approved', (i) => port.approve(i)),
+    discard: shown('discarded', (i) => port.discard(i)),
+    pause: (i) => port.pause(i),
+    resume: (i) => port.resume(i),
+    archive: shown('archived', (i) => port.archive(i)),
+    setMode: (i) => port.setMode(i),
+    veto: (i) => port.veto(i),
   }
 }
 
@@ -218,8 +256,13 @@ export function composeServer(deps: ServerDeps) {
   const clientKey = header ? { clientKey: (req: Request) => clientIp(req) ?? 'direct' } : {}
   const rateLimits = { ...(deps.web.rateLimits ?? defaultRateLimits()), ...clientKey }
   const { dashboard: given, ...web } = deps.web
-  // A veto on the dashboard updates the run's message in Discord too, as the Veto button does there.
-  const overrides = given?.policies ? { ...given, policies: vetoesAnnounced(given.policies, rolepay, (events) => policyNotifier.announce(events)) } : given
+  // A veto on the dashboard updates the run's message in Discord too, as the Veto button does there,
+  // and an approval, discard, edit or archive updates a policy preview's two messages (treasury channel).
+  const showPolicyChange = (change: PolicyChange) =>
+    updatePolicyMessages({ rolepay, rest, notices, now: () => deps.clock.now(), onError: (error) => log('policy_notify_error', errorFields(error)) }, change)
+  const overrides = given?.policies
+    ? { ...given, policies: policyChangesShown(vetoesAnnounced(given.policies, rolepay, (events) => policyNotifier.announce(events)), showPolicyChange) }
+    : given
   const dashboard = dashboardDeps({ config, rest, kv: deps.kv, ...(overrides ? { overrides } : {}), onError: (error) => log('dashboard_error', errorFields(error)) })
   app.route('/', createWebApp({ rolepay, clock: deps.clock, config: config.web, ...web, rateLimits, dashboard }))
 

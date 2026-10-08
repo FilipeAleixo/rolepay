@@ -28,7 +28,8 @@ function options(values: Record<string, OptionValue | undefined>, focused?: stri
     }))
 }
 
-export type InteractionScope = { guildId: string | null; channelId?: string; applicationId?: string }
+/** `messageId`: for a button, the message it is on (one fixed ID unless a test names the message it pressed). */
+export type InteractionScope = { guildId: string | null; channelId?: string; applicationId?: string; messageId?: string }
 
 /** `sub` is a subcommand ("new") or a group and a subcommand ("policy new"), as Discord nests them. */
 function nest(sub: string, leaves: unknown[]) {
@@ -81,7 +82,7 @@ export function buttonClick(scope: InteractionScope, customId: string, who: Who,
     guild_id: scope.guildId,
     channel_id: scope.channelId ?? '700000000000000001',
     member: member(who),
-    message: { id: '810000000000000001' },
+    message: { id: scope.messageId ?? '810000000000000001' },
     data: { custom_id: customId, component_type: 2 },
   }
 }

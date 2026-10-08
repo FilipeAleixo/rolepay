@@ -2,7 +2,7 @@ import type { Policy, PolicyPreview, PolicyRun } from '@rolepay/core'
 import { describe, expect, it } from 'vitest'
 import { ALICE, BOB, CAROL, GUILD, MODS_ROLE, T0, TOKEN, TREASURER, TREASURER_ROLE } from '../../test/fixtures.js'
 import { explainPolicyError } from './errors.js'
-import { budgetLine, explainHold, policyBudgetOffer, policyChangedMessage, policyDiscardedMessage, policyListMessage, policyMessage, policyRunNoticeMessage } from './policy.js'
+import { budgetLine, explainHold, policyBudgetOffer, policyChangedMessage, policyDiscardedMessage, policyListMessage, policyMessage, policyReplacedMessage, policyRunNoticeMessage } from './policy.js'
 
 const text = (v: unknown) => JSON.stringify(v)
 const ctx = { token: TOKEN, approverRoleId: TREASURER_ROLE }
@@ -160,6 +160,15 @@ describe('policyMessage', () => {
     expect(m).toContain(`<@${BOB}>  2 AlphaUSD  ·  2 replies`)
   })
 
+  it('the copy of a draft without buttons (its buttons are in the treasury channel): the same preview and status, no Approve or Discard', () => {
+    const shown = policyMessage(policy(), { ...ctx, preview: preview() })
+    const copy = policyMessage(policy(), { ...ctx, preview: preview(), mirror: true })
+    expect(copy.embeds).toEqual(shown.embeds)
+    expect(text(copy)).toContain(`Draft, version 2. Waiting for a member with <@&${TREASURER_ROLE}> to approve.`)
+    expect(copy.components).toEqual([])
+    expect(text(shown)).toContain('policy:approve:pol_view01:2')
+  })
+
   it('a long list is cut to fit Discord (1024 characters a field) and says how many more', () => {
     const many = Array.from({ length: 60 }, (_, i) => ({ discordUserId: `2000000000000002${String(i).padStart(2, '0')}`, registered: true, metrics: metrics(5), amount: 5_000_000n, capped: false, reasons: [], reasonText: 'has @Mods; 5 replies to other people in #help (at least 1)', token: TOKEN, swapped: false }))
     const m = policyMessage(policy(), { ...ctx, preview: preview({ matches: many, nearMisses: [], problems: [], remaining: 100_000_000n }) })
@@ -185,6 +194,13 @@ describe('policy list, changes, discards and notices', () => {
     expect(text(policyChangedMessage(policy({ mode: 'autopilot', vetoWindowMinutes: 60 }), 'mode', TREASURER, { token: TOKEN, approverRoleId: null }))).toContain('1 hour after it is posted unless an approver vetoes it')
     expect(text(policyDiscardedMessage(policy({ status: 'paused', version: 1 }), TREASURER))).toContain('Version 1 is back, paused.')
     expect(text(policyDiscardedMessage(policy({ status: 'archived' }), TREASURER))).not.toContain('is back')
+  })
+
+  it('a preview an edit replaced says by which version and who edited it, without buttons, pinging nobody', () => {
+    const m = policyReplacedMessage(policy({ status: 'active', version: 3, name: 'Help desk, renamed' }), 2, TREASURER)
+    expect(m.embeds?.[0]).toMatchObject({ title: 'Replaced: Help desk, renamed', description: `Version 2 was replaced by version 3, edited by <@${TREASURER}>.` })
+    expect(m.components).toEqual([])
+    expect(m.allowed_mentions).toEqual({ parse: [] })
   })
 
   it('a held run says why with the numbers and who would have been paid; an empty period is one line', () => {

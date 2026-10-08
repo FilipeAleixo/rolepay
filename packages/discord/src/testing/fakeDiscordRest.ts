@@ -7,6 +7,7 @@ import type {
   InteractionLog,
   MemberDirectory,
   PendingSources,
+  PolicyPreviewMessages,
   ReplyHandle,
   RestError,
   RestResult,
@@ -199,6 +200,7 @@ export class MemoryRunNotices implements RunNotices {
   private messages = new Map<string, RunMessageRef>()
   private mirrors = new Map<string, RunMessageRef>()
   private receipts = new Set<string>()
+  private previews = new Map<string, PolicyPreviewMessages>()
   async rememberMessage(runId: string, ref: RunMessageRef) {
     this.messages.set(runId, { ...ref })
   }
@@ -218,6 +220,14 @@ export class MemoryRunNotices implements RunNotices {
     if (this.receipts.has(runId)) return false
     this.receipts.add(runId)
     return true
+  }
+  async rememberPolicyPreview(policyId: string, preview: PolicyPreviewMessages | null) {
+    if (preview) this.previews.set(policyId, structuredClone(preview))
+    else this.previews.delete(policyId)
+  }
+  async policyPreview(policyId: string) {
+    const p = this.previews.get(policyId)
+    return p ? structuredClone(p) : null
   }
 }
 

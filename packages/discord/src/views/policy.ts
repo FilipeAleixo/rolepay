@@ -23,6 +23,11 @@ export type PolicyViewContext = {
   budget?: PolicyKeyStatus | null
   /** The treasury page for this policy's own budget: only in an answer to an approver, never in a public message. */
   budgetUrl?: string | null
+  /**
+   * The copy of a draft's preview in a public channel while its buttons are in the treasury channel:
+   * the same preview, with its status, without Approve policy and Discard.
+   */
+  mirror?: boolean
 }
 
 const FIELD_MAX = 1024
@@ -127,7 +132,8 @@ const TITLES: Record<Policy['status'], string> = { draft: 'Policy draft', active
 
 /**
  * A policy: the rule in plain words (and the original instruction), the schedule, the mode and,
- * with a preview, who it applies to right now. A draft carries Approve and Discard, for the version shown.
+ * with a preview, who it applies to right now. A draft carries Approve and Discard, for the version
+ * shown, except on its copy without buttons (`mirror`).
  */
 export function policyMessage(p: Policy, ctx: PolicyViewContext & { preview?: PolicyPreview | null; previewProblem?: string; nextRunAt?: Date | null }): Message {
   const rule = ctx.preview?.rule ?? describeRule(p.compiled, { schedule: p.schedule, caps: p.caps, guildId: p.communityId })
@@ -175,7 +181,7 @@ export function policyMessage(p: Policy, ctx: PolicyViewContext & { preview?: Po
     footer: { text: `Policy ${p.id} · version ${p.version}` },
   }
   const components: ActionRow[] =
-    p.status === 'draft'
+    p.status === 'draft' && !ctx.mirror
       ? [
           {
             type: ComponentType.ActionRow,
@@ -233,6 +239,18 @@ export function policyBudgetOffer(p: Policy, opts: { url: string; expiresAt: Dat
 export function policyDiscardedMessage(p: Policy, by: string): Message {
   const back = p.status === 'paused' ? ` Version ${p.version} is back, paused.` : ''
   return { embeds: [{ title: cut(`Discarded: ${p.name}`, 256), color: COLORS.muted, description: `Discarded by ${mention(by)}.${back}`, footer: { text: `Policy ${p.id}` } }], components: [], allowed_mentions: NO_PINGS }
+}
+
+/**
+ * A preview whose version an edit replaced (on the dashboard): which version replaced it and who
+ * edited it. Nothing about the new version's state, which this message is not told about later.
+ */
+export function policyReplacedMessage(p: Policy, replaced: number, by: string): Message {
+  return {
+    embeds: [{ title: cut(`Replaced: ${p.name}`, 256), color: COLORS.muted, description: `Version ${replaced} was replaced by version ${p.version}, edited by ${mention(by)}.`, footer: { text: `Policy ${p.id}` } }],
+    components: [],
+    allowed_mentions: NO_PINGS,
+  }
 }
 
 /** /rolepay policy list. */

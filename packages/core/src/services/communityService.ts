@@ -243,12 +243,12 @@ export class CommunityService {
   }
 
   /**
-   * The treasury channel: where Rolepay posts what only a Treasurer can act on (runs to approve,
-   * runs to veto, held runs). Chosen by a member holding the CURRENT approver role, the same rule as
-   * approving policies (`actorRoleIds`: the roles Discord signed, or the dashboard read fresh). null
-   * chooses none: everything goes where it always did, and Rolepay stops looking for a channel named
-   * "treasury". The caller has checked the channel is in this server and that Rolepay can post there.
-   * Audited with the channel before; the same choice again changes nothing.
+   * The treasury channel: where Rolepay posts what only a Treasurer can act on (policies and runs
+   * to approve, runs to veto, held runs). Chosen by a member holding the CURRENT approver role, the
+   * same rule as approving policies (`actorRoleIds`: the roles Discord signed, or the dashboard read
+   * fresh). null chooses none: everything goes where it always did, and Rolepay stops looking for a
+   * channel named "treasury". The caller has checked the channel is in this server and that Rolepay
+   * can post there. Audited with the channel before; the same choice again changes nothing.
    */
   async setTreasuryChannel(input: {
     guildId: string

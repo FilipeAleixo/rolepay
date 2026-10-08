@@ -54,9 +54,9 @@ export const CommunitySchema = z
      */
     preferredTokens: z.boolean().default(false),
     /**
-     * The treasury channel: where Rolepay posts what only a Treasurer can act on (runs to approve,
-     * runs to veto, held runs), with their buttons; the channel each would have gone to gets a copy
-     * without them. null = none: each message goes where it always did, buttons included.
+     * The treasury channel: where Rolepay posts what only a Treasurer can act on (policies and runs
+     * to approve, runs to veto, held runs), with their buttons; the channel each would have gone to
+     * gets a copy without them. null = none: each message goes where it always did, buttons included.
      */
     treasuryChannelId: DiscordIdSchema.nullable().default(null),
     treasuryChannelSource: TreasuryChannelSourceSchema.default('unset'),
