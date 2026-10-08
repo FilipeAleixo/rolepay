@@ -8,6 +8,7 @@ import { AiUsageService } from './services/aiUsageService.js'
 import { AuditService, AuditTrail } from './services/auditTrail.js'
 import { CommunityService } from './services/communityService.js'
 import { FundingService } from './services/fundingService.js'
+import { LiveService } from './services/liveService.js'
 import { PayeeService } from './services/payeeService.js'
 import { PayRunService } from './services/payRunService.js'
 import { PolicyKeyService } from './services/policyKeyService.js'
@@ -33,6 +34,8 @@ export type Rolepay = {
   aiUsage: AiUsageService
   /** Funding with attribution: deposit addresses (virtual addresses) per funding source, and the deposits they received. */
   funding: FundingService
+  /** Live updates for the web pages: a community's events and the payments to one address, as they happen. */
+  live: LiveService
 }
 
 export const DEFAULT_LINK_TTL_SECONDS = 1800
@@ -50,7 +53,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     ids,
     setupLinkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
   })
-  const audit = new AuditTrail({ log: r.audit, policyRuns: r.policyRuns, clock, ...(deps.onAuditError ? { onError: deps.onAuditError } : {}) })
+  const audit = new AuditTrail({ log: r.audit, policyRuns: r.policyRuns, clock, live: deps.live ?? null, ...(deps.onAuditError ? { onError: deps.onAuditError } : {}) })
   const policyKeys = new PolicyKeyService({ communities: r.communities, policies: r.policies, policyKeys: r.policyKeys, chain, vault, clock, audit, communityService: communities })
   const payRuns = new PayRunService({
     runs: r.runs,
@@ -131,6 +134,15 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     audit: new AuditService({ log: r.audit }),
     aiUsage: new AiUsageService({ usage: r.aiUsage, clock }),
     funding: new FundingService({ funding: r.funding, communities: r.communities, chain: deps.fundingChain ?? null, ids, clock, audit }),
+    live: new LiveService({
+      feed: deps.live ?? null,
+      audit: r.audit,
+      runs: r.runs,
+      payees: r.payees,
+      communities: r.communities,
+      clock,
+      ...(deps.onAuditError ? { onError: deps.onAuditError } : {}),
+    }),
   }
 }
 

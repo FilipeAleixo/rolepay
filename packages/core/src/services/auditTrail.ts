@@ -3,6 +3,7 @@ import { type AuditDetails, type AuditEventType, type AuditQueryInput, AuditQuer
 import { type Result, ok } from '../domain/result.js'
 import type { Run } from '../domain/run.js'
 import type { Clock } from '../ports/clock.js'
+import type { LiveFeed } from '../ports/liveFeed.js'
 import type { AuditLog, PolicyRunRepository } from '../ports/repositories.js'
 import { type InvalidInput, invalidInput } from './common.js'
 
@@ -10,16 +11,23 @@ import { type InvalidInput, invalidInput } from './common.js'
  * Writes the audit stream for the services. Policy and policy run events are written as part of
  * the action (an outage throws, like any write). Pay run events are best effort: a failed audit
  * write never fails a payment step (it is reported through `onError`). A pay run made by a policy
- * carries the policy, its version and the policy run.
+ * carries the policy, its version and the policy run. Every stored event is also published to the
+ * live feed (when there is one), for the pages that update as it happens; publishing never fails
+ * the write.
  */
 export class AuditTrail {
   constructor(
-    private readonly deps: { log: AuditLog; policyRuns: PolicyRunRepository; clock: Clock; onError?: (error: unknown) => void },
+    private readonly deps: { log: AuditLog; policyRuns: PolicyRunRepository; clock: Clock; live?: LiveFeed | null; onError?: (error: unknown) => void },
   ) {}
 
   async record(e: Omit<NewAuditEvent, 'at' | 'policyVersion' | 'policyRunId' | 'runId' | 'policyId'> & Partial<Pick<NewAuditEvent, 'policyId' | 'policyVersion' | 'policyRunId' | 'runId'>>): Promise<void> {
     const event = NewAuditEventSchema.parse({ policyId: null, policyVersion: null, policyRunId: null, runId: null, ...e, at: this.deps.clock.now() })
-    await this.deps.log.append(event)
+    const stored = await this.deps.log.append(event)
+    try {
+      this.deps.live?.publish(stored)
+    } catch (error) {
+      this.deps.onError?.(error)
+    }
   }
 
   /** An event that must never fail the step that caused it (a deposit already stored): a failure is reported through `onError`. */

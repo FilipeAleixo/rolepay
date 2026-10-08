@@ -3,6 +3,7 @@ import type { Clock } from './clock.js'
 import type { FundingChain } from './fundingChain.js'
 import type { IdGenerator } from './idGenerator.js'
 import type { KeyVault } from './keyVault.js'
+import type { LiveFeed } from './liveFeed.js'
 import type { PayoutChain } from './payoutChain.js'
 import type { ActivityReader } from './activityReader.js'
 import type { ProposalLog } from './proposalLog.js'
@@ -70,4 +71,9 @@ export type RolepayDeps = {
    * reads nothing.
    */
   fundingChain?: FundingChain | null
+  /**
+   * The live feed: every audit event, published as it is appended, for the pages that update live
+   * (`InProcessLiveFeed` in production: one process). Without it, `live` subscriptions receive nothing.
+   */
+  live?: LiveFeed | null
 }

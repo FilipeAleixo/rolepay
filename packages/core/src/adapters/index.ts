@@ -19,6 +19,7 @@ export {
   unclearCriteria,
 } from './memory/index.js'
 export { KvProposalRepository } from './kv/proposals.js'
+export { InProcessLiveFeed } from './live/index.js'
 export { DailyCappedProposer } from './kv/proposerDailyCap.js'
 export { KvRunLeases } from './kv/runLeases.js'
 export { openSqliteDatabase } from './sqlite/index.js'

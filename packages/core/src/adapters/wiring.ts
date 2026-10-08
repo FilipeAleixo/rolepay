@@ -5,6 +5,7 @@ import { AnthropicRunProposer } from './anthropic/index.js'
 import { AesGcmKeyVault, RandomIds, SystemClock } from './crypto/index.js'
 import { DailyCappedProposer } from './kv/proposerDailyCap.js'
 import { KvRunLeases } from './kv/runLeases.js'
+import { InProcessLiveFeed } from './live/index.js'
 import { openSqliteDatabase } from './sqlite/index.js'
 import { TempoFundingChain, TempoPayoutChain } from './tempo/index.js'
 
@@ -39,6 +40,8 @@ export async function openRolepayAdapters(
       swapMaxSlippageBps: config.swapMaxSlippageBps,
       // Read only: the registry and deposit events. Nothing is read until a community sets up deposit addresses.
       fundingChain: new TempoFundingChain({ network: config.network, rpcUrl: config.rpcUrl }),
+      // Every audit event to the pages that update live, in this process only (one server instance).
+      live: new InProcessLiveFeed(),
     },
     /** Same database: passkey credentials and sessions, delivery markers. */
     kv: db.kv,
