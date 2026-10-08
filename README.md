@@ -16,8 +16,8 @@ Rolepay pays the people who run a Discord community (moderators, staff, bounty w
 ### What to look at in 3 minutes
 
 1. **The demo video:** **[TO FILL: VIDEO_URL]**
-2. **Get paid on the testnet demo, with nobody online** (about two minutes of your time, paid at the next daily run): join the demo server, **[TO FILL: DISCORD_INVITE_URL. If the demo bot can be added to other servers, its invite link too, for the treasurer side.]** Run `/payee link`, create your passkey and react ✅ to the welcome post in #start-here. A standing policy pays 1 test AlphaUSD to every new payee who did, every day at 18:00 UTC, on autopilot within the bot key's on-chain limit, with a DM receipt. The steps are in [Try it](#try-it).
-3. **A pay run on Tempo mainnet,** from the pilot in [`apps/server/MAINNET.md`](apps/server/MAINNET.md): **[TO FILL: MAINNET_TX_URL, the pay run's transaction on explore.tempo.xyz]**
+2. **Get paid on the testnet demo, with nobody online** (about two minutes of your time, paid at the next daily run): join the demo server, **[TO FILL: DISCORD_INVITE_URL. If the demo bot can be added to other servers, its invite link too, for the treasurer side.]** Run `/payee link`, create your passkey and react ✅ to the welcome post in #start-here. A standing policy pays 1 test AlphaUSD to every new payee who did, every day at 16:00 UTC, on autopilot within the bot key's on-chain limit, with a DM receipt. The steps are in [Try it](#try-it).
+3. **A pay run on Tempo mainnet,** from the pilot in [`apps/server/MAINNET.md`](apps/server/MAINNET.md): [the first one](https://explore.tempo.xyz/tx/0x3cde4de2241315c563ed2316ba859ed763b2a669fcec8811620da25a95761593) (8 October 2026) paid 1 USDC.e from the pilot community's treasury to a member's passkey account. A Treasurer approved it in Discord, the bot's access key signed it as one `transferWithMemo`, and the fee, 0.00005 pathUSD, came out of the key's separate fee budget.
 4. **The chain refusing an over-limit batch with Rolepay's own checks skipped:** [the reverted transaction on Moderato](https://explore.testnet.tempo.xyz/tx/0xa29ba08c3162e427cea7008f5fcf902f439eef6c84da27458cc659cf8c0c8ee0), sent by [`protocolLimit.chain.test.ts`](packages/core/test/protocolLimit.chain.test.ts).
 5. **What can go wrong, and what stops it:** [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md).
 
@@ -179,7 +179,7 @@ AI writes the rule once. Humans approve it. Code runs it. The chain caps it.
 - `apps/server`: the composition root (Hono).
 - `docs/ARCHITECTURE.md`: the design. `docs/THREAT-MODEL.md`: the threat model.
 
-See `docs/ARCHITECTURE.md` for the design and `apps/server/README.md` to run it (and, under "Deploying", how the hosted servers run on Fly.io). The testnet demo runs at `demo.rolepay.app`; mainnet is prepared for `web.rolepay.app` (USDC.e payouts, runbook in `apps/server/MAINNET.md`).
+See `docs/ARCHITECTURE.md` for the design and `apps/server/README.md` to run it (and, under "Deploying", how the hosted servers run on Fly.io). The testnet demo runs at `demo.rolepay.app`; mainnet runs at `web.rolepay.app` (USDC.e payouts, runbook in `apps/server/MAINNET.md`).
 
 Rolepay was called payrun while it was built. Settings, data and Discord messages from then keep working: see "Renamed from payrun" in `docs/ARCHITECTURE.md`.
 
