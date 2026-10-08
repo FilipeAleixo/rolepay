@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { webHarness } from '../../test/harness.js'
 import { BOT_PERMISSIONS, installUrl, landingPage } from '../views/landing.js'
-import { STYLE, esc } from '../views/page.js'
+import { PAID_WEEKS, STYLE, esc } from '../views/page.js'
 
 const APP_ID = '500000000000000001'
 const INSTALL = `https://discord.com/oauth2/authorize?client_id=${APP_ID}&amp;scope=bot+applications.commands&amp;permissions=84992`
@@ -20,6 +20,9 @@ const part = (html: string, open: RegExp, close: string) => {
 const topBar = (html: string) => part(html, /<header class="topbar">/, '</header>')
 const hero = (html: string) => part(html, /<section class="hero"/, '</section>')
 const finalBand = (html: string) => part(html, /<section class="final"/, '</section>')
+const places = (html: string) => part(html, /<section class="places"/, '</section>')
+/** The list items of a part, as read: tags dropped without a gap, so "with <span>/payee link</span>." reads "with /payee link.". */
+const items = (html: string) => [...html.matchAll(/<li>([\s\S]*?)<\/li>/g)].map((m) => text((m[1] as string).replace(/<[^>]+>/g, '')).trim())
 
 /** How a pay run works: four steps, a title and a line each. */
 const STEPS = [
@@ -46,11 +49,31 @@ const FEATURES = [...FOR_PAYEES, ...FOR_TREASURER]
 const TRUST = [
   ["Your community's account holds the money.", "Rolepay never does. Only the treasurer's passkey controls the account."],
   ['The bot can spend only its allowance.', 'Its key has an expiry, a limit per period and one allowed action. Ask for more and Tempo refuses the whole batch.'],
-  ['Every payment leaves a record.', 'Runs, approvals and vetoes are on the dashboard, and export to CSV.'],
+  [
+    'Every payment leaves a record.',
+    'Each paid run is on the dashboard with its transaction, and every approval and veto with who made it. Runs and the audit log export to CSV.',
+  ],
+] as const
+
+/** In Discord, and on the web: what happens in Discord, and what the dashboard shows, a line each. */
+const IN_DISCORD = [
+  'People sign up to be paid with /payee link.',
+  'Start a run with /rolepay new, or right-click a message and choose Pay the author.',
+  'The treasurer approves it with one button.',
+  'Runs that pay on their own wait first, so the treasurer can veto them.',
+  'Everyone paid gets a receipt by DM, with a link to the transaction.',
+] as const
+const ON_THE_WEB = [
+  "The treasury's balance, and what the bot has left to spend.",
+  'What was paid each week, and what each person got.',
+  'Every deposit, and the funding source it came in through.',
+  'An estimate of what the AI cost this month, draft by draft.',
+  'Every approval and veto, with who made it and when. Each paid run links its transaction.',
+  'Any run, or the audit log, as a CSV.',
 ] as const
 
 describe('the home page (/)', () => {
-  it('says what Rolepay is with a picture of it, what it replaces, how it works, what it does, why you can trust it, and where to go', async () => {
+  it('says what Rolepay is with a picture of it, what it replaces, how it works, where it lives (Discord and the web), what it does, why you can trust it, and where to go', async () => {
     const res = await webHarness({ discordAppId: APP_ID }).send('/')
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/text\/html/)
@@ -59,8 +82,8 @@ describe('the home page (/)', () => {
     expect(html).toContain('<h1 id="hero-title">Pay the people who run your community.</h1>')
     expect(t).toContain("Pick a role, name the people, or describe them in plain words. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.")
     expect(html).toContain('<meta name="description" content="Pay the people who run your community, from Discord, in stablecoins on Tempo.">')
-    // The product shot: one image to assistive tech. The three ways to say who to pay, the run, paid, and the allowance with its on-chain limit.
-    expect(hero(html)).toContain('<div class="shot" role="img" aria-label="The three ways to say who to pay: a role, people you pick, or plain words that Rolepay\'s AI drafts into a list; the pay run in Discord, paid in one transaction; and the bot\'s allowance for the month with its on-chain limit">')
+    // The product shot: one image to assistive tech. The three ways to say who to pay, the run in Discord, paid, and the allowance on the dashboard with its on-chain limit.
+    expect(hero(html)).toContain('<div class="shot" role="img" aria-label="The three ways to say who to pay: a role, people you pick, or plain words that Rolepay\'s AI drafts into a list; the pay run in Discord, paid in one transaction; and on the dashboard, the bot\'s allowance for the month with its on-chain limit">')
     expect(hero(html)).toContain('<p class="e-title">Paid</p><p class="e-note">September</p>')
     // The "Who to pay" card comes first, where a run starts: a role, people you pick, or plain words. The AI is one of the three, and only drafts.
     expect(text(hero(html))).toContain('Who to pay @Moderators a role @mira @kofi @ines @theo people you pick “1 USDC.e per question answered in #help this month, up to 40 each” in plain words, drafted by AI The AI only drafts the list. You see every name before anything is paid.')
@@ -71,6 +94,32 @@ describe('the home page (/)', () => {
     expect(part(hero(html), /<p class="w-label">/, '</p>')).not.toContain('<svg')
     expect(hero(html)).toContain('Paid in one transaction. Approved by <span class="at">@Treasurer</span>.')
     expect(t).toContain('On-chain limit')
+    // Each card says where it lives, quietly, at the end of its first row: the run in Discord, the allowance on the dashboard. "Who to pay" says nothing.
+    expect(part(hero(html), /<p class="who">/, '</p>')).toMatch(/<span class="when">.*<\/span><span class="surface">Discord<\/span>$/)
+    expect(part(hero(html), /<p class="b-head">/, '</p>')).toBe('<p class="b-head"><span class="b-label">The bot\'s allowance this month</span><span class="surface">Dashboard</span>')
+    expect(hero(html).match(/class="surface"/g)).toHaveLength(2)
+    expect(part(hero(html), /<div class="ways">/, '<div class="msg">')).not.toContain('surface')
+    // In Discord, and on the web: right after how a run works, before who it is for.
+    expect(html.indexOf('<section class="how"')).toBeLessThan(html.indexOf('<section class="places"'))
+    expect(html.indexOf('<section class="places"')).toBeLessThan(html.indexOf('<section class="details"'))
+    expect(html).toContain('<h2 id="places-title">In Discord, and on the web</h2>')
+    expect(t).toContain('You pay people from Discord. The dashboard keeps the record, and anyone in your server can sign in and read it.')
+    const both = places(html)
+    expect(both).toContain('<h3>In Discord</h3><p class="where">Where the work happens.</p>')
+    expect(both).toContain('<h3>On the web</h3><p class="where">Where you see all of it.</p>')
+    expect(both.indexOf('<h3>In Discord</h3>')).toBeLessThan(both.indexOf('<h3>On the web</h3>'))
+    const discord = both.slice(0, both.indexOf('<h3>On the web</h3>'))
+    const web = both.slice(both.indexOf('<h3>On the web</h3>'))
+    expect(items(discord)).toEqual(IN_DISCORD)
+    expect(items(web)).toEqual(ON_THE_WEB)
+    expect(discord).toContain('<span class="cmd">/rolepay new</span>')
+    expect(discord).toContain('<span class="cmd">Pay the author</span>')
+    expect(text(web)).toContain('People paid to a passkey account get a page of their own, where their balance and each payment show up live.')
+    // Two small pictures, one image each to assistive tech: a receipt as Discord sends it, and the dashboard's chart of what was paid per week.
+    expect(discord).toContain('<div class="dm" role="img" aria-label="A receipt in Discord, sent by DM: you were paid 30 USDC.e from The Commons, for pay run 42, line 1, with buttons to view the transaction and to open your account">')
+    expect(text(discord)).toContain('You were paid 30 USDC.e From The Commons , through Rolepay on Tempo. To your account 0x7f3a…c21e Pay run 42, line 1 View transaction Your account')
+    expect(web).toContain('<div class="weeks" role="img" aria-label="The dashboard\'s chart of what was paid per week: a gold bar for each of the last 8 weeks, 355 USDC.e in all, 25 so far this week">')
+    expect(text(web)).toContain('Paid per week 355 USDC.e in the last 8 weeks')
     // What it replaces: today, and with Rolepay, row by row (screen readers hear which column each line is).
     expect(html).toContain('<h2 id="contrast-title" class="sr">Paying people today, and with Rolepay</h2>')
     for (const [was, now] of [
@@ -122,8 +171,8 @@ describe('the home page (/)', () => {
   it('reads in order without the pictures: one h1, a heading per section, a title per step, and every icon and light hidden from assistive tech', () => {
     const html = landingPage({ testnet: true })
     const headings = [...html.matchAll(/<h([1-6])[^>]*>/g)].map((m) => Number(m[1]))
-    expect(headings).toEqual([1, 2, 2, 3, 3, 3, 3, 2, 3, 3, 2, 2])
-    for (const id of ['hero-title', 'contrast-title', 'how-title', 'who', 'trust', 'final-title']) expect(html).toContain(`aria-labelledby="${id}"`)
+    expect(headings).toEqual([1, 2, 2, 3, 3, 3, 3, 2, 3, 3, 2, 3, 3, 2, 2])
+    for (const id of ['hero-title', 'contrast-title', 'how-title', 'places-title', 'who', 'trust', 'final-title']) expect(html).toContain(`aria-labelledby="${id}"`)
     expect(html).toContain('<div class="atmos" aria-hidden="true">')
     const svgs = [...html.matchAll(/<svg\b[^>]*>/g)].map((m) => m[0])
     for (const svg of svgs) {
@@ -136,6 +185,21 @@ describe('the home page (/)', () => {
     for (const svg of icons) expect(svg).toMatch(/viewBox="0 0 24 24"[^>]*fill="none" stroke="currentColor" stroke-width="1.5"/)
     // The CSP allows the stylesheet by hash and nothing else: a style attribute would be refused.
     expect(html).not.toMatch(/\sstyle=/)
+  })
+
+  it('draws the paid-per-week picture from one list: a bar per week, each as tall as its amount on the 0 to 100 scale, and the total it states', () => {
+    const html = landingPage({ testnet: true })
+    const bars = part(html, /<p class="wk-bars">/, '</p>')
+    expect(bars.match(/<span>/g)).toHaveLength(PAID_WEEKS.length)
+    expect(bars).toContain('<span class="sofar">so far</span>') // the week in progress, as the dashboard marks it
+    PAID_WEEKS.forEach((v, i) => {
+      expect(v).toBeGreaterThan(0)
+      expect(v).toBeLessThanOrEqual(100)
+      expect(STYLE).toContain(`.home .wk-bars>span:nth-child(${i + 1}){height:${v}%}`)
+    })
+    expect(STYLE).toContain(`.home .wk-bars{display:grid;grid-template-columns:repeat(${PAID_WEEKS.length},minmax(0,1fr))`)
+    const total = PAID_WEEKS.reduce((a, b) => a + b, 0)
+    expect(part(html, /<p class="wk-amount">/, '</p>')).toBe(`<p class="wk-amount"><strong>${total}</strong> USDC.e in the last ${PAID_WEEKS.length} weeks`)
   })
 
   it('lets the light breathe only in CSS, on opacity and transform, and holds it still under reduced motion', () => {

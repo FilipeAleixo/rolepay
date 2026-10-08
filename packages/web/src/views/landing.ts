@@ -1,4 +1,4 @@
-import { STYLE, esc, head } from './page.js'
+import { PAID_WEEKS, STYLE, esc, head } from './page.js'
 import { mark } from './theme.js'
 
 /**
@@ -56,6 +56,70 @@ const STEPS: ReadonlyArray<{ title: string; line: string }> = [
   { title: 'One approval pays everyone', line: 'One transaction, a memo on every line, a receipt in Discord for each person. Regular pay can run on its own, with time to stop each run.' },
 ]
 
+/** A line of copy: words, and the name of a command or menu item as Discord shows it. */
+type Line = ReadonlyArray<string | { cmd: string }>
+
+/**
+ * In Discord and on the web: where the work happens and where the record is kept. Each line is
+ * something the product does now: the slash command and the "Pay the author" message command
+ * (packages/discord), the approve and veto buttons, the receipt DMs; and the dashboard's Overview
+ * (treasury, bot key budget, paid per week, funded this month, AI this month), Payees, Funding,
+ * the audit log and each run's page with its transaction, the CSV exports (each run, the audit log)
+ * and the payee's own account page, live over server-sent events.
+ */
+const IN_DISCORD: ReadonlyArray<Line> = [
+  ['People sign up to be paid with ', { cmd: '/payee link' }, '.'],
+  ['Start a run with ', { cmd: '/rolepay new' }, ', or right-click a message and choose ', { cmd: 'Pay the author' }, '.'],
+  ['The treasurer approves it with one button.'],
+  ['Runs that pay on their own wait first, so the treasurer can veto them.'],
+  ['Everyone paid gets a receipt by DM, with a link to the transaction.'],
+]
+const ON_THE_WEB: ReadonlyArray<Line> = [
+  ["The treasury's balance, and what the bot has left to spend."],
+  ['What was paid each week, and what each person got.'],
+  ['Every deposit, and the funding source it came in through.'],
+  ['An estimate of what the AI cost this month, draft by draft.'],
+  ['Every approval and veto, with who made it and when. Each paid run links its transaction.'],
+  ['Any run, or the audit log, as a CSV.'],
+]
+const line = (l: Line) => l.map((p) => (typeof p === 'string' ? esc(p) : `<span class="cmd">${esc(p.cmd)}</span>`)).join('')
+
+/**
+ * The labels under the mock's bars, as the dashboard labels its weeks: counting back from "This week",
+ * every other week when wide (`w`), every third when narrow (`n`). Placed by the stylesheet.
+ */
+const PAID_WEEK_TICKS: ReadonlyArray<{ text: string; on?: 'w' | 'n' }> = [
+  { text: 'Aug 3' },
+  { text: 'Aug 17', on: 'w' },
+  { text: 'Aug 24', on: 'n' },
+  { text: 'Aug 31', on: 'w' },
+  { text: 'This week' },
+]
+const PAID_TOTAL = PAID_WEEKS.reduce((a, b) => a + b, 0)
+
+/**
+ * A small picture of the dashboard's "Paid per week" chart (dashboard/views/charts.ts): gold weekly
+ * bars on a scale of 0 to 100 with its grid lines, every other week labelled, the week in progress
+ * marked "so far". Made-up numbers; the heights come from PAID_WEEKS in the stylesheet. Static, and
+ * one image to assistive tech.
+ */
+const paidWeeksMock = () => `<div class="weeks" role="img" aria-label="The dashboard's chart of what was paid per week: a gold bar for each of the last ${PAID_WEEKS.length} weeks, ${PAID_TOTAL} USDC.e in all, ${PAID_WEEKS.at(-1)} so far this week">
+<p class="wk-label">Paid per week</p><p class="wk-amount"><strong>${PAID_TOTAL}</strong> USDC.e in the last ${PAID_WEEKS.length} weeks</p>
+<div class="wk-chart"><p class="wk-axis"><span>100</span><span>50</span><span>0</span></p>
+<p class="wk-bars">${PAID_WEEKS.map((_, i) => (i === PAID_WEEKS.length - 1 ? '<span><span class="sofar">so far</span></span>' : '<span></span>')).join('')}</p>
+<p class="wk-ticks">${PAID_WEEK_TICKS.map((t) => `<span${t.on ? ` class="${t.on}"` : ''}>${t.text}</span>`).join('')}</p></div></div>`
+
+/**
+ * A receipt as Discord shows it, by DM (receiptDm in packages/discord): @mira's line of the hero's
+ * run 42, with the two link buttons the real one carries, to the transaction and to her account
+ * page. Static, and one image to assistive tech.
+ */
+const receiptMock = () => `<div class="dm" role="img" aria-label="A receipt in Discord, sent by DM: you were paid 30 USDC.e from The Commons, for pay run 42, line 1, with buttons to view the transaction and to open your account">
+<p class="who">${mark(24)}<b>Rolepay</b><span class="app">App</span><span class="when">Today at 18:00</span></p>
+<div class="embed"><p class="e-title">You were paid 30 USDC.e</p><p class="e-note">From <b>The Commons</b>, through Rolepay on Tempo.</p>
+<p class="fields"><span><span class="f-name">To your account</span>0x7f3a…c21e</span><span><span class="f-name">Pay run</span>42, line 1</span></p></div>
+<p class="links"><span>View transaction</span><span>Your account</span></p></div>`
+
 /** Who it is for: what the people being paid get, and what the treasurer gets. `cool` takes the second accent. */
 const FOR_PAYEES: ReadonlyArray<{ icon: IconName; title: string; line: string; cool?: boolean }> = [
   { icon: 'fingerprint', title: 'No wallet to set up.', line: 'Their account is a passkey on their phone or laptop. Anyone with a wallet can use that instead.' },
@@ -74,7 +138,11 @@ export const FEATURES = [...FOR_PAYEES, ...FOR_TREASURER]
 const TRUST: ReadonlyArray<{ icon: IconName; bold: string; muted: string }> = [
   { icon: 'vault', bold: "Your community's account holds the money.", muted: "Rolepay never does. Only the treasurer's passkey controls the account." },
   { icon: 'key', bold: 'The bot can spend only its allowance.', muted: 'Its key has an expiry, a limit per period and one allowed action. Ask for more and Tempo refuses the whole batch.' },
-  { icon: 'log', bold: 'Every payment leaves a record.', muted: 'Runs, approvals and vetoes are on the dashboard, and export to CSV.' },
+  {
+    icon: 'log',
+    bold: 'Every payment leaves a record.',
+    muted: 'Each paid run is on the dashboard with its transaction, and every approval and veto with who made it. Runs and the audit log export to CSV.',
+  },
 ]
 
 /**
@@ -99,27 +167,28 @@ const PAYOUTS = [
 /**
  * The product shot, in the order a run happens: the three ways to say who to pay (the AI's way last
  * and the only one in the accent), the paid run as Discord shows it, and the bot key's budget as the
- * dashboard's "At a glance" draws it (the limit a hard gold line). Static, and one image to assistive tech.
+ * dashboard's "At a glance" draws it (the limit a hard gold line). The run and the budget each say,
+ * quietly, where they live: Discord and the dashboard. Static, and one image to assistive tech.
  */
-const productShot = () => `<div class="shot" role="img" aria-label="The three ways to say who to pay: a role, people you pick, or plain words that Rolepay's AI drafts into a list; the pay run in Discord, paid in one transaction; and the bot's allowance for the month with its on-chain limit">
+const productShot = () => `<div class="shot" role="img" aria-label="The three ways to say who to pay: a role, people you pick, or plain words that Rolepay's AI drafts into a list; the pay run in Discord, paid in one transaction; and on the dashboard, the bot's allowance for the month with its on-chain limit">
 <div class="ways"><p class="w-label">Who to pay</p><ul>
 <li><span class="w-what"><span class="at">@Moderators</span></span><span class="w-how">a role</span></li>
 <li><span class="w-what">${PAYOUTS.map(([who]) => `<span class="at">${who}</span>`).join(' ')}</span><span class="w-how">people you pick</span></li>
 <li class="ai"><span class="w-what">${icon('spark', 15)}“1 USDC.e per question answered in <span class="ch">#help</span> this month, up to 40 each”</span><span class="w-how">in plain words, drafted by AI</span></li></ul>
 <p class="ai-foot">The AI only drafts the list. You see every name before anything is paid.</p></div>
-<div class="msg"><p class="who">${mark(32)}<b>Rolepay</b><span class="app">App</span><span class="when">Today at 18:00</span></p>
+<div class="msg"><p class="who">${mark(32)}<b>Rolepay</b><span class="app">App</span><span class="when"><span class="day">Today at </span>18:00</span><span class="surface">Discord</span></p>
 <div class="embed"><p class="e-title">Paid</p><p class="e-note">September</p>
 <ul class="lines">${PAYOUTS.map(([who, amount]) => `<li><span class="at">${who}</span><span class="amt">${amount} USDC.e</span></li>`).join('')}</ul>
 <p class="e-status">Paid in one transaction. Approved by <span class="at">@Treasurer</span>.</p><p class="e-foot">Run 42</p></div></div>
-<div class="budget"><p class="b-label">The bot's allowance this month</p><p class="b-amount"><strong>120</strong> of 200 USDC.e</p>
+<div class="budget"><p class="b-head"><span class="b-label">The bot's allowance this month</span><span class="surface">Dashboard</span></p><p class="b-amount"><strong>120</strong> of 200 USDC.e</p>
 <div class="b-bar"><span class="b-fill"></span><span class="b-limit"></span></div>
 <p class="b-row"><span>Resets in 12 days</span><span class="b-lim">On-chain limit</span></p>
 <p class="b-cap">Over the limit, Tempo refuses the whole batch.</p></div>
 </div>`
 
 /**
- * The home page at /: what Rolepay is (with a picture of it working), the numbers, how it works,
- * the detail, why you can trust it, and where to go next. Server-rendered, no script; the light
+ * The home page at /: what Rolepay is (with a picture of it working), what it replaces, how it works,
+ * the two places it lives (Discord and the web), the detail, why you can trust it, and where to go next. Server-rendered, no script; the light
  * behind the hero breathes in CSS only and holds still under reduced motion. The same page on
  * every network, but for the testnet pill. With a Discord application id (the server passes one
  * only when ROLEPAY_PUBLIC_INSTALL is on) "Add to Discord" leads; without one, the dashboard does.
@@ -146,6 +215,15 @@ ${productShot()}</section>
 <section class="how" id="how" aria-labelledby="how-title"><div class="intro"><h2 id="how-title">How a pay run works</h2>
 <p class="lede">Four steps. You do the first two once.</p></div>
 <ol class="steps">${STEPS.map((s, i) => `<li><span class="n" aria-hidden="true">0${i + 1}</span><div><h3>${esc(s.title)}</h3><p>${esc(s.line)}</p></div></li>`).join('')}</ol></section>
+<section class="places" aria-labelledby="places-title"><h2 id="places-title">In Discord, and on the web</h2>
+<p class="lede">You pay people from Discord. The dashboard keeps the record, and anyone in your server can sign in and read it.</p>
+<div class="panes"><div class="pane cool"><h3>In Discord</h3><p class="where">Where the work happens.</p>
+${receiptMock()}
+<ul>${IN_DISCORD.map((l) => `<li>${line(l)}</li>`).join('')}</ul></div>
+<div class="pane"><h3>On the web</h3><p class="where">Where you see all of it.</p>
+${paidWeeksMock()}
+<ul>${ON_THE_WEB.map((l) => `<li>${line(l)}</li>`).join('')}</ul>
+<p class="also">${esc('People paid to a passkey account get a page of their own, where their balance and each payment show up live.')}</p></div></div></section>
 <section class="details" aria-labelledby="who"><h2 id="who">Who it is for</h2>
 <div class="groups"><div class="group"><h3>The people you pay</h3><ul class="features">${FOR_PAYEES.map(item).join('')}</ul></div>
 <div class="group"><h3>The treasurer</h3><ul class="features">${FOR_TREASURER.map(item).join('')}</ul></div></div></section>
