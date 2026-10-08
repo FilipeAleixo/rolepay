@@ -106,6 +106,7 @@ noscript p{color:var(--muted)}
 .home .more:hover{color:var(--fg)}
 /* What to do once in the demo server, in one line on a desktop: wider than its column by about 2.5rem, into the gap beside the product shot, where the shot has nothing at that height. */
 .home .hint{margin:1.15rem 0 0;font-size:13px;line-height:1.6;color:var(--meta)}
+.home .down{margin:1rem 0 0}
 .home .hint code{white-space:nowrap;word-break:normal}
 @media (min-width:70rem){.home .hint{white-space:nowrap}}
 .shot{display:flex;flex-direction:column;width:100%;max-width:30rem;justify-self:center}
