@@ -71,7 +71,7 @@ export function treasuryChannelCard(d: { guildId: string; state: TreasuryChannel
           ? "<p>None: each run is posted in its policy's channel (or where it was made), with its buttons.</p>"
           : `<p>Not set yet. ${d.canAct ? ASK : 'A Treasurer chooses it here, or creates a private #treasury channel in Discord, which Rolepay then uses.'}</p>`
   const what =
-    '<p class="muted small">Rolepay posts there everything only a Treasurer can act on: runs to approve, runs you can veto, and runs it holds, with their buttons. The channel each would have gone to gets a copy without the buttons.</p>' +
+    '<p class="muted small">Rolepay posts there everything only a Treasurer can act on: policies and runs to approve, runs you can veto, and runs it holds, with their buttons. The channel each would have gone to gets a copy without the buttons.</p>' +
     "<p class=\"muted small\">Make it visible only to the Treasurer role and Rolepay: set that in Discord, in the channel's permissions. The buttons only ever work for the Treasurer role.</p>"
   const open = current?.everyoneCanView
     ? `<p class="notice warn" role="alert">Everyone in the server can see #${esc(current.name)}. Make it visible only to the Treasurer role and Rolepay, in the channel's permissions in Discord.</p>`

@@ -21,10 +21,10 @@ export type Outcome =
   | { kind: 'reply'; message: Message; ephemeral: boolean }
   /**
    * For a button (or a modal a button opened): replace the message it is on; `followUp` then posts a
-   * new message, and `mirror` edits the run's copy without buttons (the button is in the treasury
-   * channel), so both show the same state.
+   * new message, and `mirrors` edits the other messages of the same run or policy preview (its copy
+   * without buttons, when the button is in the treasury channel), so all show the same state.
    */
-  | { kind: 'update'; message: Message; followUp?: Message; mirror?: MirrorEdit }
+  | { kind: 'update'; message: Message; followUp?: Message; mirrors?: readonly MirrorEdit[] }
   /** Show a form. Only as the answer to a command or a button. */
   | { kind: 'modal'; modal: Modal }
   /**
@@ -34,7 +34,7 @@ export type Outcome =
   | { kind: 'defer'; ephemeral: boolean; placeholder?: string; work: () => Promise<DeferredResult> }
   | { kind: 'choices'; choices: Choice[] }
 
-/** The copy of a run, without buttons, in the channel it would have gone to: edited as the bot. */
+/** Another message of a run or a policy preview (its copy without buttons, in the channel it would have gone to): edited as the bot. */
 export type MirrorEdit = { channelId: string; messageId: string; message: Message }
 
 export const ephemeralReply = (content: string): Outcome => ({ kind: 'reply', ephemeral: true, message: { content } })
@@ -54,14 +54,14 @@ export function renderOutcome(outcome: Outcome, ctx: InteractionContext, rest: D
     }
     case 'update': {
       const body = { type: ResponseType.UpdateMessage, data: splitFiles(outcome.message).json }
-      const { followUp, mirror } = outcome
-      if (!followUp && !mirror) return { kind: 'respond', body }
+      const { followUp, mirrors = [] } = outcome
+      if (!followUp && mirrors.length === 0) return { kind: 'respond', body }
       return {
         kind: 'respond',
         body,
         background: async () => {
           if (followUp) await postFollowUp(rest, ctx, followUp)
-          if (mirror) await editMirror(rest, mirror)
+          for (const mirror of mirrors) await editMirror(rest, mirror)
         },
       }
     }
@@ -133,7 +133,7 @@ export function renderLate(
           deliver: async () => {
             await editReply(rest, reply, outcome.message, onError)
             if (ack === 'update' && outcome.followUp) await postFollowUp(rest, ctx, outcome.followUp)
-            if (outcome.mirror) await editMirror(rest, outcome.mirror)
+            for (const mirror of outcome.mirrors ?? []) await editMirror(rest, mirror)
           },
         }
       case 'defer': {
@@ -190,7 +190,7 @@ async function postFollowUp(rest: DiscordRest, ctx: InteractionContext, message:
   if (!posted.ok && ctx.channelId && !ephemeral) await rest.postToChannel(ctx.channelId, message)
 }
 
-/** Best effort: if the copy cannot be edited now, the next update of the run (the payment job, the scheduler) shows it. */
+/** Best effort: if the copy cannot be edited now, the next update of the run (the payment job, the scheduler) or of the policy shows it. */
 async function editMirror(rest: DiscordRest, mirror: MirrorEdit): Promise<void> {
   await rest.editChannelMessage(mirror.channelId, mirror.messageId, mirror.message)
 }

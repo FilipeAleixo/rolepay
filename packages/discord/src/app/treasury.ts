@@ -1,16 +1,19 @@
-import { type Community, DiscordIdSchema, type Rolepay, findTreasuryChannel, mayFindTreasuryChannel } from '@rolepay/core'
+import { type Community, DiscordIdSchema, type Policy, type Rolepay, findTreasuryChannel, mayFindTreasuryChannel, nextOccurrence } from '@rolepay/core'
 import { z } from 'zod'
 import { ChannelType, type Message, Permission } from '../api.js'
-import type { DiscordRest, RestError, RestResult, RunMessageRef, RunNotices } from '../ports.js'
-import { sentToTreasurers, treasuryChannelConfirmation } from '../views/treasury.js'
+import type { DiscordRest, PolicyPreviewMessages, RestError, RestResult, RunMessageRef, RunNotices } from '../ports.js'
+import { policyDiscardedMessage, policyMessage, policyReplacedMessage } from '../views/policy.js'
+import { policySentToTreasurers, sentToTreasurers, treasuryChannelConfirmation } from '../views/treasury.js'
 import type { DiscordAppDeps } from './deps.js'
+import type { MirrorEdit } from './outcome.js'
 
 /**
- * The treasury channel in Discord: where what only a Treasurer can act on is posted (runs to approve,
- * runs to veto, held runs), with its buttons, while the channel it would have gone to gets a copy
- * without them. Shared by the policy notifier, the executor, the recovery sweep and the commands that
- * make a run. Without a treasury channel nothing here posts anything, and every caller does what it
- * always did: one message, with its buttons, where it always went.
+ * The treasury channel in Discord: where what only a Treasurer can act on is posted (policies and
+ * runs to approve, runs to veto, held runs), with its buttons, while the channel it would have gone
+ * to gets a copy without them. Shared by the policy notifier, the executor, the recovery sweep, the
+ * commands that make a run or a policy, and the dashboard's policy actions. Without a treasury channel
+ * nothing here posts anything, and every caller does what it always did: one message, with its
+ * buttons, where it always went.
  */
 
 /** For the server's log: Rolepay found #treasury, or could not post in the treasury channel (the message went where it always did). */
@@ -161,10 +164,39 @@ export async function answerForNewRun(
   input: { community: Community; runId: string; view: (mirror: boolean) => Message; channelId: string | null },
 ): Promise<{ message: Message; privately: boolean }> {
   if (!deps.notices) return { message: input.view(false), privately: false }
-  const treasury: TreasuryDeps = { rolepay: deps.rolepay, rest: deps.rest, notices: deps.notices, ...(deps.onTreasury ? { onTreasury: deps.onTreasury } : {}), ...(deps.onError ? { onError: deps.onError } : {}) }
-  const routed = await postRunForTreasurer(treasury, input)
+  const routed = await postRunForTreasurer(treasuryOf(deps, deps.notices), input)
   if (!routed.routed) return { message: input.view(false), privately: false }
   return routed.mirror ? { message: sentToTreasurers(), privately: true } : { message: input.view(true), privately: false }
+}
+
+const treasuryOf = (deps: DiscordAppDeps, notices: RunNotices): TreasuryDeps => ({
+  rolepay: deps.rolepay,
+  rest: deps.rest,
+  notices,
+  ...(deps.onTreasury ? { onTreasury: deps.onTreasury } : {}),
+  ...(deps.onError ? { onError: deps.onError } : {}),
+})
+
+/**
+ * A policy just written with /rolepay policy new, waiting for a Treasurer: what the command answers.
+ * As for a run made from Discord: with a treasury channel, the preview with Approve policy and Discard
+ * goes there and its copy without them into `channelId` (where the command was typed), both as
+ * Rolepay's own messages, remembered with the version they show so a later approval, discard, edit or
+ * archive reaches both, and the author alone is told (`privately`). If Rolepay cannot post the copy
+ * here, the answer is the copy (it is then not updated later). If it cannot post in the treasury
+ * channel (reported, as for a run), or there is none, or no `notices`: the preview with its buttons.
+ */
+export async function answerForNewPolicy(
+  deps: DiscordAppDeps,
+  input: { community: Community; policyId: string; version: number; view: (mirror: boolean) => Message; channelId: string | null },
+): Promise<{ message: Message; privately: boolean }> {
+  if (!deps.notices) return { message: input.view(false), privately: false }
+  const message = await postForTreasurer(treasuryOf(deps, deps.notices), input.community, input.view(false), input.channelId)
+  if (!message) return { message: input.view(false), privately: false }
+  const posted = input.channelId ? await deps.rest.postMessage(input.channelId, input.view(true)) : null
+  const mirror = input.channelId && posted?.ok ? { channelId: input.channelId, messageId: posted.value.messageId } : null
+  await deps.notices.rememberPolicyPreview(input.policyId, { version: input.version, message, mirror })
+  return mirror ? { message: policySentToTreasurers(), privately: true } : { message: input.view(true), privately: false }
 }
 
 type Shown = { ok: true; ref: RunMessageRef } | { ok: false; reason: RestError['code'] }
@@ -216,7 +248,74 @@ export async function updateMirror(deps: Pick<TreasuryDeps, 'rest' | 'notices'>,
  * For a button on a run's message in the treasury channel: the edit of its copy without buttons that
  * goes with the button's own update, so both show the same state at once.
  */
-export async function mirrorOf(notices: RunNotices | undefined, runId: string, message: Message): Promise<{ mirror?: { channelId: string; messageId: string; message: Message } }> {
+export async function mirrorOf(notices: RunNotices | undefined, runId: string, message: Message): Promise<{ mirrors?: MirrorEdit[] }> {
   const ref = notices ? await notices.mirror(runId) : null
-  return ref?.messageId ? { mirror: { channelId: ref.channelId, messageId: ref.messageId, message } } : {}
+  return ref?.messageId ? { mirrors: [{ channelId: ref.channelId, messageId: ref.messageId, message }] } : {}
+}
+
+/**
+ * For Approve policy or Discard, pressed for `version`: the edits of that preview's messages with a
+ * treasury channel that go with the button's own update. Pressed on its message in the treasury
+ * channel, that is the copy; pressed anywhere else (the private answer of `/rolepay policy show`),
+ * both. `settled`: the preview is done with (discarded), so its messages are forgotten.
+ */
+export async function policyMirrorsOf(
+  notices: RunNotices | undefined,
+  input: { policyId: string; version: number; messageId: string | null; settled: boolean },
+  view: (mirror: boolean) => Message,
+): Promise<{ mirrors?: MirrorEdit[] }> {
+  const shown = notices ? await notices.policyPreview(input.policyId) : null
+  if (!notices || !shown || shown.version !== input.version) return {}
+  if (input.settled) await notices.rememberPolicyPreview(input.policyId, null)
+  const edit = (ref: RunMessageRef | null, mirror: boolean): MirrorEdit[] =>
+    ref?.messageId && ref.messageId !== input.messageId ? [{ channelId: ref.channelId, messageId: ref.messageId, message: view(mirror) }] : []
+  const mirrors = [...edit(shown.message, false), ...edit(shown.mirror, true)]
+  return mirrors.length ? { mirrors } : {}
+}
+
+/** A policy changed outside its preview's buttons (on the dashboard), by `by`. */
+export type PolicyChange = { guildId: string; policyId: string; kind: 'approved' | 'discarded' | 'edited' | 'archived'; by: string }
+
+/**
+ * What a policy preview's messages show after `change`, or null when it does not concern the version
+ * they show. `settled`: that version is done with (discarded, replaced or archived), so nothing later
+ * reaches these messages; an approved one is kept, so a later edit can say it was replaced.
+ */
+function previewAfter(p: Policy, shown: number, change: PolicyChange, c: Community, now: Date): { view: (mirror: boolean) => Message; settled: boolean } | null {
+  const ctx = { token: c.payoutToken, approverRoleId: c.approverRoleId }
+  switch (change.kind) {
+    case 'approved':
+      // As Approve policy pressed in Discord shows it: who approved it, when, and the next run.
+      return p.version === shown && p.status === 'active' ? { view: (mirror) => policyMessage(p, { ...ctx, nextRunAt: nextOccurrence(p.schedule, now), mirror }), settled: false } : null
+    case 'discarded':
+      // The version shown was dropped: the policy is archived (never approved), or an earlier approved version is back.
+      return p.version < shown || (p.version === shown && p.status === 'archived') ? { view: () => policyDiscardedMessage(p, change.by), settled: true } : null
+    case 'edited':
+      return p.version > shown ? { view: () => policyReplacedMessage(p, shown, change.by), settled: true } : null
+    case 'archived':
+      return p.status === 'archived' ? { view: (mirror) => policyMessage(p, { ...ctx, mirror }), settled: true } : null
+  }
+}
+
+/**
+ * Shows a policy change made on the dashboard on its preview's messages in Discord, both of them, as
+ * the preview's buttons would have (edited, or posted again in their channel when they cannot be
+ * edited). Only a preview posted with a treasury channel is remembered, so without one nothing here
+ * posts anything. Never throws: a failure is reported, and the change itself stands.
+ */
+export async function updatePolicyMessages(deps: Pick<TreasuryDeps, 'rolepay' | 'rest' | 'notices' | 'onError'> & { now: () => Date }, change: PolicyChange): Promise<void> {
+  try {
+    const shown = await deps.notices.policyPreview(change.policyId)
+    if (!shown) return
+    const [policy, community] = await Promise.all([deps.rolepay.policies.get({ guildId: change.guildId, policyId: change.policyId }), deps.rolepay.communities.get(change.guildId)])
+    if (!policy.ok || !community.ok) return
+    const next = previewAfter(policy.value, shown.version, change, community.value, deps.now())
+    if (!next) return
+    const message = await show(deps.rest, shown.message, next.view(false))
+    const mirror = shown.mirror ? await show(deps.rest, shown.mirror, next.view(true)) : null
+    const kept: PolicyPreviewMessages = { version: shown.version, message: message.ok ? message.ref : shown.message, mirror: mirror?.ok ? mirror.ref : shown.mirror }
+    await deps.notices.rememberPolicyPreview(change.policyId, next.settled ? null : kept)
+  } catch (error) {
+    deps.onError?.(error)
+  }
 }

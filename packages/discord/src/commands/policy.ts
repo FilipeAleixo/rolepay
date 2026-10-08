@@ -4,6 +4,7 @@ import { type DiscordAppDeps, demoControlsOn } from '../app/deps.js'
 import { type AutocompleteHandler, type CommandHandler, type GuildContext, parseOptions, replyError } from '../app/handlers.js'
 import { type DeferredResult, type Outcome, ephemeralReply } from '../app/outcome.js'
 import { canOperate, holdsApproverRole } from '../app/permissions.js'
+import { answerForNewPolicy } from '../app/treasury.js'
 import { explainPolicyError } from '../views/errors.js'
 import { escapeMarkdown, roleMention } from '../views/format.js'
 import { policyChangedMessage, policyListMessage, policyMessage } from '../views/policy.js'
@@ -102,8 +103,11 @@ export async function policyBudgetLink(deps: Pick<DiscordAppDeps, 'rolepay' | 'c
  * /rolepay policy new: the AI compiles the instruction once (criteria mode), and the preview is
  * posted publicly in the channel (where the policy's runs will be posted too), so a treasurer can
  * approve it: the rule in plain words, who it applies to right now, the next run against the budget.
+ * With a treasury channel, the preview with Approve policy and Discard goes there, this channel gets
+ * it without them, and the author alone is told.
  */
-export const policyNewCommand: CommandHandler = async ({ options, ctx }, { rolepay, config }) => {
+export const policyNewCommand: CommandHandler = async ({ options, ctx }, deps) => {
+  const { rolepay, config } = deps
   const guard = await requireProposer(ctx, rolepay, { ai: true })
   if (!guard.ok) return guard.reply
   const parsed = parseOptions(NewOptions, options)
@@ -136,11 +140,11 @@ export const policyNewCommand: CommandHandler = async ({ options, ctx }, { rolep
         ...(o.name ? { name: o.name } : {}),
       })
       if (!created.ok) return { ok: false, message: { content: explainPolicyError(created.error, { community, token: community.payoutToken }) } }
-      const preview = await rolepay.policies.preview({ guildId: ctx.guildId, policyId: created.value.id })
-      return {
-        ok: true,
-        message: policyMessage(created.value, { ...view(community), ...(preview.ok ? { preview: preview.value } : { previewProblem: explainPolicyError(preview.error, { community }) }) }),
-      }
+      const policy = created.value
+      const preview = await rolepay.policies.preview({ guildId: ctx.guildId, policyId: policy.id })
+      const shown = { ...view(community), ...(preview.ok ? { preview: preview.value } : { previewProblem: explainPolicyError(preview.error, { community }) }) }
+      const answer = await answerForNewPolicy(deps, { community, policyId: policy.id, version: policy.version, view: (mirror) => policyMessage(policy, { ...shown, mirror }), channelId: ctx.channelId })
+      return { ok: true, message: answer.message, ...(answer.privately ? { privately: true } : {}) }
     },
   }
 }

@@ -407,7 +407,7 @@ describe('createPolicyNotifier with a treasury channel: the buttons go there, th
     await w.travelTo(MONDAY)
     await w.notifier.announce((await w.rolepay.scheduler.tick()).events)
     expect(w.rest.channelPosts.map((p) => p.channelId)).toEqual([TREASURY_CHANNEL, TREASURY_CHANNEL, CHANNEL])
-    expect(w.rest.channelPosts[0]?.message.content).toBe('Rolepay will post here what needs a Treasurer: runs to approve, runs you can veto, and runs it holds.')
+    expect(w.rest.channelPosts[0]?.message.content).toBe('Rolepay will post here what needs a Treasurer: policies and runs to approve, runs you can veto, and runs it holds.')
     expect(text(w.rest.channelPosts[1]?.message)).toContain('rolepay:approve:')
     expect(w.rest.channelPosts[2]?.message.components).toEqual([])
     expect(await w.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: TREASURY_CHANNEL, treasuryChannelSource: 'found' } })

@@ -23,7 +23,7 @@ const ANA = '200000000000000001'
 const RUI = '200000000000000002'
 const ADDR: Record<string, string> = { [ANA]: '0x1111111111111111111111111111111111111111', [RUI]: '0x2222222222222222222222222222222222222222' }
 const VIEW = String(1 << 10)
-const CONFIRMATION = 'Rolepay will post here what needs a Treasurer: runs to approve, runs you can veto, and runs it holds.'
+const CONFIRMATION = 'Rolepay will post here what needs a Treasurer: policies and runs to approve, runs you can veto, and runs it holds.'
 const ORIGIN = 'https://rolepay.test'
 const text = (v: unknown) => JSON.stringify(v ?? null)
 const visible = (html: string) => html.replace(/<style>[\s\S]*?<\/style>/, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')
@@ -146,6 +146,64 @@ describe('the treasury channel, wired', () => {
     const tess = await dashboard()
     expect(visible(await (await tess.get(`/dashboard/${GUILD}`)).text())).toMatch(/Treasury channel #treasury Found by its name\./)
     expect(visible(await (await tess.get(`/dashboard/${GUILD}/audit`)).text())).toContain(`Picked #treasury as the treasury channel (found by its name; channel ${TREASURY_CHANNEL}).`)
+  })
+
+  it('/rolepay policy new: the preview with Approve policy in the treasury channel, the copy here; approved there, then edited on the dashboard, both follow', async () => {
+    const { s, dashboard } = await world([])
+    await s.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER.userId, actorRoleIds: [TREASURER_ROLE], channelId: MONEY_TEAM })
+    const options = { instruction: '1 per answered question in #help, max 50 a week each, for Mods', schedule: 'weekly', weekday: 'monday', hour: 18, name: 'Help desk 2' }
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'policy new', options, TREASURER, 'tok-policy'))
+    await s.drain()
+    const [there] = postsIn(s, MONEY_TEAM)
+    const [here] = postsIn(s, CHANNEL)
+    const approve = /policy:approve:pol_[A-Za-z0-9_]+:1/.exec(text(there?.message))?.[0] as string
+    const policyId = approve.split(':')[2] as string
+    expect(text(here?.message)).toContain('Policy draft: Help desk 2')
+    expect(text(here?.message)).toContain(`Waiting for a member with <@&${TREASURER_ROLE}> to approve.`)
+    expect(here?.message.components).toEqual([])
+    expect(text(s.rest.followUps.at(-1)?.message)).toContain('A Treasurer approves it in the treasury channel; this channel shows the policy without its buttons.')
+
+    // Approve policy, pressed in the treasury channel (a signed POST /discord/interactions).
+    const res = (await (await s.interact(buttonClick({ guildId: GUILD, channelId: MONEY_TEAM, messageId: there?.messageId }, approve, TREASURER))).json()) as { type: number; data: unknown }
+    expect(res.type).toBe(7)
+    expect(text(res.data)).toContain(`Active. Approved by <@${TREASURER.userId}>`)
+    await s.drain()
+    expect(editsIn(s, MONEY_TEAM)).toEqual([])
+    const approved = editsIn(s, CHANNEL).at(-1)
+    expect(approved?.messageId).toBe(here?.messageId)
+    expect(text(approved?.message)).toContain(`Active. Approved by <@${TREASURER.userId}>`)
+
+    // Renamed on the dashboard (in force at once): both messages say version 1 was replaced.
+    const tess = await dashboard()
+    const base = `/dashboard/${GUILD}/policies/${policyId}`
+    const saved = await tess.act(`${base}/edit`, { name: 'Help desk 2, renamed', instruction: options.instruction, kind: 'weekly', weekday: '1', day: '1', hour: '18', timezone: 'UTC' })
+    expect(saved.headers.get('location')).toBe(`${base}?done=applied`)
+    for (const [channelId, posted] of [
+      [MONEY_TEAM, there],
+      [CHANNEL, here],
+    ] as const) {
+      const edit = editsIn(s, channelId).at(-1)
+      expect([channelId, edit?.messageId]).toEqual([channelId, posted?.messageId])
+      expect(text(edit?.message)).toContain(`Version 1 was replaced by version 2, edited by <@${TREASURER.userId}>.`)
+    }
+  })
+
+  it('a policy preview approved on the dashboard: its message in the treasury channel loses Approve policy and both say who approved it', async () => {
+    const { s, dashboard } = await world([])
+    await s.rolepay.communities.setTreasuryChannel({ guildId: GUILD, actor: TREASURER.userId, actorRoleIds: [TREASURER_ROLE], channelId: MONEY_TEAM })
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'policy new', { instruction: '1 per answered question in #help, max 50 a week each, for Mods', schedule: 'weekly', weekday: 'monday', hour: 18, name: 'Help desk 2' }, TREASURER))
+    await s.drain()
+    const [there] = postsIn(s, MONEY_TEAM)
+    const [here] = postsIn(s, CHANNEL)
+    const policyId = /policy:approve:(pol_[A-Za-z0-9_]+):1/.exec(text(there?.message))?.[1] as string
+    const tess = await dashboard()
+    const approved = await tess.act(`/dashboard/${GUILD}/policies/${policyId}/approve`, { version: '1' })
+    expect(approved.headers.get('location')).toBe(`/dashboard/${GUILD}/policies/${policyId}?done=approved`)
+    for (const posted of [there, here]) {
+      const edit = s.rest.channelEdits.filter((e) => e.messageId === posted?.messageId).at(-1)
+      expect(text(edit?.message)).toContain(`Active. Approved by <@${TREASURER.userId}>`)
+      expect(text(edit?.message)).not.toContain('policy:approve')
+    }
   })
 
   it('the treasury channel deleted: the scheduler posts in the policy channel with Veto, and logs why', async () => {

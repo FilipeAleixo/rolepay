@@ -1,9 +1,10 @@
 // The dashboard as the server wires it: the bot's Discord REST client is the member view, the
 // config decides whether sign-in exists, and the policy seam is a dependency.
 import type { Rolepay, SchedulerEvent } from '@rolepay/core'
+import type { PolicyChange } from '@rolepay/discord'
 import { FakeDiscordOAuth, InMemoryPolicies } from '@rolepay/web/testing'
 import { describe, expect, it } from 'vitest'
-import { vetoesAnnounced } from '../src/compose.js'
+import { policyChangesShown, vetoesAnnounced } from '../src/compose.js'
 import { restGuildMembers } from '../src/dashboard.js'
 import { GUILD, TOKEN, TREASURY, testServer } from './support.js'
 
@@ -160,5 +161,42 @@ describe('vetoesAnnounced (a dashboard veto reaches Discord too)', () => {
     expect(announced).toEqual([[{ kind: 'cancelled', ...made, run: { id: 'run_core' } }]])
     expect((await wrapped.veto({ guildId: GUILD, runId: 'run_core', actor })).ok).toBe(false)
     expect(announced).toHaveLength(1)
+  })
+})
+
+describe('policyChangesShown (a policy changed on the dashboard reaches its preview in Discord)', () => {
+  it('carries dailySchedules, passes every call through, and shows only a successful approve, edit, discard or archive, by whoever did it', async () => {
+    const port = new InMemoryPolicies()
+    port.dailySchedules = true
+    port.setApproverRole(GUILD, ROLE)
+    const shown: PolicyChange[] = []
+    const wrapped = policyChangesShown(port, async (change) => void shown.push(change))
+    expect(wrapped.dailySchedules).toBe(true)
+    expect(policyChangesShown(new InMemoryPolicies(), async () => {}).dailySchedules).toBe(false)
+    const actor = { id: TESS, roleIds: [ROLE] }
+    const draft = (instruction: string) => ({ name: 'New', instruction, schedule: { kind: 'weekly' as const, weekday: 1, hour: 1, timezone: 'UTC' } })
+    const created = await wrapped.create({ guildId: GUILD, actor, draft: draft('y') })
+    const ref = { guildId: GUILD, policyId: created.ok ? created.value.policyId : '' }
+    const seen = (kind: PolicyChange['kind']) => ({ ...ref, kind, by: TESS })
+
+    // Refused (a version it is not, or by someone without the role): nothing is shown.
+    expect((await wrapped.approve({ ...ref, actor, version: 9 })).ok).toBe(false)
+    expect((await wrapped.approve({ ...ref, actor: { id: FELIX, roleIds: [] }, version: 1 })).ok).toBe(false)
+    expect(shown).toEqual([])
+
+    expect((await wrapped.approve({ ...ref, actor, version: 1 })).ok).toBe(true)
+    expect((await wrapped.pause({ ...ref, actor })).ok).toBe(true)
+    expect((await wrapped.resume({ ...ref, actor })).ok).toBe(true)
+    expect((await wrapped.setMode({ ...ref, actor, mode: 'autopilot', vetoWindowMinutes: 60 })).ok).toBe(true)
+    expect((await wrapped.edit({ ...ref, actor, draft: draft('z') })).ok).toBe(true)
+    expect((await wrapped.archive({ ...ref, actor })).ok).toBe(true)
+    expect(shown).toEqual([seen('approved'), seen('edited'), seen('archived')])
+
+    const other = await wrapped.create({ guildId: GUILD, actor, draft: draft('w') })
+    const second = { guildId: GUILD, policyId: other.ok ? other.value.policyId : '' }
+    expect((await wrapped.discard({ ...second, actor, version: 1 })).ok).toBe(true)
+    expect(shown.at(-1)).toEqual({ ...second, kind: 'discarded', by: TESS })
+    expect(port.calls.map((c) => c.method)).toEqual(['create', 'approve', 'approve', 'approve', 'pause', 'resume', 'setMode', 'edit', 'archive', 'create', 'discard'])
+    expect((await wrapped.list({ guildId: GUILD })).length).toBe(2)
   })
 })

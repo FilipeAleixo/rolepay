@@ -5,7 +5,7 @@
 export { type FileUpload, type Message } from './api.js'
 export type { DiscordAppConfig, DiscordAppDeps } from './app/deps.js'
 export { createDispatcher } from './app/router.js'
-export { type TextChannel, type TreasuryEvent, confirmTreasuryChannel, readTextChannels } from './app/treasury.js'
+export { type PolicyChange, type TextChannel, type TreasuryEvent, confirmTreasuryChannel, readTextChannels, updatePolicyMessages } from './app/treasury.js'
 export { COMMAND_DEFINITIONS, commandDefinitions } from './commands/definitions.js'
 export { FetchDiscordRest, type FetchDiscordRestOptions } from './adapters/fetchDiscordRest.js'
 export { KvInteractionLog } from './adapters/kvInteractionLog.js'

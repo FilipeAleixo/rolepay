@@ -190,7 +190,7 @@ describe('/rolepay new with a treasury channel', () => {
     const a = await ready()
     a.rest.channels.set(GUILD, [{ id: TREASURY_CHANNEL, name: 'treasury', type: 0 }])
     await newRun(a, { amount: '10', users: `<@${ALICE}>` })
-    expect(posts(a, TREASURY_CHANNEL).map((p) => p.message.content ?? 'run')).toEqual(['Rolepay will post here what needs a Treasurer: runs to approve, runs you can veto, and runs it holds.', 'run'])
+    expect(posts(a, TREASURY_CHANNEL).map((p) => p.message.content ?? 'run')).toEqual(['Rolepay will post here what needs a Treasurer: policies and runs to approve, runs you can veto, and runs it holds.', 'run'])
     expect(await a.rolepay.communities.get(GUILD)).toMatchObject({ ok: true, value: { treasuryChannelId: TREASURY_CHANNEL, treasuryChannelSource: 'found' } })
   })
 })
