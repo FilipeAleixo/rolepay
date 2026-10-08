@@ -43,6 +43,17 @@ form>button:last-of-type{margin-top:.75rem}
 strong[data-field]{font:400 1.25em/1 var(--serif);color:var(--head);font-variant-numeric:lining-nums}
 #balances p{margin:.2rem 0;color:var(--soft)}
 #balances strong{font:400 30px/1.25 var(--serif);color:var(--head);margin-right:.3rem;font-variant-numeric:lining-nums proportional-nums}
+#balances p{border-radius:10px;transition:box-shadow .6s ease}
+#balances p.glow strong{animation:rp-glow 1.6s ease-out}
+@keyframes rp-glow{0%{color:var(--gold);text-shadow:0 0 0 rgba(237,190,90,0)}30%{color:var(--gold);text-shadow:0 0 18px rgba(237,190,90,.55)}100%{color:var(--head);text-shadow:0 0 0 rgba(237,190,90,0)}}
+ul.received{list-style:none;margin:0;padding:0}
+ul.received li{display:flex;flex-wrap:wrap;align-items:baseline;gap:.15rem .5rem;padding:.7rem 0;border-top:1px solid var(--line);font-size:14px;color:var(--soft)}
+ul.received li:first-child{border-top:0;padding-top:0}
+ul.received li strong{font:400 18px/1.3 var(--serif);color:var(--head);font-variant-numeric:lining-nums}
+ul.received li.none{color:var(--meta)}
+ul.received li.arrived{animation:rp-arrive .7s cubic-bezier(.2,.7,.2,1)}
+@keyframes rp-arrive{from{opacity:0;transform:translateY(-.6rem)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){#balances p.glow strong,ul.received li.arrived{animation:none}}
 #live-keys p{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem 1rem;margin:1rem 0 0;padding-top:1rem;border-top:1px solid var(--line);font-size:14px}
 #live-keys button{margin:0}
 noscript p{color:var(--muted)}

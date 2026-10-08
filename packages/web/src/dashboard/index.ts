@@ -4,6 +4,7 @@ import { authRoutes } from './routes/auth.js'
 import { auditRoutes } from './routes/audit.js'
 import { communityRoutes } from './routes/community.js'
 import { fundingRoutes } from './routes/funding.js'
+import { liveRoutes } from './routes/live.js'
 import { policyRoutes } from './routes/policies.js'
 import { messagePage } from './views/layout.js'
 
@@ -23,6 +24,7 @@ export function dashboardRoutes(ctx: DashboardContext): Hono {
   app.route('/', policyRoutes(kit))
   app.route('/', fundingRoutes(kit))
   app.route('/', auditRoutes(kit))
+  app.route('/', liveRoutes(kit))
   app.onError((error) => {
     ctx.onError?.(error)
     return html(

@@ -7,8 +7,10 @@ import type { WebConfig } from './config.js'
 import { type DashboardDeps, dashboardRoutes } from './dashboard/index.js'
 import { DASHBOARD_STYLE } from './dashboard/views/layout.js'
 import { fontFile } from './fonts.js'
+import { type LiveStreamOptions, liveStreams } from './live/streams.js'
 import type { Assets, PasskeySessions, RateLimiter } from './ports.js'
 import { accountRoutes } from './routes/account.js'
+import { accountLiveRoutes } from './routes/accountLive.js'
 import { claimRoutes } from './routes/claim.js'
 import { landingRoutes } from './routes/landing.js'
 import { policyBudgetRoutes } from './routes/policyBudget.js'
@@ -34,6 +36,8 @@ export type WebAppDeps = {
   rateLimits?: { perClient: RateLimiter; overall: RateLimiter; clientKey?: (req: Request) => string }
   /** The web dashboard (Discord sign-in, /dashboard). Absent: not served. */
   dashboard?: DashboardDeps
+  /** The live pages' server-sent event streams: heartbeat, retry and the caps on open streams (defaults in live/streams.ts). */
+  live?: LiveStreamOptions
 }
 
 /** The client as the proxy in front saw it: the last X-Forwarded-For hop, which it appended. */
@@ -75,6 +79,8 @@ function contentSecurityPolicy(config: WebConfig, opts: { mining?: boolean } = {
 }
 
 const RATE_LIMITED_PREFIXES = /^\/(webauthn|claim|setup|dashboard|account)\//
+/** The live pages' event streams (`/dashboard/:guildId/live`, `/account/live`): each connection takes from the `live` budget. */
+const LIVE_STREAM = /^\/(dashboard\/[^/]+|account)\/live$/
 
 /**
  * Which budget a request takes from: the public POSTs (passkeys, claim, setup, dashboard actions, a
@@ -83,7 +89,7 @@ const RATE_LIMITED_PREFIXES = /^\/(webauthn|claim|setup|dashboard|account)\//
  * the dashboard's pages.
  */
 const rateLimitGroup = (method: string, path: string) =>
-  path.startsWith('/auth/') ? 'auth' : method === 'POST' ? RATE_LIMITED_PREFIXES.exec(path)?.[1] : undefined
+  path.startsWith('/auth/') ? 'auth' : method === 'POST' ? RATE_LIMITED_PREFIXES.exec(path)?.[1] : method === 'GET' && LIVE_STREAM.test(path) ? 'live' : undefined
 
 /**
  * The web pages: the home page, the recipient claim page and the treasurer setup page, their
@@ -98,6 +104,8 @@ export function createWebApp(deps: WebAppDeps): Hono {
   const csp = contentSecurityPolicy(config)
   const setupCsp = contentSecurityPolicy(config, { mining: true })
   const https = new URL(config.origin).protocol === 'https:'
+  // One set of stream caps for the whole app, keyed by the same client address as the rate limits.
+  const live = liveStreams(deps.rateLimits?.clientKey ?? lastForwardedHop, deps.live)
 
   app.use(async (c, next) => {
     // State-changing requests must come from our own pages (CSRF). Browsers always send
@@ -164,8 +172,9 @@ export function createWebApp(deps: WebAppDeps): Hono {
   app.route('/', landingRoutes({ testnet, discordAppId: config.discordAppId }))
   app.route('/', claimRoutes({ payees: deps.rolepay.payees, sessions: deps.sessions, ...chain }))
   app.route('/', accountRoutes({ config, testnet, payees: deps.rolepay.payees, sessions: deps.sessions }))
+  app.route('/', accountLiveRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, live }))
   app.route('/', setupRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))
   app.route('/', policyBudgetRoutes({ rolepay: deps.rolepay, sessions: deps.sessions, config, clock: deps.clock, testnet }))
-  if (deps.dashboard) app.route('/', dashboardRoutes({ ...deps.dashboard, rolepay: deps.rolepay, clock: deps.clock, config, testnet }))
+  if (deps.dashboard) app.route('/', dashboardRoutes({ ...deps.dashboard, rolepay: deps.rolepay, clock: deps.clock, config, testnet, live }))
   return app
 }

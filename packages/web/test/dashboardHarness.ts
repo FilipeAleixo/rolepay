@@ -2,9 +2,10 @@
 // OAuth provider, a fake bot view of guild members and the in-memory policy port (or, for the page
 // contract, another policy backend: core's own services through the server's adapters). No network.
 import { type ActivityReader, type RunProposer, createRolepay, parseAmount } from '@rolepay/core'
-import { FakeFundingChain, FakePayoutChain, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, InProcessLiveFeed, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import type { Hono } from 'hono'
 import { createWebApp } from '../src/index.js'
+import type { LiveStreamOptions } from '../src/live/streams.js'
 import type { AuditPort, PolicyActor, PolicyPort } from '../src/dashboard/policyPort.js'
 import type { DiscordIdentity } from '../src/dashboard/ports.js'
 import { FakeDiscordOAuth, FakeGuildMembers, FakePasskeySessions, InMemoryAiUsage, InMemoryPayouts, InMemoryPolicies, InMemoryPolicyKeys, staticAssets } from '../src/testing/index.js'
@@ -121,7 +122,7 @@ export type PolicyBackendSetup<B extends { policies: PolicyPort; audit: AuditPor
 }
 
 export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditPort } = { policies: PolicyPort; audit: AuditPort }>(
-  opts: { oauth?: boolean; origin?: string; policies?: boolean; aiUsage?: boolean; payouts?: boolean; policyKeys?: boolean; backend?: (clock: ManualClock) => PolicyBackendSetup<B> } = {},
+  opts: { live?: LiveStreamOptions; oauth?: boolean; origin?: string; policies?: boolean; aiUsage?: boolean; payouts?: boolean; policyKeys?: boolean; backend?: (clock: ManualClock) => PolicyBackendSetup<B> } = {},
 ) {
   const origin = opts.origin ?? 'http://localhost:8787'
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
@@ -129,7 +130,10 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
   const setup = opts.backend?.(clock)
   // Deposit addresses: an in-memory registry and transfer log (the fake masterId is a salt's last 4 bytes).
   const fundingChain = new FakeFundingChain()
+  // Every audit event to the live pages, as in production.
+  const feed = new InProcessLiveFeed()
   const rolepay = createRolepay({
+    live: feed,
     chain,
     repositories: createMemoryRepositories({ clock }),
     vault: new PlainKeyVault(),
@@ -152,10 +156,12 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
   const base: HarnessBase = { rolepay, clock, chain, members, community, payee, activeKey, run }
   const backend = setup?.attach(base) ?? null
   const ports = backend ? { policies: recording(backend.policies, calls), audit: backend.audit } : { policies, audit: policies }
+  const sessions = new FakePasskeySessions()
   const app = createWebApp({
     rolepay,
     clock,
-    sessions: new FakePasskeySessions(),
+    sessions,
+    ...(opts.live ? { live: opts.live } : {}),
     assets: staticAssets({ 'rolepay.js': '' }),
     config: {
       origin,
@@ -262,7 +268,7 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
     return sent
   }
 
-  return { app, origin, rolepay, chain, fundingChain, clock, kv, oauth, members, policies, aiUsage, payouts, policyKeys, backend, calls, errors, browser, signIn, community, payee, activeKey, run, depositAddresses, fundingSource, deposit }
+  return { app, origin, rolepay, feed, sessions, chain, fundingChain, clock, kv, oauth, members, policies, aiUsage, payouts, policyKeys, backend, calls, errors, browser, signIn, community, payee, activeKey, run, depositAddresses, fundingSource, deposit }
 }
 
 /** What a policy backend may use to set itself up: core's services, the clock, the chain, the bot's member view, the helpers. */

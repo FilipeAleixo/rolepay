@@ -1,5 +1,6 @@
 import type { Clock, KeyValueStore, Rolepay } from '@rolepay/core'
 import type { WebConfig } from '../config.js'
+import type { LiveStreams } from '../live/streams.js'
 import { type CookieNames, cookieNames, readCookie } from './cookies.js'
 import { CachedGuildMembers } from './members.js'
 import type { AiUsagePort, AuditPort, PayoutsPort, PolicyKeysPort, PolicyPort } from './policyPort.js'
@@ -27,7 +28,8 @@ export type DashboardDeps = {
   onError?: (error: unknown) => void
 }
 
-export type DashboardContext = DashboardDeps & { rolepay: Rolepay; clock: Clock; config: WebConfig; testnet: boolean }
+/** `live`: the server-sent event streams' limits (absent: the pages do not update live). */
+export type DashboardContext = DashboardDeps & { rolepay: Rolepay; clock: Clock; config: WebConfig; testnet: boolean; live?: LiveStreams }
 
 /** Everything the dashboard's routes share: the session store, the cookies, the member cache, responses. */
 export type DashboardKit = ReturnType<typeof dashboardKit>

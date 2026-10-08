@@ -39,6 +39,10 @@ export function accountPage(c: AccountPageConfig): string {
   <p class="muted">On the explorer, balances are under Holdings, and payments received under Transfers.</p>
   <div id="balances"></div>
 </section>
+<section data-step="received" hidden>
+  <h2>Received</h2>
+  <ul id="received" class="received" aria-live="polite"></ul>
+</section>
 <section data-step="payouts" hidden>
   <h2>How you are paid</h2>
   <p class="muted">Choose the USD stablecoin each community pays you in. When it is not the community's own, Rolepay buys it for you on Tempo's stablecoin exchange, in the same transaction that pays you.</p>
@@ -64,4 +68,22 @@ export function accountPage(c: AccountPageConfig): string {
 <p id="status" role="status" aria-live="polite"></p>
 <noscript><p>This page needs JavaScript for the passkey.</p></noscript>`,
   })
+}
+
+/** One payment received, ready to show: everything already in words (escaped here). */
+export type ReceivedItem = { key: string; amount: string; token: string; communityName: string | null; runId: string; line: number; txUrl: string | null }
+
+/**
+ * The account's Received list, newest first: "+1 USDC.e · from Mods · pay run run_42, line 3 · View on
+ * explorer". Rendered on the server for `GET /account/received`; the page swaps it in when a payment lands.
+ */
+export function receivedItems(items: ReceivedItem[]): string {
+  if (items.length === 0) return '<li class="none">Nothing received yet. Payments appear here the moment they land.</li>'
+  return items
+    .map((i) => {
+      const from = i.communityName ? ` · from ${esc(i.communityName)}` : ''
+      const tx = i.txUrl ? ` · <a href="${esc(i.txUrl)}" target="_blank" rel="noreferrer">View on explorer</a>` : ''
+      return `<li data-key="${esc(i.key)}"><strong>+${esc(i.amount)} ${esc(i.token)}</strong><span>${from} · pay run ${esc(i.runId)}, line ${i.line}${tx}</span></li>`
+    })
+    .join('')
 }
