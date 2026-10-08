@@ -199,7 +199,7 @@ What to click, timed to each caption (seconds from the start of the clip).
 **demo-5-policy.mp4** (about 13 s). Needs the demo controls (one-minute veto windows, `run_now`), as on the demo.
 - 0.5 to 4 s, "A standing rule in plain words: `/rolepay policy new`": in the channel where its runs should post, `/rolepay policy new instruction:1 per answered question in #help, max 50 a week each, for Mods schedule:Weekly weekday:Monday hour:18 name:Help desk`; "Policy draft: Help desk" appears.
 - 4.5 to 8 s, "It shows *who it applies to* before anyone approves": scroll the preview's "who it applies to right now"; press **Approve policy**. (Discord then offers you, privately, "Give Help desk its own budget?": leave it, or cut it.)
-- 8.5 to 12.5 s, "On autopilot: a *veto window*, then it pays itself": `/rolepay policy mode policy:Help desk mode:Autopilot veto_minutes:1`, then `/rolepay policy run_now policy:Help desk`; the run appears with "pays at ... unless vetoed" and **Veto**; cut the minute; the same message turns into "Paid" with the transaction.
+- 8.5 to 12.5 s, "On autopilot: a *veto window*, then it pays itself": `/rolepay policy mode policy:Help desk mode:Autopilot veto_minutes:1`, then `/rolepay policy run_now policy:Help desk`; the run appears with "pays at ... unless vetoed" and **Veto** (record it in `#treasury`, where the Veto button is posted; the channel you ran it in shows the same run without the button); cut the minute; the same message turns into "Paid" with the transaction.
 
 **demo-6-policy-budget.mp4** (about 10 s). This is step 3 of "Before recording", recorded.
 - 0.5 to 4.5 s, "Give the Judges policy *its own budget*: one passkey prompt": `/rolepay policy show policy:Judges`, **Give this policy its own budget** (or **Manage its budget**); on "A budget of its own for Judges": 30, every 1 day, 14 days; "You will sign, for this policy only: Up to 30 AlphaUSD every day..."; press the button, confirm; "Judges has its own budget now".
@@ -216,7 +216,7 @@ What to click, timed to each caption (seconds from the start of the clip).
 **demo-9-judge.mp4** (about 12 s). As a judge would, on the public demo with a fresh account.
 - 0.5 to 4 s, "Judges join the demo server and run `/payee link`": `#start-here`, the pinned welcome post, `/payee link`, the ephemeral link.
 - 4.5 to 7.5 s, "Create a passkey, react to the welcome post": open the link, **Create my passkey**, confirm; back in Discord, react ✅ to the welcome post.
-- 8 to 11.5 s, "Paid at the next daily run, *with nobody online*": `#payouts` at 18:00 UTC (19:00 in Lisbon; a recording of an earlier day is fine): the run with "pays at ... unless vetoed", then "Paid"; the DM receipt. Since step 3 the run is signed with the Judges policy's own key.
+- 8 to 11.5 s, "Paid at the next daily run, *with nobody online*": `#payouts` at 18:00 UTC (19:00 in Lisbon; a recording of an earlier day is fine): the run with "pays at ... unless vetoed" (no button there: the Veto is in `#treasury`), then "Paid"; the DM receipt. Since step 3 the run is signed with the Judges policy's own key.
 
 ## Before the final render
 
