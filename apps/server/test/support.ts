@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto'
 import { TESTNET_TOKENS, createRolepay, parseAmount } from '@rolepay/core'
 import { type KeyValueStore, type Rolepay } from '@rolepay/core'
-import { FakeFundingChain, FakePayoutChain, FakeRunProposer, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
+import { FakeFundingChain, FakePayoutChain, FakeRunProposer, InProcessLiveFeed, ManualClock, MemoryKeyValueStore, PlainKeyVault, SequentialIds, createMemoryRepositories } from '@rolepay/core/adapters'
 import { RestActivityReader } from '@rolepay/discord'
 import { FakeDiscordRest, createTestSigner } from '@rolepay/discord/testing'
 import { FakePasskeySessions, staticAssets } from '@rolepay/web/testing'
@@ -78,6 +78,8 @@ export async function testServer(
       minVetoMinutes: config.policies.minVetoMinutes,
       demoControls: config.core.demoControls,
       fundingChain,
+      // Every audit event to the live pages, as main.ts wires it (openRolepayAdapters).
+      live: new InProcessLiveFeed(),
     })
   const kv = opts.from?.kv ?? new MemoryKeyValueStore(clock)
   const sessions = new FakePasskeySessions()
@@ -121,5 +123,5 @@ export async function testServer(
   /** Discord's signature over `text` (the timestamp, then the body). */
   const sign = (text: string) => signer.sign(text)
 
-  return { ...server, config, clock, chain, fundingChain, rolepay, kv, rest, proposer, logs, interact, browserPost, sign }
+  return { ...server, config, clock, chain, fundingChain, rolepay, kv, rest, proposer, sessions, logs, interact, browserPost, sign }
 }
