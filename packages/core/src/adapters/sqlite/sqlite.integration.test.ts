@@ -172,6 +172,28 @@ describe('sqlite: migrations and persistence', () => {
     expect(await again.repositories.policyKeys.get(own.address)).toEqual(own)
   })
 
+  it('a policy stored before schedules had a minute (no minute in its schedule JSON) reads as on the hour, its versions too', async () => {
+    const path = join(dir, 'before-minutes.db')
+    const db = await openSqliteDatabase(path)
+    await db.repositories.communities.insert(f.community())
+    await db.repositories.policies.insert(f.policy(), f.policyVersion())
+    await db.close()
+    // The schedule JSON exactly as a release before minutes wrote it.
+    const sqlite = new BetterSqlite3(path)
+    const old = '{"kind":"weekly","weekday":"monday","hour":18,"timezone":"Europe/Lisbon"}'
+    sqlite.prepare('UPDATE policies SET schedule = ?').run(old)
+    sqlite.prepare('UPDATE policy_versions SET schedule = ?').run(old)
+    expect((sqlite.prepare('SELECT schedule FROM policies').get() as { schedule: string }).schedule).not.toContain('minute')
+    sqlite.close()
+
+    const after = await openSqliteDatabase(path)
+    opened.push(after)
+    const p = await after.repositories.policies.get('pol_fixture01')
+    expect(p).toEqual(f.policy())
+    expect(p?.schedule).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'Europe/Lisbon' })
+    expect((await after.repositories.policies.listVersions('pol_fixture01')).map((v) => v.schedule)).toEqual([p?.schedule])
+  })
+
   it('a policy key belongs to a policy of a community: one for an unknown policy is refused', async () => {
     const db = await fresh()
     await db.repositories.communities.insert(f.community())

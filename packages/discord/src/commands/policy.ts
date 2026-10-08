@@ -22,6 +22,7 @@ const NewOptions = z.object({
   instruction: z.string().trim().min(1).max(PROPOSAL_LIMITS.maxInstructionLength),
   schedule: z.enum(['daily', 'weekly', 'monthly']),
   hour: z.number().int().min(0).max(23),
+  minute: z.number().int().min(0).max(59).default(0),
   weekday: z.enum(WEEKDAYS).optional(),
   day: z.number().int().min(1).max(31).optional(),
   timezone: z.string().trim().max(64).optional(),
@@ -114,12 +115,13 @@ export const policyNewCommand: CommandHandler = async ({ options, ctx }, { rolep
   if (o.schedule === 'monthly' && !o.day) return ephemeralReply('A monthly policy needs a `day` of the month (1 to 31).')
   const timezone = o.timezone || 'UTC'
   if (!isTimezone(timezone)) return ephemeralReply('That `timezone` is not one Rolepay knows: use an IANA name such as Europe/Lisbon, or UTC.')
+  const time = { hour: o.hour, minute: o.minute }
   const schedule: Schedule =
     o.schedule === 'daily'
-      ? { kind: 'daily', hour: o.hour, timezone }
+      ? { kind: 'daily', ...time, timezone }
       : o.schedule === 'weekly'
-        ? { kind: 'weekly', weekday: o.weekday as (typeof WEEKDAYS)[number], hour: o.hour, timezone }
-        : { kind: 'monthly', day: o.day as number, hour: o.hour, timezone }
+        ? { kind: 'weekly', weekday: o.weekday as (typeof WEEKDAYS)[number], ...time, timezone }
+        : { kind: 'monthly', day: o.day as number, ...time, timezone }
   const community = guard.community
   return {
     kind: 'defer',

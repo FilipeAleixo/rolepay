@@ -121,6 +121,9 @@ export const coreBackend: PolicyBackendFactory = (clock) => {
           await h.run([[ALICE.id, '50']])
         },
         autopilotRun,
+        async separateApprover() {
+          must(await rolepay.communities.setRequireSeparateApprover({ guildId: GUILD, value: true, actorRoleIds: [ROLE] }))
+        },
         async releasedRun(policyId) {
           const runId = await autopilotRun(policyId)
           h.clock.advance(61 * 60)

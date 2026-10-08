@@ -54,7 +54,7 @@ const helpDesk: CompiledRule = {
   assumptions: [],
   amountsInInstruction: true,
 }
-const mondays: Schedule = { kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC' }
+const mondays: Schedule = { kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'UTC' }
 
 describe('who may govern policies', () => {
   it('only a member holding the current approver role (Manage Server alone is not enough, and with no role set nobody is)', () => {
@@ -70,7 +70,7 @@ describe('the period a run covers', () => {
   })
 
   it('never more than 31 days back, whatever the schedule', () => {
-    const monthly: Schedule = { kind: 'monthly', day: 31, hour: 0, timezone: 'Europe/Lisbon' }
+    const monthly: Schedule = { kind: 'monthly', day: 31, hour: 0, minute: 0, timezone: 'Europe/Lisbon' }
     // 31 October 00:00 Lisbon is 31 days and an hour after 30 September... the bound cuts the extra hour.
     const w = runWindow(monthly, d('2026-10-31T00:00:00Z'))
     expect(w.end.getTime() - w.start.getTime()).toBeLessThanOrEqual(31 * 86_400_000)
@@ -150,7 +150,7 @@ describe('the rule in plain words', () => {
       assumptions: [],
       amountsInInstruction: true,
     }
-    expect(describeRule(judges, { schedule: { kind: 'daily', hour: 18, timezone: 'UTC' }, caps: { perRun: null, perPerson: null }, guildId: GUILD })).toEqual([
+    expect(describeRule(judges, { schedule: { kind: 'daily', hour: 18, minute: 0, timezone: 'UTC' }, caps: { perRun: null, perPerson: null }, guildId: GUILD })).toEqual([
       '1 each.',
       `Who: reacted ✅ to https://discord.com/channels/${GUILD}/${GENERAL}/810000000000000077; has never been paid by this community.`,
       'When: every day at 18:00 (UTC), counting activity since the previous run.',

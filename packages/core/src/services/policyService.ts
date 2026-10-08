@@ -147,6 +147,9 @@ const EditInputSchema = ActorSchema.extend({
   instruction: InstructionSchema.optional(),
   schedule: ScheduleSchema.optional(),
   caps: CapsInputSchema.optional(),
+  /** Only for an edit that is in force at once (see `edit`); its range is checked as `setMode` checks it. */
+  mode: PolicyModeSchema.optional(),
+  vetoWindowMinutes: z.number().int().optional(),
 })
 export type EditPolicyInput = z.input<typeof EditInputSchema>
 
@@ -158,8 +161,9 @@ const defaultName = (rule: CompiledRule, instruction: string) => (rule.note ?? i
  * is edited), the approver role approves it, the scheduler runs it with code. Only the CURRENT
  * approver role approves, pauses, resumes, switches modes, sets veto windows, archives and vetoes,
  * checked from the roles the caller passes on every request; the approver or proposer role may
- * write and edit (an edit is a new version that needs a new approval and switches autopilot off).
- * Every action goes to the audit stream.
+ * write and edit (an edit is a new version: an approver's edit of an approved policy is in force
+ * at once, any other waits for an approval and switches autopilot off; see `edit`). Every action
+ * goes to the audit stream.
  */
 export class PolicyService {
   constructor(private readonly deps: PolicyServiceDeps) {}
@@ -179,6 +183,14 @@ export class PolicyService {
 
   private nextRunAt(p: Policy, now: Date): Date | null {
     return p.status === 'active' && !this.refused(p.schedule) ? nextOccurrence(p.schedule, now) : null
+  }
+
+  /** A veto window this server allows: `minVeto` (60 minutes, or 1 with the demo controls) to 7 days. */
+  private vetoWindow(minutes: number): Result<number, { code: 'invalid_veto_window'; min: number; max: number }> {
+    if (!Number.isInteger(minutes) || minutes < this.minVeto || minutes > POLICY_LIMITS.maxVetoMinutes) {
+      return err({ code: 'invalid_veto_window', min: this.minVeto, max: POLICY_LIMITS.maxVetoMinutes })
+    }
+    return ok(minutes)
   }
 
   // ---- writing ---------------------------------------------------------------------------
@@ -227,18 +239,51 @@ export class PolicyService {
   }
 
   /**
-   * A new version: any of name, instruction (recompiled by the AI), schedule and caps. The policy
-   * stops (draft) until an approver approves the new version, and autopilot is switched off.
+   * A new version: any of name, instruction (recompiled by the AI), schedule and caps, and from an
+   * approver the mode and veto window. Who edits what decides what happens to it:
+   *
+   * - **In force at once** when the editor holds the CURRENT approver role, the community does not
+   *   require a separate approver, and the policy was approved before (active or paused): a
+   *   treasurer's edit needs no second approval. The new version is recorded as approved by the
+   *   editor, on the policy and its version; the status stays (active from now on, as `approve`
+   *   sets it, or paused); the mode stays unless the edit names one. Autopilot that stays or is
+   *   switched on now runs in the editor's name (runs are approved in the name of whoever enabled
+   *   it, and they endorse the new rule). The checks `approve` makes still apply (a daily schedule
+   *   without the demo controls, an amount the instruction does not state, a veto window out of
+   *   range): if one fails nothing is saved. A run already in its veto window was made by the old
+   *   version, so autopilot does not release it (`policy_changed`): it never pays under the old rule.
+   * - **Waiting for approval** otherwise (a proposer, four eyes on, or a draft never approved, whose
+   *   first approval stays an explicit step after the preview): the policy stops (draft) until an
+   *   approver approves the new version, and autopilot is switched off. Such an edit cannot switch
+   *   autopilot on (`policy_not_approved`, as `setMode` refuses it for a draft), and a veto window
+   *   it names is ignored: it is set when autopilot is switched on again.
    */
   async edit(
     input: EditPolicyInput,
-  ): Promise<Result<Policy, InvalidInput | ScheduleNotAllowed | NotFound | NotPermitted | AiGate | CompileError | ReadError | Conflict | { code: 'policy_archived' }>> {
+  ): Promise<
+    Result<
+      Policy,
+      | InvalidInput
+      | ScheduleNotAllowed
+      | NotFound
+      | NotPermitted
+      | AiGate
+      | CompileError
+      | ReadError
+      | Conflict
+      | { code: 'policy_archived' }
+      | { code: 'policy_not_approved' }
+      | { code: 'policy_blocked'; problems: string[] }
+      | { code: 'invalid_veto_window'; min: number; max: number }
+    >
+  > {
     const parsed = EditInputSchema.safeParse(input)
     if (!parsed.success) return invalidInput(parsed.error)
     const i = parsed.data
     const recompile = i.instruction !== undefined
     const gate = await this.writerGate(i, { ai: recompile })
     if (!gate.ok) return gate
+    const community = gate.value
     const policy = await this.find(i)
     if (!policy.ok) return policy
     const p = policy.value
@@ -246,15 +291,25 @@ export class PolicyService {
     // The version this edit makes keeps the current schedule unless it names one: either way, no daily without the demo controls.
     const schedule = this.refused(i.schedule ?? p.schedule)
     if (schedule) return err(schedule)
+    const inForce = canApprovePolicies(community, i.actorRoleIds) && !community.requireSeparateApprover && (p.status === 'active' || p.status === 'paused')
+    // Before the model is called: what the edit asks of the mode.
+    if (!inForce && i.mode === 'autopilot') return err({ code: 'policy_not_approved' })
+    let vetoWindowMinutes = p.vetoWindowMinutes
+    if (inForce && (i.mode !== undefined || i.vetoWindowMinutes !== undefined)) {
+      const window = this.vetoWindow(i.vetoWindowMinutes ?? p.vetoWindowMinutes)
+      if (!window.ok) return window
+      vetoWindowMinutes = window.value
+    }
     const latest = Math.max(...(await this.deps.policies.listVersions(p.id)).map((v) => v.version), p.version)
     let compiled = p.compiled
     if (recompile) {
-      const c = await this.compile(gate.value, i.instruction as string, { actor: i.actor, policyId: p.id, version: latest + 1 })
+      const c = await this.compile(community, i.instruction as string, { actor: i.actor, policyId: p.id, version: latest + 1 })
       if (!c.ok) return c
       compiled = c.value
     }
+    if (inForce && !compiled.amountsInInstruction) return err({ code: 'policy_blocked', problems: ['amount_not_in_instruction'] })
     const now = this.deps.clock.now()
-    const next: Policy = {
+    const edited: Policy = {
       ...p,
       name: i.name ?? p.name,
       instruction: i.instruction ?? p.instruction,
@@ -262,18 +317,33 @@ export class PolicyService {
       schedule: i.schedule ?? p.schedule,
       caps: i.caps ?? p.caps,
       version: latest + 1,
-      status: 'draft',
-      mode: 'propose',
-      autopilot: null,
-      approvedBy: null,
-      approvedAt: null,
-      activeSince: null,
       updatedAt: now,
       rev: p.rev + 1,
     }
-    const saved = await this.save(next, versionOf(next, i.actor, now))
+    const mode = i.mode ?? p.mode
+    const next: Policy = inForce
+      ? {
+          ...edited,
+          mode,
+          vetoWindowMinutes,
+          autopilot: mode === 'autopilot' ? { enabledBy: i.actor, enabledAt: now, approverRoleId: community.approverRoleId as string } : null,
+          approvedBy: i.actor,
+          approvedAt: now,
+          activeSince: p.status === 'active' ? now : p.activeSince,
+        }
+      : { ...edited, status: 'draft', mode: 'propose', autopilot: null, approvedBy: null, approvedAt: null, activeSince: null }
+    const version = versionOf(next, i.actor, now)
+    const saved = await this.save(next, inForce ? { ...version, approvedBy: i.actor, approvedAt: now } : version)
     if (!saved.ok) return saved
-    await this.event(next, 'policy.edited', i.actor, { recompiled: recompile, autopilotOff: p.mode === 'autopilot', previous: p.version })
+    await this.event(next, 'policy.edited', i.actor, {
+      recompiled: recompile,
+      applied: inForce,
+      mode: next.mode,
+      previousMode: p.mode,
+      autopilotOff: p.mode === 'autopilot' && next.mode !== 'autopilot',
+      vetoWindowMinutes: next.vetoWindowMinutes,
+      previous: p.version,
+    })
     if (recompile) await this.compiledEvent(next, i.actor)
     return ok(next)
   }
@@ -379,10 +449,9 @@ export class PolicyService {
       const version = await this.deps.policies.getVersion(p.id, p.version)
       if (community.requireSeparateApprover && version?.authoredBy === input.actor) return err({ code: 'creator_cannot_approve' })
     }
-    const minutes = input.vetoWindowMinutes ?? p.vetoWindowMinutes
-    if (!Number.isInteger(minutes) || minutes < this.minVeto || minutes > POLICY_LIMITS.maxVetoMinutes) {
-      return err({ code: 'invalid_veto_window', min: this.minVeto, max: POLICY_LIMITS.maxVetoMinutes })
-    }
+    const window = this.vetoWindow(input.vetoWindowMinutes ?? p.vetoWindowMinutes)
+    if (!window.ok) return window
+    const minutes = window.value
     const now = this.deps.clock.now()
     const next: Policy = {
       ...p,

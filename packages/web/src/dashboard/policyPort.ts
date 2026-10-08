@@ -20,11 +20,14 @@ export type PolicyActor = { id: string; roleIds: string[] }
 export type PolicyStatus = 'draft' | 'active' | 'paused' | 'archived'
 export type PolicyMode = 'propose' | 'autopilot'
 
-/** When a policy runs, in the community's timezone (an IANA name, default UTC). Daily is the testnet demo's only (`PolicyPort.dailySchedules`). */
+/**
+ * When a policy runs, in the community's timezone (an IANA name, default UTC), at `hour`:`minute`
+ * (`minute` 0 to 59; absent is 0, on the hour). Daily is the testnet demo's only (`PolicyPort.dailySchedules`).
+ */
 export type PolicySchedule =
-  | { kind: 'daily'; hour: number; timezone: string }
-  | { kind: 'weekly'; /** 0 = Sunday ... 6 = Saturday */ weekday: number; hour: number; timezone: string }
-  | { kind: 'monthly'; /** 1-28 */ day: number; hour: number; timezone: string }
+  | { kind: 'daily'; hour: number; minute?: number; timezone: string }
+  | { kind: 'weekly'; /** 0 = Sunday ... 6 = Saturday */ weekday: number; hour: number; minute?: number; timezone: string }
+  | { kind: 'monthly'; /** 1-28 */ day: number; hour: number; minute?: number; timezone: string }
 
 export type PolicySummary = {
   id: string
@@ -53,7 +56,7 @@ export type PolicyDetail = PolicySummary & {
   createdAt: Date
   approvedBy: string | null
   approvedAt: Date | null
-  /** A newer version (an edit) waiting for approval, or null. */
+  /** A version waiting for approval (a new draft, or an edit that needs one), or null. */
   pendingVersion: number | null
 }
 
@@ -154,8 +157,14 @@ export interface PolicyPort {
 
   /** Compiles the instruction once (the AI) into a draft, which needs an approval to run. */
   create(input: { guildId: string; actor: PolicyActor; draft: PolicyDraft }): Promise<Result<{ policyId: string }, PolicyError>>
-  /** Recompiles into a new version, which needs a new approval. */
-  edit(input: Ref & { actor: PolicyActor; draft: PolicyDraft }): Promise<Result<{ version: number }, PolicyError>>
+  /**
+   * A new version (the instruction recompiled when it changed). From the approver role, on a policy
+   * approved before, with no separate approver required, it is in force at once (`inForce`): the
+   * policy keeps running and keeps its mode unless `mode` names one (`vetoWindowMinutes` with it,
+   * checked by the services). Otherwise it waits for an approval, the policy stops meanwhile, and a
+   * `mode` of autopilot is refused (`policy_not_approved`).
+   */
+  edit(input: Ref & { actor: PolicyActor; draft: PolicyDraft; mode?: PolicyMode; vetoWindowMinutes?: number }): Promise<Result<{ version: number; inForce: boolean }, PolicyError>>
   approve(input: Ref & { actor: PolicyActor; version: number }): Promise<Result<void, PolicyError>>
   /** Drops a version waiting for approval. */
   discard(input: Ref & { actor: PolicyActor; version: number }): Promise<Result<void, PolicyError>>

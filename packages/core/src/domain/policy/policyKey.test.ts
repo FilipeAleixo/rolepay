@@ -56,12 +56,12 @@ describe('which key signs a policy run (policySigner)', () => {
 describe('the budget a policy key starts from (policyKeyDefaults)', () => {
   const caps = (perRun: bigint | null) => ({ perRun, perPerson: null })
   it("the limit is the policy's cap per run, the period one run of its schedule", () => {
-    expect(policyKeyDefaults({ caps: caps(30_000_000n), schedule: { kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC' } })).toEqual({ limit: 30_000_000n, periodSeconds: 7 * 86_400 })
-    expect(policyKeyDefaults({ caps: caps(null), schedule: { kind: 'daily', hour: 18, timezone: 'UTC' } })).toEqual({ limit: null, periodSeconds: 86_400 })
+    expect(policyKeyDefaults({ caps: caps(30_000_000n), schedule: { kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'UTC' } })).toEqual({ limit: 30_000_000n, periodSeconds: 7 * 86_400 })
+    expect(policyKeyDefaults({ caps: caps(null), schedule: { kind: 'daily', hour: 18, minute: 0, timezone: 'UTC' } })).toEqual({ limit: null, periodSeconds: 86_400 })
   })
 
   it('a monthly policy resets every 28 days, so no period ever holds two of its runs', () => {
-    expect(policyKeyDefaults({ caps: caps(null), schedule: { kind: 'monthly', day: 1, hour: 9, timezone: 'UTC' } }).periodSeconds).toBe(28 * 86_400)
+    expect(policyKeyDefaults({ caps: caps(null), schedule: { kind: 'monthly', day: 1, hour: 9, minute: 0, timezone: 'UTC' } }).periodSeconds).toBe(28 * 86_400)
   })
 })
 

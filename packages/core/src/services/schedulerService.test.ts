@@ -17,13 +17,16 @@ import {
   TODAY_18,
   TOKEN,
   TREASURER,
+  TREASURER_TWO,
   TREASURY,
   WELCOME,
   addressOf,
   asTreasurer,
   asWriter,
+  helpDeskAnswer,
   judgesAnswer,
   policyWorld,
+  reply,
   usd,
 } from '../../test/support/policyWorld.js'
 
@@ -110,6 +113,15 @@ describe('SchedulerService: propose mode', () => {
     expect((await w.rolepay.scheduler.tick()).events).toEqual([])
     w.travelTo(new Date('2026-10-12T17:00:00Z'))
     expect((await w.rolepay.scheduler.tick()).events.map((e) => e.policyRun.periodEnd)).toEqual([new Date('2026-10-12T17:00:00Z')])
+  })
+
+  it('runs at the minute its schedule names: Monday 18:30, over the week since the previous Monday 18:30', async () => {
+    const w = await policyWorld()
+    await w.active({ schedule: { ...MONDAYS, minute: 30 } })
+    w.travelTo(new Date('2026-10-12T18:29:59Z'))
+    expect((await w.rolepay.scheduler.tick()).events).toEqual([])
+    w.travelTo(new Date('2026-10-12T18:30:00Z'))
+    expect((await w.rolepay.scheduler.tick()).events.map((e) => [e.policyRun.periodStart, e.policyRun.periodEnd])).toEqual([[new Date('2026-10-05T18:30:00Z'), new Date('2026-10-12T18:30:00Z')]])
   })
 
   it('a paused policy makes nothing, and resuming does not backfill the period it missed', async () => {
@@ -260,6 +272,32 @@ describe('SchedulerService: autopilot', () => {
       expect(held?.run?.id).toBe(gen?.run?.id)
       expect(w.chain.landedTxCount).toBe(0)
     }
+  })
+
+  it("an approver's edit during the veto window (in force at once) stops that run: it never pays under the old rule, and the next period runs the new rule, still on autopilot", async () => {
+    const w = await policyWorld()
+    const p = await w.active({}, { vetoWindowMinutes: 60 })
+    w.travelTo(MONDAY)
+    const [gen] = (await w.rolepay.scheduler.tick()).events
+    expect(gen?.policyRun).toMatchObject({ status: 'scheduled', policyVersion: 1, total: usd(64) })
+    w.travel(30 * 60)
+    w.proposer.onCriteria = () => helpDeskAnswer({ amount: { kind: 'perUnit', amount: '2', per: 'replies', cap: '50', total: '', splitBy: '' } })
+    const edited = await w.rolepay.policies.edit({ ...asTreasurer, actor: TREASURER_TWO, policyId: p.id, instruction: 'Every Monday: 2 per answered question in #help, max 50 a week each, for Mods' })
+    expect(edited.ok && [edited.value.status, edited.value.mode, edited.value.version, edited.value.autopilot?.enabledBy]).toEqual(['active', 'autopilot', 2, TREASURER_TWO])
+    w.travel(HOUR)
+    const [held] = (await w.rolepay.scheduler.tick()).events
+    expect([held?.kind, held?.policyRun.status, held?.policyRun.hold?.code, held?.run?.id, held?.run?.status]).toEqual(['held', 'held', 'policy_changed', gen?.run?.id, 'pending_approval'])
+    expect(w.chain.landedTxCount).toBe(0)
+    // The next week: Ana answers three times; the run is made by version 2 (2 per answer) and released in the editor's name.
+    const nextMonday = new Date(MONDAY.getTime() + 7 * DAY * 1000)
+    w.activity.addMessages(...[1, 2, 3].map((h) => reply(ANA, new Date(nextMonday.getTime() - h * HOUR * 1000))))
+    w.travelTo(nextMonday)
+    const [next] = (await w.rolepay.scheduler.tick()).events
+    expect(next?.policyRun).toMatchObject({ status: 'scheduled', policyVersion: 2, total: usd(6) })
+    w.travel(HOUR)
+    const [paid] = (await w.rolepay.scheduler.tick()).events
+    expect(paid).toMatchObject({ kind: 'released', outcome: 'paid', run: { status: 'paid', approvedBy: TREASURER_TWO } })
+    expect(w.chain.balance(TOKEN, addressOf(ANA))).toBe(usd(6))
   })
 
   it('a key that can no longer pay (revoked during the window) holds the approved run; it is never partly paid', async () => {

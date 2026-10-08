@@ -35,7 +35,7 @@ const policy = (over: Partial<Policy> = {}): Policy => ({
     assumptions: ['"a week" means since the previous run'],
     amountsInInstruction: true,
   },
-  schedule: { kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC' },
+  schedule: { kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'UTC' },
   caps: { perRun: null, perPerson: null },
   channelId: '700000000000000001',
   status: 'draft',
@@ -126,10 +126,10 @@ describe('policyMessage', () => {
     expect(own).toContain("With its swaps into preferred stablecoins counted at their most, more than this policy's own key has left: the run would be held whole, never paid in part.")
   })
 
-  it('a daily policy (the testnet demo) says its schedule in plain words', () => {
-    const m = text(policyMessage(policy({ schedule: { kind: 'daily', hour: 18, timezone: 'UTC' } }), { ...ctx, preview: preview({ nextRunAt: new Date('2026-10-07T18:00:00Z') }) }))
+  it('a daily policy (the testnet demo) says its schedule in plain words, the time with its minute', () => {
+    const m = text(policyMessage(policy({ schedule: { kind: 'daily', hour: 18, minute: 0, timezone: 'UTC' } }), { ...ctx, preview: preview({ nextRunAt: new Date('2026-10-07T18:00:00Z') }) }))
     expect(m).toContain('every day at 18:00 (UTC).')
-    expect(text(policyListMessage([{ policy: policy({ schedule: { kind: 'daily', hour: 9, timezone: 'Europe/Lisbon' } }), nextRunAt: null, lastRun: null }]))).toContain('every day at 09:00 (Europe/Lisbon)')
+    expect(text(policyListMessage([{ policy: policy({ schedule: { kind: 'daily', hour: 9, minute: 15, timezone: 'Europe/Lisbon' } }), nextRunAt: null, lastRun: null }]))).toContain('every day at 09:15 (Europe/Lisbon)')
   })
 
   it('without a preview it can say why; active, paused and archived policies have no buttons', () => {

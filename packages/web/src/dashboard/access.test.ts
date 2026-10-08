@@ -16,12 +16,14 @@ describe('dashboard security headers and errors', () => {
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(res.headers.get('x-frame-options')).toBe('DENY')
     expect(res.headers.get('strict-transport-security')).toBe('max-age=31536000')
-    // The policy forms show only the schedule fields the chosen kind uses, in CSS (no script), inside the hashed stylesheet.
+    // The policy forms show only the schedule fields the chosen kind uses (and the editor the veto window only
+    // with autopilot chosen), in CSS (no script), inside the hashed stylesheet.
     for (const rule of [
       'form:has(select[name=kind] option[value=daily]:checked) .field-weekday',
       'form:has(select[name=kind] option[value=daily]:checked) .field-day',
       'form:has(select[name=kind] option[value=weekly]:checked) .field-day',
       'form:has(select[name=kind] option[value=monthly]:checked) .field-weekday',
+      'form:has(input[name=mode][value=propose]:checked) .field-veto',
     ])
       expect(DASHBOARD_STYLE).toContain(rule)
     // One script, from this origin (the live updates), and no inline script at all.

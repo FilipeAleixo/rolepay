@@ -33,10 +33,12 @@ const MAX_VETO_MINUTES = 7 * 24 * 60
  * pages alone. It behaves the way core does, and the page contract (`@rolepay/web/contract`)
  * holds the two equal: the approver role is re-checked from the actor's roles on every action
  * (`not_permitted`); an instruction is "compiled" once into a draft (one containing "unclear"
- * cannot be compiled); an edit makes a new version and puts the policy back to draft (it stops
- * running and autopilot is switched off) until that version is approved; discarding an edit goes
- * back to the last approved version, paused; every action lands in the audit stream. `calls`
- * records every action with its actor.
+ * cannot be compiled); an edit makes a new version, in force at once on a policy approved before
+ * (only the approver role acts here; the policy keeps running and its mode unless the edit names
+ * one), or, with a separate approver required (`setSeparateApprover`) or on a draft, putting the
+ * policy back to draft (it stops running and autopilot is switched off) until that version is
+ * approved; discarding an edit goes back to the last approved version, paused; every action lands
+ * in the audit stream. `calls` records every action with its actor.
  */
 export class InMemoryPolicies implements PolicyPort, AuditPort {
   readonly eventTypes: readonly string[] = AUDIT_EVENT_TYPES
@@ -47,6 +49,7 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
   private readonly stream: (AuditEventView & { guildId: string })[] = []
   private readonly origins = new Map<string, RunOrigin>()
   private readonly approverRoles = new Map<string, string>()
+  private readonly separateApprover = new Set<string>()
   private counter = 0
 
   constructor(private readonly clock: { now(): Date } = { now: () => new Date() }) {}
@@ -56,6 +59,12 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
   /** The role that may act in this guild, as core reads it from the community. */
   setApproverRole(guildId: string, roleId: string) {
     this.approverRoles.set(guildId, roleId)
+  }
+
+  /** Four eyes, as core reads `requireSeparateApprover` from the community: an edit then waits for a second approver. */
+  setSeparateApprover(guildId: string, required: boolean) {
+    if (required) this.separateApprover.add(guildId)
+    else this.separateApprover.delete(guildId)
   }
 
   /** An existing policy; returns its id. Defaults: active, propose mode, weekly on Monday 18:00 UTC. */
@@ -169,19 +178,31 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
     return ok({ policyId: id })
   }
 
-  async edit(input: Ref & { actor: PolicyActor; draft: PolicyDraft }) {
+  async edit(input: Ref & { actor: PolicyActor; draft: PolicyDraft; mode?: PolicyMode; vetoWindowMinutes?: number }) {
     const p = this.action('edit', input)
     if (!p.ok) return p
     const d = p.value.detail
     if (d.status === 'archived') return fail('illegal_state')
     if (!this.scheduleAllowed(input.draft.schedule)) return fail('schedule_not_allowed', DAILY_REFUSED)
+    // Like core: in force at once from the approver role (the only one that acts here) on a policy approved before, unless four eyes are on.
+    const inForce = !this.separateApprover.has(input.guildId) && (d.status === 'active' || d.status === 'paused')
+    if (!inForce && input.mode === 'autopilot') return fail('policy_not_approved')
+    let vetoWindowMinutes = d.vetoWindowMinutes
+    if (inForce && (input.mode !== undefined || input.vetoWindowMinutes !== undefined)) {
+      vetoWindowMinutes = input.vetoWindowMinutes ?? d.vetoWindowMinutes
+      if (!this.vetoWindowAllowed(vetoWindowMinutes)) return fail('invalid_veto_window')
+    }
     if (/unclear/i.test(input.draft.instruction)) return fail('could_not_compile', 'The rule could not be compiled from that instruction.')
     const version = Math.max(...p.value.versions.map((v) => v.version)) + 1
-    for (const v of p.value.versions) if (v.status === 'pending') v.status = 'discarded'
+    const now = this.clock.now()
+    for (const v of p.value.versions) {
+      if (v.status === 'pending') v.status = 'discarded'
+      else if (inForce && v.status === 'approved') v.status = 'superseded'
+    }
     const ruleInWords = `Compiled from: ${input.draft.instruction}`
     const filter = { compiledFrom: 'instruction', length: input.draft.instruction.length }
-    p.value.versions.push({ version, instruction: input.draft.instruction, ruleInWords, filter, createdBy: input.actor.id, createdAt: this.clock.now(), approvedBy: null, approvedAt: null, status: 'pending' })
-    // Like core: the policy is the new draft now (it stops running, autopilot goes off) until approved.
+    const approval = inForce ? { approvedBy: input.actor.id, approvedAt: now } : { approvedBy: null, approvedAt: null }
+    p.value.versions.push({ version, instruction: input.draft.instruction, ruleInWords, filter, createdBy: input.actor.id, createdAt: now, ...approval, status: inForce ? 'approved' : 'pending' })
     Object.assign(d, {
       name: input.draft.name,
       instruction: input.draft.instruction,
@@ -189,15 +210,12 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
       ruleInWords,
       filter,
       version,
-      status: 'draft',
-      mode: 'propose',
-      approvedBy: null,
-      approvedAt: null,
-      nextRunAt: null,
-      pendingVersion: version,
+      ...approval,
+      // Like core: in force, it keeps running and its mode (unless the edit names one); otherwise the policy is the new draft (it stops running, autopilot goes off) until approved.
+      ...(inForce ? { mode: input.mode ?? d.mode, vetoWindowMinutes, pendingVersion: null } : { status: 'draft', mode: 'propose', nextRunAt: null, pendingVersion: version }),
     })
-    this.audit(input.guildId, 'policy.edited', input.actor.id, input.policyId, `Edited "${d.name}": version ${version} waits for approval.`)
-    return ok({ version })
+    this.audit(input.guildId, 'policy.edited', input.actor.id, input.policyId, `Edited "${d.name}": version ${version} ${inForce ? 'is in force' : 'waits for approval'}.`)
+    return ok({ version, inForce })
   }
 
   async approve(input: Ref & { actor: PolicyActor; version: number }) {
@@ -269,7 +287,7 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
     const d = p.value.detail
     if (d.status === 'archived') return fail('illegal_state')
     if (input.mode === 'autopilot' && (d.approvedBy === null || d.status === 'draft')) return fail('policy_not_approved')
-    if (!Number.isInteger(input.vetoWindowMinutes) || input.vetoWindowMinutes < MIN_VETO_MINUTES || input.vetoWindowMinutes > MAX_VETO_MINUTES) return fail('invalid_veto_window')
+    if (!this.vetoWindowAllowed(input.vetoWindowMinutes)) return fail('invalid_veto_window')
     Object.assign(d, { mode: input.mode, vetoWindowMinutes: input.vetoWindowMinutes })
     const words = input.mode === 'autopilot' ? `autopilot, veto window ${input.vetoWindowMinutes} minutes` : 'propose'
     this.audit(input.guildId, 'policy.mode_changed', input.actor.id, input.policyId, `Switched "${d.name}" to ${words}.`)
@@ -306,6 +324,11 @@ export class InMemoryPolicies implements PolicyPort, AuditPort {
   /** Like core: daily only with the demo controls. */
   private scheduleAllowed(s: PolicyDetail['schedule']) {
     return s.kind !== 'daily' || this.dailySchedules
+  }
+
+  /** Like core without the demo controls: an hour to 7 days. */
+  private vetoWindowAllowed(minutes: number) {
+    return Number.isInteger(minutes) && minutes >= MIN_VETO_MINUTES && minutes <= MAX_VETO_MINUTES
   }
 
   private find(ref: Ref) {

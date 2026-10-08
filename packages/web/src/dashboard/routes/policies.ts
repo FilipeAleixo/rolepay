@@ -5,7 +5,7 @@ import { type CommunityAccess, actionAccess, communityAccess } from '../access.j
 import { type DashboardKit, html, redirect } from '../kit.js'
 import type { PolicyDraft, PolicyError, PolicyPort, RunOrigin } from '../policyPort.js'
 import { type Section, messagePage, shell } from '../views/layout.js'
-import { DAILY_REFUSED, type LatestPolicyRun, type PolicyBudgetRead, type PolicyFormValues, notice, policiesBody, policyBody, policyFormBody } from '../views/policies.js'
+import { DAILY_REFUSED, type EditApplies, type LatestPolicyRun, type PolicyBudgetRead, type PolicyFormValues, notice, policiesBody, policyBody, policyFormBody } from '../views/policies.js'
 
 const MAX_NAMED = 60
 /** A chain read slower than this is shown as unavailable rather than holding the page. */
@@ -34,6 +34,8 @@ const DraftForm = z.object({
     .max(MAX_INSTRUCTION, `The instruction is at most ${MAX_INSTRUCTION.toLocaleString('en-US')} characters.`),
   kind: z.enum(['daily', 'weekly', 'monthly'], 'Choose weekly or monthly.'),
   hour: z.coerce.number().int().min(0, 'The hour is 0 to 23.').max(23, 'The hour is 0 to 23.'),
+  // Absent (a page from before minutes): on the hour.
+  minute: z.coerce.number().int('The minute is 0 to 59.').min(0, 'The minute is 0 to 59.').max(59, 'The minute is 0 to 59.').default(0),
   timezone: z.string().trim().min(1).refine(validTimezone, 'Unknown timezone: use a name such as UTC or Europe/Lisbon.'),
 })
 /** Read only for the kinds that use them: a weekly form's day of the month (hidden, maybe stale) is never read, nor a monthly one's weekday. */
@@ -42,6 +44,32 @@ const DayField = z.coerce.number().int().min(1, 'The day of the month is 1 to 28
 
 const ModeForm = z.object({ mode: z.enum(['propose', 'autopilot']), vetoWindowHours: z.coerce.number().int().min(1).max(168) })
 const VersionForm = z.object({ version: z.coerce.number().int().min(1) })
+const MAX_VETO = POLICY_LIMITS.maxVetoMinutes
+const EditVetoField = z.coerce
+  .number()
+  .int('The veto window is a whole number of minutes.')
+  .min(1, `The veto window is 1 to ${MAX_VETO.toLocaleString('en-US')} minutes.`)
+  .max(MAX_VETO, `The veto window is 1 to ${MAX_VETO.toLocaleString('en-US')} minutes (7 days).`)
+
+/**
+ * The mode an edit sets, when the editor offered it (only for an edit in force at once): propose, or
+ * autopilot with its veto window. No `mode` field: the edit leaves the mode alone. With propose
+ * chosen the veto window (hidden on the page) is not read, as with the schedule fields.
+ */
+function modeFrom(form: Record<string, string>): { ok: true; mode: { mode?: 'propose' | 'autopilot'; vetoWindowMinutes?: number } } | { ok: false; error: string } {
+  if (form.mode === undefined) return { ok: true, mode: {} }
+  if (form.mode === 'propose') return { ok: true, mode: { mode: 'propose' } }
+  if (form.mode !== 'autopilot') return { ok: false, error: 'Choose propose or autopilot.' }
+  const minutes = EditVetoField.safeParse(form.vetoWindowMinutes)
+  return minutes.success ? { ok: true, mode: { mode: 'autopilot', vetoWindowMinutes: minutes.data } } : { ok: false, error: minutes.error.issues[0]?.message ?? 'Check the veto window.' }
+}
+
+/** Refusals of an edit that are about what was sent: the editor reopens with it and why (nothing was saved). */
+const EDIT_REFUSED: Record<string, string> = {
+  policy_blocked: 'Nothing was saved: the new rule uses an amount the instruction does not state, so it cannot be put in force. State the amount in the instruction.',
+  invalid_veto_window: 'Nothing was saved: that veto window is not allowed here (at least 1 hour, at most 7 days).',
+  policy_not_approved: 'Nothing was saved: autopilot can be switched on only for an approved policy, and this change waits for approval first.',
+}
 
 /** The draft a form describes. A daily schedule only where the policy services allow it (the testnet demo controls); refused here first, in words. */
 function draftFrom(form: Record<string, string>, opts: { daily: boolean }): { ok: true; draft: PolicyDraft } | { ok: false; error: string } {
@@ -49,15 +77,16 @@ function draftFrom(form: Record<string, string>, opts: { daily: boolean }): { ok
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Some of the values were not valid.' }
   const f = parsed.data
   if (f.kind === 'daily' && !opts.daily) return { ok: false, error: DAILY_REFUSED }
-  if (f.kind === 'daily') return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'daily', hour: f.hour, timezone: f.timezone } } }
+  const time = { hour: f.hour, minute: f.minute, timezone: f.timezone }
+  if (f.kind === 'daily') return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'daily', ...time } } }
   if (f.kind === 'weekly') {
     const weekday = WeekdayField.safeParse(form.weekday)
     if (!weekday.success) return { ok: false, error: weekday.error.issues[0]?.message ?? 'Choose a day of the week.' }
-    return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'weekly', weekday: weekday.data, hour: f.hour, timezone: f.timezone } } }
+    return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'weekly', weekday: weekday.data, ...time } } }
   }
   const day = DayField.safeParse(form.day)
   if (!day.success) return { ok: false, error: day.error.issues[0]?.message ?? 'The day of the month is 1 to 28.' }
-  return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'monthly', day: day.data, hour: f.hour, timezone: f.timezone } } }
+  return { ok: true, draft: { name: f.name, instruction: f.instruction, schedule: { kind: 'monthly', day: day.data, ...time } } }
 }
 
 const formValues = (form: Record<string, string>): PolicyFormValues => ({
@@ -67,7 +96,10 @@ const formValues = (form: Record<string, string>): PolicyFormValues => ({
   weekday: form.weekday ?? '1',
   day: form.day ?? '1',
   hour: form.hour ?? '18',
+  minute: form.minute ?? '0',
   timezone: form.timezone ?? 'UTC',
+  ...(form.mode === undefined ? {} : { mode: form.mode }),
+  ...(form.vetoWindowMinutes === undefined ? {} : { vetoWindowMinutes: form.vetoWindowMinutes }),
 })
 
 /** The policy's page with a message after an action: `done` on success, the error code otherwise. */
@@ -155,10 +187,16 @@ export function policyRoutes(kit: DashboardKit): Hono {
   })
 
   /**
-   * A policy's page. For the Treasurer role it carries the inline editor: closed, open (`?edit=1`, the
-   * old /edit URL), or open with a refused edit's values and why (`edit`).
+   * A policy's page, with the message after an action (`done` or `error`, codes from the URL). For
+   * the Treasurer role it carries the inline editor: closed, open (`?edit=1`, the old /edit URL), or
+   * open with a refused edit's values and why (`edit`).
    */
-  async function policyPage(a: CommunityAccess, policies: PolicyPort, policyId: string, opts: { notice: string; editOpen: boolean; edit?: { values: PolicyFormValues; error: string }; status?: number }) {
+  async function policyPage(
+    a: CommunityAccess,
+    policies: PolicyPort,
+    policyId: string,
+    opts: { done?: string | undefined; error?: string | undefined; editOpen: boolean; edit?: { values: PolicyFormValues; error: string }; status?: number },
+  ) {
     const ref = { guildId: a.community.id, policyId }
     const policy = await policies.get(ref)
     if (!policy.ok) return notFound(a)
@@ -185,9 +223,19 @@ export function policyRoutes(kit: DashboardKit): Hono {
       weekday: String(s.kind === 'weekly' ? s.weekday : 1),
       day: String(s.kind === 'monthly' ? s.day : 1),
       hour: String(s.hour),
+      minute: String(s.minute ?? 0),
       timezone: s.timezone,
+      mode: p.mode,
+      vetoWindowMinutes: String(p.vetoWindowMinutes),
     }
-    const editor = a.viewer.canAct ? { values: opts.edit?.values ?? current, daily: daily(), open: opts.editOpen || !!opts.edit, error: opts.edit?.error ?? null } : null
+    // What saving does, as the policy services decide it (the editor only says it beforehand): an approver's
+    // edit of a policy approved before is in force at once, unless the community requires a separate approver.
+    const applies: EditApplies = a.community.requireSeparateApprover
+      ? 'second_approval'
+      : a.viewer.canAct && (p.status === 'active' || p.status === 'paused')
+        ? 'now'
+        : 'approval'
+    const editor = a.viewer.canAct ? { values: opts.edit?.values ?? current, daily: daily(), open: opts.editOpen || !!opts.edit, error: opts.edit?.error ?? null, applies } : null
     const body = policyBody({
       guildId: a.community.id,
       policy: p,
@@ -197,7 +245,7 @@ export function policyRoutes(kit: DashboardKit): Hono {
       token: a.community.payoutToken,
       canAct: a.viewer.canAct,
       csrf: a.viewer.csrf,
-      notice: opts.notice,
+      notice: notice(opts.done, opts.error, { version: p.version }),
       compiles,
       budget,
       latest,
@@ -212,7 +260,7 @@ export function policyRoutes(kit: DashboardKit): Hono {
     const a = access.value
     const policies = port()
     if (!policies) return notFound(a)
-    return policyPage(a, policies, c.req.param('policyId'), { notice: notice(c.req.query('done'), c.req.query('error')), editOpen: c.req.query('edit') === '1' })
+    return policyPage(a, policies, c.req.param('policyId'), { done: c.req.query('done'), error: c.req.query('error'), editOpen: c.req.query('edit') === '1' })
   })
 
   /** The old edit page: the policy's page with its editor open (for anyone else, the page as they see it). */
@@ -230,12 +278,17 @@ export function policyRoutes(kit: DashboardKit): Hono {
     if (!policies) return notFound(a)
     const policyId = c.req.param('policyId')
     // A refused edit comes back to the policy's page, the editor open with what was sent and why.
-    const refusedEdit = (error: string, status: number) => policyPage(a, policies, policyId, { notice: '', editOpen: true, edit: { values: formValues(a.form), error }, status })
+    const refusedEdit = (error: string, status: number) => policyPage(a, policies, policyId, { editOpen: true, edit: { values: formValues(a.form), error }, status })
     const draft = draftFrom(a.form, { daily: daily() })
     if (!draft.ok) return refusedEdit(draft.error, 400)
-    const edited = await policies.edit({ guildId: a.community.id, policyId, actor: a.actor, draft: draft.draft })
+    const mode = modeFrom(a.form)
+    if (!mode.ok) return refusedEdit(mode.error, 400)
+    const edited = await policies.edit({ guildId: a.community.id, policyId, actor: a.actor, draft: draft.draft, ...mode.mode })
     if (!edited.ok && edited.error.code === 'could_not_compile') return refusedEdit(compileError(edited.error), 422)
-    return back(base(a, policyId), edited, 'edited')
+    const refusal = edited.ok ? undefined : EDIT_REFUSED[edited.error.code]
+    if (!edited.ok && refusal) return refusedEdit(edited.error.message ?? refusal, 422)
+    // In force at once (an approver's edit) or waiting for approval: the page says which.
+    return back(base(a, policyId), edited, edited.ok && edited.value.inForce ? 'applied' : 'edited')
   })
 
   /** One policy action: gate it, call the port with the actor, go back to the policy's page. */

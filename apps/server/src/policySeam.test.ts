@@ -57,15 +57,26 @@ async function world(opts: { proposer?: FakeRunProposer | null; activity?: FakeA
 }
 
 describe('schedules between the dashboard (weekday 0 = Sunday) and core (weekday names)', () => {
-  it('map both ways, weekly and monthly', () => {
-    expect(toCoreSchedule(MONDAY)).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, timezone: 'UTC' })
-    expect(toPortSchedule({ kind: 'weekly', weekday: 'sunday', hour: 9, timezone: 'Europe/Lisbon' })).toEqual({ kind: 'weekly', weekday: 0, hour: 9, timezone: 'Europe/Lisbon' })
-    const monthly = { kind: 'monthly' as const, day: 15, hour: 9, timezone: 'Europe/Lisbon' }
+  it('map both ways, weekly and monthly, with the minute (none from the dashboard is on the hour)', () => {
+    expect(toCoreSchedule(MONDAY)).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 0, timezone: 'UTC' })
+    expect(toCoreSchedule({ ...MONDAY, minute: 45 })).toEqual({ kind: 'weekly', weekday: 'monday', hour: 18, minute: 45, timezone: 'UTC' })
+    expect(toPortSchedule({ kind: 'weekly', weekday: 'sunday', hour: 9, minute: 30, timezone: 'Europe/Lisbon' })).toEqual({ kind: 'weekly', weekday: 0, hour: 9, minute: 30, timezone: 'Europe/Lisbon' })
+    const monthly = { kind: 'monthly' as const, day: 15, hour: 9, minute: 5, timezone: 'Europe/Lisbon' }
     expect(toPortSchedule(toCoreSchedule(monthly))).toEqual(monthly)
   })
 
+  it('a policy at a minute past the hour: the list and the next scheduled runs are at that minute', async () => {
+    const w = await world()
+    const created = await w.port.create({ guildId: GUILD, actor, draft: { name: 'Help desk', instruction: RULE, schedule: { ...MONDAY, minute: 30 } } })
+    if (!created.ok) throw new Error(created.error.code)
+    expect((await w.port.approve({ guildId: GUILD, policyId: created.value.policyId, actor, version: 1 })).ok).toBe(true)
+    const [listed] = await w.port.list({ guildId: GUILD })
+    expect([listed?.schedule, listed?.nextRunAt]).toEqual([{ ...MONDAY, minute: 30 }, new Date('2026-10-12T18:30:00Z')])
+    expect((await w.port.upcoming({ guildId: GUILD, limit: 5 })).map((u) => u.at)).toEqual([new Date('2026-10-12T18:30:00Z')])
+  })
+
   it('daily (the testnet demo controls) maps both ways too, and the port says whether core allows it', async () => {
-    const daily = { kind: 'daily' as const, hour: 18, timezone: 'UTC' }
+    const daily = { kind: 'daily' as const, hour: 18, minute: 0, timezone: 'UTC' }
     expect(toCoreSchedule(daily)).toEqual(daily)
     expect(toPortSchedule(daily)).toEqual(daily)
     expect((await world()).port.dailySchedules).toBe(false)
@@ -115,11 +126,33 @@ describe('policyPortFromCore: refusals in words', () => {
     expect(await w.port.resume(ref)).toEqual({ ok: false, error: { code: 'illegal_state' } })
     expect(await w.port.discard({ ...ref, version: 1 })).toEqual({ ok: false, error: { code: 'illegal_state' } })
     expect(await w.port.setMode({ ...ref, mode: 'autopilot', vetoWindowMinutes: 30 })).toEqual({ ok: false, error: { code: 'invalid_veto_window' } })
-    // A new name or schedule is a new version without asking the model again.
+    // A new name or schedule is a new version without asking the model again (the Treasurer's: in force at once).
     const asked = w.proposer?.requests.length
-    expect(await w.port.edit({ ...ref, draft: { name: 'Renamed', instruction: `${RULE} `, schedule: { ...MONDAY, hour: 9 } } })).toEqual({ ok: true, value: { version: 2 } })
+    expect(await w.port.edit({ ...ref, draft: { name: 'Renamed', instruction: `${RULE} `, schedule: { ...MONDAY, hour: 9 } } })).toEqual({ ok: true, value: { version: 2, inForce: true } })
     expect(w.proposer?.requests.length).toBe(asked)
     expect(await w.port.edit({ ...ref, policyId: 'pol_nope', draft: { name: 'x', instruction: RULE, schedule: MONDAY } })).toEqual({ ok: false, error: { code: 'policy_not_found' } })
+  })
+
+  it("an edit's mode reaches core; what core refuses about it comes back with this server's own numbers, or as its code", async () => {
+    const w = await world()
+    const draft = { name: 'Help desk', instruction: RULE, schedule: MONDAY }
+    const created = await w.port.create({ guildId: GUILD, actor, draft })
+    if (!created.ok) throw new Error(created.error.code)
+    const ref = { guildId: GUILD, policyId: created.value.policyId, actor }
+    // A draft never approved: the edit waits, and autopilot is refused.
+    expect(await w.port.edit({ ...ref, draft, mode: 'autopilot', vetoWindowMinutes: 120 })).toEqual({ ok: false, error: { code: 'policy_not_approved' } })
+    expect(await w.port.edit({ ...ref, draft: { ...draft, name: 'Help desk, v2' } })).toEqual({ ok: true, value: { version: 2, inForce: false } })
+    expect((await w.port.approve({ ...ref, version: 2 })).ok).toBe(true)
+    expect(await w.port.edit({ ...ref, draft, mode: 'autopilot', vetoWindowMinutes: 30 })).toEqual({
+      ok: false,
+      error: { code: 'invalid_veto_window', message: 'Nothing was saved: a veto window here is at least 1 hour and at most 168 hours.' },
+    })
+    expect(await w.port.edit({ ...ref, draft, mode: 'autopilot', vetoWindowMinutes: 120 })).toEqual({ ok: true, value: { version: 3, inForce: true } })
+    const p = await w.rolepay.policies.get({ guildId: GUILD, policyId: created.value.policyId })
+    expect(p.ok && [p.value.status, p.value.mode, p.value.vetoWindowMinutes, p.value.autopilot?.enabledBy]).toEqual(['active', 'autopilot', 120, TREASURER])
+    // A rule with an amount the instruction does not state cannot be put in force: its code, and nothing saved.
+    expect(await w.port.edit({ ...ref, draft: { ...draft, instruction: 'Every Monday: pay each Mod per answered question in #help.' } })).toEqual({ ok: false, error: { code: 'policy_blocked' } })
+    expect((await w.port.versions({ guildId: GUILD, policyId: created.value.policyId })).map((v) => v.version)).toEqual([1, 2, 3])
   })
 
   it('a policy archived before anyone approved it: its only version reads as dropped', async () => {
@@ -304,8 +337,20 @@ describe('auditSummary: every event in plain words, from codes, counts and amoun
   it('policy events', () => {
     expect(say('policy.created')).toBe('Wrote the policy as a draft (version 2).')
     expect(say('policy.compiled', { amountsInInstruction: false })).toBe('Compiled the instruction once into a rule; it uses an amount the instruction does not state, so it cannot be approved.')
+    // An edit that waits (and every edit recorded before edits could be in force, which have no `applied`).
     expect(say('policy.edited', { recompiled: true, autopilotOff: true })).toBe('Edited it: version 2 waits for approval (compiled again from a new instruction); autopilot is off.')
     expect(say('policy.edited', { recompiled: false, autopilotOff: false })).toBe('Edited it: version 2 waits for approval.')
+    expect(say('policy.edited', { recompiled: false, applied: false, mode: 'propose', previousMode: 'autopilot', autopilotOff: true })).toBe('Edited it: version 2 waits for approval; autopilot is off.')
+    // An edit in force at once, by the approver who made it.
+    const applied = { applied: true, recompiled: false, vetoWindowMinutes: 120, autopilotOff: false }
+    expect(say('policy.edited', { ...applied, recompiled: true, mode: 'autopilot', previousMode: 'autopilot' })).toBe(
+      'Edited and approved it at once: version 2 is in force (compiled again from a new instruction); autopilot stays on, with a veto window of 2 hours.',
+    )
+    expect(say('policy.edited', { ...applied, mode: 'autopilot', previousMode: 'propose' })).toBe(
+      'Edited and approved it at once: version 2 is in force; autopilot is on: each run pays after a veto window of 2 hours unless vetoed.',
+    )
+    expect(say('policy.edited', { ...applied, mode: 'propose', previousMode: 'autopilot', autopilotOff: true })).toBe('Edited and approved it at once: version 2 is in force; autopilot is off: each run waits for approval.')
+    expect(say('policy.edited', { ...applied, mode: 'propose', previousMode: 'propose' })).toBe('Edited and approved it at once: version 2 is in force.')
     expect(say('policy.discarded', { discarded: 3, restored: 2 })).toBe('Discarded version 3; back to version 2, paused.')
     expect(say('policy.discarded', { discarded: 1, restored: null })).toBe('Discarded version 1; the policy is archived.')
     expect(say('policy.mode_changed', { to: 'autopilot', vetoWindowMinutes: 1 })).toContain('a veto window of 1 minute')
