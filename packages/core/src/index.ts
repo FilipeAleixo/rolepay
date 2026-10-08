@@ -44,6 +44,7 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
   const { chain, repositories: r, vault, ids, clock, network } = deps
   // Daily policy schedules: the testnet demo only, never off Moderato.
   const demoControls = deps.demoControls === true && network === 'moderato'
+  const audit = new AuditTrail({ log: r.audit, policyRuns: r.policyRuns, clock, live: deps.live ?? null, ...(deps.onAuditError ? { onError: deps.onAuditError } : {}) })
   const communities = new CommunityService({
     communities: r.communities,
     chain,
@@ -52,8 +53,8 @@ export function createRolepay(deps: RolepayDeps): Rolepay {
     network,
     ids,
     setupLinkTtlSeconds: deps.linkTtlSeconds ?? DEFAULT_LINK_TTL_SECONDS,
+    audit,
   })
-  const audit = new AuditTrail({ log: r.audit, policyRuns: r.policyRuns, clock, live: deps.live ?? null, ...(deps.onAuditError ? { onError: deps.onAuditError } : {}) })
   const policyKeys = new PolicyKeyService({ communities: r.communities, policies: r.policies, policyKeys: r.policyKeys, chain, vault, clock, audit, communityService: communities })
   const payRuns = new PayRunService({
     runs: r.runs,

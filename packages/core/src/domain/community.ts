@@ -16,6 +16,19 @@ export const FEE_MODES = ['sponsor', 'fee_budget'] as const
 export const FeeModeSchema = z.enum(FEE_MODES)
 export type FeeMode = z.infer<typeof FeeModeSchema>
 
+/**
+ * How the treasury channel was set: `unset` (nobody chose; Rolepay looks for a text channel named
+ * "treasury"), `found` (Rolepay picked that channel by its name), `chosen` (a Treasurer chose it, or
+ * chose none). A Treasurer's choice always wins: once chosen, Rolepay never picks one by itself again,
+ * unless the chosen channel is gone.
+ */
+export const TREASURY_CHANNEL_SOURCES = ['unset', 'found', 'chosen'] as const
+export const TreasuryChannelSourceSchema = z.enum(TREASURY_CHANNEL_SOURCES)
+export type TreasuryChannelSource = z.infer<typeof TreasuryChannelSourceSchema>
+
+/** Where Rolepay posts what only a Treasurer can act on, and how that was decided. */
+export type TreasuryChannel = { channelId: string | null; source: TreasuryChannelSource }
+
 /** A community is a Discord guild. Its own Tempo account (the treasury) holds the funds. */
 export const CommunitySchema = z
   .object({
@@ -40,12 +53,41 @@ export const CommunitySchema = z
      * default; the treasurer turns it on from the setup page, and the bot key needs the swap scope.
      */
     preferredTokens: z.boolean().default(false),
+    /**
+     * The treasury channel: where Rolepay posts what only a Treasurer can act on (runs to approve,
+     * runs to veto, held runs), with their buttons; the channel each would have gone to gets a copy
+     * without them. null = none: each message goes where it always did, buttons included.
+     */
+    treasuryChannelId: DiscordIdSchema.nullable().default(null),
+    treasuryChannelSource: TreasuryChannelSourceSchema.default('unset'),
     createdAt: z.date(),
     updatedAt: z.date(),
   })
   .refine((c) => c.feeMode !== 'fee_budget' || c.feeToken !== null, 'fee_budget mode needs a fee token')
   .refine((c) => c.feeToken === null || c.feeToken !== c.payoutToken, 'the fee token must differ from the payout token')
+  .refine((c) => c.treasuryChannelSource !== 'unset' || c.treasuryChannelId === null, 'a treasury channel is found or chosen, never unset')
 export type Community = z.infer<typeof CommunitySchema>
+
+/** The name Rolepay looks for when nobody chose a treasury channel: a text channel called exactly this, in any case. */
+export const TREASURY_CHANNEL_NAME = 'treasury'
+
+/**
+ * The first channel named "treasury" (case-insensitive, the whole name: "treasury-old" is not it).
+ * The caller passes text channels only, in Discord's order, and checks Rolepay can post there.
+ */
+export function findTreasuryChannel<C extends { name: string | null }>(textChannels: readonly C[]): C | null {
+  return textChannels.find((c) => c.name !== null && c.name.toLowerCase() === TREASURY_CHANNEL_NAME) ?? null
+}
+
+/**
+ * Whether Rolepay may pick a channel named "treasury" by itself: while nobody chose one (`replacing`
+ * null), or when the channel set is gone (`replacing` is that channel: Rolepay could no longer post
+ * there). Never over a Treasurer's choice of no channel.
+ */
+export function mayFindTreasuryChannel(c: Pick<Community, 'treasuryChannelId' | 'treasuryChannelSource'>, replacing: string | null): boolean {
+  if (replacing === null) return c.treasuryChannelSource === 'unset'
+  return c.treasuryChannelId === replacing
+}
 
 /**
  * The settings a /rolepay setup chose. For a community that is not registered yet (its

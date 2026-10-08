@@ -5,7 +5,7 @@ import { PolicyIdSchema } from './policy.js'
 import { PolicyRunIdSchema } from './policyRun.js'
 
 /**
- * The audit stream: every policy, run, funding and payee address event, append-only, for the dashboard's audit log and
+ * The audit stream: every policy, run, funding, payee address and treasury channel event, append-only, for the dashboard's audit log and
  * the governance report a DAO can publish. Details are codes, amounts, counts and IDs, never
  * anyone's words (instructions, notes and names stay on their own records).
  */
@@ -38,6 +38,10 @@ export const AUDIT_EVENT_TYPES = [
   'deposit.received',
   /** A payee re-claimed through a new link and is now paid elsewhere: the kinds only (passkey, external), never an address or a name. */
   'payee.address_changed',
+  /** A Treasurer chose the treasury channel, or none: the channel ID and the one before, never a name. */
+  'community.treasury_channel_chosen',
+  /** Rolepay picked a channel named "treasury" by itself (nobody had chosen, or the one set was gone). */
+  'community.treasury_channel_found',
 ] as const
 export const AuditEventTypeSchema = z.enum(AUDIT_EVENT_TYPES)
 export type AuditEventType = z.infer<typeof AuditEventTypeSchema>

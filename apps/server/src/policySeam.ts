@@ -530,6 +530,13 @@ export function auditSummary(e: AuditEvent, symbol: string): string {
     // Content-free on purpose: the kinds only, never the addresses.
     case 'payee.address_changed':
       return `Registered a new payout address through a new link: from ${ADDRESS_KIND_WORDS[String(d.fromKind)] ?? String(d.fromKind)} to ${ADDRESS_KIND_WORDS[String(d.toKind)] ?? String(d.toKind)}.`
+    // Channels by ID: the stream keeps no names.
+    case 'community.treasury_channel_chosen':
+      return typeof d.channelId === 'string'
+        ? `Chose the treasury channel (channel ${d.channelId}): what needs a Treasurer is posted there, with its buttons.`
+        : "Chose no treasury channel: each run is posted in its policy's channel, with its buttons."
+    case 'community.treasury_channel_found':
+      return `Picked #treasury as the treasury channel (found by its name; channel ${String(d.channelId)})${typeof d.replaced === 'string' ? `, in place of channel ${d.replaced}, where Rolepay could no longer post` : ''}.`
   }
 }
 

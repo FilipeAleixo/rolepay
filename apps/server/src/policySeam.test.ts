@@ -417,6 +417,16 @@ describe('auditSummary: every event in plain words, from codes, counts and amoun
     expect(say('payee.address_changed', { fromKind: 'passkey', toKind: 'external' })).toBe('Registered a new payout address through a new link: from a Rolepay passkey account to their own wallet.')
     expect(say('payee.address_changed', { fromKind: 'external', toKind: 'passkey' })).toBe('Registered a new payout address through a new link: from their own wallet to a Rolepay passkey account.')
   })
+
+  it('the treasury channel: chosen (or none) by a Treasurer, or picked by its name; channels by ID, never a name', () => {
+    const id = '700000000000000009'
+    expect(say('community.treasury_channel_chosen', { channelId: id, previous: null })).toBe(`Chose the treasury channel (channel ${id}): what needs a Treasurer is posted there, with its buttons.`)
+    expect(say('community.treasury_channel_chosen', { channelId: null, previous: id })).toBe("Chose no treasury channel: each run is posted in its policy's channel, with its buttons.")
+    expect(say('community.treasury_channel_found', { channelId: id, replaced: null })).toBe(`Picked #treasury as the treasury channel (found by its name; channel ${id}).`)
+    expect(say('community.treasury_channel_found', { channelId: id, replaced: '700000000000000005' })).toBe(
+      `Picked #treasury as the treasury channel (found by its name; channel ${id}), in place of channel 700000000000000005, where Rolepay could no longer post.`,
+    )
+  })
 })
 
 describe('aiUsagePortFromCore: the AI spend, read from the rows core writes', () => {

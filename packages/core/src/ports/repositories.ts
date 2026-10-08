@@ -1,5 +1,5 @@
 import type { AiUsage, AiUsagePurpose, NewAiUsage } from '../domain/aiUsage.js'
-import type { BotKey, Community, SetupLink } from '../domain/community.js'
+import type { BotKey, Community, SetupLink, TreasuryChannel } from '../domain/community.js'
 import type { Deposit, DepositMaster, FundingSource } from '../domain/funding.js'
 import type { LinkToken, Payee } from '../domain/payee.js'
 import type { AuditEvent, AuditQuery, NewAuditEvent } from '../domain/policy/audit.js'
@@ -14,7 +14,14 @@ import type { Run, RunStatus } from '../domain/run.js'
 export interface CommunityRepository {
   get(id: string): Promise<Community | null>
   insert(community: Community): Promise<Result<void, { code: 'already_exists' }>>
+  /** Every setting but the treasury channel, which only `setTreasuryChannel` changes. */
   update(community: Community): Promise<void>
+  /**
+   * Sets the treasury channel. With `expected`, only while the stored setting is still exactly that
+   * (a compare-and-set, so a channel Rolepay found by its name never overwrites a Treasurer's choice
+   * made in between): false when it was not.
+   */
+  setTreasuryChannel(communityId: string, next: TreasuryChannel & { at: Date }, expected?: TreasuryChannel): Promise<boolean>
   /** Upsert by key address. */
   saveBotKey(key: BotKey): Promise<void>
   getBotKey(address: string): Promise<BotKey | null>

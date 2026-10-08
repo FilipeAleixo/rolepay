@@ -14,17 +14,20 @@ import {
   botKeyContext,
   canChangeApprovalRules,
   keyAuthorization,
+  mayFindTreasuryChannel,
   toBotKeyView,
 } from '../domain/community.js'
 import { keyLacksSwapScope, preferredTokenPolicy } from '../domain/delivery.js'
 import type { Hex } from '../domain/hex.js'
 import { type Address, AddressSchema, DiscordIdSchema } from '../domain/ids.js'
+import { canApprovePolicies } from '../domain/policy/policy.js'
 import { type Result, err, ok } from '../domain/result.js'
 import type { Clock } from '../ports/clock.js'
 import type { IdGenerator } from '../ports/idGenerator.js'
 import type { KeyVault } from '../ports/keyVault.js'
 import type { ChainRejection, PayoutChain, RootSigner } from '../ports/payoutChain.js'
 import type { CommunityRepository } from '../ports/repositories.js'
+import type { AuditTrail } from './auditTrail.js'
 import { type InvalidInput, invalidInput } from './common.js'
 
 export type CommunityServiceDeps = {
@@ -36,6 +39,8 @@ export type CommunityServiceDeps = {
   ids: IdGenerator
   /** How long a setup link stays valid. */
   setupLinkTtlSeconds: number
+  /** The audit stream, for the treasury channel's changes. Absent (some unit tests): not audited. */
+  audit?: AuditTrail
 }
 
 export const RegisterCommunityInputSchema = z.object({
@@ -70,6 +75,9 @@ export const IssueSetupLinkInputSchema = z.object({
   settings: SetupSettingsSchema,
 })
 export type IssueSetupLinkInput = z.input<typeof IssueSetupLinkInputSchema>
+
+const TreasuryChoiceSchema = z.object({ actor: DiscordIdSchema, channelId: DiscordIdSchema.nullable() })
+const FoundChannelSchema = z.object({ channelId: DiscordIdSchema, replacing: DiscordIdSchema.nullable() })
 
 export type NotFound = { code: 'community_not_found' }
 export type NotPermitted = { code: 'not_permitted' }
@@ -232,6 +240,67 @@ export class CommunityService {
     await this.deps.communities.update(updated)
     const active = (await this.deps.communities.listBotKeys(community.id)).find((k) => k.status === 'active')
     return ok({ community: updated, keyNeedsSwapScope: keyLacksSwapScope(updated, active?.policy ?? null) })
+  }
+
+  /**
+   * The treasury channel: where Rolepay posts what only a Treasurer can act on (runs to approve,
+   * runs to veto, held runs). Chosen by a member holding the CURRENT approver role, the same rule as
+   * approving policies (`actorRoleIds`: the roles Discord signed, or the dashboard read fresh). null
+   * chooses none: everything goes where it always did, and Rolepay stops looking for a channel named
+   * "treasury". The caller has checked the channel is in this server and that Rolepay can post there.
+   * Audited with the channel before; the same choice again changes nothing.
+   */
+  async setTreasuryChannel(input: {
+    guildId: string
+    actor: string
+    actorRoleIds: readonly string[]
+    channelId: string | null
+  }): Promise<Result<Community, InvalidInput | NotFound | NotPermitted>> {
+    const parsed = TreasuryChoiceSchema.safeParse(input)
+    if (!parsed.success) return invalidInput(parsed.error)
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    if (!canApprovePolicies(community, input.actorRoleIds)) return err({ code: 'not_permitted' })
+    const channelId = parsed.data.channelId
+    if (community.treasuryChannelSource === 'chosen' && community.treasuryChannelId === channelId) return ok(community)
+    const at = this.deps.clock.now()
+    await this.deps.communities.setTreasuryChannel(community.id, { channelId, source: 'chosen', at })
+    await this.deps.audit?.record({
+      communityId: community.id,
+      type: 'community.treasury_channel_chosen',
+      actor: parsed.data.actor,
+      details: { channelId, previous: community.treasuryChannelId },
+    })
+    return ok({ ...community, treasuryChannelId: channelId, treasuryChannelSource: 'chosen', updatedAt: at })
+  }
+
+  /**
+   * Rolepay found a text channel named "treasury" and posted its confirmation there: it becomes the
+   * treasury channel, while nobody has chosen one (`replacing` null), or in place of the channel set
+   * when Rolepay could no longer post there (`replacing` is that channel). A compare-and-set on what
+   * was read, so a Treasurer's choice made in between always wins (`concurrent_update`); a choice
+   * already made, or a channel found already, is `not_looking`. Audited with Rolepay as the actor.
+   */
+  async useFoundTreasuryChannel(input: {
+    guildId: string
+    channelId: string
+    replacing: string | null
+  }): Promise<Result<Community, InvalidInput | NotFound | { code: 'not_looking' } | { code: 'concurrent_update' }>> {
+    const parsed = FoundChannelSchema.safeParse(input)
+    if (!parsed.success) return invalidInput(parsed.error)
+    const community = await this.deps.communities.get(input.guildId)
+    if (!community) return err({ code: 'community_not_found' })
+    if (!mayFindTreasuryChannel(community, parsed.data.replacing)) return err({ code: 'not_looking' })
+    const at = this.deps.clock.now()
+    const expected = { channelId: community.treasuryChannelId, source: community.treasuryChannelSource }
+    if (!(await this.deps.communities.setTreasuryChannel(community.id, { channelId: parsed.data.channelId, source: 'found', at }, expected))) return err({ code: 'concurrent_update' })
+    await this.deps.audit?.record({
+      communityId: community.id,
+      type: 'community.treasury_channel_found',
+      actor: null,
+      details: { channelId: parsed.data.channelId, replaced: parsed.data.replacing },
+    })
+    return ok({ ...community, treasuryChannelId: parsed.data.channelId, treasuryChannelSource: 'found', updatedAt: at })
   }
 
   /**

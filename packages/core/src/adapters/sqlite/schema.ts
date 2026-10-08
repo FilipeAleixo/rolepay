@@ -21,6 +21,9 @@ export interface CommunitiesTable {
   proposer_role_id: string | null
   /** 0 or 1. */
   preferred_tokens: number
+  treasury_channel_id: string | null
+  /** 'unset', 'found' or 'chosen'. */
+  treasury_channel_source: string
   created_at: string
   updated_at: string
 }

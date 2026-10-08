@@ -1,5 +1,5 @@
 import type { AiUsage, AiUsagePurpose, NewAiUsage } from '../../domain/aiUsage.js'
-import type { BotKey, Community, SetupLink } from '../../domain/community.js'
+import type { BotKey, Community, SetupLink, TreasuryChannel } from '../../domain/community.js'
 import type { Deposit, DepositMaster, FundingSource } from '../../domain/funding.js'
 import type { LinkToken, Payee } from '../../domain/payee.js'
 import type { AuditEvent, AuditQuery, NewAuditEvent } from '../../domain/policy/audit.js'
@@ -42,7 +42,16 @@ export class MemoryCommunityRepository implements CommunityRepository {
     return ok(undefined)
   }
   async update(c: Community) {
-    if (this.communities.has(c.id)) this.communities.set(c.id, copy(c))
+    const stored = this.communities.get(c.id)
+    // The treasury channel is left as stored: only setTreasuryChannel changes it.
+    if (stored) this.communities.set(c.id, { ...copy(c), treasuryChannelId: stored.treasuryChannelId, treasuryChannelSource: stored.treasuryChannelSource })
+  }
+  async setTreasuryChannel(communityId: string, next: TreasuryChannel & { at: Date }, expected?: TreasuryChannel) {
+    const stored = this.communities.get(communityId)
+    if (!stored) return false
+    if (expected && (stored.treasuryChannelId !== expected.channelId || stored.treasuryChannelSource !== expected.source)) return false
+    this.communities.set(communityId, { ...stored, treasuryChannelId: next.channelId, treasuryChannelSource: next.source, updatedAt: next.at })
+    return true
   }
   async saveBotKey(key: BotKey) {
     this.keys.set(key.address, copy(key))
