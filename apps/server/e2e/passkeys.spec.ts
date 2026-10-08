@@ -67,6 +67,30 @@ test('a recipient creates a passkey on the claim page, and a returning one signs
   expect(await auth.credentials()).toHaveLength(1)
 })
 
+test('two payees of one community claiming in the same browser (a shared device) get two passkeys and two addresses', async ({ page }) => {
+  const guildId = snowflake()
+  const dev = privateKeyToAddress(generatePrivateKey()).toLowerCase()
+  const registered = await server.rolepay.communities.register({ guildId, name: 'E2E shared guild', treasuryAddress: dev, payoutToken: TOKEN, feeMode: 'sponsor' })
+  expect(registered.ok).toBe(true)
+  const auth = await virtualAuthenticator(page)
+  const claim = async (discordUserId: string, discordUsername: string) => {
+    const link = await server.rolepay.payees.issueLink({ guildId, discordUserId, discordUsername })
+    if (!link.ok) throw new Error(link.error.code)
+    await page.goto(`${server.url}/claim/${link.value.token}`)
+    await page.getByRole('button', { name: 'Create my passkey' }).click()
+    await expect(page.getByRole('heading', { name: 'You will be paid here' })).toBeVisible()
+    return (await page.locator('#address').textContent())?.trim() as string
+  }
+  // Before the fix both passkeys were "Rolepay: E2E shared guild", and the SDK signed the second
+  // person in to the first person's account, so both were paid at one address.
+  const alice = await claim('200000000000000001', 'alice')
+  const bob = await claim('200000000000000002', 'bob')
+  expect(bob).not.toBe(alice)
+  expect(await auth.credentials()).toHaveLength(2)
+  expect(await server.rolepay.payees.get({ guildId, discordUserId: '200000000000000001' })).toMatchObject({ ok: true, value: { address: alice } })
+  expect(await server.rolepay.payees.get({ guildId, discordUserId: '200000000000000002' })).toMatchObject({ ok: true, value: { address: bob } })
+})
+
 test('after the server forgets a passkey (its database reset), the browser that still remembers it can create a new one', async ({ page }) => {
   const guildId = snowflake()
   const dev = privateKeyToAddress(generatePrivateKey()).toLowerCase()
@@ -82,13 +106,15 @@ test('after the server forgets a passkey (its database reset), the browser that 
   const address = (await page.locator('#address').textContent())?.trim() as string
 
   // The server forgets the credential, as a database reset does; the browser's Accounts SDK store
-  // still remembers the account under the same passkey name ("Rolepay: E2E reset guild").
+  // still remembers the account under the same passkey name ("Rolepay: E2E reset guild
+  // (200000000000000001)": the community and the person, so only that person's next claim meets it).
   const credentials = (await auth.credentials()) as { credentialId: string }[]
   for (const c of credentials) await server.kv.delete(`webauthn:credential:${c.credentialId.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`)
 
-  // Asked for a new passkey under that name, the SDK first signs in with the remembered one, which
-  // the server no longer knows ("Unknown credential"); the page forgets it and registers a new one.
-  const second = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000002' })
+  // The same person claims again with a new link. Asked for a new passkey under that name, the SDK
+  // first signs in with the remembered one, which the server no longer knows ("Unknown
+  // credential"); the page forgets it and registers a new one.
+  const second = await server.rolepay.payees.issueLink({ guildId, discordUserId: '200000000000000001' })
   if (!second.ok) throw new Error(second.error.code)
   await page.goto(`${server.url}/claim/${second.value.token}`)
   await page.getByRole('button', { name: 'Create my passkey' }).click()
@@ -97,7 +123,7 @@ test('after the server forgets a passkey (its database reset), the browser that 
   expect(fresh).toMatch(/^0x[0-9a-f]{40}$/)
   expect(fresh).not.toBe(address)
   expect(await auth.credentials()).toHaveLength(2)
-  expect(await server.rolepay.payees.get({ guildId, discordUserId: '200000000000000002' })).toMatchObject({ ok: true, value: { address: fresh } })
+  expect(await server.rolepay.payees.get({ guildId, discordUserId: '200000000000000001' })).toMatchObject({ ok: true, value: { address: fresh } })
 })
 
 test('a treasurer creates the treasury with a passkey, authorises the bot key with it, the bot pays, and the passkey revokes it', async ({ page }) => {

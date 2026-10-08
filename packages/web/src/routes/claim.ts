@@ -1,6 +1,7 @@
 import { type PayeeService, TOKEN_SYMBOLS } from '@rolepay/core'
 import { Hono } from 'hono'
 import { failure, jsonResponse, linkStatus } from '../json.js'
+import { payeePasskeyName } from '../passkeyNames.js'
 import type { PasskeySessions } from '../ports.js'
 import { claimPage } from '../views/claim.js'
 import { linkErrorPage } from '../views/page.js'
@@ -29,7 +30,8 @@ export function claimRoutes(deps: ClaimRoutesDeps): Hono {
           page: 'claim',
           token,
           communityName,
-          passkeyName: `Rolepay: ${communityName}`,
+          // One name per person (see passkeyNames.ts): the SDK signs in to a remembered account of the same name.
+          passkeyName: payeePasskeyName(communityName, link.value.discordUsername ?? link.value.discordUserId),
           network: deps.network,
           explorerUrl: deps.explorerUrl,
           guildId: link.value.guildId,

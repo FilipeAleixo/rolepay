@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Community } from '../domain/community.js'
 import { preferenceChoices } from '../domain/delivery.js'
 import { type Address, AddressSchema, DiscordIdSchema } from '../domain/ids.js'
-import { type Payee, checkLinkToken } from '../domain/payee.js'
+import { DiscordUsernameSchema, type Payee, checkLinkToken } from '../domain/payee.js'
 import { type Result, err, ok } from '../domain/result.js'
 import type { Clock } from '../ports/clock.js'
 import type { IdGenerator } from '../ports/idGenerator.js'
@@ -19,7 +19,7 @@ export type PayeeServiceDeps = {
   linkTtlSeconds: number
 }
 
-const IssueLinkInputSchema = z.object({ guildId: DiscordIdSchema, discordUserId: DiscordIdSchema })
+const IssueLinkInputSchema = z.object({ guildId: DiscordIdSchema, discordUserId: DiscordIdSchema, discordUsername: z.string().nullable().optional() })
 const RegisterInputSchema = z.object({ token: z.string().min(1), address: AddressSchema })
 
 const SetPreferredTokenInputSchema = z.object({ guildId: DiscordIdSchema, discordUserId: DiscordIdSchema, token: AddressSchema.nullable() })
@@ -52,9 +52,11 @@ export type PayeeRegistration = {
 export class PayeeService {
   constructor(private readonly deps: PayeeServiceDeps) {}
 
+  /** `discordUsername`: the caller's username from the signed interaction, which names their passkey on the claim page (kept only if it is one). */
   async issueLink(input: {
     guildId: string
     discordUserId: string
+    discordUsername?: string | null
   }): Promise<Result<{ token: string; expiresAt: Date }, InvalidInput | { code: 'community_not_found' }>> {
     const parsed = IssueLinkInputSchema.safeParse(input)
     if (!parsed.success) return invalidInput(parsed.error)
@@ -69,6 +71,7 @@ export class PayeeService {
       createdAt: now,
       expiresAt,
       consumedAt: null,
+      discordUsername: DiscordUsernameSchema.safeParse(parsed.data.discordUsername).data ?? null,
     })
     return ok({ token, expiresAt })
   }
@@ -76,13 +79,19 @@ export class PayeeService {
   /** For the claim page: who is this link for? Does not consume it. */
   async describeLink(input: {
     token: string
-  }): Promise<Result<{ guildId: string; communityName: string | null; discordUserId: string; expiresAt: Date }, LinkError>> {
+  }): Promise<Result<{ guildId: string; communityName: string | null; discordUserId: string; discordUsername: string | null; expiresAt: Date }, LinkError>> {
     const link = await this.deps.payees.getLinkToken(await this.deps.vault.fingerprint(input.token))
     if (!link) return err({ code: 'link_not_found' })
     const usable = checkLinkToken(link, this.deps.clock.now())
     if (!usable.ok) return usable
     const community = await this.deps.communities.get(link.communityId)
-    return ok({ guildId: link.communityId, communityName: community?.name ?? null, discordUserId: link.discordUserId, expiresAt: link.expiresAt })
+    return ok({
+      guildId: link.communityId,
+      communityName: community?.name ?? null,
+      discordUserId: link.discordUserId,
+      discordUsername: link.discordUsername,
+      expiresAt: link.expiresAt,
+    })
   }
 
   /** Consumes the link (exactly once) and maps the Discord user to the address. */

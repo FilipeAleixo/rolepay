@@ -344,6 +344,14 @@ const migrations: Record<string, Migration> = {
       await db.schema.createIndex('deposits_source').on('deposits').column('source_id').execute()
     },
   },
+  '0011_link_usernames': {
+    async up(db: Kysely<unknown>) {
+      // The member's Discord username on each claim link, which names their passkey (so two people's
+      // passkeys never share a name in one browser). A nullable column only: links from before keep
+      // working, and their page names the passkey with the Discord ID.
+      await db.schema.alterTable('link_tokens').addColumn('discord_username', 'text').execute()
+    },
+  },
 }
 
 /** Every migration's name, in the order they run (tests build a database as an earlier release left it). */

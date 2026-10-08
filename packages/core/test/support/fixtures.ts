@@ -103,6 +103,7 @@ export function linkToken(over: Partial<LinkToken> = {}): LinkToken {
     createdAt: T0,
     expiresAt: at(1800),
     consumedAt: null,
+    discordUsername: null,
     ...over,
   }
 }

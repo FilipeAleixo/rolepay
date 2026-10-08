@@ -4,7 +4,7 @@ import { payeeLinkMessage } from '../views/payee.js'
 
 /** /payee link: anyone in the server gets their own one-time claim link, ephemerally. */
 export const payeeLinkCommand: CommandHandler = async ({ ctx }, { rolepay, config }) => {
-  const link = await rolepay.payees.issueLink({ guildId: ctx.guildId, discordUserId: ctx.caller.userId })
+  const link = await rolepay.payees.issueLink({ guildId: ctx.guildId, discordUserId: ctx.caller.userId, discordUsername: ctx.caller.username })
   if (!link.ok) return replyError(link.error)
   const current = await rolepay.payees.get({ guildId: ctx.guildId, discordUserId: ctx.caller.userId })
   const url = `${config.claimBaseUrl.replace(/\/+$/, '')}/${encodeURIComponent(link.value.token)}`

@@ -10,9 +10,32 @@ describe('the recipient claim page', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/text\/html/)
     const config = await pageConfig(res)
-    expect(config).toMatchObject({ page: 'claim', token, communityName: 'Mods guild', network: 'moderato', passkeyName: 'Rolepay: Mods guild' })
+    expect(config).toMatchObject({ page: 'claim', token, communityName: 'Mods guild', network: 'moderato', passkeyName: 'Rolepay: Mods guild (alice)' })
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(res.headers.get('referrer-policy')).toBe('no-referrer')
+  })
+
+  it("names the passkey after the community and the person, so two payees in one browser never share an account (their Discord ID when the link kept no username)", async () => {
+    const h = webHarness()
+    await registeredCommunity(h)
+    const BOB = '200000000000000002'
+    const alice = await pageConfig(await h.send(`/claim/${await claimLink(h, ALICE, 'alice')}`))
+    const bob = await pageConfig(await h.send(`/claim/${await claimLink(h, BOB, 'bob')}`))
+    const old = await pageConfig(await h.send(`/claim/${await claimLink(h, BOB, null)}`))
+    expect([alice.passkeyName, bob.passkeyName, old.passkeyName]).toEqual(['Rolepay: Mods guild (alice)', 'Rolepay: Mods guild (bob)', `Rolepay: Mods guild (${BOB})`])
+  })
+
+  it('a hostile community name stays text in the passkey name, the page and its config, within 64 bytes', async () => {
+    const h = webHarness()
+    await registeredCommunity(h, PASSKEY, { name: '</script><img src=x onerror=alert(1)> very long name indeed' })
+    const res = await h.send(`/claim/${await claimLink(h)}`)
+    const html = await res.text()
+    expect(html).not.toContain('<img src=x')
+    const m = html.match(/<script type="application\/json" id="rolepay-config">([^<]*)<\/script>/)
+    const config = JSON.parse((m?.[1] ?? '').replaceAll('\\u003c', '<')) as { passkeyName: string }
+    expect(config.passkeyName.startsWith('Rolepay: </script><img')).toBe(true)
+    expect(config.passkeyName.endsWith('… (alice)')).toBe(true)
+    expect(new TextEncoder().encode(config.passkeyName).length).toBeLessThanOrEqual(64)
   })
 
   it('once registered, points to the account page, where the payee sees and moves what they are paid', async () => {

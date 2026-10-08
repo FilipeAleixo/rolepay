@@ -14,6 +14,7 @@ import { type Database, openSqliteDatabase } from './index.js'
 import { MIGRATION_NAMES, migrateTo } from './migrations.js'
 import { SqlitePolicyKeyRepository } from './policyKeyRepository.js'
 import { SqliteAuditLog, SqlitePolicyRepository } from './policyRepositories.js'
+import { SqliteFundingRepository } from './fundingRepository.js'
 import { SqliteCommunityRepository, SqlitePayeeRepository, SqliteRunRepository } from './repositories.js'
 
 // Real SQLite on a temp file (not :memory:), so file-level behaviour is exercised too.
@@ -250,6 +251,43 @@ describe('sqlite: migrations and persistence', () => {
     expect(await again.repositories.funding.getMaster(f.GUILD)).toEqual(f.depositMaster())
     expect(await again.repositories.funding.listDeposits(f.GUILD)).toEqual([f.deposit()])
     expect(await again.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(payee)
+  })
+
+  it("0011 keeps the payee's Discord username on claim links, applied to a database 0010 left with a community, a payee, a spent and a live link, a run and a funding source in it", async () => {
+    expect(MIGRATION_NAMES[MIGRATION_NAMES.indexOf('0011_link_usernames') - 1]).toBe('0010_funding')
+    const path = join(dir, 'before-0011.db')
+    const sqlite = new BetterSqlite3(path)
+    sqlite.pragma('foreign_keys = ON')
+    const before = new Kysely<Database>({ dialect: new SqliteDialect({ database: sqlite }) })
+    await migrateTo(before as unknown as Kysely<unknown>, '0010_funding')
+    await insertAsBefore0009(before, { payee: true })
+    // The link rows as the 0010 release wrote them (its columns only).
+    const linkRow = (hash: string, consumed: Date | null) => ({
+      token_hash: hash,
+      community_id: f.GUILD,
+      discord_user_id: f.ALICE,
+      created_at: f.T0.toISOString(),
+      expires_at: f.at(1800).toISOString(),
+      consumed_at: consumed?.toISOString() ?? null,
+    })
+    await before.insertInto('link_tokens').values([linkRow('fp_spent', f.at(5)), linkRow('fp_live', null)] as never).execute()
+    await new SqliteFundingRepository(before).insertSource(f.fundingSource())
+    const columns = (table: string) => (sqlite.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name)
+    expect(columns('link_tokens')).not.toContain('discord_username')
+    await before.destroy()
+
+    const after = await openSqliteDatabase(path)
+    opened.push(after)
+    // The old links read as they were, with no username (the claim page falls back to the Discord ID).
+    expect(await after.repositories.payees.getLinkToken('fp_spent')).toEqual(f.linkToken({ tokenHash: 'fp_spent', consumedAt: f.at(5) }))
+    expect(await after.repositories.payees.getLinkToken('fp_live')).toEqual(f.linkToken({ tokenHash: 'fp_live' }))
+    expect(await after.repositories.payees.consumeLinkToken('fp_live', f.at(6))).toBe(true)
+    expect(await after.repositories.payees.get(f.GUILD, f.ALICE)).toEqual(f.payee())
+    expect(await after.repositories.runs.get('run_fixture01')).toEqual(f.run())
+    expect(await after.repositories.funding.getSource(f.fundingSource().id)).toEqual(f.fundingSource())
+    // New links keep it.
+    await after.repositories.payees.insertLinkToken(f.linkToken({ tokenHash: 'fp_new', discordUsername: 'alice' }))
+    expect((await after.repositories.payees.getLinkToken('fp_new'))?.discordUsername).toBe('alice')
   })
 
   it('keeps key-value records across reopen', async () => {

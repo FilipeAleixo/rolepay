@@ -7,6 +7,7 @@
 import { Storage, local } from 'accounts'
 import { Account } from 'viem/tempo'
 import { describe, expect, it } from 'vitest'
+import { payeePasskeyName } from '../passkeyNames.js'
 import { explainPasskeyError } from './dom.js'
 import { passkeys } from './passkey.js'
 
@@ -177,5 +178,43 @@ describe('passkeys over the Accounts SDK (a remembered account the server no lon
     const keys = passkeys('moderato', { adapter: fakeServer(Storage.memory()).adapter, storage: broken })
     await expect(keys.ready()).resolves.toBeUndefined()
     expect(keys.account()).toBeNull()
+  })
+})
+
+// The bug this pins (2026-10-08): payee passkeys were all named "Rolepay: <community>", and the SDK,
+// asked to register a name it remembers, signs in with that account instead. So a second payee of
+// the same community claiming in the same browser got the first payee's account, and the server
+// linked the second Discord user to the first person's address. Names now carry the person.
+describe('one browser, several people (a shared device)', () => {
+  const addressOf = (cred: number) => Account.fromWebAuthnP256({ id: `cred-${cred}`, publicKey: p256(cred).publicKey }).address.toLowerCase()
+
+  it('two payees of one community claiming in the same browser get two passkeys, two accounts, two addresses', async () => {
+    const { server, keys } = setup()
+    const alice = await keys.create(payeePasskeyName('Mods guild', 'alice'))
+    const bob = await keys.create(payeePasskeyName('Mods guild', 'bob'))
+    expect(server.calls).toEqual(['create:Rolepay: Mods guild (alice)', 'create:Rolepay: Mods guild (bob)'])
+    expect([alice, bob]).toEqual([addressOf(1), addressOf(2)])
+    expect(alice).not.toBe(bob)
+    expect(remembered(keys)).toEqual(['Rolepay: Mods guild (bob):cred-2', 'Rolepay: Mods guild (alice):cred-1']) // newest first
+  })
+
+  it('the same payee claiming again (a new /payee link) is signed back in to their own account, not given a second one', async () => {
+    const { server, keys } = setup()
+    const first = await keys.create(payeePasskeyName('Mods guild', 'alice'))
+    await keys.create(payeePasskeyName('Mods guild', 'bob'))
+    server.calls.length = 0
+    const again = await keys.create(payeePasskeyName('Mods guild', 'alice'))
+    expect(server.calls).toEqual(['load:cred-1'])
+    expect(again).toBe(first)
+  })
+
+  it('the treasury passkey ("Rolepay treasury: <community>") still signs its treasurer back in, and a payee in the same browser stays apart from it', async () => {
+    const { server, keys } = setup()
+    const treasury = await keys.create('Rolepay treasury: Mods guild')
+    const payee = await keys.create(payeePasskeyName('Mods guild', 'alice'))
+    server.calls.length = 0
+    expect(await keys.create('Rolepay treasury: Mods guild')).toBe(treasury)
+    expect(server.calls).toEqual(['load:cred-1'])
+    expect(payee).not.toBe(treasury)
   })
 })

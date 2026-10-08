@@ -46,7 +46,7 @@ describe('PayeeService', () => {
     const link = await issue()
     expect(await svc.describeLink({ token: link.token })).toEqual({
       ok: true,
-      value: { guildId: GUILD, communityName: 'Test guild', discordUserId: ALICE, expiresAt: link.expiresAt },
+      value: { guildId: GUILD, communityName: 'Test guild', discordUserId: ALICE, discordUsername: null, expiresAt: link.expiresAt },
     })
     expect(await svc.describeLink({ token: link.token })).toMatchObject({ ok: true })
   })
@@ -58,6 +58,18 @@ describe('PayeeService', () => {
     expect(await svc.get({ guildId: GUILD, discordUserId: ALICE })).toMatchObject({ ok: true, value: { address: ADDR } })
     expect(await svc.register({ token: link.token, address: ADDR })).toEqual({ ok: false, error: { code: 'link_already_used' } })
     expect(await svc.describeLink({ token: link.token })).toEqual({ ok: false, error: { code: 'link_already_used' } })
+  })
+
+  it("keeps the Discord username the link was issued to (it names the payee's passkey), and only a real username", async () => {
+    const named = await svc.issueLink({ guildId: GUILD, discordUserId: ALICE, discordUsername: 'alice' })
+    if (!named.ok) throw new Error(named.error.code)
+    expect(await svc.describeLink({ token: named.value.token })).toMatchObject({ ok: true, value: { discordUserId: ALICE, discordUsername: 'alice' } })
+    // A display name or a legacy name is not a username: the link is issued all the same, without it (the page falls back to the ID).
+    for (const odd of ['Alice Smith', 'bob#1234', 'x) (y']) {
+      const r = await svc.issueLink({ guildId: GUILD, discordUserId: ALICE, discordUsername: odd })
+      if (!r.ok) throw new Error(r.error.code)
+      expect(await svc.describeLink({ token: r.value.token })).toMatchObject({ ok: true, value: { discordUsername: null } })
+    }
   })
 
   it('refuses expired and unknown links', async () => {

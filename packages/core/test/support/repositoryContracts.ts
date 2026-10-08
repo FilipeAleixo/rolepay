@@ -132,6 +132,13 @@ export function repositoryContracts(name: string, make: RepoFactory) {
       expect(await repo.consumeLinkToken('fp_unknown', f.at(10))).toBe(false)
       expect(await repo.getLinkToken('fp_unknown')).toBeNull()
     })
+
+    it('keeps the Discord username a link was issued to, or none', async () => {
+      await repo.insertLinkToken(f.linkToken({ discordUsername: 'alice' }))
+      await repo.insertLinkToken(f.linkToken({ tokenHash: 'fp_2' }))
+      expect((await repo.getLinkToken('fp_1'))?.discordUsername).toBe('alice')
+      expect((await repo.getLinkToken('fp_2'))?.discordUsername).toBeNull()
+    })
   })
 
   describe(`${name}: RunRepository`, () => {

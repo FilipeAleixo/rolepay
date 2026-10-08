@@ -202,6 +202,7 @@ export class SqlitePayeeRepository implements PayeeRepository {
         created_at: iso(t.createdAt),
         expires_at: iso(t.expiresAt),
         consumed_at: isoOrNull(t.consumedAt),
+        discord_username: t.discordUsername,
       })
       .execute()
   }
@@ -216,6 +217,7 @@ export class SqlitePayeeRepository implements PayeeRepository {
       createdAt: date(r.created_at),
       expiresAt: date(r.expires_at),
       consumedAt: dateOrNull(r.consumed_at),
+      discordUsername: r.discord_username,
     })
   }
 

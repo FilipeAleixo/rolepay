@@ -67,6 +67,8 @@ export interface LinkTokensTable {
   created_at: string
   expires_at: string
   consumed_at: string | null
+  /** 0011: the member's Discord username (it names their passkey), null before. */
+  discord_username: string | null
 }
 
 export interface RunsTable {

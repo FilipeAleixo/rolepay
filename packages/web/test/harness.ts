@@ -113,8 +113,9 @@ export async function registeredCommunity(h: ReturnType<typeof webHarness>, trea
   return r.value
 }
 
-export async function claimLink(h: ReturnType<typeof webHarness>, user = ALICE) {
-  const link = await h.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: user })
+/** A `/payee link` for `user`, issued as Discord would with their username (`null`: a link from before usernames were kept). */
+export async function claimLink(h: ReturnType<typeof webHarness>, user = ALICE, username: string | null = user === ALICE ? 'alice' : null) {
+  const link = await h.rolepay.payees.issueLink({ guildId: GUILD, discordUserId: user, discordUsername: username })
   if (!link.ok) throw new Error(link.error.code)
   return link.value.token
 }

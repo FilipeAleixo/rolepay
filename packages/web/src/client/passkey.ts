@@ -6,7 +6,16 @@ import type { Account } from 'viem/tempo'
 import { tempo, tempoModerato } from 'viem/tempo/chains'
 
 export type Passkeys = {
-  /** A new passkey (and with it a new Tempo account). Returns its address. */
+  /**
+   * A new passkey (and with it a new Tempo account). Returns its address. `name` must belong to one
+   * person: the SDK, asked to register a name this browser remembers, signs in with that account
+   * instead (Provider's "If a stored account already has this label"). The pages pass one name per
+   * person (`passkeyNames.ts`: a payee's carries their Discord username, the treasury's its
+   * community), so on a shared device a second person always gets their own passkey, and the same
+   * person creating again is signed back in to their own account rather than given a second one.
+   * That is why names are made unique rather than remembered accounts cleared before each register:
+   * clearing would also give a returning payee or treasurer a new, empty account each time.
+   */
   create(name: string): Promise<string>
   /** An existing passkey on this device or synced to it. Returns its address. */
   signIn(): Promise<string>
