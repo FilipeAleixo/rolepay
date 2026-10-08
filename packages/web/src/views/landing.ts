@@ -97,11 +97,16 @@ const PAYOUTS = [
 ] as const
 
 /**
- * The product shot: a paid run as Discord shows it, the bot key's budget as the dashboard's
- * "At a glance" draws it (the limit a hard gold line), and the three ways to say who to pay, the
- * AI's way last and the only one in the accent. Static, and one image to assistive tech.
+ * The product shot, in the order a run happens: the three ways to say who to pay (the AI's way last
+ * and the only one in the accent), the paid run as Discord shows it, and the bot key's budget as the
+ * dashboard's "At a glance" draws it (the limit a hard gold line). Static, and one image to assistive tech.
  */
-const productShot = () => `<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction; the bot's allowance for the month with its on-chain limit; and the three ways to say who to pay: a role, people you pick, or plain words that Rolepay's AI drafts into a list">
+const productShot = () => `<div class="shot" role="img" aria-label="The three ways to say who to pay: a role, people you pick, or plain words that Rolepay's AI drafts into a list; the pay run in Discord, paid in one transaction; and the bot's allowance for the month with its on-chain limit">
+<div class="ways"><p class="w-label">Who to pay</p><ul>
+<li><span class="w-what"><span class="at">@Moderators</span></span><span class="w-how">a role</span></li>
+<li><span class="w-what">${PAYOUTS.map(([who]) => `<span class="at">${who}</span>`).join(' ')}</span><span class="w-how">people you pick</span></li>
+<li class="ai"><span class="w-what">${icon('spark', 15)}“1 USDC.e per question answered in <span class="ch">#help</span> this month, up to 40 each”</span><span class="w-how">in plain words, drafted by AI</span></li></ul>
+<p class="ai-foot">The AI only drafts the list. You see every name before anything is paid.</p></div>
 <div class="msg"><p class="who">${mark(32)}<b>Rolepay</b><span class="app">App</span><span class="when">Today at 18:00</span></p>
 <div class="embed"><p class="e-title">Paid</p><p class="e-note">September</p>
 <ul class="lines">${PAYOUTS.map(([who, amount]) => `<li><span class="at">${who}</span><span class="amt">${amount} USDC.e</span></li>`).join('')}</ul>
@@ -110,11 +115,6 @@ const productShot = () => `<div class="shot" role="img" aria-label="A pay run in
 <div class="b-bar"><span class="b-fill"></span><span class="b-limit"></span></div>
 <p class="b-row"><span>Resets in 12 days</span><span class="b-lim">On-chain limit</span></p>
 <p class="b-cap">Over the limit, Tempo refuses the whole batch.</p></div>
-<div class="ways"><p class="w-label">Who to pay</p><ul>
-<li><span class="w-what"><span class="at">@Moderators</span></span><span class="w-how">a role</span></li>
-<li><span class="w-what">${PAYOUTS.map(([who]) => `<span class="at">${who}</span>`).join(' ')}</span><span class="w-how">people you pick</span></li>
-<li class="ai"><span class="w-what">${icon('spark', 15)}“1 USDC.e per question answered in <span class="ch">#help</span> this month, up to 40 each”</span><span class="w-how">in plain words, drafted by AI</span></li></ul>
-<p class="ai-foot">The AI only drafts the list. You see every name before anything is paid.</p></div>
 </div>`
 
 /**

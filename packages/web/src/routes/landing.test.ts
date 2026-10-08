@@ -59,12 +59,12 @@ describe('the home page (/)', () => {
     expect(html).toContain('<h1 id="hero-title">Pay the people who run your community.</h1>')
     expect(t).toContain("Pick a role, name the people, or describe them in plain words. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.")
     expect(html).toContain('<meta name="description" content="Pay the people who run your community, from Discord, in stablecoins on Tempo.">')
-    // The product shot: one image to assistive tech. The run, paid, the allowance with its on-chain limit, and the three ways to say who to pay.
-    expect(hero(html)).toContain('<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction; the bot\'s allowance for the month with its on-chain limit; and the three ways to say who to pay: a role, people you pick, or plain words that Rolepay\'s AI drafts into a list">')
+    // The product shot: one image to assistive tech. The three ways to say who to pay, the run, paid, and the allowance with its on-chain limit.
+    expect(hero(html)).toContain('<div class="shot" role="img" aria-label="The three ways to say who to pay: a role, people you pick, or plain words that Rolepay\'s AI drafts into a list; the pay run in Discord, paid in one transaction; and the bot\'s allowance for the month with its on-chain limit">')
     expect(hero(html)).toContain('<p class="e-title">Paid</p><p class="e-note">September</p>')
-    // The "Who to pay" card comes last: a role, people you pick, or plain words. The AI is one of the three, and only drafts.
+    // The "Who to pay" card comes first, where a run starts: a role, people you pick, or plain words. The AI is one of the three, and only drafts.
     expect(text(hero(html))).toContain('Who to pay @Moderators a role @mira @kofi @ines @theo people you pick “1 USDC.e per question answered in #help this month, up to 40 each” in plain words, drafted by AI The AI only drafts the list. You see every name before anything is paid.')
-    expect(hero(html).indexOf('class="ways"')).toBeGreaterThan(hero(html).indexOf('class="budget"'))
+    expect(hero(html).indexOf('class="ways"')).toBeLessThan(hero(html).indexOf('class="msg"'))
     // Only the plain-words row carries the accent, and the spark sits on it, not on the card's label.
     expect(hero(html).match(/<li class="ai">/g)).toHaveLength(1)
     expect(part(hero(html), /<li class="ai">/, '</li>')).toContain('<svg')
