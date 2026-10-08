@@ -63,12 +63,15 @@ const CHEVRON =
 /**
  * The shared base. Contrast on the lightest surface (a panel over the field's lightest point):
  * --head 14.9:1, --fg 13.6, --soft 8.5, --meta 5.5, --muted 4.8, gold 9.7, ok 9.0, warn 8.7,
- * bad 6.8, info 8.2. Every text colour passes WCAG AA at any size.
+ * bad 6.8, info 8.2, --accent-2 7.5 (on #101116). Every text colour passes WCAG AA at any size.
+ * --accent-2, a soft periwinkle, is the second accent and the cool one: gold stays the brand and the
+ * primary action; the periwinkle marks the Discord side, step numbers and small labels, never on the
+ * same small element as gold. Only the home page uses it so far.
  */
 export const INK_BASE = `
 /* Lora and Montserrat: SIL Open Font License 1.1, ${FONT_PATH}${FONT_LICENSES[0].file} and ${FONT_PATH}${FONT_LICENSES[1].file} */
 ${fontFaces}
-:root{color-scheme:dark;--ink:#0B0C0F;--head:#F2F1EE;--fg:#E8E7E4;--soft:#B9B8B4;--meta:#94938F;--muted:#8A8985;--line:rgba(255,255,255,.07);--gold:#EDBE5A;--ok:#8CCB9E;--warn:#E2B26E;--bad:#E08E92;--info:#8FB8E6;--serif:Lora,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;--sans:Montserrat,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;--panel-bg:rgba(255,255,255,.022);--panel-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 45px -30px rgba(0,0,0,.95)}
+:root{color-scheme:dark;--ink:#0B0C0F;--head:#F2F1EE;--fg:#E8E7E4;--soft:#B9B8B4;--meta:#94938F;--muted:#8A8985;--line:rgba(255,255,255,.07);--gold:#EDBE5A;--accent-2:#8F9CFF;--ok:#8CCB9E;--warn:#E2B26E;--bad:#E08E92;--info:#8FB8E6;--serif:Lora,"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;--sans:Montserrat,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;--panel-bg:rgba(255,255,255,.022);--panel-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 18px 45px -30px rgba(0,0,0,.95)}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html{background:var(--ink);-webkit-text-size-adjust:100%;text-size-adjust:100%}
