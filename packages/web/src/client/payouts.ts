@@ -21,6 +21,26 @@ export function payoutText(p: Payout, chosen: string | null): string {
   return `${name} pays everyone in ${p.payoutToken.label} for now; you get ${label} once its treasurer turns on preferred stablecoins.`
 }
 
+/**
+ * The coins the account page lists for these communities (lowercase addresses): what each one pays
+ * this account in, its payout token or the payee's choice, and the choice even while the community
+ * still pays everyone in its payout token (both then). `preferred` is the choices alone, which the
+ * page marks.
+ */
+export function coinsToList(payouts: Payout[]): { listed: Set<string>; preferred: Set<string> } {
+  const listed = new Set<string>()
+  const preferred = new Set<string>()
+  for (const p of payouts) {
+    const chosen = p.preferredToken === null || same(p.preferredToken, p.payoutToken.address) ? null : p.preferredToken.toLowerCase()
+    if (chosen) {
+      preferred.add(chosen)
+      listed.add(chosen)
+    }
+    if (!chosen || !p.enabled) listed.add(p.payoutToken.address.toLowerCase())
+  }
+  return { listed, preferred }
+}
+
 /** Saves one community's choice. The answer says what is stored, or why not, in words. */
 export async function savePreference(guildId: string, payoutToken: string, value: string): Promise<{ ok: true; preferredToken: string | null } | { ok: false; error: string }> {
   const r = await post<{ preferredToken: string | null }>('/account/preference', { guildId, token: storedChoice(payoutToken, value) })
@@ -35,9 +55,14 @@ export async function savePreference(guildId: string, payoutToken: string, value
 
 /**
  * One labelled select per community, built with the DOM (never HTML strings), saving on change.
- * `report` shows the outcome (the page's status line).
+ * `report` shows the outcome (the page's status line); `saved` hears each choice the server stored.
  */
-export function renderPayouts(box: HTMLElement, payouts: Payout[], report: (text: string, tone: 'ok' | 'bad') => void) {
+export function renderPayouts(
+  box: HTMLElement,
+  payouts: Payout[],
+  report: (text: string, tone: 'ok' | 'bad') => void,
+  saved: (guildId: string, preferredToken: string | null) => void = () => {},
+) {
   if (payouts.length === 0) {
     const none = document.createElement('p')
     none.className = 'muted'
@@ -69,6 +94,7 @@ export function renderPayouts(box: HTMLElement, payouts: Payout[], report: (text
         void savePreference(p.guildId, p.payoutToken.address, select.value).then((r) => {
           if (!r.ok) return report(`Not saved: ${r.error}.`, 'bad')
           says.textContent = payoutText(p, r.preferredToken)
+          saved(p.guildId, r.preferredToken)
           report('Saved.', 'ok')
         })
       })

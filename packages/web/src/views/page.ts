@@ -44,6 +44,7 @@ strong[data-field]{font:400 1.25em/1 var(--serif);color:var(--head);font-variant
 #balances p{margin:.2rem 0;color:var(--soft)}
 #balances strong{font:400 30px/1.25 var(--serif);color:var(--head);margin-right:.3rem;font-variant-numeric:lining-nums proportional-nums}
 #balances p{border-radius:10px;transition:box-shadow .6s ease}
+#balances .pill{margin-left:.4rem}
 #balances p.glow strong{animation:rp-glow 1.6s ease-out}
 @keyframes rp-glow{0%{color:var(--gold);text-shadow:0 0 0 rgba(237,190,90,0)}30%{color:var(--gold);text-shadow:0 0 18px rgba(237,190,90,.55)}100%{color:var(--head);text-shadow:0 0 0 rgba(237,190,90,0)}}
 ul.received{list-style:none;margin:0;padding:0}
