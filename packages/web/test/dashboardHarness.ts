@@ -8,7 +8,7 @@ import { createWebApp } from '../src/index.js'
 import type { LiveStreamOptions } from '../src/live/streams.js'
 import type { AuditPort, PolicyActor, PolicyPort } from '../src/dashboard/policyPort.js'
 import type { DiscordIdentity } from '../src/dashboard/ports.js'
-import { FakeDiscordOAuth, FakeGuildMembers, FakePasskeySessions, InMemoryAiUsage, InMemoryPayouts, InMemoryPolicies, InMemoryPolicyKeys, staticAssets } from '../src/testing/index.js'
+import { FakeDiscordOAuth, FakeGuildChannels, FakeGuildMembers, FakePasskeySessions, InMemoryAiUsage, InMemoryPayouts, InMemoryPolicies, InMemoryPolicyKeys, staticAssets } from '../src/testing/index.js'
 
 export const GUILD = '1094309218049937418'
 export const OTHER_GUILD = '1094309218049937419'
@@ -122,7 +122,7 @@ export type PolicyBackendSetup<B extends { policies: PolicyPort; audit: AuditPor
 }
 
 export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditPort } = { policies: PolicyPort; audit: AuditPort }>(
-  opts: { live?: LiveStreamOptions; oauth?: boolean; origin?: string; policies?: boolean; aiUsage?: boolean; payouts?: boolean; policyKeys?: boolean; backend?: (clock: ManualClock) => PolicyBackendSetup<B> } = {},
+  opts: { live?: LiveStreamOptions; oauth?: boolean; origin?: string; policies?: boolean; aiUsage?: boolean; payouts?: boolean; policyKeys?: boolean; channels?: boolean; backend?: (clock: ManualClock) => PolicyBackendSetup<B> } = {},
 ) {
   const origin = opts.origin ?? 'http://localhost:8787'
   const clock = new ManualClock(new Date('2026-10-06T12:00:00Z'))
@@ -151,6 +151,8 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
   const aiUsage = new InMemoryAiUsage(clock)
   const payouts = new InMemoryPayouts(clock, TOKEN)
   const policyKeys = new InMemoryPolicyKeys()
+  // The server's text channels as the bot sees them (the treasury channel setting); none by default.
+  const channels = new FakeGuildChannels()
   const errors: unknown[] = []
   const calls: PortCall[] = []
   const base: HarnessBase = { rolepay, clock, chain, members, community, payee, activeKey, run }
@@ -180,6 +182,7 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
       ...(opts.aiUsage === false ? {} : { aiUsage }),
       ...(opts.payouts === false ? {} : { payouts }),
       ...(opts.policyKeys === false ? {} : { policyKeys }),
+      ...(opts.channels === false ? {} : { channels }),
       onError: (e) => errors.push(e),
     },
   })
@@ -268,7 +271,7 @@ export function dashboardHarness<B extends { policies: PolicyPort; audit: AuditP
     return sent
   }
 
-  return { app, origin, rolepay, feed, sessions, chain, fundingChain, clock, kv, oauth, members, policies, aiUsage, payouts, policyKeys, backend, calls, errors, browser, signIn, community, payee, activeKey, run, depositAddresses, fundingSource, deposit }
+  return { app, origin, rolepay, feed, sessions, chain, fundingChain, clock, kv, oauth, members, policies, aiUsage, payouts, policyKeys, channels, backend, calls, errors, browser, signIn, community, payee, activeKey, run, depositAddresses, fundingSource, deposit }
 }
 
 /** What a policy backend may use to set itself up: core's services, the clock, the chain, the bot's member view, the helpers. */

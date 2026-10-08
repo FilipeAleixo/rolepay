@@ -4,7 +4,7 @@ import type { LiveStreams } from '../live/streams.js'
 import { type CookieNames, cookieNames, readCookie } from './cookies.js'
 import { CachedGuildMembers } from './members.js'
 import type { AiUsagePort, AuditPort, PayoutsPort, PolicyKeysPort, PolicyPort } from './policyPort.js'
-import type { DiscordOAuth, GuildMembers } from './ports.js'
+import type { DiscordOAuth, GuildChannels, GuildMembers } from './ports.js'
 import { type DashboardSession, DashboardSessionStore } from './sessions.js'
 
 /** What the server gives the dashboard (apps/server builds it; tests use the fakes). */
@@ -24,6 +24,8 @@ export type DashboardDeps = {
   payouts?: PayoutsPort
   /** Policies' own budgets (policyPort.ts). Absent: a policy's page leaves its budget out. */
   policyKeys?: PolicyKeysPort
+  /** The server's text channels and posting in one (the treasury channel setting). Absent: the Overview shows the setting read only. */
+  channels?: GuildChannels
   /** Unexpected errors (the page shows a generic message). Never given request data. */
   onError?: (error: unknown) => void
 }

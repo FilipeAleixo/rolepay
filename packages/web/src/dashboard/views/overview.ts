@@ -3,6 +3,7 @@ import type { AiSpendView, PaidByWeekView, RunOrigin, ScheduledRunView } from '.
 import { atAGlance } from './charts.js'
 import { fundedCard } from './funding.js'
 import { type Names, addressLink, day, esc, money, period, person, pill, row, runPill, table, tokenLabel, when } from './format.js'
+import { type TreasuryChannelState, treasuryChannelCard, treasuryChannelPrompt } from './treasuryChannel.js'
 
 /** A chain read that may have failed: the value, `missing` (no key yet), or `unavailable` (the RPC). */
 export type ChainRead<T> = { kind: 'ok'; value: T } | { kind: 'missing' } | { kind: 'unavailable' }
@@ -23,6 +24,8 @@ export type OverviewData = {
   payouts: PaidByWeekView | null
   /** What deposit addresses brought in this month; the card shows only once they are set up. */
   funding?: FundingMonth | null
+  /** The treasury channel setting (its card, and for a Treasurer the question when none is set). Absent: left out. */
+  treasury?: { state: TreasuryChannelState; canAct: boolean; csrf: string; notice: string }
 }
 
 const UNREADABLE = '<p class="muted">Rolepay could not read the chain just now. Reload in a moment.</p>'
@@ -107,8 +110,10 @@ export function overviewBody(d: OverviewData): string {
   const recent = d.recent.length
     ? table('Recent runs', RUN_COLUMNS, runRows(d.community.id, d.recent, d.origins, d.names), { numeric: [3, 4] })
     : '<p class="muted">No runs yet. <code>/rolepay new</code> in Discord makes one.</p>'
-  return `<h1>Overview</h1><p class="lede">The treasury, what the bot may spend, and what is coming.</p>
+  const t = d.treasury
+  return `<h1>Overview</h1><p class="lede">The treasury, what the bot may spend, and what is coming.</p>${t ? treasuryChannelPrompt(t.state, t.canAct) : ''}
 <div data-live-region="glance">${atAGlance({ key: d.key, payouts: d.payouts })}</div>
 <div class="grid" data-live-region="cards">${treasuryCard(d)}${keyCard(d)}${fundedCard(d.community.id, d.funding ?? null, d.community.payoutToken)}${upcomingCard(d)}${aiCard(d.aiSpend)}</div>
+${t ? treasuryChannelCard({ guildId: d.community.id, ...t }) : ''}
 <section class="card" data-live-region="recent"><h2>Recent runs</h2>${recent}<p><a href="/dashboard/${g}/runs">All runs</a> · <a href="/dashboard/${g}/payees">Payees</a> · <a href="/dashboard/${g}/policies">Policies</a> · <a href="/dashboard/${g}/audit">Audit log</a></p></section>`
 }

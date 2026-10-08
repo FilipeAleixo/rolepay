@@ -4,7 +4,7 @@
  */
 import { createHash } from 'node:crypto'
 import type { Address, Result } from '@rolepay/core'
-import type { DiscordIdentity, DiscordOAuth, GuildMember, GuildMembers, OAuthError } from '../dashboard/ports.js'
+import type { DiscordIdentity, DiscordOAuth, GuildChannel, GuildChannels, GuildMember, GuildMembers, OAuthError } from '../dashboard/ports.js'
 import type { Assets, PasskeySession, PasskeySessions } from '../ports.js'
 
 export { InMemoryAiUsage } from './inMemoryAiUsage.js'
@@ -95,5 +95,33 @@ export class FakeGuildMembers implements GuildMembers {
     this.lookups++
     const m = this.members.get(`${guildId}:${userId}`)
     return m ? { roles: [...m.roles], name: m.name } : null
+  }
+}
+
+/**
+ * A server's text channels and Rolepay's posts in them, in memory. `closed` channels refuse a post
+ * (no access, or gone); `down` makes Discord not answer. `posts` records each confirmation.
+ */
+export class FakeGuildChannels implements GuildChannels {
+  readonly posts: string[] = []
+  readonly closed = new Set<string>()
+  down = false
+  reads = 0
+  private readonly channels = new Map<string, GuildChannel[]>()
+
+  set(guildId: string, channels: GuildChannel[]) {
+    this.channels.set(guildId, structuredClone(channels))
+  }
+
+  async textChannels(guildId: string): Promise<GuildChannel[] | null> {
+    this.reads++
+    return this.down ? null : structuredClone(this.channels.get(guildId) ?? [])
+  }
+
+  async confirm(channelId: string): Promise<Result<void, { code: 'cannot_post' | 'unavailable' }>> {
+    if (this.down) return { ok: false, error: { code: 'unavailable' } }
+    if (this.closed.has(channelId)) return { ok: false, error: { code: 'cannot_post' } }
+    this.posts.push(channelId)
+    return { ok: true, value: undefined }
   }
 }
