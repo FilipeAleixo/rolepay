@@ -47,7 +47,7 @@ const TRUST = [
 ] as const
 
 describe('the home page (/)', () => {
-  it('says what Rolepay is with a picture of it, the numbers, how it works, what it does, why you can trust it, and where to go', async () => {
+  it('says what Rolepay is with a picture of it, what it replaces, how it works, what it does, why you can trust it, and where to go', async () => {
     const res = await webHarness({ discordAppId: APP_ID }).send('/')
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/text\/html/)
@@ -60,8 +60,14 @@ describe('the home page (/)', () => {
     expect(hero(html)).toMatch(/<div class="shot" role="img" aria-label="A pay run in Discord, paid in one transaction, and the bot key's budget for the period with its on-chain limit">/)
     expect(hero(html)).toContain('Paid in one transaction. Approved by <span class="at">@Treasurer</span>.')
     expect(t).toContain('On-chain limit')
-    // The numbers a community cares about (cost from apps/server/MAINNET.md).
-    for (const n of ['1 transaction for the whole run', '< 1¢ in fees per payout', '0 wallets or gas needed to get paid']) expect(t).toContain(n)
+    // What it replaces: today, and with Rolepay, row by row (screen readers hear which column each line is).
+    expect(html).toContain('<h2 id="contrast-title" class="sr">Paying people today, and with Rolepay</h2>')
+    for (const [was, now] of [
+      ['One wallet send at a time', 'One approval, one transaction for everyone'],
+      ['A spreadsheet to reconcile', 'A receipt for every person, and a CSV for every run'],
+      ['Every recipient needs a wallet and gas', 'Recipients need only a passkey, or the wallet they already have'],
+      ['Whoever holds the keys holds all the money', 'The bot can spend only what the chain allows'],
+    ]) expect(html).toContain(`<li><p class="was"><span class="sr">Today: </span>${was}</p><p class="now"><span class="sr">With Rolepay: </span>${now}</p></li>`)
     expect(html).toContain('<h2 id="how-title">')
     expect(t).toContain('AI can draft a run. Only a person can approve it, and only the chain decides how much the bot can spend.')
     STEPS.forEach(([title, line], i) => {
@@ -102,8 +108,8 @@ describe('the home page (/)', () => {
   it('reads in order without the pictures: one h1, a heading per section, a title per step, and every icon and light hidden from assistive tech', () => {
     const html = landingPage({ testnet: true })
     const headings = [...html.matchAll(/<h([1-6])[^>]*>/g)].map((m) => Number(m[1]))
-    expect(headings).toEqual([1, 2, 3, 3, 3, 3, 2, 2, 2])
-    for (const id of ['hero-title', 'how-title', 'what', 'trust', 'final-title']) expect(html).toContain(`aria-labelledby="${id}"`)
+    expect(headings).toEqual([1, 2, 2, 3, 3, 3, 3, 2, 2, 2])
+    for (const id of ['hero-title', 'contrast-title', 'how-title', 'what', 'trust', 'final-title']) expect(html).toContain(`aria-labelledby="${id}"`)
     expect(html).toContain('<div class="atmos" aria-hidden="true">')
     const svgs = [...html.matchAll(/<svg\b[^>]*>/g)].map((m) => m[0])
     for (const svg of svgs) {

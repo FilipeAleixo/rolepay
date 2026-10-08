@@ -76,14 +76,14 @@ const TRUST: ReadonlyArray<{ icon: IconName; bold: string; muted: string }> = [
 ]
 
 /**
- * By the numbers, for a community deciding: one batched transaction per run (up to 50 lines), the
- * network fee per payout on mainnet (about US$0.001 to an existing account, US$0.006 to a new one:
- * apps/server/MAINNET.md), and what a recipient needs to be paid (a passkey, no wallet, no gas).
+ * Today versus with Rolepay: the problem the page otherwise never states, one line each, so the
+ * claims below it have something to answer. Every "with" line is something the product does now.
  */
-const PROOF: ReadonlyArray<{ value: string; label: string }> = [
-  { value: '1', label: 'transaction for the whole run' },
-  { value: '< 1¢', label: 'in fees per payout' },
-  { value: '0', label: 'wallets or gas needed to get paid' },
+const CONTRAST: ReadonlyArray<{ was: string; now: string }> = [
+  { was: 'One wallet send at a time', now: 'One approval, one transaction for everyone' },
+  { was: 'A spreadsheet to reconcile', now: 'A receipt for every person, and a CSV for every run' },
+  { was: 'Every recipient needs a wallet and gas', now: 'Recipients need only a passkey, or the wallet they already have' },
+  { was: 'Whoever holds the keys holds all the money', now: 'The bot can spend only what the chain allows' },
 ]
 
 /** The payouts in the product shot. Made-up people. */
@@ -133,7 +133,7 @@ export function landingPage(opts: { testnet: boolean; discordAppId?: string | un
 <p class="sub">From Discord, in stablecoins on Tempo. The money stays in the community's own account, and the bot can spend only what the chain allows.</p>
 <p class="actions">${hero}<a class="more" href="#how">How it works</a></p></div>
 ${productShot()}</section>
-<section class="proof" aria-label="By the numbers"><ul>${PROOF.map((p) => `<li><span class="num">${esc(p.value)}</span><span class="what">${esc(p.label)}</span></li>`).join('')}</ul></section>
+<section class="contrast" aria-labelledby="contrast-title"><h2 id="contrast-title" class="sr">Paying people today, and with Rolepay</h2><p class="cols" aria-hidden="true"><span>Today</span><span>With Rolepay</span></p><ul>${CONTRAST.map((r) => `<li><p class="was"><span class="sr">Today: </span>${esc(r.was)}</p><p class="now"><span class="sr">With Rolepay: </span>${esc(r.now)}</p></li>`).join('')}</ul></section>
 <section class="how" id="how" aria-labelledby="how-title"><div class="intro"><p class="kicker">How it works</p><h2 id="how-title">From your treasury to a paid batch, with a person approving what matters.</h2>
 <p class="lede">AI can draft a run. Only a person can approve it, and only the chain decides how much the bot can spend.</p></div>
 <ol class="steps">${STEPS.map((s, i) => `<li><span class="n" aria-hidden="true">0${i + 1}</span><div><h3>${esc(s.title)}</h3><p>${esc(s.line)}</p></div></li>`).join('')}</ol></section>
