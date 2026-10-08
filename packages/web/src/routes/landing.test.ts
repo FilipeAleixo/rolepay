@@ -156,11 +156,11 @@ describe('the home page (/)', () => {
     expect(t).not.toContain('—') // no em dash
   })
 
-  it('has a top bar: the mark and the name on the left; on the right the payee\'s account and the dashboard, quietly, then the gold "Add to Discord"', async () => {
+  it('has a top bar: the mark and the name on the left; on the right the payee account and the treasury dashboard, quietly, then the gold "Add to Discord"', async () => {
     const html = await (await webHarness({ discordAppId: APP_ID }).send('/')).text()
     const bar = topBar(html)
     expect(bar).toMatch(/^<header class="topbar"><div class="bar"><p class="logo"><svg class="mark" width="28" height="28" aria-hidden="true"[\s\S]*<\/svg><span>Rolepay<\/span><\/p>/)
-    expect(bar).toContain(`<nav aria-label="Main"><a class="quiet account" href="/account"><span class="wide">Your account</span><span class="narrow">Account</span></a><a class="quiet" href="/dashboard">Dashboard</a><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a></nav>`)
+    expect(bar).toContain(`<nav aria-label="Main"><a class="quiet account" href="/account"><span class="wide">Payee account</span><span class="narrow">Account</span></a><a class="quiet" href="/dashboard">Treasury dashboard</a><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a></nav>`)
     // The hero leads with the same action, plus a way down the page.
     expect(hero(html)).toContain(`<p class="actions"><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a><a class="more" href="#how">How it works</a></p>`)
     expect(html).toContain('<section class="how" id="how"')
@@ -242,15 +242,15 @@ describe('the home page (/)', () => {
       const html = await (await webHarness(opts).send('/')).text()
       const label = JSON.stringify(opts)
       if (offered) {
-        expect(topBar(html), label).toContain(`<a class="quiet" href="/dashboard">Dashboard</a><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a>`)
+        expect(topBar(html), label).toContain(`<a class="quiet" href="/dashboard">Treasury dashboard</a><a class="button" href="${INSTALL}" rel="noreferrer">Add to Discord</a>`)
         expect(finalBand(html), label).toContain('Add Rolepay to a server')
       } else {
         // The gold action becomes the dashboard everywhere, and nothing points at Discord's install page.
         expect(html, label).not.toContain('discord.com/oauth2')
         expect(html, label).not.toContain('Add to Discord')
         expect(html, label).not.toContain('Add Rolepay to a server')
-        // In the bar it is the short "Dashboard", beside the payee's account, so both fit on a phone.
-        expect(topBar(html), label).toContain('<nav aria-label="Main"><a class="quiet account" href="/account"><span class="wide">Your account</span><span class="narrow">Account</span></a><a class="button" href="/dashboard">Dashboard</a></nav>')
+        // In the bar it is "Treasury dashboard" ("Dashboard" on a phone), beside the payee's account, so both fit at 375 px.
+        expect(topBar(html), label).toContain('<nav aria-label="Main"><a class="quiet account" href="/account"><span class="wide">Payee account</span><span class="narrow">Account</span></a><a class="button" href="/dashboard"><span class="wide">Treasury dashboard</span><span class="narrow">Dashboard</span></a></nav>')
         expect(hero(html), label).toContain(`<p class="actions">${dashboard}<a class="more" href="#how">How it works</a></p>`)
         expect(finalBand(html), label).toContain(`<nav class="cta" aria-label="Get started">${dashboard}<a class="source"`)
       }
