@@ -144,6 +144,14 @@ describe('standing policies across Discord and the dashboard', () => {
     const [firstRun] = await s.rolepay.policies.listRuns({ guildId: GUILD, policyId })
     expect(firstRun?.status).toBe('scheduled')
     const firstRunId = firstRun?.runId as string
+    // The policy page's Latest run: the veto window, which the dashboard's script counts down.
+    const latest = async (b = tess) => {
+      const html = await (await b.get(`/dashboard/${GUILD}/policies/${policyId}`)).text()
+      return visible(/<section class="card" data-live-region="latest-run">[\s\S]*?<\/section>/.exec(html)?.[0] ?? '')
+    }
+    const policyHtml = await (await tess.get(`/dashboard/${GUILD}/policies/${policyId}`)).text()
+    expect(policyHtml).toMatch(/<span data-countdown="\d{4}-[^"]+Z">pays at <time [^>]+>[^<]+<\/time> unless vetoed<\/span>/)
+    expect(await latest()).toMatch(new RegExp(`Latest run ${firstRunId} Waiting for approval 4 AlphaUSD to 2 people, .* Autopilot: pays at .* unless vetoed`))
 
     // 5. Tess vetoes it on the dashboard; Felix could not. The run is cancelled, Discord's message says so, nothing is paid.
     const runPage = `/dashboard/${GUILD}/runs/${firstRunId}`
@@ -158,6 +166,7 @@ describe('standing policies across Discord and the dashboard', () => {
     expect(edit?.messageId).toBe(first?.messageId)
     expect(text(edit?.message)).toContain(`Vetoed by <@${TREASURER.userId}>`)
     expect(text(edit?.message)).not.toContain('policy-run:veto:')
+    expect(await latest()).toMatch(new RegExp(`Latest run ${firstRunId} Cancelled .* Vetoed .*: nothing is paid`))
     s.clock.advance(120)
     s.chain.advance(120)
     expect((await s.tickPolicies()).events).toEqual([])
@@ -188,6 +197,8 @@ describe('standing policies across Discord and the dashboard', () => {
     expect(text(s.rest.channelEdits.at(-1)?.message)).toContain('Paid on autopilot after the veto window')
     expect(text(s.rest.channelEdits.at(-1)?.message)).not.toContain('Approved by')
     const secondRunId = released.events[0]?.run?.id as string
+    // A week later the first sign-in has expired (eight hours): sign in again.
+    expect(await latest(await dashboard(s, oauth, { id: TREASURER.userId, name: 'tess' }))).toMatch(new RegExp(`Latest run ${secondRunId} Paid 7 AlphaUSD to 2 people, .* Paid \\d{4}-`))
 
     // 7. The audit log shows every step, in order, and exports it.
     const events = await s.rolepay.audit.list({ guildId: GUILD, policyId, limit: 100 })

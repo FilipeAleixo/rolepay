@@ -1,8 +1,8 @@
-import { POLICY_LIMITS, PROPOSAL_LIMITS, secondsText, usdText } from '@rolepay/core'
-import type { AiCallView, PolicyBudgetView, PolicyDetail, PolicyPreview, PolicySchedule, PolicySummary, PolicyVersionView } from '../policyPort.js'
+import { POLICY_LIMITS, PROPOSAL_LIMITS, type Run, secondsText, usdText } from '@rolepay/core'
+import type { AiCallView, PolicyBudgetView, PolicyDetail, PolicyPreview, PolicySchedule, PolicySummary, PolicyVersionView, RunOrigin } from '../policyPort.js'
 import { POLICY_KEY_WORDS, keyBudget } from './charts.js'
 import { lineDiff } from './diff.js'
-import { type Names, esc, money, person, pill, row, table, when } from './format.js'
+import { type Names, esc, money, paysUnlessVetoed, person, pill, row, runPill, table, when } from './format.js'
 import { csrfField } from './layout.js'
 
 export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
@@ -214,6 +214,31 @@ function budgetSection(d: { base: string; budget: PolicyBudgetRead; canAct: bool
   )
 }
 
+/** The policy's latest run as the policy page shows it: the pay run and where it stands (null: none yet). */
+export type LatestPolicyRun = { run: Run; origin: RunOrigin | undefined } | null
+
+/**
+ * The latest run this policy made: its status, and on autopilot the veto window ("pays in 0:42 unless
+ * vetoed" with the dashboard's script), then paid or vetoed. A live region: the page re-reads it as
+ * the run moves.
+ */
+function latestRunSection(guildId: string, latest: LatestPolicyRun): string {
+  const head = '<h2>Latest run</h2>'
+  if (!latest) return `<section class="card" data-live-region="latest-run">${head}<p class="muted">No run yet. Its runs show here as they are made, paid or vetoed.</p></section>`
+  const { run, origin: o } = latest
+  const window =
+    o?.vetoedAt
+      ? `Vetoed ${when(o.vetoedAt)}: nothing is paid.`
+      : o?.mode === 'autopilot' && o.executesAt && !o.executedAt && run.status === 'pending_approval'
+        ? `Autopilot: ${paysUnlessVetoed(o.executesAt)}.`
+        : run.paidAt
+          ? `Paid ${when(run.paidAt)}.`
+          : ''
+  return `<section class="card" data-live-region="latest-run">${head}<p><a href="/dashboard/${esc(guildId)}/runs/${encodeURIComponent(run.id)}">${esc(run.id)}</a> ${runPill(run.status)} ${money(run.total, run.token)} to ${run.lines.length} ${
+    run.lines.length === 1 ? 'person' : 'people'
+  }${o ? `, ${esc(o.period)}` : ''}</p>${window ? `<p>${window}</p>` : ''}</section>`
+}
+
 export function policyBody(d: {
   guildId: string
   policy: PolicyDetail
@@ -228,6 +253,8 @@ export function policyBody(d: {
   compiles?: Record<number, AiCallView> | null
   /** The policy's own budget; null: policy keys are not wired on this server (no card). */
   budget?: PolicyBudgetRead | null
+  /** The latest run it made; undefined: not read on this server (no card). */
+  latest?: LatestPolicyRun
 }): string {
   const p = d.policy
   const g = esc(d.guildId)
@@ -249,6 +276,7 @@ export function policyBody(d: {
 <div class="grid"><section class="card"><h2>The rule</h2><p>${esc(p.ruleInWords)}</p><h3>As written</h3><blockquote>${esc(p.instruction)}</blockquote>
 <details><summary>Exact filter</summary><pre>${esc(JSON.stringify(p.filter, null, 2))}</pre></details></section>
 <section class="card"><h2>Settings</h2><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section></div>
+${d.latest === undefined ? '' : latestRunSection(d.guildId, d.latest)}
 ${previewSection({ preview: d.preview, names: d.names, token: d.token })}
 ${d.budget ? budgetSection({ base, budget: d.budget, canAct: d.canAct, csrf: d.csrf, archived: p.status === 'archived' }) : ''}
 ${actions}

@@ -15,6 +15,12 @@ export const money = (amount: bigint, token: string) => `${displayAmount(amount)
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** "2026-10-06 12:00 UTC" in a <time> element. */
+/**
+ * "pays at 2026-10-12 18:00 UTC unless vetoed": an autopilot run's veto window. With the dashboard's
+ * script it counts down ("pays in 0:42 unless vetoed"); without it, the time stays.
+ */
+export const paysUnlessVetoed = (at: Date) => `<span data-countdown="${at.toISOString()}">pays at ${when(at)} unless vetoed</span>`
+
 export function when(d: Date): string {
   const s = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
   return `<time datetime="${d.toISOString()}">${s}</time>`

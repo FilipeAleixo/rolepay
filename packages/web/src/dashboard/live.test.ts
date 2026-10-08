@@ -161,4 +161,26 @@ describe('GET /dashboard/:guildId/live', () => {
     expect(home).not.toContain('data-live')
     expect(home).not.toContain('<script')
   })
+
+  it('marks the Runs list, the Audit log and the Funding page too, never around a form someone may be typing in', async () => {
+    const h = await seeded()
+    await h.run([[ALICE.id, '1']])
+    await h.depositAddresses()
+    await h.fundingSource('Acme DAO')
+    const { browser } = await h.signIn(identity(TREASURER))
+    const runs = await (await browser.get(`/dashboard/${GUILD}/runs`)).text()
+    expect(runs).toContain('<section class="card" data-live-region="runs">')
+    const audit = await (await browser.get(`/dashboard/${GUILD}/audit`)).text()
+    expect(audit).toContain('<section class="card" data-live-region="audit">')
+    const funding = await (await browser.get(`/dashboard/${GUILD}/funding`)).text()
+    for (const region of ['funded', 'sources', 'deposits']) expect(funding).toContain(`data-live-region="${region}"`)
+    // Forms someone may be typing in stay outside the regions: the filters come before the lists, and
+    // the new-source form sits between "Funded this month" (no nested sections) and the sources.
+    expect(runs.indexOf('<form class="filters"')).toBeLessThan(runs.indexOf('data-live-region="runs"'))
+    expect(audit.indexOf('<form')).toBeLessThan(audit.indexOf('data-live-region="audit"'))
+    const form = funding.indexOf(`action="/dashboard/${GUILD}/funding/sources"`)
+    expect(form).toBeGreaterThan(funding.indexOf('</section>', funding.indexOf('data-live-region="funded"')))
+    expect(form).toBeLessThan(funding.indexOf('data-live-region="sources"'))
+  })
 })
+

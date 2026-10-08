@@ -3,9 +3,9 @@ import { type Context, Hono } from 'hono'
 import { z } from 'zod'
 import { type CommunityAccess, actionAccess, communityAccess } from '../access.js'
 import { type DashboardKit, html, redirect } from '../kit.js'
-import type { PolicyDraft, PolicyError, PolicyPort } from '../policyPort.js'
+import type { PolicyDraft, PolicyError, PolicyPort, RunOrigin } from '../policyPort.js'
 import { type Section, messagePage, shell } from '../views/layout.js'
-import { DAILY_REFUSED, type PolicyBudgetRead, type PolicyFormValues, notice, policiesBody, policyBody, policyFormBody } from '../views/policies.js'
+import { DAILY_REFUSED, type LatestPolicyRun, type PolicyBudgetRead, type PolicyFormValues, notice, policiesBody, policyBody, policyFormBody } from '../views/policies.js'
 
 const MAX_NAMED = 60
 /** A chain read slower than this is shown as unavailable rather than holding the page. */
@@ -99,6 +99,23 @@ export function policyRoutes(kit: DashboardKit): Hono {
     }
   }
 
+  /**
+   * The latest run this policy made, from core's policy runs, with where it stands (the port's run
+   * origin: the veto window, a veto). undefined when it cannot be read (no card).
+   */
+  const latestRun = async (ref: { guildId: string; policyId: string }): Promise<LatestPolicyRun | undefined> => {
+    try {
+      const [last] = await kit.rolepay.policies.listRuns({ ...ref, limit: 1 })
+      if (!last?.runId) return null
+      const runId = last.runId
+      const origins: Promise<Record<string, RunOrigin>> = kit.policies ? kit.policies.runOrigins({ guildId: ref.guildId, runIds: [runId] }) : Promise.resolve({})
+      const [run, origin] = await Promise.all([kit.rolepay.payRuns.get({ guildId: ref.guildId, runId }), origins.then((o) => o[runId])])
+      return run.ok ? { run: run.value, origin } : null
+    } catch {
+      return undefined
+    }
+  }
+
   app.get('/dashboard/:guildId/policies', async (c) => {
     const access = await communityAccess(kit, c)
     if (!access.ok) return access.response
@@ -143,11 +160,12 @@ export function policyRoutes(kit: DashboardKit): Hono {
     const ref = { guildId: a.community.id, policyId: c.req.param('policyId') }
     const policy = await policies.get(ref)
     if (!policy.ok) return notFound(a)
-    const [preview, versions, compiles, budget] = await Promise.all([
+    const [preview, versions, compiles, budget, latest] = await Promise.all([
       policies.preview(ref).catch(() => null),
       policies.versions(ref),
       kit.aiUsage ? kit.aiUsage.compiles(ref) : Promise.resolve(null),
       budgetRead(ref),
+      latestRun(ref),
     ])
     const shown = preview?.ok ? preview.value : { error: preview && !preview.ok ? (preview.error.message ?? '') : '' }
     const people = [
@@ -167,6 +185,7 @@ export function policyRoutes(kit: DashboardKit): Hono {
       notice: notice(c.req.query('done'), c.req.query('error')),
       compiles,
       budget,
+      latest,
     })
     return page(a, policy.value.name, body)
   })

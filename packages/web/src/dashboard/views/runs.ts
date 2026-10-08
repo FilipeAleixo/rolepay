@@ -1,6 +1,6 @@
 import { RUN_STATUSES, type Run, type RunStatus } from '@rolepay/core'
 import type { PolicySummary, RunOrigin } from '../policyPort.js'
-import { type Names, RUN_STATUS_LABELS, addressLink, esc, money, person, pill, row, runPill, shortHex, table, txLink, when } from './format.js'
+import { type Names, RUN_STATUS_LABELS, addressLink, esc, money, paysUnlessVetoed, person, pill, row, runPill, shortHex, table, txLink, when } from './format.js'
 import { csrfField } from './layout.js'
 import { RUN_COLUMNS, runRows } from './overview.js'
 
@@ -38,7 +38,7 @@ export function runsBody(d: {
   const pager = `<nav class="pager" aria-label="Pages">${d.filters.page > 1 ? `<a href="${query(d.filters.page - 1)}">Newer runs</a>` : '<span></span>'}${d.hasMore ? `<a href="${query(d.filters.page + 1)}">Older runs</a>` : ''}</nav>`
   return `<h1>Runs</h1><p class="lede">Every pay run, newest first.</p>
 <form class="filters" method="get" action="/dashboard/${g}/runs">${statusSelect}${policySelect}<div><button type="submit" class="secondary">Filter</button></div></form>
-<section class="card">${list}${pager}</section>`
+<section class="card" data-live-region="runs">${list}${pager}</section>`
 }
 
 const FAILURE_WORDS: Record<string, string> = {
@@ -92,7 +92,7 @@ function timeline(run: Run, origin: RunOrigin | undefined, names: Names, explore
 
 /** Where an autopilot run stands: released after its window, vetoed, or paying at a time unless vetoed. */
 const autopilotWords = (o: RunOrigin) =>
-  o.executedAt ? `, released after its veto window ${when(o.executedAt)}` : o.vetoedAt ? ', vetoed' : o.executesAt ? `, pays at ${when(o.executesAt)} unless vetoed` : ''
+  o.executedAt ? `, released after its veto window ${when(o.executedAt)}` : o.vetoedAt ? ', vetoed' : o.executesAt ? `, ${paysUnlessVetoed(o.executesAt)}` : ''
 
 /** An autopilot run inside its veto window: the Veto button for the Treasurer role, a line for everyone else. */
 function vetoControl(d: { guildId: string; run: Run; origin: RunOrigin; canAct: boolean; csrf: string }): string {

@@ -57,7 +57,7 @@ export function auditBody(d: {
     d.olderThan ? `<a href="/dashboard/${g}/audit${esc(auditQuery(d.filters, { before: d.olderThan }))}">Older events</a>` : ''
   }</nav>`
   return `<h1>Audit log</h1><p class="lede">Every policy and run event, who did it and when: the governance record a community can publish.</p>
-${filters}<p><a class="button secondary" href="/dashboard/${g}/audit/csv${esc(auditQuery(d.filters))}">Export CSV</a></p><section class="card">${list}${pager}</section>${aiSection(d.guildId, d.aiProposals ?? null, d.names)}`
+${filters}<p><a class="button secondary" href="/dashboard/${g}/audit/csv${esc(auditQuery(d.filters))}">Export CSV</a></p><section class="card" data-live-region="audit">${list}${pager}</section>${aiSection(d.guildId, d.aiProposals ?? null, d.names)}`
 }
 
 const unknown = '<span class="muted">?</span>'
@@ -82,5 +82,5 @@ function aiSection(guildId: string, proposals: AiProposalView[] | null, names: N
     ),
   )
   const list = rows.length ? table('AI proposals', ['When', 'By', 'Mode', 'Model', 'Time', 'Cost', 'Outcome', 'Run'], rows, { numeric: [4, 5] }) : '<p class="muted">No proposals yet.</p>'
-  return `<section class="card"><h2>AI proposals</h2><p class="muted small">The latest proposals that reached the model, newest first, with the estimated cost of each. No instruction or message text is kept for them.</p>${list}</section>`
+  return `<section class="card" data-live-region="ai-proposals"><h2>AI proposals</h2><p class="muted small">The latest proposals that reached the model, newest first, with the estimated cost of each. No instruction or message text is kept for them.</p>${list}</section>`
 }

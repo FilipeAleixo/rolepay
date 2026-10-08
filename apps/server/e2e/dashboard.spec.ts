@@ -90,7 +90,8 @@ test('a treasurer signs in with Discord and walks Overview, Runs, Policies (paus
   // The autopilot run, inside its veto window: Tess vetoes it, nothing is paid.
   await nav().getByRole('link', { name: 'Runs' }).click()
   await page.getByRole('link', { name: server.autopilotRunId }).click()
-  await expect(page.getByText(/pays at .* unless vetoed/)).toBeVisible()
+  // The veto window counts down in the browser (the dashboard script); without it the page says "pays at <time>".
+  await expect(page.getByText(/pays in \d+:\d{2}(:\d{2})? unless vetoed/)).toBeVisible()
   await page.getByRole('button', { name: 'Veto this run' }).click()
   await expect(page.getByText('Vetoed. This run is cancelled and nothing will be paid for it.')).toBeVisible()
   await expect(page.getByText(/Vetoed by Tess/).first()).toBeVisible()

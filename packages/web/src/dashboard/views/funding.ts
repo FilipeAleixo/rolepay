@@ -63,7 +63,7 @@ export function fundingBody(d: {
     return `${head}<section class="card"><h2>Deposit addresses are not set up</h2><p>A treasurer sets them up once on the treasury page: <code>/rolepay setup</code> in Discord gives the link. It takes about a minute of work in the browser and one passkey prompt.</p></section>`
   }
   const sourceName = new Map(d.status.sources.map((s) => [s.source.id, s.source.name]))
-  const summary = `<section class="card"><h2>Funded this month</h2><p class="big">${received(d.month, d.payoutToken, { breakdown: true })}</p>
+  const summary = `<section class="card" data-live-region="funded"><h2>Funded this month</h2><p class="big">${received(d.month, d.payoutToken, { breakdown: true })}</p>
 <p class="muted small">${d.month.deposits === 0 ? 'No deposits yet this month.' : `from ${plural(d.month.sources, 'source', 'sources')}, since ${day(d.month.since)}.`}</p>
 <dl class="facts"><dt>Lands in</dt><dd>${addressLink(d.explorer, d.treasury, { full: true })}</dd><dt>Addresses start with</dt><dd><code>${esc(master.masterId)}</code></dd>${
     master.txHash ? `<dt>Registered</dt><dd>${txLink(d.explorer, master.txHash)}</dd>` : ''
@@ -93,6 +93,6 @@ export function fundingBody(d: {
     : '<p class="muted">No deposits yet. They show here within a minute of landing.</p>'
   return `${head}<div class="grid">${summary}${create}</div>
 <p class="muted small">${WARNING}</p>
-${sources}
-<section class="card"><h2>Deposits</h2>${deposits}<p class="muted small">"From" is whoever sent it: anyone can send to a deposit address, so a source says where the money arrived, not who signed for it. Amounts in ${esc(tokenLabel(d.payoutToken))} and the network's other USD stablecoins.</p></section>`
+<div data-live-region="sources">${sources}</div>
+<section class="card" data-live-region="deposits"><h2>Deposits</h2>${deposits}<p class="muted small">"From" is whoever sent it: anyone can send to a deposit address, so a source says where the money arrived, not who signed for it. Amounts in ${esc(tokenLabel(d.payoutToken))} and the network's other USD stablecoins.</p></section>`
 }

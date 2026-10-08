@@ -1,22 +1,29 @@
 // The dashboard's live script on fakes: a run page re-reads itself from the server when an event
 // about its run arrives (and only then), swaps its live region in, and stops when the session ends.
 import { describe, expect, it } from 'vitest'
-import { startDashboardLive } from './dashboardLive.js'
+import { countdownWords, startDashboardLive } from './dashboardLive.js'
 import { FakeEventSource } from '../../test/fakeEventSource.js'
 
-type Region = { innerHTML: string; getAttribute(n: string): string | null; querySelectorAll(): { open: boolean }[] }
+type Region = { innerHTML: string; textContent: string | null; getAttribute(n: string): string | null; querySelectorAll(): { open: boolean }[] }
 
-function page(regions: Record<string, string>, attrs: Record<string, string> = {}, body: Record<string, string> = { 'data-live': '/dashboard/1094309218049937418/live' }) {
+function page(
+  regions: Record<string, string>,
+  attrs: Record<string, string> = {},
+  body: Record<string, string> = { 'data-live': '/dashboard/1094309218049937418/live' },
+  countdowns: Region[] = [],
+) {
   const els: Region[] = Object.entries(regions).map(([name, html]) => ({
     innerHTML: html,
+    textContent: null,
     getAttribute: (n: string) => (n === 'data-live-region' ? name : (attrs[n] ?? null)),
     querySelectorAll: () => [],
   }))
   const fetched: string[] = []
   let answer: { status: number; html: string } = { status: 200, html: '' }
   const timers: (() => void)[] = []
+  const clock = { now: Date.parse('2026-10-06T12:00:00Z'), tick: () => {} }
   const source = startDashboardLive({
-    document: { body: { getAttribute: (n) => body[n] ?? null }, querySelectorAll: () => els },
+    document: { body: { getAttribute: (n) => body[n] ?? null }, querySelectorAll: (s) => (s === '[data-countdown]' ? countdowns : els) },
     EventSource: FakeEventSource,
     fetch: async (url) => {
       fetched.push(url)
@@ -32,12 +39,16 @@ function page(regions: Record<string, string>, attrs: Record<string, string> = {
     }),
     href: () => 'http://localhost/dashboard/1094309218049937418/runs/run_000003?done=approved',
     setTimeout: (fn) => timers.push(fn),
+    setInterval: (fn) => {
+      clock.tick = fn
+    },
+    now: () => clock.now,
   })
   const flush = async () => {
     while (timers.length) timers.shift()?.()
     await new Promise((r) => setTimeout(r, 0))
   }
-  return { els, fetched, source, flush, answer: (a: typeof answer) => (answer = a), events: FakeEventSource.last as FakeEventSource }
+  return { els, fetched, source, flush, clock, answer: (a: typeof answer) => (answer = a), events: FakeEventSource.last as FakeEventSource }
 }
 
 describe('the dashboard live script', () => {
@@ -88,4 +99,30 @@ describe('the dashboard live script', () => {
     expect(page({ glance: 'x' }, {}, {}).source).toBeNull()
     expect(FakeEventSource.last).toBeNull()
   })
+
+  it("counts an autopilot run's veto window down each second, and re-reads the page when it runs out", async () => {
+    const countdown: Region = { innerHTML: '', textContent: 'pays at 2026-10-06 12:01 UTC unless vetoed', getAttribute: (n) => (n === 'data-countdown' ? '2026-10-06T12:00:42.000Z' : null), querySelectorAll: () => [] }
+    const p = page({ 'latest-run': 'pending' }, {}, undefined, [countdown])
+    expect(countdown.textContent).toBe('pays in 0:42 unless vetoed')
+    p.clock.now += 41_000
+    p.clock.tick()
+    expect(countdown.textContent).toBe('pays in 0:01 unless vetoed')
+    expect(p.fetched).toEqual([])
+    p.answer({ status: 200, html: '<div data-live-region="latest-run">paid</div>' })
+    p.clock.now += 1_000
+    p.clock.tick()
+    p.clock.tick() // once per window, not every second after
+    expect(countdown.textContent).toBe('veto window over: paying now')
+    await p.flush()
+    expect(p.fetched).toHaveLength(1)
+    expect(p.els[0]?.innerHTML).toBe('paid')
+  })
+
+  it('words a countdown in minutes, or hours for a long window', () => {
+    expect(countdownWords(42_000)).toBe('pays in 0:42 unless vetoed')
+    expect(countdownWords(41_001)).toBe('pays in 0:42 unless vetoed')
+    expect(countdownWords(3_903_000)).toBe('pays in 1:05:03 unless vetoed')
+    expect(countdownWords(0)).toBe('veto window over: paying now')
+  })
 })
+
