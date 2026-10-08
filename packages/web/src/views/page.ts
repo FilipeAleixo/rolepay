@@ -111,9 +111,9 @@ noscript p{color:var(--muted)}
 .home .down{margin:1rem 0 0}
 .home .hint code{white-space:nowrap;word-break:normal}
 @media (min-width:70rem){.home .hint{white-space:nowrap}}
-.shot{display:flex;flex-direction:column;width:100%;max-width:30rem;justify-self:center}
+.shot{display:flex;flex-direction:column;gap:.9rem;width:100%;max-width:30rem;justify-self:center}
 .shot p{margin:0}
-.shot .ways{align-self:flex-end;width:90%;margin:0 0 -1.1rem;position:relative;z-index:1;padding:.95rem 1.05rem .95rem;border-radius:16px;border:1px solid color-mix(in srgb,var(--accent-2) 26%,transparent);background:linear-gradient(180deg,#141623,#101220);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 30px 60px -34px rgba(0,0,0,.95),0 0 46px -16px color-mix(in srgb,var(--accent-2) 42%,transparent)}
+.shot .ways{padding:.95rem 1.05rem .95rem;border-radius:16px;border:1px solid color-mix(in srgb,var(--accent-2) 26%,transparent);background:linear-gradient(180deg,#141623,#101220);box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 30px 60px -34px rgba(0,0,0,.95),0 0 46px -16px color-mix(in srgb,var(--accent-2) 42%,transparent)}
 .shot .w-label{font:500 10.5px/1.5 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--meta)}
 .shot .ways ul{margin:.4rem 0 0}
 .shot .ways li{display:grid;grid-template-columns:minmax(0,1fr) 7.5rem;gap:1rem;align-items:baseline;padding:.55rem 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5}
@@ -126,7 +126,7 @@ noscript p{color:var(--muted)}
 .shot .ai-foot{margin-top:.7rem;font-size:12px;line-height:1.5;color:var(--soft);text-wrap:pretty}
 @media (max-width:40rem){.shot .ways li{grid-template-columns:minmax(0,1fr);gap:.1rem}.shot .w-how{text-align:left}}
 .shot .ch{padding:0 .2em;border-radius:3px;color:var(--accent-2);background:color-mix(in srgb,var(--accent-2) 9%,transparent)}
-.shot .msg{width:94%;padding:2rem 1.1rem 3.4rem;border-radius:16px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.022));box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 40px 80px -40px rgba(0,0,0,.95)}
+.shot .msg{padding:1rem 1.1rem 1.1rem;border-radius:16px;border:1px solid rgba(255,255,255,.07);background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.022));box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 40px 80px -40px rgba(0,0,0,.95)}
 .shot .who{display:flex;align-items:center;gap:.55rem;margin-bottom:.7rem;font-size:13px;color:var(--meta)}
 .shot .who .mark{clip-path:circle(50%)}
 .shot .who b{font-weight:600;font-size:14px;color:var(--head)}
@@ -141,7 +141,7 @@ noscript p{color:var(--muted)}
 .shot .amt{color:var(--fg);font-variant-numeric:tabular-nums}
 .shot .e-status{margin-top:.6rem;font-size:12.5px;line-height:1.5;color:var(--soft)}
 .shot .e-foot{margin-top:.3rem;font-size:11px;color:var(--muted)}
-.shot .budget{align-self:flex-end;width:78%;margin-top:-2.5rem;position:relative;z-index:1;padding:1.05rem 1.15rem 1rem;border-radius:16px;border:1px solid rgba(255,255,255,.075);background:linear-gradient(180deg,#18191E,#121317);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 30px 60px -24px rgba(0,0,0,.95)}
+.shot .budget{padding:1.05rem 1.15rem 1rem;border-radius:16px;border:1px solid rgba(255,255,255,.075);background:linear-gradient(180deg,#18191E,#121317);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 30px 60px -24px rgba(0,0,0,.95)}
 .shot .b-label{font:500 10px/1.5 var(--sans);letter-spacing:.16em;text-transform:uppercase;color:var(--meta)}
 .shot .b-amount{margin:.35rem 0 .85rem;font-size:13px;color:var(--meta)}
 .shot .b-amount strong{margin-right:.3rem;font:400 28px/1 var(--serif);color:var(--head);font-variant-numeric:lining-nums}
@@ -157,9 +157,7 @@ noscript p{color:var(--muted)}
 .shot .when{white-space:nowrap}
 .shot .who .surface{margin-left:auto;padding-left:.75rem}
 .shot .b-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
-.shot .b-head .b-label{max-width:11rem}
 @media (max-width:25rem){.shot .day{display:none}}
-@media (max-width:40rem){.shot .budget{width:88%}}
 
 
 
