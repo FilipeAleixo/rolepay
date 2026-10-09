@@ -16,22 +16,40 @@ export const PAYRUN_SLOW_CAPTIONS: CaptionCue[] = [
 ]
 
 /**
- * The demo (hard limit 3:00): the overview slide's four lines, then one screen recording of the
- * live product for each, with captions, and a slide naming what else is built. Captions are timed
- * in seconds from the start of their clip; each slot's `note` says what its recording shows.
+ * The demo (hard limit 3:00), as one story: set up, a first pay run, other ways to find who to
+ * pay, pay that runs on its own, then the viewer trying it. A title, the five steps up front, a
+ * separator card before each recording (the step, what follows, where it was recorded), and a
+ * slide naming what else is built. Captions are timed in seconds from the start of their clip.
  */
 export const DEMO: Item[] = [
-  // The four lines the recordings then show, one each.
-  { type: 'scene', scene: 'overview' },
-  // The community's own account and a capped bot key: what every run below stands on.
+  { type: 'scene', scene: 'title' },
+  {
+    type: 'slot',
+    file: 'demo-agenda.mp4',
+    kind: 'screen',
+    label: 'In this demo',
+    note: 'The five steps the demo shows.',
+    seconds: 8,
+    card: {
+      kind: 'points',
+      title: 'In this demo',
+      points: [
+        'Set up in a minute',
+        'Your first pay run, on *Tempo mainnet*',
+        'Pay from a message, or let the *AI* draft the run',
+        'Pay that runs on its own, with a *veto window*',
+        '*Try it yourself*: paid at the next daily run',
+      ],
+    },
+  },
   {
     type: 'slot',
     file: 'demo-chapter-1.mp4',
     kind: 'screen',
     label: 'Step 1: Set up in a minute',
-    note: 'A chapter card before the recording.',
+    note: 'A separator card: the step, what follows, and where it was recorded.',
     seconds: 4,
-    card: { kind: 'chapter', step: 1, of: 5, title: 'Set up in a minute', line: "The community's own Tempo account, made with a passkey, and a bot with a *capped key*.", where: 'Recorded on the testnet demo' },
+    card: { kind: 'chapter', step: 1, of: 5, title: 'Set up in a minute', line: "Add the bot, create the community's own Tempo account with a passkey, and give the bot a *capped key*.", where: 'Recorded on the testnet demo' },
   },
   {
     type: 'slot',
@@ -47,15 +65,33 @@ export const DEMO: Item[] = [
       { at: 13.8, until: 17.85, text: 'The bot gets an *access key*: an expiry, a limit, one call' },
     ],
   },
-  // "A role, a reaction or plain words: Rolepay finds the people"
   {
     type: 'slot',
     file: 'demo-chapter-2.mp4',
     kind: 'screen',
-    label: 'Step 2: Find who to pay',
-    note: 'A chapter card before the recording.',
+    label: 'Step 2: Your first pay run',
+    note: 'A separator card: the step, what follows, and where it was recorded.',
     seconds: 4,
-    card: { kind: 'chapter', step: 2, of: 5, title: 'Find who to pay', line: 'Right-click a message to pay its author, or let the AI draft a run from a *winners post*.', where: 'Recorded on the testnet demo' },
+    card: { kind: 'chapter', step: 2, of: 5, title: 'Your first pay run', line: 'One command builds the run, a treasurer approves it in Discord, and each person is paid, with a *receipt*.', where: 'Recorded on Tempo mainnet' },
+  },
+  {
+    type: 'slot',
+    file: 'pitch-2-demo.mp4',
+    kind: 'screen',
+    label: 'A pay run, approved and paid',
+    note: "The first mainnet run, the slow cut: /rolepay new and the run, the Treasurer's approval in #treasury with the payee's balance arriving, the DM receipt, the transaction on Tempo mainnet.",
+    seconds: 25,
+    captions: PAYRUN_SLOW_CAPTIONS,
+    fallback: { file: 'demo-2-payrun.mp4', captions: PAYRUN_CAPTIONS },
+  },
+  {
+    type: 'slot',
+    file: 'demo-chapter-3.mp4',
+    kind: 'screen',
+    label: 'Step 3: Pay from a message',
+    note: 'A separator card: the step, what follows, and where it was recorded.',
+    seconds: 4,
+    card: { kind: 'chapter', step: 3, of: 5, title: 'Pay from a message', line: 'Right-click a message to pay its author, or let the AI draft a run from a *winners post*.', where: 'Recorded on the testnet demo' },
   },
   {
     type: 'slot',
@@ -71,57 +107,14 @@ export const DEMO: Item[] = [
       { at: 15.45, until: 19.5, text: 'The footer shows what it cost: *about a cent*' },
     ],
   },
-  // "One approval in Discord, one transaction, a receipt for every person"
-  {
-    type: 'slot',
-    file: 'demo-chapter-3.mp4',
-    kind: 'screen',
-    label: 'Step 3: Approve once, pay everyone',
-    note: 'A chapter card before the recording.',
-    seconds: 4,
-    card: { kind: 'chapter', step: 3, of: 5, title: 'Approve once, pay everyone', line: 'One approval in Discord, one transaction, and a *receipt* for each person.', where: 'Recorded on Tempo mainnet' },
-  },
-  {
-    type: 'slot',
-    file: 'pitch-2-demo.mp4',
-    kind: 'screen',
-    label: 'A pay run, approved and paid',
-    note: "The first mainnet run, the slow cut: /rolepay new and the run, the Treasurer's approval in #treasury with the payee's balance arriving, the DM receipt, the transaction on Tempo mainnet.",
-    seconds: 25,
-    captions: PAYRUN_SLOW_CAPTIONS,
-    fallback: { file: 'demo-2-payrun.mp4', captions: PAYRUN_CAPTIONS },
-  },
-  // "Recipients need only a passkey"
   {
     type: 'slot',
     file: 'demo-chapter-4.mp4',
     kind: 'screen',
-    label: 'Step 4: Recipients need only a passkey',
-    note: 'A chapter card before the recording.',
+    label: 'Step 4: Pay that runs on its own',
+    note: 'A separator card: the step, what follows, and where it was recorded.',
     seconds: 4,
-    card: { kind: 'chapter', step: 4, of: 5, title: 'Recipients need only a passkey', line: 'Judges sign up with a passkey and get paid at the *next daily run*.', where: 'Recorded on the testnet demo' },
-  },
-  {
-    type: 'slot',
-    file: 'demo-9-judge.mp4',
-    kind: 'screen',
-    label: 'The judge flow',
-    note: "As a judge: the welcome post's three steps in #start-here, then the 8 October 16:00 UTC run in #payouts, the account page receiving it live, and the DM receipt.",
-    seconds: 16.4,
-    captions: [
-      { at: 0.3, until: 5.45, text: 'Judges join the demo, run `/payee link` and react ✅' },
-      { at: 5.9, until: 16.0, text: 'Paid at the next daily run, *with nobody online*' },
-    ],
-  },
-  // "Regular pay runs on its own, within its budget, with time to veto"
-  {
-    type: 'slot',
-    file: 'demo-chapter-5.mp4',
-    kind: 'screen',
-    label: 'Step 5: Pay that runs on its own',
-    note: 'A chapter card before the recording.',
-    seconds: 4,
-    card: { kind: 'chapter', step: 5, of: 5, title: 'Pay that runs on its own', line: 'A rule in plain words, approved once, paying on *autopilot* after a veto window.', where: 'Recorded on the testnet demo' },
+    card: { kind: 'chapter', step: 4, of: 5, title: 'Pay that runs on its own', line: 'A rule in plain words, approved once, paying on *autopilot* after a veto window.', where: 'Recorded on the testnet demo' },
   },
   {
     type: 'slot',
@@ -134,6 +127,27 @@ export const DEMO: Item[] = [
       { at: 0.3, until: 6.15, text: 'A standing rule in plain words: `/rolepay policy new`' },
       { at: 6.6, until: 10.75, text: 'It shows *who it applies to* before anyone approves' },
       { at: 11.2, until: 18.6, text: 'On autopilot: a *veto window*, then it pays itself' },
+    ],
+  },
+  {
+    type: 'slot',
+    file: 'demo-chapter-5.mp4',
+    kind: 'screen',
+    label: 'Step 5: Try it yourself',
+    note: 'A separator card: the step, what follows, and where it was recorded.',
+    seconds: 4,
+    card: { kind: 'chapter', step: 5, of: 5, title: 'Try it yourself', line: 'Join the demo server, sign up with a passkey, and get paid at the *next daily run*, with nobody online.', where: 'Recorded on the testnet demo' },
+  },
+  {
+    type: 'slot',
+    file: 'demo-9-judge.mp4',
+    kind: 'screen',
+    label: 'The judge flow',
+    note: "As a judge: the welcome post's three steps in #start-here, then the 8 October 16:00 UTC run in #payouts, the account page receiving it live, and the DM receipt.",
+    seconds: 16.4,
+    captions: [
+      { at: 0.3, until: 5.45, text: 'Judges join the demo, run `/payee link` and react ✅' },
+      { at: 5.9, until: 16.0, text: 'Paid at the next daily run, *with nobody online*' },
     ],
   },
   {
