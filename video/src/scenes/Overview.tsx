@@ -22,7 +22,7 @@ export const OVERVIEW_FRAMES = sec(15)
  * a longer or a shorter read, and reads on its own when silent. Each column of the contrast
  * arrives whole, top to bottom, the "Today" column first; it steps back as the answers arrive.
  */
-const WHAT = 'Pay the people who run your community, from Discord, in stablecoins on Tempo.'
+const WHAT = 'Pay the people who run your Discord community, in stablecoins on Tempo.'
 const WHAT_SUB = "Approved in Discord, paid from the community's own account."
 const CONTRAST = [
   { was: 'Working out who did what by hand, from Discord into a spreadsheet', now: 'A role, a reaction or plain words: Rolepay *finds the people*' },
