@@ -292,7 +292,7 @@ export function proposalCreatedMessage(p: Proposal, run: Run, ctx: ProposalViewC
       {
         title: 'Pay run created',
         color: COLORS.paid,
-        description: `Run ${run.id} (${money(run.total, run.token)} for ${count(run.lines.length, 'person', 'people')}) is posted in this channel for ${ctx.approverRoleId ? roleMention(ctx.approverRoleId) : 'the approver role'} to approve. Nothing is paid before that.`,
+        description: `Run ${run.id} (${money(run.total, run.token)} for ${count(run.lines.length, 'person', 'people')}) is posted for ${ctx.approverRoleId ? roleMention(ctx.approverRoleId) : 'the approver role'} to approve. Nothing is paid before that.`,
         footer: { text: `From proposal ${p.id}` },
       },
     ],
