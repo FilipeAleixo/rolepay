@@ -54,7 +54,7 @@ fly apps create rolepay-app
 fly volumes create rolepay_app_data --app rolepay-app --region iad --size 1
 ```
 
-The region is `iad` (Ashburn), as the demo's since 2026-10-07: Discord's servers are in the US, and from Paris each Discord-to-server hop took 1 to 3 seconds against Discord's 3-second deadline.
+The region is `iad` (Ashburn), as the demo's since 2026-10-07: Discord's servers are in the US, and from Fly's Paris region (`cdg`), where the demo ran first, each Discord-to-server hop took 1 to 3 seconds against Discord's 3-second deadline.
 
 The secrets, typed at hidden prompts (nothing echoed, nothing in shell history) and a **new** master key generated straight into Fly, never printed (it seals the bot keys in this app's database; never reuse the demo's or a local one). In zsh:
 

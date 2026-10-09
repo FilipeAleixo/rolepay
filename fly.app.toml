@@ -1,5 +1,5 @@
 # Fly.io: the Rolepay MAINNET app, https://web.rolepay.app (Tempo mainnet, chain 4217). REAL MONEY.
-# Prepared, not created. The runbook is apps/server/MAINNET.md: the production Discord
+# The runbook is apps/server/MAINNET.md: the production Discord
 # application, the app and its volume, the secrets, DNS, the first deploy, funding the treasury and
 # how to stop everything. `apps/server/test/flyConfig.test.ts` checks this file parses into a safe
 # mainnet server (no testnet controls, USDC.e payouts, a pathUSD fee budget, its own passkey domain).
@@ -14,8 +14,8 @@
 #   fly certs add web.rolepay.app -a rolepay-app
 
 app = "rolepay-app"
-# Ashburn, next to Discord's servers, as the demo since 2026-10-07: from Paris each Discord-to-server
-# hop took 1 to 3 s, against Discord's 3-second deadline for an answer.
+# Ashburn, next to Discord's servers, as the demo since 2026-10-07: from Fly's Paris region (cdg)
+# each Discord-to-server hop took 1 to 3 s, against Discord's 3-second deadline for an answer.
 primary_region = "iad"
 # The server drains payments in flight on SIGTERM (up to 10 s) before closing the database.
 kill_signal = "SIGTERM"

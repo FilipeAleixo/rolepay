@@ -6,7 +6,7 @@ Paths: `core/` is `packages/core/src/`, `discord/` is `packages/discord/src/`, `
 
 ## 1. Scope and summary
 
-**In scope:** the code in this repository (`packages/core`, `packages/discord`, `packages/web`, `apps/server`), run as the testnet demo (`fly.demo.toml`) or the prepared mainnet server (`fly.app.toml`).
+**In scope:** the code in this repository (`packages/core`, `packages/discord`, `packages/web`, `apps/server`), run as the testnet demo (`fly.demo.toml`) or the mainnet server (`fly.app.toml`).
 
 **Out of scope:** Tempo's protocol and nodes, Discord, Anthropic, Fly.io, and the security of people's devices and passkey managers. Rolepay relies on them, and this document says where.
 
