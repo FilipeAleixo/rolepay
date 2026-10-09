@@ -30,21 +30,7 @@ const DEMO_CAPTIONS: CaptionCue[] = PAYRUN_SLOW_CAPTIONS
 export const PITCH: Item[] = [
   // One slide: what it is, why it matters, who it is for, the proof. The voice-over is the opening's.
   { type: 'scene', scene: 'overview', voice: 'pitch-1-problem' },
-  {
-    type: 'slot',
-    file: 'pitch-2-demo.mp4',
-    kind: 'screen',
-    label: 'The demo, short',
-    note: "The first mainnet pay run, slowed to narrate over (about 25 s): /rolepay new and the run, the Treasurer's approval in #treasury with the payee's balance arriving, the DM receipt, the transaction on Tempo mainnet.",
-    seconds: 25,
-    audible: true,
-    captions: DEMO_CAPTIONS,
-    voice: 'pitch-2-demo',
-    fallback: { file: 'demo-2-payrun.mp4', captions: PAYRUN_CAPTIONS },
-    card: { kind: 'points', title: 'A pay run, from Discord', points: DEMO_CAPTIONS.map((c) => c.text) },
-  },
   { type: 'scene', scene: 'trustModel', voice: 'pitch-vo-trust-model' },
-  { type: 'scene', scene: 'whyTempo', voice: 'pitch-vo-why-tempo' },
   {
     type: 'slot',
     file: 'pitch-4-why-me.mp4',
@@ -96,20 +82,5 @@ export const PITCH: Item[] = [
     overlays: [{ kind: 'points', title: 'Go-to-market', points: ['*Crypto communities* first', 'Then creator communities', 'Then gaming'], at: 1.2, until: 8.3 }],
     voice: 'pitch-6-go-to-market',
   },
-  {
-    type: 'slot',
-    file: 'pitch-7-status.mp4',
-    kind: 'camera',
-    label: 'Honest status',
-    note: 'Honest status: what works today, what was proven on chain, what is not done yet.',
-    seconds: 12,
-    voice: 'pitch-7-status',
-    card: {
-      kind: 'points',
-      title: 'Where it stands',
-      points: ['The *testnet demo* runs all of it, open to try', 'A first real pay run on *Tempo mainnet*, 8 October', '*Still open:* a second RPC, the setup page on its own origin, a separate signer'],
-    },
-  },
-  { type: 'scene', scene: 'numbers', voice: 'pitch-vo-numbers' },
   { type: 'scene', scene: 'endCard', voice: 'pitch-8-close' },
 ]
