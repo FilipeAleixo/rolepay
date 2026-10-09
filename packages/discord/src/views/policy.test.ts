@@ -119,6 +119,13 @@ describe('policyMessage', () => {
     expect(m).toContain('First run after approval')
   })
 
+  it("the AI's assumptions name roles and channels as mentions (read as names, never pinging), and stay escaped otherwise", () => {
+    const assumed = policyMessage(policy({ compiled: { ...policy().compiled, assumptions: [`<@&${MODS_ROLE}> means the moderators; replies count in <#${HELP}> (**all** of them)`] } }), ctx)
+    const field = assumed.embeds?.[0]?.fields?.find((f) => f.name === 'The AI assumed')
+    expect(field?.value).toBe(`• <@&${MODS_ROLE}> means the moderators; replies count in <#${HELP}> \\(\\*\\*all\\*\\* of them\\)`)
+    expect(assumed.allowed_mentions).toEqual({ parse: [] })
+  })
+
   it('a preview over the key budget only once its swaps count at their most says so', () => {
     const bot = text(policyMessage(policy(), { ...ctx, preview: preview({ problems: ['swaps_over_budget'], remaining: 50_000_000n }) }))
     expect(bot).toContain('With its swaps into preferred stablecoins counted at their most, more than the bot key has left: the run would be held whole, never paid in part.')
@@ -296,5 +303,7 @@ describe('explainHold and explainPolicyError: every code in plain words', () => 
     ]
     for (const [error, says] of cases) expect([error.code, explainPolicyError(error, { community })]).toEqual([error.code, expect.stringContaining(says)])
     expect(explainPolicyError({ code: 'not_permitted' })).toContain('the approver role')
+    // The AI's problem names a channel as a mention (core mapped its token), escaped otherwise.
+    expect(explainPolicyError({ code: 'criteria_unclear', problem: `Voice activity in <#${HELP}> is not available (*yet*).` })).toContain(`filter: Voice activity in <#${HELP}> is not available \\(\\*yet\\*\\).`)
   })
 })

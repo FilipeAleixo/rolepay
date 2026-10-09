@@ -7,7 +7,7 @@ import type { Run } from '../run.js'
 import { type AmountPlan, type Metric, type Metrics } from './amounts.js'
 import { parseLooseAmount } from './numbers.js'
 import type { RawActivity, RawAnchor, RawCriteriaProposal } from './raw.js'
-import { type InstructionRefs, own } from './sources.js'
+import { type InstructionRefs, detokenize, own } from './sources.js'
 
 /**
  * Criteria mode, "pay X to people who Y": the model turns Y into these conditions and code runs
@@ -93,7 +93,8 @@ const given = (text: string): string | null => text.trim() || null
 const ANCHOR_WORDS: Record<RawAnchor['kind'], string> = { reactedTo: 'reacted to', mentionedIn: 'mentioned in', postedIn: 'posted in' }
 
 /**
- * Checks the model's criteria and maps its tokens back to Discord IDs. Bounds are applied here, in
+ * Checks the model's criteria and maps its tokens back to Discord IDs (and, in the words it writes
+ * for people, to names: `detokenize`). Bounds are applied here, in
  * code: the lookback is cut to 31 days (and said so), windows end no later than now, at most 5
  * channels. Amounts are parsed, and each must appear in the instruction (the instruction is the
  * only text the model saw in this mode, so an amount it did not state is a model error). The raw
@@ -103,15 +104,19 @@ export function resolveCriteria(
   raw: RawCriteriaProposal,
   ctx: { refs: InstructionRefs; now: Date; instructionAmounts: readonly Micros[] },
 ): Result<ResolvedCriteria, CriteriaError> {
-  if (!raw.understood) return err({ code: 'criteria_unclear', problem: (given(raw.problem) ?? 'The instruction could not be expressed with the filters Rolepay has.').slice(0, 300) })
-  const issues: string[] = []
   const { refs, now } = ctx
+  // The model's words are shown to people: its tokens become names again.
+  const words = (text: string) => detokenize(text.trim(), refs)
+  if (!raw.understood) return err({ code: 'criteria_unclear', problem: (given(raw.problem) ? words(raw.problem) : 'The instruction could not be expressed with the filters Rolepay has.').slice(0, 300) })
+  const issues: string[] = []
   const earliest = new Date(now.getTime() - PROPOSAL_LIMITS.maxLookbackDays * DAY_MS)
   let lookbackClamped = false
 
+  // A token the request never made is "the role the AI named", never "R9"; a name it wrote instead is worth quoting.
+  const named = (what: string, t: string) => (/^[@#]?[UMRC][1-9]\d*$/.test(t.trim()) ? `${what} the AI named` : `${what} "${t}"`)
   const lookup = (table: Record<string, string>, what: string) => (t: string) => {
     const id = own(table, t.trim().replace(/^[@#]/, ''))
-    if (!id) issues.push(`${what} "${t}" is not one the instruction or the server names`)
+    if (!id) issues.push(`${named(what, t)} is not one the instruction or the server names`)
     return id ?? null
   }
   const role = lookup(refs.roles, 'the role')
@@ -119,7 +124,7 @@ export function resolveCriteria(
   const user = lookup(refs.users, 'the person')
   const message = (t: string) => {
     const m = own(refs.messages, t.trim())
-    if (!m) issues.push(`the message "${t}" is not linked in the instruction (paste the message link)`)
+    if (!m) issues.push(`${named('the message', t)} is not linked in the instruction (paste the message link)`)
     return m ?? null
   }
 
@@ -252,8 +257,8 @@ export function resolveCriteria(
   return ok({
     criteria,
     plan: { ...plan, overrides, perPersonCap },
-    note: raw.note.trim().slice(0, 200) || null,
-    assumptions: raw.assumptions.map((s) => s.trim().slice(0, 300)).filter(Boolean).slice(0, 10),
+    note: words(raw.note).slice(0, 200) || null,
+    assumptions: raw.assumptions.map((s) => words(s).slice(0, 300)).filter(Boolean).slice(0, 10),
     lookbackClamped,
     amountsInInstruction: used.every((x) => stated.has(x)),
   })

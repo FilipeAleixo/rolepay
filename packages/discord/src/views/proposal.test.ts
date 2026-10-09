@@ -91,13 +91,35 @@ describe('proposalMessage', () => {
     }
   })
 
-  it("the model's words cannot format the message: reasons, assumptions and summaries are escaped", () => {
-    const evil = '**Approved** [click](https://evil.example) <@&400000000000000099>'
-    const p = proposal({ lines: [{ ...proposal().lines[0], reason: evil } as ReturnType<typeof proposal>['lines'][number]], assumptions: [evil], unresolved: [{ text: evil, why: evil }] })
+  it("the model's words cannot format the message: reasons, assumptions, summaries and the note are escaped", () => {
+    const evil = '**Approved** [click](https://evil.example) <https://evil.example> <t:0:R> <@&40000> <@everyone>'
+    const p = proposal({
+      lines: [{ ...proposal().lines[0], reason: evil } as ReturnType<typeof proposal>['lines'][number]],
+      assumptions: [evil],
+      unresolved: [{ text: evil, why: evil }],
+      suspicious: [{ ...(proposal().suspicious[0] as ReturnType<typeof proposal>['suspicious'][number]), summary: evil }],
+      note: evil,
+    })
     const text = all(proposalMessage(p, ctx))
     expect(text).not.toContain('**Approved**')
     expect(text).not.toContain('[click](https://evil')
-    expect(text).not.toContain('<@&400000000000000099>')
+    expect(text).not.toContain('<https://evil')
+    expect(text).not.toContain('<t:0:R>')
+    expect(text).not.toContain('<@&40000>')
+    expect(text).not.toContain('<@everyone>')
+  })
+
+  it("people, roles and channels in the AI's words read as names (core turns its tokens into the request's own mentions), and nobody is pinged", () => {
+    const words = `named by <@${BOB}> in <#${CHANNEL}> for <@&${MODS_ROLE}>`
+    const p = proposal({ lines: [{ ...proposal().lines[0], reason: words } as ReturnType<typeof proposal>['lines'][number]], assumptions: [words], unresolved: [{ text: 'x', why: words }], note: words })
+    const m = proposalMessage(p, ctx)
+    const e = embedOf(m)
+    expect(e.description).toContain(`1. <@${ALICE}>  50 AlphaUSD · named by <@${BOB}> in <#${CHANNEL}> for <@&${MODS_ROLE}> · [source]`)
+    expect(e.description).toContain(`**Note on the run:** named by <@${BOB}> in <#${CHANNEL}> for <@&${MODS_ROLE}>`)
+    const fields = Object.fromEntries((e.fields ?? []).map((f) => [f.name, f.value]))
+    expect(fields.Assumptions).toBe(`• ${words}`)
+    expect(fields['Could not resolve']).toBe(`"x": ${words}`)
+    expect(m.allowed_mentions).toEqual({ parse: [] })
   })
 
   it('stays inside Discord limits with 50 long lines, pointing at Edit for the rest', () => {

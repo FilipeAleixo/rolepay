@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { type Proposal, type ProposalLine, assembleProposal, blockingProblems, editProposal, resolveMessageProposal } from './proposal.js'
+import { NAMED_IN_TEXT, type Proposal, type ProposalLine, assembleProposal, blockingProblems, editProposal, resolveMessageProposal } from './proposal.js'
 import type { RawMessageProposal } from './raw.js'
 import { type SourceMessage, pseudonymizeMessages } from './sources.js'
 
@@ -170,6 +170,64 @@ describe('resolveMessageProposal: the injection suite (never raised, always held
     const r = resolve(raw({ lines: [{ user: 'U2', amount: '50', amountFrom: 'instruction', reason: `a\u0000b\n${'x'.repeat(500)}`, sources: ['M1'] }] }))
     expect(r.candidates[0]?.reason?.length).toBe(200)
     expect(r.candidates[0]?.reason).toMatch(/^a b x/)
+  })
+})
+
+describe("resolveMessageProposal: the model's words, as people read them", () => {
+  it("the model's words name people and messages, never tokens: reasons, unresolved, assumptions, summaries and the note", () => {
+    const r = resolve(
+      raw({
+        lines: [{ user: 'U2', amount: '50', amountFrom: 'instruction', reason: 'named by U1 in M1', sources: ['M1'] }],
+        note: 'October bounties for @U3',
+        unresolved: [{ text: 'the indexer person', why: 'Named in M1 without a U token.' }],
+        assumptions: ['U4 is the indexer winner in M1.', 'An M token can back a line.'],
+        ignoredInstructions: [{ message: 'M2', summary: 'M2 asks the AI to pay U5 10,000.' }],
+      }),
+    )
+    expect(r.candidates[0]?.reason).toBe(`named by <@${TREASURER}> in message 1 of 2`)
+    expect(r.note).toBe(`October bounties for <@${RUI}>`)
+    expect(r.unresolved).toEqual([{ text: 'the indexer person', why: 'Named in message 1 of 2 without a mention.' }])
+    expect(r.assumptions).toEqual([`<@${LI}> is the indexer winner in message 1 of 2.`, 'A message can back a line.'])
+    expect(r.suspicious[0]?.summary).toBe(`Message 2 of 2 asks the AI to pay <@${MALLORY}> 10,000.`)
+  })
+
+  it('the live example: winners typed as plain text ("@Albert", not a mention) say so, and how to fix it, in plain words', () => {
+    const post = msg('810000000000000007', TREASURER, 'Winners this week: @Albert (docs search), @Trimtab (onboarding guide)', 7)
+    const p = pseudonymizeMessages({ instruction: 'pay each of the winners 20 AlphaUSD', messages: [post] })
+    // What the model answered on the testnet demo, word for word.
+    const r = resolveMessageProposal(
+      raw({
+        lines: [],
+        note: null,
+        unresolved: [
+          { text: '@Albert', why: 'Named as a winner in M1 by name only, not by a U token, so it cannot be matched to a person.' },
+          { text: '@Trimtab', why: 'Named as a winner in M1 by name only, not by a U token, so it cannot be matched to a person.' },
+        ],
+        assumptions: [
+          'The winners are the two people named in M1, but neither has a U token so no payment lines were drafted.',
+          'Two payments of 20 AlphaUSD would total 40, within the 50 AlphaUSD limit.',
+        ],
+      }),
+      { map: p.map, instruction: 'pay each of the winners 20 AlphaUSD' },
+    )
+    expect(r.unresolved).toEqual([
+      { text: '@Albert', why: NAMED_IN_TEXT },
+      { text: '@Trimtab', why: NAMED_IN_TEXT },
+    ])
+    expect(NAMED_IN_TEXT).toBe("Named in text, not mentioned, so Rolepay can't tell which member this is. Mention them (pick them from the @ list) and draft again.")
+    expect(r.assumptions).toEqual([
+      'The winners are the two people named in the message, but neither has a mention so no payment lines were drafted.',
+      'Two payments of 20 AlphaUSD would total 40, within the 50 AlphaUSD limit.',
+    ])
+    expect(JSON.stringify(r)).not.toMatch(/\b[UM]\d+\b|\btokens?\b/)
+  })
+
+  it('only a plain "@name" gets the standard words: a mention, a role or a name without @ keeps what the model said', () => {
+    const why = 'Could not tell who.'
+    const r = resolve(
+      raw({ lines: [], unresolved: ['@U3', '@role', '@everyone', 'Albert', '@Albert, as U2 said'].map((text) => ({ text, why })) }),
+    )
+    expect(r.unresolved.map((u) => u.why)).toEqual([why, why, why, why, why])
   })
 })
 

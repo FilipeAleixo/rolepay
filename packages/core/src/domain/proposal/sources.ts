@@ -161,3 +161,95 @@ export function tokenizeInstruction(
   for (const [id, t] of userTokens) refs.users[t] = id
   return { text, refs, roles: roles.map(({ ref, name }) => ({ ref, name })), channels: channels.map(({ ref, name, kind }) => ({ ref, name, kind })) }
 }
+
+// ---- the way back: tokens in the model's words become names -------------------------------
+
+/**
+ * What the tokens of one request stand for: `MessageTokenMap` (people and messages) or
+ * `InstructionRefs` (also roles and channels). A kind left out is not a token in that mode, so
+ * "R2" in message mode is ordinary text and stays as written.
+ */
+export type TokenNames = {
+  users: Readonly<Record<string, string>>
+  messages?: Readonly<Record<string, unknown>>
+  roles?: Readonly<Record<string, string>>
+  channels?: Readonly<Record<string, string>>
+}
+
+/** Discord markup the model wrote itself (it never saw an ID, so it can only have made one up or echoed one of ours). */
+const MARKUP = /<(@!?|@&|#)(\d{1,20})>/g
+/** "a U token", "M tokens", "a message token": how the model talks about the tokens. Never "a token of thanks" or "the payout token". */
+const JARGON = /\b(?:([Aa]n?) )?(?:([UMRC])|([Uu]ser|[Pp]erson|[Mm]essage|[Rr]ole|[Cc]hannel))[- ]([Tt]okens?)\b/g
+const NOUN: Record<string, string> = { u: 'mention', user: 'mention', person: 'mention', m: 'message', message: 'message', r: 'role', role: 'role', c: 'channel', channel: 'channel' }
+/**
+ * A token on its own: "M1" (with the words the model puts around one: "the M1", "message M1",
+ * "[message M1]"), "@U2", "@R1", "#C3". Not inside a word or a number ("MU1", "U1x", "U1.5").
+ */
+const TOKEN = /(?<![\w@#&])(?:\[message (M[1-9]\d{0,3})\]|(?:([Tt]he|[Aa]) )?(?:[Mm]essages? )?(M[1-9]\d{0,3})|[@#]?([URC][1-9]\d{0,3}))(?!\w|\.\d)/g
+const SENTENCE_START = /(?:^\s*|[.!?]\s+|\n\s*)$/
+
+/**
+ * Each match becomes `to(match)`; a replacement at the start of a sentence starts with a capital,
+ * unless the model began it in lower case ("an M token" stays "a message").
+ */
+function swap(text: string, pattern: RegExp, to: (m: RegExpMatchArray) => string): string {
+  let out = ''
+  let last = 0
+  for (const m of text.matchAll(pattern)) {
+    const at = m.index ?? 0
+    out += text.slice(last, at)
+    const word = to(m)
+    out += word !== m[0] && /^[a-z]/.test(word) && !/^[a-z]/.test(m[0]) && SENTENCE_START.test(out) ? `${word[0]?.toUpperCase()}${word.slice(1)}` : word
+    last = at + m[0].length
+  }
+  return out + text.slice(last)
+}
+
+/**
+ * The model's free text (reasons, notes, assumptions, what it could not resolve) is shown to people,
+ * and it writes people and messages as the tokens it was given. This maps them back with the
+ * request's own tokens: people, roles and channels to their Discord mentions (`<@id>`, `<@&id>`,
+ * `<#id>`, the way lines and criteria name them: read as names, and Rolepay's messages ping
+ * nobody), messages to "the message" or "message 2 of 3" (oldest first, or in the order the
+ * instruction links them). A token the request never made is a neutral word ("someone", "a
+ * message"), never the raw token, and so is any mention the model wrote itself that is not one of
+ * the request's: only people, roles and channels of this request survive. Talk about tokens ("not
+ * by a U token") becomes plain words ("not by a mention"). Idempotent.
+ */
+export function detokenize(text: string, names: TokenNames): string {
+  const users = new Set(Object.values(names.users))
+  const roles = new Set(Object.values(names.roles ?? {}))
+  const channels = new Set(Object.values(names.channels ?? {}))
+  const messages = names.messages ?? {}
+  const count = Object.keys(messages).length
+
+  const marked = swap(text, MARKUP, ([, kind, id = '']) =>
+    kind === '#' ? (channels.has(id) ? `<#${id}>` : 'a channel') : kind === '@&' ? (roles.has(id) ? `<@&${id}>` : 'a role') : users.has(id) ? `<@${id}>` : 'someone',
+  )
+  const plain = swap(marked, JARGON, ([, article, letter, word, tokens = '']) => {
+    const noun = `${NOUN[(letter ?? word ?? '').toLowerCase()]}${tokens.toLowerCase().endsWith('s') ? 's' : ''}`
+    return article ? `${article[0]} ${noun}` : noun
+  })
+  return swap(plain, TOKEN, (m) => {
+    const [whole, linked, , message, other = ''] = m
+    const ref = linked ?? message
+    if (ref) {
+      if (!names.messages) return whole
+      if (own(messages, ref) === undefined) return 'a message'
+      return count === 1 ? 'the message' : `message ${ref.slice(1)} of ${count}`
+    }
+    const id = (table: Readonly<Record<string, string>>) => own(table, other)
+    if (other.startsWith('U')) {
+      const user = id(names.users)
+      return user ? `<@${user}>` : 'someone'
+    }
+    if (other.startsWith('R')) {
+      if (!names.roles) return whole
+      const role = id(names.roles)
+      return role ? `<@&${role}>` : 'a role'
+    }
+    if (!names.channels) return whole
+    const channel = id(names.channels)
+    return channel ? `<#${channel}>` : 'a channel'
+  })
+}

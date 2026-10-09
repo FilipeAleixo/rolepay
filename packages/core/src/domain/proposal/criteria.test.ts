@@ -80,11 +80,34 @@ describe('resolveCriteria (the model writes the filter, code checks it)', () => 
     )
     expect(r.ok).toBe(false)
     const issues = !r.ok && r.error.code === 'criteria_invalid' ? r.error.issues.join(' | ') : ''
-    expect(issues).toMatch(/role "R9"/)
-    expect(issues).toMatch(/person "U9"/)
+    // People read these: a made-up token is "the role the AI named", never "R9".
+    expect(issues).toMatch(/the role the AI named is not one the instruction or the server names/)
+    expect(issues).toMatch(/the person the AI named is not one/)
     expect(issues).toMatch(/"last month" is not a date/)
-    expect(issues).toMatch(/message "M7" is not linked/)
+    expect(issues).toMatch(/the message the AI named is not linked/)
     expect(issues).toMatch(/depends on replies/)
+    expect(issues).not.toMatch(/R9|U9|M7/)
+    // A name instead of a token is worth quoting: it says what the AI looked for.
+    const named = resolve(raw({}, { hasRole: ['Moderators'] }))
+    expect(!named.ok && named.error.code === 'criteria_invalid' && named.error.issues).toEqual(['the role "Moderators" is not one the instruction or the server names'])
+  })
+
+  it("the model's words (assumptions, the note, the problem) name roles, channels, people and messages, never tokens", () => {
+    const r = resolve(
+      raw(
+        {
+          note: 'Help desk, except U1',
+          assumptions: ['@R2 means the Mods role, and replies are counted in #C1.', 'M1 is the winners post; an R token was not needed.'],
+        },
+        { hasRole: ['R2'], activity: [act('replies', ['C1'], '2026-09-06')] },
+      ),
+    )
+    expect(r.ok && r.value.assumptions).toEqual([`<@&${MODS}> means the Mods role, and replies are counted in <#${HELP}>.`, 'The message is the winners post; a role was not needed.'])
+    expect(r.ok && r.value.note).toBe(`Help desk, except <@${C}>`)
+    expect(resolve(raw({ understood: false, problem: 'Voice activity in C2 is not available, and U9 is nobody.' }))).toEqual({
+      ok: false,
+      error: { code: 'criteria_unclear', problem: `Voice activity in <#${GENERAL}> is not available, and someone is nobody.` },
+    })
   })
 
   it('refuses more than 5 channels in one proposal', () => {

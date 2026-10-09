@@ -1,5 +1,5 @@
 import { type Community, MAX_LINES_PER_RUN, PROPOSAL_LIMITS } from '@rolepay/core'
-import { escapeMarkdown, mention, money, relativeTime, roleMention, tokenLabel } from './format.js'
+import { escapeAiText, escapeMarkdown, mention, money, relativeTime, roleMention, tokenLabel } from './format.js'
 
 const tokenList = (tokens: unknown) => (Array.isArray(tokens) ? tokens.map((t) => tokenLabel(String(t))).join(' and ') : '?')
 
@@ -32,7 +32,7 @@ export function explainProposalError(error: CodedError, ctx: { token?: string; c
     case 'could_not_propose':
       return String(error.reason) in COULD_NOT_PROPOSE ? COULD_NOT_PROPOSE[error.reason as keyof typeof COULD_NOT_PROPOSE] : COULD_NOT_PROPOSE.malformed
     case 'criteria_unclear':
-      return `The AI could not turn that into a filter: ${escapeMarkdown(String(error.problem ?? ''))} Try naming a role, a channel and an amount, or propose from messages with \`/rolepay propose source:#channel\`.`
+      return `The AI could not turn that into a filter: ${escapeAiText(String(error.problem ?? ''))} Try naming a role, a channel and an amount, or propose from messages with \`/rolepay propose source:#channel\`.`
     case 'criteria_invalid':
       return `The filter the AI wrote does not work: ${escapeMarkdown(((error.issues as string[] | undefined) ?? []).join('; '))}. Try rewording. Nothing was created.`
     case 'cannot_read':
