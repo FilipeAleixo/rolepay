@@ -6,6 +6,7 @@ import { FOUR_BEATS_FRAMES, FourBeats } from './FourBeats'
 import { FUNDING_FRAMES, Funding } from './Funding'
 import { NEVER_PAY_TWICE_FRAMES, NeverPayTwice } from './NeverPayTwice'
 import { NUMBERS_FRAMES, Numbers } from './Numbers'
+import { OVERVIEW_FRAMES, Overview } from './Overview'
 import { OWN_BUDGETS_FRAMES, OwnBudgets } from './OwnBudgets'
 import { PREFERRED_STABLECOIN_FRAMES, PreferredStablecoin } from './PreferredStablecoin'
 import { PROBLEM_FRAMES, Problem } from './Problem'
@@ -16,6 +17,7 @@ import { WHY_TEMPO_FRAMES, WhyTempo } from './WhyTempo'
 /** Every animated scene, by the id the timelines use, with its composition id and length. */
 export const SCENES = {
   title: { id: 'Title', component: Title, frames: TITLE_FRAMES },
+  overview: { id: 'Overview', component: Overview, frames: OVERVIEW_FRAMES },
   problem: { id: 'Problem', component: Problem, frames: PROBLEM_FRAMES },
   trustModel: { id: 'TrustModel', component: TrustModel, frames: TRUST_MODEL_FRAMES },
   ownBudgets: { id: 'OwnBudgets', component: OwnBudgets, frames: OWN_BUDGETS_FRAMES },

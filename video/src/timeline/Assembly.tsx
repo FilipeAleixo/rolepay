@@ -87,7 +87,7 @@ export const voiceFile = (base: string | undefined) => (base ? (VOICE_EXTENSIONS
 
 /** The speech starts this far into its item, after the crossfade, and the item runs this long past it. */
 const VOICE_LEAD = sec(0.2)
-const VOICE_TAIL = sec(0.6)
+const VOICE_TAIL = sec(0.45)
 
 /** How long an item must be to carry a voice-over. */
 const spoken = (v: VoiceTake) => VOICE_LEAD + (v.to - v.from) + VOICE_TAIL
