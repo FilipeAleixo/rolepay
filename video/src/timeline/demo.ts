@@ -107,11 +107,11 @@ export const DEMO: Item[] = [
     file: 'demo-7-dashboard.mp4',
     kind: 'screen',
     label: 'The dashboard',
-    note: 'The web dashboard: the Overview with its At a glance panel, then the Audit log and its CSV.',
+    note: "The web dashboard: the bot key's budget in At a glance, the Audit log and Export CSV, the download, then the CSV opened.",
     seconds: 9,
     captions: [
-      { at: 0.5, until: 4.5, text: "The dashboard: *At a glance*, the key's budget and its limit" },
-      { at: 5, until: 8.5, text: 'Every step in the *audit log*, exportable to CSV' },
+      { at: 0.3, until: 3.45, text: "The dashboard: *At a glance*, the key's budget and its limit" },
+      { at: 3.85, until: 8.65, text: 'Every step in the *audit log*, exportable to CSV' },
     ],
   },
   // How money comes in with its source attached, before the recording shows a deposit.
