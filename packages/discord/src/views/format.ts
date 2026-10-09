@@ -42,3 +42,10 @@ export const escapeAiText = (text: string) =>
     .split(/(<(?:@&?|#)\d{17,20}>)/)
     .map((part, i) => (i % 2 ? part : escapeMarkdown(part)))
     .join('')
+
+/**
+ * An instruction a person typed, escaped like a note except for whole mentions: Discord writes a
+ * channel, role or person picked from its list as `<#id>`, `<@&id>` or `<@id>`, which escaped would
+ * show as raw IDs. They read as names, and with `NO_PINGS` (and inside an embed) they ping nobody.
+ */
+export const escapeInstruction = escapeAiText

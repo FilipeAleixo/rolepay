@@ -293,6 +293,21 @@ describe('policyPortFromCore: who it applies to, when it cannot be worked out', 
     const again = await plain.get({ guildId: GUILD, policyId: created.value.policyId })
     expect(again.ok && again.value.ruleInWords).toContain('@role 400000000000000002')
   })
+
+  it('the instruction as written names the channels and roles picked in Discord, and the edit form keeps them as typed', async () => {
+    const w = await world()
+    const typed = 'Every Monday: 1 USDC per answered question in <#700000000000000002>, max 50 a week each, for <@&400000000000000002>.'
+    const created = await w.port.create({ guildId: GUILD, actor, draft: { name: 'Help desk', instruction: typed, schedule: MONDAY } })
+    if (!created.ok) throw new Error(created.error.code)
+    const named = policyPortFromCore(w.rolepay, {
+      names: { guildNames: async () => ({ roles: [{ id: '400000000000000002', name: 'Mods' }], channels: [{ id: '700000000000000002', name: 'help', kind: 'text' }] }) },
+    })
+    const ref = { guildId: GUILD, policyId: created.value.policyId }
+    const d = await named.get(ref)
+    expect(d.ok && d.value.instructionInWords).toBe('Every Monday: 1 USDC per answered question in #help, max 50 a week each, for @Mods.')
+    expect(d.ok && d.value.instruction).toBe(typed)
+    expect((await named.versions(ref)).map((v) => v.instructionInWords)).toEqual([d.ok && d.value.instructionInWords])
+  })
 })
 
 async function bare() {

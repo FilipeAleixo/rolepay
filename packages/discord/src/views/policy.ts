@@ -13,7 +13,7 @@ import {
 } from '@rolepay/core'
 import { type ActionRow, ButtonStyle, ComponentType, type Embed, type Message, MessageFlags } from '../api.js'
 import { encodePolicyButton } from '../components/customId.js'
-import { COLORS, NO_PINGS, count, escapeAiText, escapeMarkdown, mention, money, roleMention } from './format.js'
+import { COLORS, NO_PINGS, count, escapeAiText, escapeInstruction, escapeMarkdown, mention, money, roleMention } from './format.js'
 
 export type PolicyViewContext = {
   /** The community's payout token, for amounts. */
@@ -137,7 +137,7 @@ const TITLES: Record<Policy['status'], string> = { draft: 'Policy draft', active
  */
 export function policyMessage(p: Policy, ctx: PolicyViewContext & { preview?: PolicyPreview | null; previewProblem?: string; nextRunAt?: Date | null }): Message {
   const rule = ctx.preview?.rule ?? describeRule(p.compiled, { schedule: p.schedule, caps: p.caps, guildId: p.communityId })
-  const fields: NonNullable<Embed['fields']> = [{ name: 'Instruction', value: cut(`> ${escapeMarkdown(p.instruction)}`) }]
+  const fields: NonNullable<Embed['fields']> = [{ name: 'Instruction', value: cut(`> ${escapeInstruction(p.instruction)}`) }]
   const next = ctx.preview?.nextRunAt ?? ctx.nextRunAt ?? null
   fields.push({ name: 'Schedule', value: `${describeSchedule(p.schedule)}.${next && p.status !== 'archived' && p.status !== 'paused' ? ` ${p.status === 'draft' ? 'First run after approval' : 'Next run'}: ${when(next)}.` : ''}` })
   fields.push({

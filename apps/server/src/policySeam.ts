@@ -111,6 +111,10 @@ async function namesFor(rolepay: Rolepay, guildId: string, source: NameSource | 
 
 const ruleWords = (compiled: CompiledRule, d: { schedule: Schedule; caps: PolicyCaps }, names: Names) => describeRule(compiled, { schedule: d.schedule, caps: d.caps, ...names }).join(' ')
 
+/** The instruction as written, with the mentions Discord put in it (`<#id>`, `<@&id>`, `<@id>`) as names, never raw IDs. */
+const instructionWords = (text: string, names: Names) =>
+  text.replace(/<(@&|@|#)(\d{17,20})>/g, (_m, kind: string, id: string) => (kind === '#' ? (names.channel?.(id) ?? `#${id}`) : kind === '@&' ? (names.role?.(id) ?? `@role ${id}`) : (names.user?.(id) ?? `user ${id}`)))
+
 function detailOf(p: Policy, nextRunAt: Date | null, names: Names): PolicyDetail {
   return {
     id: p.id,
@@ -122,6 +126,7 @@ function detailOf(p: Policy, nextRunAt: Date | null, names: Names): PolicyDetail
     nextRunAt,
     matchesNow: null,
     instruction: p.instruction,
+    instructionInWords: instructionWords(p.instruction, names),
     ruleInWords: ruleWords(p.compiled, p, names),
     filter: jsonSafe(p.compiled),
     vetoWindowMinutes: p.vetoWindowMinutes,
@@ -340,6 +345,7 @@ export function policyPortFromCore(rolepay: Rolepay, opts: { names?: NameSource 
       return d.value.versions.map((v) => ({
         version: v.version,
         instruction: v.instruction,
+        instructionInWords: instructionWords(v.instruction, n),
         ruleInWords: ruleWords(v.compiled, v, n),
         filter: jsonSafe(v.compiled),
         createdBy: v.authoredBy,

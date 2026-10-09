@@ -126,6 +126,13 @@ describe('policyMessage', () => {
     expect(assumed.allowed_mentions).toEqual({ parse: [] })
   })
 
+  it('the instruction keeps the channels and roles picked from Discord\'s list as mentions, never raw IDs, and stays escaped otherwise', () => {
+    const typed = policyMessage(policy({ instruction: `2 per message in <#${HELP}> this week, **max** 6 each, for <@&${MODS_ROLE}> @everyone` }), ctx)
+    const field = typed.embeds?.[0]?.fields?.find((f) => f.name === 'Instruction')
+    expect(field?.value).toBe(`> 2 per message in <#${HELP}> this week, \\*\\*max\\*\\* 6 each, for <@&${MODS_ROLE}> \\@everyone`)
+    expect(typed.allowed_mentions).toEqual({ parse: [] })
+  })
+
   it('a preview over the key budget only once its swaps count at their most says so', () => {
     const bot = text(policyMessage(policy(), { ...ctx, preview: preview({ problems: ['swaps_over_budget'], remaining: 50_000_000n }) }))
     expect(bot).toContain('With its swaps into preferred stablecoins counted at their most, more than the bot key has left: the run would be held whole, never paid in part.')

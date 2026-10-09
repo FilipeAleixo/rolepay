@@ -16,7 +16,7 @@ import {
 } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message, type Modal, TextInputStyle } from '../api.js'
 import { type ProposalAction, encodeProposalId, encodeProposalModalId } from '../components/customId.js'
-import { COLORS, NO_PINGS, count, escapeAiText, escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'
+import { COLORS, NO_PINGS, count, escapeAiText, escapeInstruction, escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'
 
 /**
  * The proposal, for the person who asked (an ephemeral message): what the AI understood, one
@@ -146,7 +146,7 @@ function header(p: Proposal): string[] {
     const what = n === 1 && first ? `[1 message](${messageLink(p.communityId, p.source.channelId, first)})` : count(n, 'message', 'messages')
     out.push(`**From:** ${what} in <#${p.source.channelId}>.`)
   }
-  out.push(`**Instruction:** ${escapeMarkdown(clip(p.instruction, 300))}`)
+  out.push(`**Instruction:** ${escapeInstruction(clip(p.instruction, 300))}`)
   if (p.note) out.push(`**Note on the run:** ${escapeAiText(p.note)}`)
   // Many exclusions or overrides could make the criteria long: each part has a bound.
   return out.map((x) => clip(x, 900))

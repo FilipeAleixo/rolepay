@@ -134,7 +134,7 @@ function previewSection(d: { preview: PolicyPreview | { error: string }; names: 
 <section class="card"><h2>Just below the line</h2>${near}</section>`
 }
 
-const versionText = (v: PolicyVersionView) => `Instruction:\n${v.instruction}\n\nRule:\n${v.ruleInWords}\n\nFilter:\n${JSON.stringify(v.filter, null, 2)}`
+const versionText = (v: PolicyVersionView) => `Instruction:\n${v.instructionInWords ?? v.instruction}\n\nRule:\n${v.ruleInWords}\n\nFilter:\n${JSON.stringify(v.filter, null, 2)}`
 
 /** "Compiled by Sonnet 5.5 in 3.4 s for $0.018.": the one model call that made this version. */
 function compileLine(c: AiCallView | undefined): string {
@@ -335,7 +335,7 @@ export function policyBody(d: {
   const actions = d.canAct ? actionsSection({ base, policy: p, csrf: d.csrf }) : '<p class="muted">Only the Treasurer role can change policies.</p>'
   return `<p class="small"><a href="/dashboard/${g}/policies">All policies</a></p>
 <h1>${esc(p.name)} ${statusPill(p.status)} ${modePill(p.mode)}</h1>${d.notice}${pending}
-<div class="grid"><section class="card"><h2>The rule</h2><p>${esc(p.ruleInWords)}</p><h3>As written</h3><blockquote>${esc(p.instruction)}</blockquote>
+<div class="grid"><section class="card"><h2>The rule</h2><p>${esc(p.ruleInWords)}</p><h3>As written</h3><blockquote>${esc(p.instructionInWords ?? p.instruction)}</blockquote>
 <details><summary>Exact filter</summary><pre>${esc(JSON.stringify(p.filter, null, 2))}</pre></details>${d.editor && p.status !== 'archived' ? editorSection(base, d.csrf, d.editor) : ''}</section>
 <section class="card"><h2>Settings</h2><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl></section></div>
 ${d.latest === undefined ? '' : latestRunSection(d.guildId, d.latest, p.version)}

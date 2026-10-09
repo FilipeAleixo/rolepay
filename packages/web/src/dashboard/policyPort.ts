@@ -45,6 +45,8 @@ export type PolicySummary = {
 export type PolicyDetail = PolicySummary & {
   /** What the treasurer typed, kept next to the compiled rule. */
   instruction: string
+  /** The same, for reading: the mentions in it (`<#id>`, `<@&id>`) as names. Absent: show `instruction`. */
+  instructionInWords?: string
   /** The compiled rule in plain words (written by code from the filter, not by the model). */
   ruleInWords: string
   /** The exact compiled filter and amount plan, JSON-safe (bigints as strings). */
@@ -98,6 +100,7 @@ export type PolicyPreview = {
 export type PolicyVersionView = {
   version: number
   instruction: string
+  instructionInWords?: string
   ruleInWords: string
   filter: unknown
   createdBy: string
