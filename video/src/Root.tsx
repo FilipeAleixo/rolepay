@@ -13,8 +13,8 @@ import { FPS, HEIGHT, WIDTH, sec } from './theme'
 
 const frame = { fps: FPS, width: WIDTH, height: HEIGHT } as const
 
-const pitchProps: AssemblyProps = { items: PITCH, frames: null, audio: 'pitch-audio.mp3', audioVolume: 0.12, maxSeconds: 180 }
-const demoProps: AssemblyProps = { items: DEMO, frames: null, audio: 'demo-audio.mp3', audioVolume: 0.12, maxSeconds: 180 }
+const pitchProps: AssemblyProps = { items: PITCH, fit: null, audio: 'pitch-audio.mp3', audioVolume: 0.12, maxSeconds: 180 }
+const demoProps: AssemblyProps = { items: DEMO, fit: null, audio: 'demo-audio.mp3', audioVolume: 0.12, maxSeconds: 180 }
 
 export const RemotionRoot: React.FC = () => (
   <>

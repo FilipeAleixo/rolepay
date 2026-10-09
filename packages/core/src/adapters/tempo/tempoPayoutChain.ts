@@ -178,8 +178,10 @@ export class TempoPayoutChain implements PayoutChain {
       })
       return { kind: 'quoted', amountIn: amountIn as bigint }
     } catch (e) {
-      // The DEX reverting (no pair, InsufficientLiquidity) is an answer; an RPC failure is not.
+      // The DEX reverting (no pair, InsufficientLiquidity) is an answer; an RPC failure is not. So is a quote
+      // that runs out of gas walking the order book: a swap of that size could not execute either.
       if (e instanceof BaseError && e.walk((x) => x instanceof ContractFunctionRevertedError)) return { kind: 'no_route', detail: errorSummary(e) }
+      if (/out of gas/i.test(errorSummary(e))) return { kind: 'no_route', detail: errorSummary(e) }
       throw e
     }
   }

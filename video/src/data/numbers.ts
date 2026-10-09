@@ -1,23 +1,23 @@
 /**
  * The real numbers the "By the numbers" scene counts up to. Re-read them before a final render.
  *
- * Measured on main at baf7669 (2026-10-08) with `pnpm test` and `pnpm test:coverage` at the repo
- * root, and the same as the README's "How to verify it yourself": 1,991 tests in 163 files (core
- * 965, discord 463, web 396, server 167).
+ * Measured on main at 28fa797 (2026-10-09) with `pnpm test` at the repo root, and the same as the
+ * README's "How to verify it yourself": 1,998 tests in 163 files (core 965, discord 463, web 400,
+ * server 170). Line coverage is the README's table, from `pnpm test:coverage`.
  */
-export const TESTS = { core: 965, discord: 463, web: 396, server: 167 } as const
+export const TESTS = { core: 965, discord: 463, web: 400, server: 170 } as const
 export const TOTAL_TESTS = TESTS.core + TESTS.discord + TESTS.web + TESTS.server
 
 /** Line coverage per package, from `pnpm test:coverage` (what CI runs, with a threshold per package). */
 export const LINE_COVERAGE = [
   { pkg: 'core', pct: 95.94 },
   { pkg: 'discord', pct: 96.97 },
-  { pkg: 'web', pct: 88.83 },
+  { pkg: 'web', pct: 88.84 },
   { pkg: 'server', pct: 86.83 },
 ] as const
 
-/** `pnpm test:chain` on Moderato: 37 tests in 9 files (8 in packages/core/test, 1 in apps/server/test). */
-export const CHAIN_SUITE = { tests: 37, files: 9 } as const
+/** `pnpm test:chain` on Moderato (run 2026-10-09): 39 tests in 10 files (9 in packages/core/test, 1 in apps/server/test). */
+export const CHAIN_SUITE = { tests: 39, files: 10 } as const
 
 /**
  * The distinct on-chain proofs the README links on Moderato's explorer, in its order: the bot key's
