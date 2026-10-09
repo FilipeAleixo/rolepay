@@ -2,7 +2,7 @@ import { parseMedia } from '@remotion/media-parser'
 import { fade } from '@remotion/transitions/fade'
 import { TransitionSeries, linearTiming } from '@remotion/transitions'
 import React from 'react'
-import { AbsoluteFill, Audio, type CalculateMetadataFunction, Sequence, getRemotionEnvironment, staticFile } from 'remotion'
+import { AbsoluteFill, Audio, type CalculateMetadataFunction, Sequence, getRemotionEnvironment, interpolate, staticFile, useCurrentFrame, useVideoConfig } from 'remotion'
 import { type CaptionCue, Captions } from '../components/Caption'
 import { LowerThird, SidePoints } from '../components/Overlays'
 import { Slot, type SlotKind, hasAsset } from '../components/Slot'
@@ -10,6 +10,7 @@ import { VoiceCard, type VoiceCardContent } from '../components/VoiceCard'
 import { SANS } from '../fonts'
 import { SCENES, type SceneId } from '../scenes'
 import { C, FPS, sec } from '../theme'
+import { PROMPTER_FLASH_FRAMES, PROMPTER_INTRO_FRAMES, type PrompterLine as Line, cueAt, readFrames } from './prompter'
 import { speechSpan } from './speech'
 
 /** A crossfade between every two items: short, so cuts stay calm without eating the timeline. */
@@ -74,6 +75,11 @@ export type AssemblyProps = {
   audioVolume: number
   /** The submission's hard limit: the studio shows a warning past it. */
   maxSeconds: number
+  /**
+   * The teleprompter (PitchPrompter): each item's line by its `voice` name, shown on screen, and the
+   * item made long enough to read it. Voice files are ignored, so a new take is never mixed with an old one.
+   */
+  prompter?: Record<string, Line> | null
 }
 
 const planned = (item: Item) => (item.type === 'scene' ? SCENES[item.scene].frames : sec(item.seconds))
@@ -133,7 +139,15 @@ async function voiceTake(file: string): Promise<VoiceTake | null> {
  * A slot is as long as the clip dropped into it, or as its voice-over when there is no clip (or a
  * longer one over a screen recording); a scene is at least as long as its voice-over.
  */
-async function fitItem(item: Item): Promise<ItemFit> {
+async function fitItem(item: Item, prompter: Record<string, Line> | null): Promise<ItemFit> {
+  if (prompter) {
+    const line = item.voice ? prompter[item.voice] : undefined
+    const needed = line ? VOICE_LEAD + readFrames(line) : 0
+    if (item.type === 'scene') return { frames: Math.max(planned(item), needed), voice: null, clipFrames: null }
+    const { clip } = slotPlan(item)
+    const clipFrames = clip ? await mediaFrames(clip) : null
+    return { frames: Math.max(TRANSITION_FRAMES * 2 + 1, clipFrames ?? sec(item.seconds), needed), voice: null, clipFrames }
+  }
   if (item.type === 'scene') {
     const file = voiceFile(item.voice)
     const voice = file ? await voiceTake(file) : null
@@ -148,14 +162,31 @@ async function fitItem(item: Item): Promise<ItemFit> {
 }
 
 export const fitTimeline: CalculateMetadataFunction<AssemblyProps> = async ({ props }) => {
-  const fit = await Promise.all(props.items.map(fitItem))
+  const fit = await Promise.all(props.items.map((item) => fitItem(item, props.prompter ?? null)))
   return { durationInFrames: totalFrames(fit.map((f) => f.frames)), props: { ...props, fit } }
+}
+
+/**
+ * The teleprompter's length: the intro, then the film. It also logs where each item starts in the
+ * film (frames after the flash), which is where the one take is cut into per-item voice files.
+ */
+export const fitPrompter: CalculateMetadataFunction<AssemblyProps> = async (args) => {
+  const fitted = await fitTimeline(args)
+  const fit = (fitted.props as AssemblyProps).fit ?? []
+  let at = 0
+  const items = args.props.items.map((item, i) => {
+    const start = at
+    at += (fit[i]?.frames ?? 0) - TRANSITION_FRAMES
+    return { voice: item.voice ?? null, start, frames: fit[i]?.frames ?? 0 }
+  })
+  console.log(`PROMPTER_TIMELINE ${JSON.stringify({ fps: FPS, intro: PROMPTER_INTRO_FRAMES, items })}`)
+  return { ...fitted, durationInFrames: (fitted.durationInFrames ?? 0) + PROMPTER_INTRO_FRAMES }
 }
 
 /** The planned length of a timeline before any clip exists (Root uses it as the default). */
 export const plannedFrames = (items: Item[]) => totalFrames(items.map(planned))
 
-export const Assembly: React.FC<AssemblyProps> = ({ items, fit, audio, audioVolume, maxSeconds }) => {
+export const Assembly: React.FC<AssemblyProps> = ({ items, fit, audio, audioVolume, maxSeconds, prompter = null }) => {
   const lengths = fit?.map((f) => f.frames) ?? items.map(planned)
   const slots = items.filter((i) => i.type === 'slot').length
   let slotNumber = 0
@@ -166,17 +197,18 @@ export const Assembly: React.FC<AssemblyProps> = ({ items, fit, audio, audioVolu
     children.push(
       <TransitionSeries.Sequence key={`s${i}`} durationInFrames={lengths[i] ?? planned(item)} name={item.type === 'scene' ? SCENES[item.scene].id : `${item.kind}: ${item.label}`}>
         {item.type === 'scene' ? (
-          <SceneView id={item.scene} voice={item.voice} take={fit?.[i]?.voice ?? null} />
+          <SceneView id={item.scene} voice={prompter ? undefined : item.voice} take={fit?.[i]?.voice ?? null} />
         ) : (
-          <SlotView item={item} index={`Slot ${slotNumber} of ${slots}`} fit={fit?.[i] ?? null} />
+          <SlotView item={prompter ? { ...item, voice: undefined } : item} index={`Slot ${slotNumber} of ${slots}`} fit={fit?.[i] ?? null} />
         )}
+        {prompter ? <PrompterLine text={item.voice ? (prompter[item.voice] ?? null) : null} /> : null}
       </TransitionSeries.Sequence>,
     )
   })
   return (
     <AbsoluteFill style={{ backgroundColor: C.ink }}>
       <TransitionSeries>{children}</TransitionSeries>
-      {audio && hasAsset(audio) ? <Audio src={staticFile(audio)} volume={audioVolume} /> : null}
+      {audio && hasAsset(audio) && !prompter ? <Audio src={staticFile(audio)} volume={audioVolume} /> : null}
       <LengthWarning frames={totalFrames(lengths)} maxSeconds={maxSeconds} />
     </AbsoluteFill>
   )
@@ -210,11 +242,13 @@ const SceneView: React.FC<{ id: SceneId; voice?: string; take: VoiceTake | null 
 const SlotView: React.FC<{ item: SlotItem; index: string; fit: ItemFit | null }> = ({ item, index, fit }) => {
   const { clip, captions, voice } = slotPlan(item)
   const card = cardOf(item)
-  if (!clip && voice && card) {
+  // With no recording, the slot's points carry it, spoken over or silent; the missing-file card
+  // is only for a slot that has nothing to show.
+  if (!clip && card) {
     return (
       <AbsoluteFill>
         <VoiceCard content={card} />
-        <VoiceTrack file={voice} take={fit?.voice ?? null} />
+        {voice ? <VoiceTrack file={voice} take={fit?.voice ?? null} /> : null}
       </AbsoluteFill>
     )
   }
@@ -266,3 +300,50 @@ const LengthWarning: React.FC<{ frames: number; maxSeconds: number }> = ({ frame
     </div>
   )
 }
+
+/** The teleprompter's line for the item on screen (or the part of it due now), over the bottom of the frame, with the time it has left. */
+const PrompterLine: React.FC<{ text: Line | null }> = ({ text: line }) => {
+  const frame = useCurrentFrame()
+  const { durationInFrames } = useVideoConfig()
+  const cue = line ? cueAt(line, frame / FPS) : null
+  const text = cue?.text ?? null
+  const from = sec(cue?.from ?? 0)
+  const until = cue?.until !== null && cue?.until !== undefined ? sec(cue.until) : durationInFrames
+  const left = interpolate(frame, [from, until], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })
+  return (
+    <AbsoluteFill style={{ justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 36 }}>
+      <div style={{ width: 1640, padding: '26px 40px 30px', borderRadius: 18, background: 'rgba(8,8,10,0.9)', boxShadow: 'inset 0 0 0 2px rgba(240,178,50,0.55)' }}>
+        <div style={{ font: `500 44px/1.38 ${SANS}`, color: text ? '#FFFFFF' : 'rgba(255,255,255,0.45)' }}>{text ?? '(no voice here: stay quiet)'}</div>
+        <div style={{ marginTop: 18, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.12)' }}>
+          <div style={{ width: `${left * 100}%`, height: 6, borderRadius: 3, background: '#F0B232' }} />
+        </div>
+      </div>
+    </AbsoluteFill>
+  )
+}
+
+/** Before the teleprompter's film: what to do, a count of three, then a white flash on its last frames. */
+const PrompterIntro: React.FC = () => {
+  const frame = useCurrentFrame()
+  const flashFrom = PROMPTER_INTRO_FRAMES - PROMPTER_FLASH_FRAMES
+  if (frame >= flashFrom) return <AbsoluteFill style={{ backgroundColor: '#FFFFFF' }} />
+  const count = Math.ceil((flashFrom - frame) / FPS)
+  return (
+    <AbsoluteFill style={{ backgroundColor: C.ink, justifyContent: 'center', alignItems: 'center', gap: 40, font: `500 40px/1.5 ${SANS}`, color: '#FFFFFF', textAlign: 'center' }}>
+      <div style={{ maxWidth: 1400 }}>Recording with the microphone on? Read each line as it appears, at your own pace. A slip is fine: pause, and say the sentence again.</div>
+      <div style={{ font: `600 160px/1 ${SANS}`, color: count <= 3 ? '#F0B232' : 'rgba(255,255,255,0.25)' }}>{count <= 3 ? count : ''}</div>
+    </AbsoluteFill>
+  )
+}
+
+/** PitchPrompter: the intro, then the pitch with its lines on screen. */
+export const PrompterFilm: React.FC<AssemblyProps> = (props) => (
+  <AbsoluteFill style={{ backgroundColor: C.ink }}>
+    <Sequence durationInFrames={PROMPTER_INTRO_FRAMES} name="prompter: intro">
+      <PrompterIntro />
+    </Sequence>
+    <Sequence from={PROMPTER_INTRO_FRAMES} name="prompter: film">
+      <Assembly {...props} />
+    </Sequence>
+  </AbsoluteFill>
+)

@@ -9,14 +9,14 @@ export const PAYRUN_CAPTIONS: CaptionCue[] = [
 ]
 
 /**
- * The demo (planned 2:56, hard limit 3:00): screen recordings of the live product with captions,
- * and the explainer scenes where they explain what the recording shows. Captions are timed in
- * seconds from the start of their clip; each slot's `note` says what its recording shows, so time
- * the clicks to its captions (or move `at` and `until` to fit the take). The slots are tight: trim
- * each recording to its planned length, or the studio's corner warning appears.
+ * The demo (hard limit 3:00): the overview slide's four lines, then one screen recording of the
+ * live product for each, with captions, and a slide naming what else is built. Captions are timed
+ * in seconds from the start of their clip; each slot's `note` says what its recording shows.
  */
 export const DEMO: Item[] = [
-  { type: 'scene', scene: 'title' },
+  // The four lines the recordings then show, one each.
+  { type: 'scene', scene: 'overview' },
+  // The community's own account and a capped bot key: what every run below stands on.
   {
     type: 'slot',
     file: 'demo-1-setup.mp4',
@@ -31,19 +31,7 @@ export const DEMO: Item[] = [
       { at: 9.1, until: 12.1, text: 'The bot gets an *access key*: an expiry, a limit, one call' },
     ],
   },
-  // What that access key can and cannot do.
-  { type: 'scene', scene: 'trustModel' },
-  {
-    type: 'slot',
-    file: 'demo-2-payrun.mp4',
-    kind: 'screen',
-    label: 'A pay run, approved and paid',
-    note: 'The first mainnet run: /rolepay new in #general, approved in #treasury while the payee\'s balance arrives, then the DM receipt and the explorer.',
-    seconds: 13.2,
-    captions: PAYRUN_CAPTIONS,
-  },
-  // Why a double click, a retry or a crash cannot pay that run twice.
-  { type: 'scene', scene: 'neverPayTwice' },
+  // "A role, a reaction or plain words: Rolepay finds the people"
   {
     type: 'slot',
     file: 'demo-3-right-click.mp4',
@@ -58,23 +46,30 @@ export const DEMO: Item[] = [
       { at: 11.0, until: 13.45, text: 'The footer shows what it cost: *about a cent*' },
     ],
   },
-  // How a payee gets the stablecoin they chose, before the recording shows one.
-  { type: 'scene', scene: 'preferredStablecoin' },
+  // "One approval in Discord, one transaction, a receipt for every person"
   {
     type: 'slot',
-    file: 'demo-4-preferred.mp4',
+    file: 'demo-2-payrun.mp4',
     kind: 'screen',
-    label: 'The stablecoin they choose',
-    note: "/payee prefer BetaUSD from the payee's account, a run showing 5 AlphaUSD → 5 BetaUSD (swapped) and its Swaps limit, Approve, Paid, the payee's DM, then their account page reloaded.",
-    seconds: 10.9,
+    label: 'A pay run, approved and paid',
+    note: 'The first mainnet run: /rolepay new in #general, approved in #treasury while the payee\'s balance arrives, then the DM receipt and the explorer.',
+    seconds: 13.2,
+    captions: PAYRUN_CAPTIONS,
+  },
+  // "Recipients need only a passkey"
+  {
+    type: 'slot',
+    file: 'demo-9-judge.mp4',
+    kind: 'screen',
+    label: 'The judge flow',
+    note: "As a judge: the welcome post's three steps in #start-here, then the 8 October 16:00 UTC run in #payouts, the account page receiving it live, and the DM receipt.",
+    seconds: 12,
     captions: [
-      { at: 0.3, until: 2.45, text: 'A payee picks a stablecoin: `/payee prefer`' },
-      { at: 2.8, until: 5.6, text: 'The run shows the *swap* and the most it may spend' },
-      { at: 5.95, until: 10.55, text: 'Paid in *BetaUSD*, in the same transaction' },
+      { at: 0.3, until: 4.15, text: 'Judges join the demo, run `/payee link` and react ✅' },
+      { at: 4.5, until: 11.6, text: 'Paid at the next daily run, *with nobody online*' },
     ],
   },
-  // What a standing policy is, before the recording shows one.
-  { type: 'scene', scene: 'fourBeats' },
+  // "Regular pay runs on its own, within its budget, with time to veto"
   {
     type: 'slot',
     file: 'demo-5-policy.mp4',
@@ -90,55 +85,23 @@ export const DEMO: Item[] = [
   },
   {
     type: 'slot',
-    file: 'demo-6-policy-budget.mp4',
+    file: 'demo-also-built.mp4',
     kind: 'screen',
-    label: "The policy's own budget",
-    note: "/rolepay policy show's Budget (shared), Give this policy its own budget, the treasury page's limits and one passkey prompt, then the same field reading Own budget, chain-enforced.",
-    seconds: 10,
-    captions: [
-      { at: 0.3, until: 5.65, text: 'Give a policy *its own budget*: one passkey prompt' },
-      { at: 6.05, until: 9.7, text: 'Its limit is enforced *by the chain*, not by the bot' },
-    ],
-  },
-  // What a key per policy buys: the chain caps each one on its own.
-  { type: 'scene', scene: 'ownBudgets' },
-  {
-    type: 'slot',
-    file: 'demo-7-dashboard.mp4',
-    kind: 'screen',
-    label: 'The dashboard',
-    note: "The web dashboard: the bot key's budget in At a glance, the Audit log and Export CSV, the download, then the CSV opened.",
-    seconds: 9,
-    captions: [
-      { at: 0.3, until: 3.45, text: "The dashboard: *At a glance*, the key's budget and its limit" },
-      { at: 3.85, until: 8.65, text: 'Every step in the *audit log*, exportable to CSV' },
-    ],
-  },
-  // How money comes in with its source attached, before the recording shows a deposit.
-  { type: 'scene', scene: 'funding' },
-  {
-    type: 'slot',
-    file: 'demo-8-funding.mp4',
-    kind: 'screen',
-    label: 'Funding',
-    note: "/rolepay fund new and its deposit address, a payee's account sending 1 AlphaUSD to it, then the dashboard's Funding page: the month's total and the deposit under its source.",
-    seconds: 10,
-    captions: [
-      { at: 0.3, until: 2.85, text: '`/rolepay fund new`: a *deposit address* for each source' },
-      { at: 3.2, until: 9.7, text: 'A deposit lands in the treasury, *attributed* to its source' },
-    ],
-  },
-  {
-    type: 'slot',
-    file: 'demo-9-judge.mp4',
-    kind: 'screen',
-    label: 'The judge flow',
-    note: "As a judge: the welcome post's three steps in #start-here, then the 8 October 16:00 UTC run in #payouts, the account page receiving it live, and the DM receipt.",
-    seconds: 12,
-    captions: [
-      { at: 0.3, until: 4.15, text: 'Judges join the demo, run `/payee link` and react ✅' },
-      { at: 4.5, until: 11.6, text: 'Paid at the next daily run, *with nobody online*' },
-    ],
+    label: 'Also built',
+    note: 'A slide: what else runs on the testnet demo.',
+    seconds: 13,
+    card: {
+      kind: 'points',
+      title: 'Also built',
+      points: [
+        'Paid in *the stablecoin each person prefers*',
+        'A standing policy with *its own on-chain budget*',
+        '*Funding sources*, each with its own deposit address',
+        'A *dashboard* with an audit log and CSV export',
+        '*Never pays twice*, through retries and crashes',
+        'The AI only drafts: *code checks*, a Treasurer approves',
+      ],
+    },
   },
   { type: 'scene', scene: 'endCard' },
 ]

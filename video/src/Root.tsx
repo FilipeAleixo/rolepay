@@ -6,9 +6,10 @@ import { README_FPS, README_LOOP, README_SIZE, X_CLIP } from './cuts'
 import { Cut, cutFrames } from './cuts/Cut'
 import './fonts'
 import { SCENES } from './scenes'
-import { Assembly, type AssemblyProps, fitTimeline, plannedFrames } from './timeline/Assembly'
+import { Assembly, type AssemblyProps, PrompterFilm, fitPrompter, fitTimeline, plannedFrames } from './timeline/Assembly'
 import { DEMO } from './timeline/demo'
 import { PITCH } from './timeline/pitch'
+import { PROMPTER_INTRO_FRAMES, PROMPTER_LINES } from './timeline/prompter'
 import { FPS, HEIGHT, WIDTH, sec } from './theme'
 
 const frame = { fps: FPS, width: WIDTH, height: HEIGHT } as const
@@ -21,6 +22,14 @@ export const RemotionRoot: React.FC = () => (
     <Folder name="Films">
       <Composition id="PitchVideo" component={Assembly} durationInFrames={plannedFrames(PITCH)} defaultProps={pitchProps} calculateMetadata={fitTimeline} {...frame} />
       <Composition id="DemoVideo" component={Assembly} durationInFrames={plannedFrames(DEMO)} defaultProps={demoProps} calculateMetadata={fitTimeline} {...frame} />
+      <Composition
+        id="PitchPrompter"
+        component={PrompterFilm}
+        durationInFrames={plannedFrames(PITCH) + PROMPTER_INTRO_FRAMES}
+        defaultProps={{ ...pitchProps, audio: null, prompter: PROMPTER_LINES }}
+        calculateMetadata={fitPrompter}
+        {...frame}
+      />
     </Folder>
     <Folder name="Scenes">
       {Object.values(SCENES).map((s) => (
