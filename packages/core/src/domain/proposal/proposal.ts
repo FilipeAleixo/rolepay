@@ -162,7 +162,7 @@ const clean = (text: string, max: number) => {
 }
 
 /** Why a name typed as plain text ("@Albert", not picked from the list) is not in the proposal, and what to do. */
-export const NAMED_IN_TEXT = "Named in text, not mentioned, so Rolepay can't tell which member this is. Mention them (pick them from the @ list) and draft again."
+export const NAMED_IN_TEXT = "Named in text, not mentioned, so Rolepay can't tell which member this is. Edit the message so they're mentioned (picked from the @ list), then draft again."
 
 /**
  * "@Albert" with no mention behind it: Discord gave Rolepay no member, only the text. Not a token

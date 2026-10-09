@@ -214,7 +214,7 @@ describe("resolveMessageProposal: the model's words, as people read them", () =>
       { text: '@Albert', why: NAMED_IN_TEXT },
       { text: '@Trimtab', why: NAMED_IN_TEXT },
     ])
-    expect(NAMED_IN_TEXT).toBe("Named in text, not mentioned, so Rolepay can't tell which member this is. Mention them (pick them from the @ list) and draft again.")
+    expect(NAMED_IN_TEXT).toBe("Named in text, not mentioned, so Rolepay can't tell which member this is. Edit the message so they're mentioned (picked from the @ list), then draft again.")
     expect(r.assumptions).toEqual([
       'The winners are the two people named in the message, but neither has a mention so no payment lines were drafted.',
       'Two payments of 20 AlphaUSD would total 40, within the 50 AlphaUSD limit.',

@@ -127,7 +127,7 @@ describe('Apps > Draft pay run with AI (the message command)', () => {
     await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${post.id}`, { instruction: 'pay each of the winners 20 AlphaUSD' }, treasurer, { token: 'tok-plain' }))
     const shown = a.rest.lastEdit('tok-plain')
     const fields = Object.fromEntries((shown?.embeds?.[0]?.fields ?? []).map((f) => [f.name, f.value]))
-    const fix = "Named in text, not mentioned, so Rolepay can't tell which member this is. Mention them \\(pick them from the \\@ list\\) and draft again."
+    const fix = "Named in text, not mentioned, so Rolepay can't tell which member this is. Edit the message so they're mentioned \\(picked from the \\@ list\\), then draft again."
     expect(fields['Could not resolve']).toBe([`"\\@Albert": ${fix}`, `"\\@Trimtab": ${fix}`].join('\n'))
     expect(fields.Assumptions).toBe(
       ['• The winners are the two people named in the message, but neither has a mention so no payment lines were drafted.', '• Two payments of 20 AlphaUSD would total 40, within the 50 AlphaUSD limit.'].join('\n'),
