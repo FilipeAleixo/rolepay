@@ -3,10 +3,11 @@ import type { Item } from './Assembly'
 import { PAYRUN_CAPTIONS } from './demo'
 
 /**
- * The pitch (planned 2:08 silent, limit 3:00), framed around one line: access keys are how you
- * give software a budget it can't exceed, and Rolepay gives one to a community's bot and one to
- * each of its standing policies. It works on camera, with the voice alone, or with any mix of the
- * two.
+ * The pitch (planned 2:08 silent, limit 3:00), framed around one line: a Safe keeps the money
+ * safe; Rolepay works out who gets paid from what happened in Discord, and pays them all with one
+ * approval, to people who need nothing but a passkey. The spending cap is not what is new (Safe's
+ * spending-limit module has one); on Tempo it is part of the account. It works on camera, with the
+ * voice alone, or with any mix of the two.
  *
  * It opens on one slide (the Overview scene: what Rolepay is, why it matters, who it is for, the
  * proof), narrated by pitch-1-problem, then the short demo, then straight into the trust model.

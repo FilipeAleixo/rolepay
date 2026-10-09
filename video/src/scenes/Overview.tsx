@@ -1,6 +1,6 @@
 import React from 'react'
 import { Img, staticFile, useCurrentFrame, useVideoConfig } from 'remotion'
-import { KeyIcon } from '../components/Icons'
+import { CoinsIcon } from '../components/Icons'
 import { Mark } from '../components/Mark'
 import { RichText } from '../components/RichText'
 import { Scene } from '../components/Scene'
@@ -30,7 +30,8 @@ const CONTRAST = [
   { was: 'Every recipient needs a wallet and gas', now: 'Recipients need *only a passkey*, or the wallet they already have' },
   { was: 'Regular pay needs someone online to sign it', now: 'Regular pay *runs on its own*, within its budget, with time to veto' },
 ] as const
-const PROOF = ['Live on Tempo mainnet', "The chain refuses any batch over the bot's budget"] as const
+/** The first mainnet payout's fee was 0.00005 pathUSD; apps/server/MAINNET.md estimates about $0.001 to $0.006 per transfer. */
+const PROOF = ['Live on Tempo mainnet', 'Under a cent per payout'] as const
 
 /** The title beat, in frames from the start, the same whatever the scene's length. */
 const T = { tile: 0, outline: 3, fill: 17, face: 21, word: 8, settle: 36, header: 50, what: 46 }
@@ -113,7 +114,7 @@ export const Overview: React.FC = () => {
               whiteSpace: 'nowrap',
             }}
           >
-            {i === 0 ? <span style={{ width: 10, height: 10, borderRadius: 5, background: C.ok, boxShadow: `0 0 12px ${C.ok}` }} /> : <KeyIcon size={24} color={C.gold} strokeWidth={1.6} />}
+            {i === 0 ? <span style={{ width: 10, height: 10, borderRadius: 5, background: C.ok, boxShadow: `0 0 12px ${C.ok}` }} /> : <CoinsIcon size={24} color={C.gold} strokeWidth={1.6} />}
             <span style={{ font: `500 22px/1 ${SANS}`, color: C.fg }}>{p}</span>
           </div>
         ))}

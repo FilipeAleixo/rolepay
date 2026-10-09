@@ -13,7 +13,7 @@ export const WHY_TEMPO_FRAMES = sec(10)
  * access keys per account is folded into access keys (a budget for the bot and one per policy).
  */
 const POINTS = [
-  { Icon: KeyIcon, title: 'Access keys, many per account', body: 'A budget for the bot and one per policy, enforced by the protocol even inside a batch.' },
+  { Icon: KeyIcon, title: 'Access keys, many per account', body: 'Part of the account, not a module to install: a budget for the bot and one per policy, enforced even inside a batch.' },
   { Icon: FingerprintIcon, title: 'Passkey accounts', body: "The treasury's root key is a passkey. Recipients need no wallet and no seed phrase." },
   { Icon: MemoIcon, title: "Memo'd stablecoin transfers", body: 'Every payout line carries its run and line number.' },
   { Icon: NoGasIcon, title: 'Fee sponsorship', body: 'Recipients never need gas to be paid.' },
