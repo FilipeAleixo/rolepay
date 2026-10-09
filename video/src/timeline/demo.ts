@@ -96,8 +96,8 @@ export const DEMO: Item[] = [
     note: "/rolepay policy show's Budget (shared), Give this policy its own budget, the treasury page's limits and one passkey prompt, then the same field reading Own budget, chain-enforced.",
     seconds: 10,
     captions: [
-      { at: 0.3, until: 5.95, text: 'Give a policy *its own budget*: one passkey prompt' },
-      { at: 6.35, until: 9.7, text: 'Its limit is enforced *by the chain*, not by the bot' },
+      { at: 0.3, until: 5.65, text: 'Give a policy *its own budget*: one passkey prompt' },
+      { at: 6.05, until: 9.7, text: 'Its limit is enforced *by the chain*, not by the bot' },
     ],
   },
   // What a key per policy buys: the chain caps each one on its own.
