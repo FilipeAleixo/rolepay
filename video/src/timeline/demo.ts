@@ -65,12 +65,12 @@ export const DEMO: Item[] = [
     file: 'demo-4-preferred.mp4',
     kind: 'screen',
     label: 'The stablecoin they choose',
-    note: '/payee prefer BetaUSD from the second account, a run showing 5 AlphaUSD → 5 BetaUSD (swapped), Approve, the receipt.',
-    seconds: 11,
+    note: "/payee prefer BetaUSD from the payee's account, a run showing 5 AlphaUSD → 5 BetaUSD (swapped) and its Swaps limit, Approve, Paid, the payee's DM, then their account page reloaded.",
+    seconds: 10.9,
     captions: [
-      { at: 0.5, until: 3.5, text: 'A payee picks a stablecoin: `/payee prefer`' },
-      { at: 4, until: 7, text: 'The run shows the *swap* and the most it may spend' },
-      { at: 7.5, until: 10.5, text: 'Paid in *BetaUSD*, in the same transaction' },
+      { at: 0.3, until: 2.45, text: 'A payee picks a stablecoin: `/payee prefer`' },
+      { at: 2.8, until: 5.6, text: 'The run shows the *swap* and the most it may spend' },
+      { at: 5.95, until: 10.55, text: 'Paid in *BetaUSD*, in the same transaction' },
     ],
   },
   // What a standing policy is, before the recording shows one.
