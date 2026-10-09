@@ -246,7 +246,7 @@ describe('the treasurer setup page', () => {
 
     const second = await json(await h.post(`/setup/${token}/key`, { limit: '10', periodDays: 30, expiresAt: inDays(h, 30) }, PASSKEY))
     const during = await json(await h.send(`/setup/${token}/state`, { passkey: PASSKEY }))
-    // A pending key never hides the active one (M5): the state still describes it, and lists both.
+    // A pending key never hides the active one: the state still describes it, and lists both.
     expect(during.key).toMatchObject({ address: first.keyAddress, status: 'active' })
     expect(during.keys).toMatchObject([
       { address: second.keyAddress, status: 'pending_authorization', chain: { status: 'not_authorized' } },
@@ -283,7 +283,7 @@ describe('the treasurer setup page', () => {
     expect((await json(await h.send(`/setup/${token}/state`, { passkey: PASSKEY }))).keys.map((k: { address: string }) => k.address)).toEqual([second.keyAddress])
   })
 
-  it('a registration session minted after the treasury existed is no proof of its passkey: sign in first (M4)', async () => {
+  it('a registration session minted after the treasury existed is no proof of its passkey: sign in first', async () => {
     const h = webHarness()
     const token = await setupLink(h)
     const now = Math.floor(h.clock.now().getTime() / 1000)

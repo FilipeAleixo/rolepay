@@ -1,4 +1,4 @@
-// A policy as the policy services will describe one: the Monday rule from the spec.
+// A policy as the policy services will describe one: the Monday rule.
 import type { PolicyPreview } from '../src/dashboard/policyPort.js'
 import { GUILD, type DashboardHarness, usd } from './dashboardHarness.js'
 

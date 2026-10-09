@@ -20,7 +20,7 @@ export type RunViewContext = {
   stillConfirming?: boolean
   /**
    * Show the node's or sponsor's own error text on a failure. Only for replies just to the caller
-   * (`/rolepay status run:`): a public message shows the reason code alone (L2).
+   * (`/rolepay status run:`): a public message shows the reason code alone.
    */
   showDetail?: boolean
   /** The run was made by a standing policy: which one, which version, for which period. */

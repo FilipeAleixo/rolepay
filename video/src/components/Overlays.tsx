@@ -52,7 +52,7 @@ export const LowerThird: React.FC<{ name?: string; role?: string; from?: number;
 }
 
 /**
- * A few short points over a camera clip, on the right third (the founder sits left of centre):
+ * A few short points over a camera clip, on the right third (the speaker sits left of centre):
  * a small uppercase title and up to three lines that arrive one after another.
  */
 export const SidePoints: React.FC<{ title: string; points: readonly string[]; from: number; to: number; gap?: number }> = ({ title, points, from, to, gap = sec(0.9) }) => {

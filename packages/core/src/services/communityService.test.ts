@@ -136,7 +136,7 @@ describe('CommunityService', () => {
       expect(await svc.confirmBotKey({ guildId: '1094309218049937499', keyAddress })).toEqual({ ok: false, error: { code: 'community_not_found' } })
     })
 
-    it('confirm takes the key the treasurer authorised, never "the newest pending one" (H2)', async () => {
+    it('confirm takes the key the treasurer authorised, never "the newest pending one"', async () => {
       const pending = await svc.provisionBotKey(policy())
       if (!pending.ok) throw new Error()
       await chain.authorizeKey({ root: chain.rootSigner(TREASURY), accessKey: pending.value.keyAddress, authorization: pending.value.authorization })
@@ -195,7 +195,7 @@ describe('CommunityService', () => {
       expect(await communities.getBotKey(first.value.keyAddress)).toMatchObject({ status: 'superseded', sealedSecret: null })
     })
 
-    it('keyStatus describes the active key even while a newer key waits for authorisation (M5)', async () => {
+    it('keyStatus describes the active key even while a newer key waits for authorisation', async () => {
       const active = await svc.provisionBotKey(policy())
       await svc.authorizeBotKey({ guildId: GUILD, root: chain.rootSigner(TREASURY) })
       clock.advance(60)
@@ -307,7 +307,7 @@ describe('CommunityService', () => {
     })
   })
 
-  describe('who may change the approval rules (H1: Manage Server alone must not make itself the approver)', () => {
+  describe('who may change the approval rules (Manage Server alone must not make itself the approver)', () => {
     const ROLE = '400000000000000001'
     const NEW_ROLE = '400000000000000002'
 

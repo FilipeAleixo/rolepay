@@ -6,7 +6,7 @@ Everything below is testnet (Moderato). Secrets go only in the repo-root `.env`,
 
 ## One-time setup (about 20 minutes)
 
-You need: the Discord desktop app, a private test server where you are the owner, a second Discord account that is a member of it, Chrome or Safari (for passkeys), and `ngrok` (installed and logged in on this Mac; `cloudflared` is not installed).
+You need: the Discord desktop app, a private test server where you are the owner, a second Discord account that is a member of it, Chrome or Safari (for passkeys), and `ngrok` (installed and logged in).
 
 1. **Install and check.** From the repo root: `pnpm install`, then `pnpm typecheck && pnpm test` (all green, no network).
 
@@ -15,7 +15,7 @@ You need: the Discord desktop app, a private test server where you are the owner
    - Bot: press **Reset Token** and copy the token (shown once). Turn **Public Bot** off so only you can invite it.
    - Bot, Privileged Gateway Intents: leave all three **off**. Rolepay needs none (it looks up members one by one with Get Guild Member and reads the server name with Get Guild; neither needs an intent). One optional exception, for AI proposals: `/rolepay propose source:#channel` reads the text of that channel's messages, which needs **Message Content Intent** on (fine for a bot in under 100 servers, no review). Everything else works without it: Apps > Draft pay run with AI on a message gets that message's text with the interaction, and criteria proposals count messages by author, which needs no intent. Server Members Intent stays off.
 
-3. **Fill in `.env`** (repo root; it already holds the testnet keys from the chain test). Add:
+3. **Fill in `.env`** (repo root, gitignored; after `pnpm test:chain` it also holds that test's throwaway testnet keys). Add:
 
    ```
    DISCORD_APP_ID=<Application ID>
@@ -46,7 +46,7 @@ You need: the Discord desktop app, a private test server where you are the owner
 
 6. **Start a tunnel** in its own terminal: `ngrok http 8787` (if ngrok reports connection refused, use `ngrok http 127.0.0.1:8787`). It prints a forwarding URL such as `https://<name>.ngrok-free.app`. Put `PUBLIC_URL=https://<name>.ngrok-free.app` in `.env`.
    - A free ngrok account has one static domain, so the URL usually stays the same. If it ever changes, update `PUBLIC_URL`, restart the server and repeat step 8.
-   - Passkeys are bound to that tunnel host: one made on `https://<name>.ngrok-free.app` only works there. That is fine for testing. The hosted servers are `https://demo.rolepay.app` (the testnet demo for judges, live) and `https://web.rolepay.app` (mainnet, prepared: [`MAINNET.md`](MAINNET.md)); each is its own `PUBLIC_URL`, and passkeys bind to the host (or `ROLEPAY_RP_ID`) for good, so passkeys from the tunnel or the demo do not carry over to mainnet.
+   - Passkeys are bound to that tunnel host: one made on `https://<name>.ngrok-free.app` only works there. That is fine for testing. The hosted servers are `https://demo.rolepay.app` (the testnet demo for judges, live) and `https://web.rolepay.app` (mainnet, a private pilot: [`MAINNET.md`](MAINNET.md)); each is its own `PUBLIC_URL`, and passkeys bind to the host (or `ROLEPAY_RP_ID`) for good, so passkeys from the tunnel or the demo do not carry over to mainnet.
    - The first time a browser opens a tunnel page, ngrok shows a "You are about to visit" warning: press Visit Site. Discord's requests to the interactions endpoint are not affected.
    - For a demo with other people, run `ngrok http 8787 --inspect=false`: ngrok's local inspector (127.0.0.1:4040) otherwise records every request and response body, including the claim links `/payee link` returns. Rolepay answers each interaction ID once, so a replay from the inspector gets 409 and no new link, but the recorded responses would still show the links.
 
@@ -178,7 +178,7 @@ On the hosted testnet demo (`https://demo.rolepay.app`, `fly.demo.toml`) one sta
 
 ### Give the Judges policy its own budget (about 3 minutes, optional)
 
-The pitch line: access keys are how you give software a budget it can't exceed, so every standing policy can get its own. With its own key, the Judges policy is capped on chain by that key alone, and the bot key (manual runs, AI proposals, other policies) is never touched by it. Do this after step 3 (approve) and before you leave, from the device that holds the treasury passkey.
+Access keys are how you give software a budget it can't exceed, so every standing policy can get its own. With its own key, the Judges policy is capped on chain by that key alone, and the bot key (manual runs, AI proposals, other policies) is never touched by it. Do this after step 3 (approve) and before you leave, from the device that holds the treasury passkey.
 
 1. **Open the policy's treasury page.** Right after **Approve policy**, Discord sends you (only you) "Give **Judges** its own budget?" with a **Give this policy its own budget** button. If that was more than 30 minutes ago, run `/rolepay policy show policy:Judges` (with `Treasurer`): the private answer has the same button, or **Manage its budget** once it has one. On the dashboard, the policy's page has the same button under Budget.
 2. **Sign in and choose the budget.** The page is "A budget of its own for Judges". Sign in with the treasury passkey if it asks. The form starts from the policy's cap per run (or the server's default limit when it has none) and one run of its schedule (a day); for the judge demo set **Spend limit** to how many judges you expect per day (for example `30`), **Resets every** `1` day, **Key expires after** the days until judging ends (for example `14`). The page shows exactly what you will sign: "You will sign, for this policy only: Up to 30 AlphaUSD every day. Only transferWithMemo on AlphaUSD ... Expires ...".
@@ -249,9 +249,9 @@ Rolepay runs on Fly.io as one always-on machine per network, built from the repo
 | App | Config | URL | Network | Status |
 | --- | --- | --- | --- | --- |
 | `rolepay-demo` | `fly.demo.toml` | <https://demo.rolepay.app> (also <https://rolepay-demo.fly.dev>) | Moderato testnet, for judges | live |
-| `rolepay-app` | `fly.app.toml` | <https://web.rolepay.app> | mainnet (USDC.e payouts, fees from a pathUSD fee budget) | prepared, not created: the steps are in [`MAINNET.md`](MAINNET.md) |
+| `rolepay-app` | `fly.app.toml` | <https://web.rolepay.app> | mainnet (USDC.e payouts, fees from a pathUSD fee budget) | live, a private pilot: the steps are in [`MAINNET.md`](MAINNET.md) |
 
-The demo: region `iad` (Ashburn, Virginia; moved from `cdg` on 2026-10-07 to sit next to Discord, whose servers are in the US: each Discord-to-server hop took 1 to 3 s from Paris), one `shared-cpu-1x` machine with 512 MB and 512 MB of swap, never stopped (`min_machines_running = 1`, no auto-stop: Discord needs an answer within 3 seconds, so no cold starts), health checked on `GET /health`. The SQLite file is `/data/rolepay.db` on the encrypted 1 GB volume `rolepay_demo_data` (Fly snapshots it daily, five days kept). Memory: the compiled server uses about 130 MB (the client bundle is built with the image, so no page request starts esbuild), which leaves about 330 MB available. About US$4.20 a month for the machine (Fly's price, October 2026) plus US$0.15 for the volume; the shared IPv4 is free (no dedicated one).
+The demo: region `iad` (Ashburn, Virginia; moved from `cdg`, Fly's Paris region, on 2026-10-07 to sit next to Discord, whose servers are in the US: from `cdg` each Discord-to-server hop took 1 to 3 s), one `shared-cpu-1x` machine with 512 MB and 512 MB of swap, never stopped (`min_machines_running = 1`, no auto-stop: Discord needs an answer within 3 seconds, so no cold starts), health checked on `GET /health`. The SQLite file is `/data/rolepay.db` on the encrypted 1 GB volume `rolepay_demo_data` (Fly snapshots it daily, five days kept). Memory: the compiled server uses about 130 MB (the client bundle is built with the image, so no page request starts esbuild), which leaves about 330 MB available. About US$4.20 a month for the machine (Fly's price, October 2026) plus US$0.15 for the volume; the shared IPv4 is free (no dedicated one).
 
 **Settings.** Non-secret ones are in the `[env]` block of the Fly config: the network, `PUBLIC_URL`, `ROLEPAY_RP_ID` (the demo's passkeys bind to `demo.rolepay.app` only), `HOST=0.0.0.0`, `PORT`, `ROLEPAY_DB_PATH`, `ROLEPAY_CLIENT_IP_HEADER=Fly-Client-IP` (the per-client rate limits key on the IP Fly's proxy saw, which a client cannot forge), `ROLEPAY_AI_DAILY_CAP` (at most 50 model calls a UTC day on the server) and `ROLEPAY_DEMO_INVITE_URL` (the demo server's permanent invite, so the home page leads with joining it). Dev shortcuts are off; the demo controls are on (`ROLEPAY_DEMO_CONTROLS=true`: `run_now` and veto windows down to a minute, for the Treasurer role only, so judges can see autopilot without waiting a week, and daily policies, so judges get paid with nobody online: see "The judge demo" above). Secrets, set with `fly secrets` and never written anywhere else:
 

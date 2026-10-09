@@ -98,7 +98,7 @@ describe('rotationCalls: replacing the bot key is ONE root transaction that revo
   })
 })
 
-describe('the setup page signs what the treasurer entered, never numbers the server chose (H4)', () => {
+describe('the setup page signs what the treasurer entered, never numbers the server chose', () => {
   const NOW = 1_800_000_000
   const DAY = 86_400
   const page = { payoutToken: TOKEN, feeToken: null }

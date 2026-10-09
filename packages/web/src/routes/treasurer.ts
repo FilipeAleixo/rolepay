@@ -5,7 +5,7 @@ import { failure, linkStatus } from '../json.js'
 import type { PasskeySession, PasskeySessions } from '../ports.js'
 
 /**
- * Whether a session proves the treasury's passkey (M4). A login session does: it signed a server
+ * Whether a session proves the treasury's passkey. A login session does: it signed a server
  * challenge. A registration session proves nothing (anyone can register a public key, and the
  * treasury's is public on chain once it signs), except the one that created the treasury: it was
  * issued before the community existed, when nobody else could have known that public key. So the

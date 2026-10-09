@@ -21,10 +21,7 @@ playwright-report/
 *.db-wal
 *.db-shm
 
-# Video (video/, outside the pnpm workspace): the founder's recordings and the renders stay out of git
-video/assets/*.mp4
-video/assets/*.mov
-video/assets/*.m4a
-video/assets/*.mp3
-video/assets/*.wav
+# Video (video/, outside the pnpm workspace): the recordings and the renders stay out of git
+video/assets/*
+!video/assets/.gitkeep
 video/out/

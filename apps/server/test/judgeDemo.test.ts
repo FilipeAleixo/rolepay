@@ -1,5 +1,5 @@
 // The judge demo, in process, with the public demo's flags (ROLEPAY_DEMO_CONTROLS on, the dev
-// shortcuts off), as apps/server/README.md tells the founder to set it up: one daily policy, "1
+// shortcuts off), as apps/server/README.md sets it up: one daily policy, "1
 // AlphaUSD to every registered payee who reacted ✅ to the welcome post and has never been paid",
 // on autopilot with the one-minute veto window, and then nobody online. A judge joins, runs /payee
 // link, claims with a passkey, reacts ✅, and is paid by the next daily run with a DM receipt (a
@@ -12,13 +12,13 @@ import { FakeDiscordOAuth } from '@rolepay/web/testing'
 import { describe, expect, it } from 'vitest'
 import { GUILD, TOKEN, TREASURY, testServer, usd } from './support.js'
 
-const POLICIES = '700000000000000001' // where the founder writes the policy: its runs are posted here
+const POLICIES = '700000000000000001' // where the treasurer writes the policy: its runs are posted here
 const START_HERE = '700000000000000010'
 const WELCOME = '810000000000000123' // the welcome post in #start-here
 const SCOPE = { guildId: GUILD, channelId: POLICIES }
 const TREASURER_ROLE = '400000000000000001'
-const FOUNDER = { userId: '300000000000000001', roles: [TREASURER_ROLE] }
-const FOUNDER_ADMIN = { ...FOUNDER, manageGuild: true }
+const TREASURER = { userId: '300000000000000001', roles: [TREASURER_ROLE] }
+const TREASURER_ADMIN = { ...TREASURER, manageGuild: true }
 const JUDGE = '200000000000000021'
 const QUIET_JUDGE = '200000000000000022' // DMs from server members off
 const LATE_JUDGE = '200000000000000023' // reacts first, links the next day
@@ -37,7 +37,7 @@ type Server = Awaited<ReturnType<typeof testServer>>
 /** The production setup, as the public demo has it: the treasury page binds the passkey and authorises a key of 100. */
 async function setUp(s: Server) {
   s.rest.guilds.set(GUILD, 'Rolepay demo')
-  await s.interact(slashCommand(SCOPE, 'rolepay', 'setup', { approver_role: TREASURER_ROLE }, FOUNDER_ADMIN, 'tok-setup'))
+  await s.interact(slashCommand(SCOPE, 'rolepay', 'setup', { approver_role: TREASURER_ROLE }, TREASURER_ADMIN, 'tok-setup'))
   await s.drain()
   const path = /https:\/\/rolepay\.test(\/setup\/[A-Za-z0-9_-]+)/.exec(text(s.rest.lastEdit('tok-setup')))?.[1] as string
   expect((await s.browserPost(`${path}/treasury`, TREASURY)).status).toBe(200)
@@ -48,14 +48,14 @@ async function setUp(s: Server) {
   const authorization = { ...provisioned.authorization, limits: provisioned.authorization.limits.map((l) => ({ ...l, limit: BigInt(l.limit) })) }
   expect((await s.chain.authorizeKey({ root: s.chain.rootSigner(TREASURY), accessKey: provisioned.keyAddress, authorization: authorization as never })).ok).toBe(true)
   expect((await s.browserPost(`${path}/key/confirm`, TREASURY, { keyAddress: provisioned.keyAddress })).status).toBe(200)
-  await s.interact(slashCommand(SCOPE, 'rolepay', 'setup', { ai_proposals: true }, FOUNDER_ADMIN, 'tok-ai'))
+  await s.interact(slashCommand(SCOPE, 'rolepay', 'setup', { ai_proposals: true }, TREASURER_ADMIN, 'tok-ai'))
   await s.drain()
   s.rest.roles.set(GUILD, [{ id: TREASURER_ROLE, name: 'Treasurer' }])
   s.rest.channels.set(GUILD, [
     { id: POLICIES, name: 'policies', type: 0 },
     { id: START_HERE, name: 'start-here', type: 0 },
   ])
-  s.rest.setMember(GUILD, FOUNDER.userId, [TREASURER_ROLE], null, 'Filipe')
+  s.rest.setMember(GUILD, TREASURER.userId, [TREASURER_ROLE], null, 'Tess')
 }
 
 /** A judge joins the server and registers: /payee link, then the claim page with a passkey. */
@@ -86,11 +86,11 @@ describe('the judge demo: get paid with nobody online', () => {
     const hour = new Date(first).getUTCHours()
     const DAY = 86_400_000
 
-    // 1. The founder writes the policy once, in Discord; the AI compiles it, the preview is posted publicly.
+    // 1. The treasurer writes the policy once, in Discord; the AI compiles it, the preview is posted publicly.
     s.proposer.onCriteria = () =>
       emptyCriteria({ amount: { kind: 'flat', amount: '1', per: '', cap: '', total: '', splitBy: '' }, note: 'Judges' }, { anchors: [{ kind: 'reactedTo', message: 'M1', thread: '', emoji: '✅' }], neverPaid: true })
     const instruction = `Every day at ${String(hour).padStart(2, '0')}:00 UTC: 1 AlphaUSD to every registered payee who reacted ✅ to https://discord.com/channels/${GUILD}/${START_HERE}/${WELCOME} and has never been paid`
-    await s.interact(slashCommand(SCOPE, 'rolepay', 'policy new', { instruction, schedule: 'daily', hour, name: 'Judges' }, FOUNDER, 'tok-policy'))
+    await s.interact(slashCommand(SCOPE, 'rolepay', 'policy new', { instruction, schedule: 'daily', hour, name: 'Judges' }, TREASURER, 'tok-policy'))
     await s.drain()
     const preview = text(s.rest.lastEdit('tok-policy'))
     expect(preview).toContain('Policy draft: Judges')
@@ -102,9 +102,9 @@ describe('the judge demo: get paid with nobody online', () => {
     const approveId = /policy:approve:pol_[A-Za-z0-9_]+:1/.exec(preview)?.[0] as string
     const policyId = approveId.split(':')[2] as string
 
-    // 2. Approve, then autopilot with the demo controls' shortest veto window. Then the founder goes offline.
-    expect(((await (await s.interact(buttonClick(SCOPE, approveId, FOUNDER))).json()) as { type: number }).type).toBe(7)
-    const mode = (await (await s.interact(slashCommand(SCOPE, 'rolepay', 'policy mode', { policy: policyId, mode: 'autopilot', veto_minutes: 1 }, FOUNDER))).json()) as { data: unknown }
+    // 2. Approve, then autopilot with the demo controls' shortest veto window. Then the treasurer goes offline.
+    expect(((await (await s.interact(buttonClick(SCOPE, approveId, TREASURER))).json()) as { type: number }).type).toBe(7)
+    const mode = (await (await s.interact(slashCommand(SCOPE, 'rolepay', 'policy mode', { policy: policyId, mode: 'autopilot', veto_minutes: 1 }, TREASURER))).json()) as { data: unknown }
     expect(text(mode.data)).toContain('Autopilot is on')
     expect(text(mode.data)).toContain('1 minute')
     expect(s.proposer.requests).toHaveLength(1)
@@ -163,7 +163,7 @@ describe('the judge demo: get paid with nobody online', () => {
 
     // 7. The dashboard shows the policy in the same words.
     const b = new TestBrowser(s.app, ORIGIN)
-    oauth.signInAs(identity({ id: FOUNDER.userId, name: 'filipe' }, [{ id: GUILD, name: 'Rolepay demo' }]))
+    oauth.signInAs(identity({ id: TREASURER.userId, name: 'tess' }, [{ id: GUILD, name: 'Rolepay demo' }]))
     const consent = new URL((await b.get('/auth/discord')).headers.get('location') as string)
     await b.get(consent.pathname + consent.search)
     const page = visible(await (await b.get(`/dashboard/${GUILD}/policies/${policyId}`)).text())

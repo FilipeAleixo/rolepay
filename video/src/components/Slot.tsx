@@ -11,7 +11,7 @@ export type SlotKind = 'camera' | 'screen'
 export const hasAsset = (file: string) => getStaticFiles().some((f) => f.name === file)
 
 /**
- * A slot for one of the founder's recordings. When `file` is in video/assets/, the clip plays
+ * A slot for one of the recordings. When `file` is in video/assets/, the clip plays
  * (a camera clip fills the frame; a screen recording is fitted whole on the ink ground, and
  * plays silent unless `audible`). When it is missing, a neutral card says what goes here, so
  * the timeline can be reviewed before anything is recorded.
