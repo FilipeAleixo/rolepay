@@ -19,7 +19,7 @@ Rolepay runs in two places. The testnet demo at [demo.rolepay.app](https://demo.
 
 ### What to look at in 3 minutes
 
-1. **The demo video:** [TO FILL: VIDEO_URL]
+1. **The videos:** [the pitch](https://youtu.be/eYC79TOwGdY) (2:48) and [the product demo](https://youtu.be/VvBoJemKTLU) (2:24).
 2. **Get paid on the testnet demo, with nobody online.** Join the demo server at [discord.gg/tCuABJt72P](https://discord.gg/tCuABJt72P), run `/payee link` in #start-here, create your passkey from the link, and react ✅ to the welcome post. Every day at 16:00 UTC a standing policy pays 1 test AlphaUSD to each new payee who did, on autopilot and within its key's on-chain limit, with a DM receipt. It takes about two minutes of your time. The steps are in [Try it](#try-it).
 3. **A pay run on Tempo mainnet.** [The first one](https://explore.tempo.xyz/tx/0x3cde4de2241315c563ed2316ba859ed763b2a669fcec8811620da25a95761593), on 8 October 2026, paid 1 USDC.e from the pilot community's treasury to a member's passkey account. A treasurer approved it in Discord, the bot's access key signed it as one `transferWithMemo`, and the fee, 0.00005 pathUSD, came out of the key's separate fee budget. The pilot's runbook is [`apps/server/MAINNET.md`](apps/server/MAINNET.md).
 4. **The chain refusing an over-limit batch, with Rolepay's own checks skipped.** [The reverted transaction on Moderato](https://explore.testnet.tempo.xyz/tx/0xa29ba08c3162e427cea7008f5fcf902f439eef6c84da27458cc659cf8c0c8ee0), sent by [`protocolLimit.chain.test.ts`](packages/core/test/protocolLimit.chain.test.ts). Each line fits the key's limit on its own. The batch does not, so it reverts whole and nobody is paid.
