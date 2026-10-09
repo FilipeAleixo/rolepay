@@ -5,7 +5,7 @@ export const NETWORKS = {
     chainId: 42431,
     testnet: true,
     rpcUrl: 'https://rpc.moderato.tempo.xyz',
-    /** Public testnet fee sponsor, no API key (spike RESULTS.md). */
+    /** Public testnet fee sponsor; it needs no API key. */
     sponsorUrl: 'https://sponsor.moderato.tempo.xyz',
     explorerUrl: 'https://explore.testnet.tempo.xyz',
   },

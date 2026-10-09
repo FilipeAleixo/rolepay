@@ -24,7 +24,7 @@ export type SlotItem = {
   kind: SlotKind
   /** A short name for the slot (the studio's timeline and the missing-file card). */
   label: string
-  /** What the founder shows or says here, printed on the card until the file exists. */
+  /** What is shown or said here, printed on the card until the file exists. */
   note: string
   /** The planned length. When the file exists, its real length is used instead. */
   seconds: number

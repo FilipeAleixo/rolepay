@@ -104,7 +104,7 @@ export interface RunNotices {
 /**
  * Interaction IDs already answered. A signed request stays valid for the 5-minute timestamp
  * window, so anyone who sees one (a tunnel's request inspector, say) could replay it: answering
- * each ID once means a replay never mints a second claim link (L1).
+ * each ID once means a replay never mints a second claim link.
  */
 export interface InteractionLog {
   /** True exactly once per interaction ID. */

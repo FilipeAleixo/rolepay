@@ -55,7 +55,7 @@ async function issuedTokens(res: Response): Promise<string[]> {
  * Wraps the WebAuthn endpoints so every session a successful `/webauthn/login` issues is recorded
  * as a passkey login. A login is an assertion verified against the stored public key; a
  * registration with attestation "none" is not a signature at all, so its session proves nothing
- * about the passkey and is never recorded (M4). The record holds a hash of the token only.
+ * about the passkey and is never recorded. The record holds a hash of the token only.
  */
 export function withLoginProof(
   inner: { fetch: (req: Request) => Response | Promise<Response> },

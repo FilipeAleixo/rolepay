@@ -138,7 +138,7 @@ describe('/rolepay setup', () => {
     expect(final).toContain(`<@&${NEW_ROLE}>`)
   })
 
-  it('Manage Server alone cannot change the approver role, the fee mode or the separate-approver rule (H1)', async () => {
+  it('Manage Server alone cannot change the approver role, the fee mode or the separate-approver rule', async () => {
     const a = await appHarness()
     await setup(a, { treasury: TREASURY, approver_role: TREASURER_ROLE }, treasurerAdmin)
     for (const values of [{ approver_role: NEW_ROLE }, { fees: 'fee_budget' }, { separate_approver: true }]) {

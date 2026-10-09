@@ -1,14 +1,14 @@
 import type { Item } from './Assembly'
 
 /**
- * The pitch (planned 2:33, limit 3:00): the founder on camera, with the scenes cut in, framed around
+ * The pitch (planned 2:33, limit 3:00): the presenter on camera, with the scenes cut in, framed around
  * one line: access keys are how you give software a budget it can't exceed, and Rolepay gives one
  * to a community's bot and one to each of its standing policies. Each camera clip goes in
  * video/assets/ under its file name; until it exists its slot shows a card with what is said there.
  * SCRIPT.md has the talking points for every slot.
  *
  * The scenes read on their own, silent. A voice-over for one (pitch-vo-*.m4a, .mp3 or .wav in
- * video/assets/) plays over it when it exists, so the founder's voice can carry through.
+ * video/assets/) plays over it when it exists, so the presenter's voice can carry through.
  */
 export const PITCH: Item[] = [
   { type: 'scene', scene: 'title' },
@@ -61,7 +61,7 @@ export const PITCH: Item[] = [
     file: 'pitch-4-why-me.mp4',
     kind: 'camera',
     label: 'Why me',
-    note: 'Why you: two hackathon wins in 2021, both about Discord and on-chain money.',
+    note: 'Why me: two hackathon wins in 2021, both about Discord and on-chain money.',
     seconds: 12,
     overlays: [
       {

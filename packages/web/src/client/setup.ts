@@ -257,7 +257,7 @@ export function startSetup(config: SetupConfig) {
     ...(config.feeMode === 'fee_budget' ? { feeBudget: input('feeBudget') } : {}),
   })
   /**
-   * What this page signs comes from the form and the page config, never from the server (H4). With
+   * What this page signs comes from the form and the page config, never from the server. With
    * preferred stablecoins on (the switch above the form), it adds the swap scope for the page
    * config's swap tokens.
    */

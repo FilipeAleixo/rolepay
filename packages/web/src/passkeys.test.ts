@@ -36,7 +36,7 @@ describe('passkeys (Accounts SDK Handler.webAuthn over core KeyValueStore)', () 
     expect(await sessions.current(new Request('https://pay.example.org/', { headers: { cookie: 'accounts_webauthn=forged' } }))).toBeNull()
   })
 
-  it('a session counts as a passkey login only when /webauthn/login (a verified assertion) issued it; a registration session does not (M4)', async () => {
+  it('a session counts as a passkey login only when /webauthn/login (a verified assertion) issued it; a registration session does not', async () => {
     const store = new MemoryKeyValueStore()
     const { sessions } = createPasskeys({ kv: store, origin: 'https://pay.example.org', rpId: 'pay.example.org' })
     const key = P256.randomPrivateKey()

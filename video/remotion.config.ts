@@ -1,6 +1,6 @@
 import { Config } from '@remotion/cli/config'
 
-// The founder's recordings live in video/assets/ (gitignored); staticFile('demo-1-setup.mp4')
+// The recordings live in video/assets/ (gitignored); staticFile('demo-1-setup.mp4')
 // reads video/assets/demo-1-setup.mp4.
 Config.setPublicDir('./assets')
 Config.setEntryPoint('./src/index.ts')

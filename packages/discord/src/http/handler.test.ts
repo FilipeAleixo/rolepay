@@ -46,7 +46,7 @@ describe('createInteractionsHandler', () => {
     expect(called).toBe(false)
   })
 
-  it('a replayed signed request (same interaction ID, inside the 5-minute window) is refused and never dispatched again (L1)', async () => {
+  it('a replayed signed request (same interaction ID, inside the 5-minute window) is refused and never dispatched again', async () => {
     let calls = 0
     const { post } = await setup(async () => (calls++, { kind: 'respond', body: { type: 4, data: { content: 'https://rolepay.test/claim/secret' } } }))
     const interaction = { id: '900000000000000001', type: 2 }

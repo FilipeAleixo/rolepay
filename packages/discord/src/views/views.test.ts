@@ -146,7 +146,7 @@ describe('runMessage', () => {
     expect(actions(m)).toEqual([])
   })
 
-  it("a refused transaction shows only the reason code in public; the node's own error text appears only where details are asked for (L2)", () => {
+  it("a refused transaction shows only the reason code in public; the node's own error text appears only where details are asked for", () => {
     const r = failed('rejected')
     const withNodeText = { ...r, failure: r.failure && { ...r.failure, detail: 'insufficient_balance: HTTP request failed. URL: https://rpc.example/key-abc <html>' } }
     const pub = text(runMessage(withNodeText, ctx))
@@ -250,7 +250,7 @@ describe('a run autopilot released after its veto window: nobody approved this r
   })
 })
 
-describe('run notes are shown as text, never as Discord markdown (L6)', () => {
+describe('run notes are shown as text, never as Discord markdown', () => {
   const phishing = '[Claim your bonus](https://evil.example/claim) **now** <@&123> `x` ||spoiler||'
   const escaped = (t: string) => {
     // No unescaped markdown left: every formatting character has a backslash before it.
