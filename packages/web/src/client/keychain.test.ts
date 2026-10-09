@@ -1,7 +1,7 @@
 import { decodeFunctionData, encodeFunctionData, getAddress, toFunctionSelector } from 'viem'
 import { Abis, Addresses } from 'viem/tempo'
 import { describe, expect, it } from 'vitest'
-import { authorizationMismatch, authorizeKeyCall, buildAuthorization, describeAuthorization, rotationCalls } from './keychain.js'
+import { authorizationMismatch, authorizeKeyCall, buildAuthorization, describeAuthorization, keyFormIncomplete, rotationCalls } from './keychain.js'
 
 const TOKEN = '0x20c0000000000000000000000000000000000001'
 const FEE_TOKEN = '0x20c0000000000000000000000000000000000000'
@@ -215,5 +215,18 @@ describe('with preferred stablecoins on, the page adds the swap scope itself, in
         `Only transferWithMemo on AlphaUSD (${TOKEN}), to anyone. Only swapExactAmountOut on the stablecoin exchange (${DEX}), buying exactly what a run pays out. ` +
         `Only transferWithMemo on BetaUSD (${BETA}), to anyone. Only transferWithMemo on ThetaUSD (${THETA}), to anyone. Expires then.`,
     )
+  })
+})
+
+describe('keyFormIncomplete: a field being typed is not a mistake yet', () => {
+  it('is true while any field is empty (the fee budget only when the form has one), false once all have something', () => {
+    const full = { limit: '100', periodDays: '7', validityDays: '30' }
+    expect(keyFormIncomplete(full)).toBe(false)
+    expect(keyFormIncomplete({ ...full, limit: '' })).toBe(true)
+    expect(keyFormIncomplete({ ...full, validityDays: ' ' })).toBe(true)
+    expect(keyFormIncomplete({ ...full, feeBudget: '' })).toBe(true)
+    expect(keyFormIncomplete({ ...full, feeBudget: '1' })).toBe(false)
+    // Something typed but wrong is not incomplete: the line says what is wrong.
+    expect(keyFormIncomplete({ ...full, limit: 'abc' })).toBe(false)
   })
 })

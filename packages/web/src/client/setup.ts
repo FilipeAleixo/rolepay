@@ -3,7 +3,7 @@
 import { MiningStalled, type Registration, buildRegistration, describeRegistration, mineSalt, registrationMismatch } from './deposits.js'
 import { $, busy, displayMicros, explainPasskeyError, fill, get, post, shortAddress, show, status } from './dom.js'
 import { treasuryFeeToken } from './fees.js'
-import { type KeyForm, STABLECOIN_DEX, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
+import { type KeyForm, STABLECOIN_DEX, authorizationMismatch, buildAuthorization, describeAuthorization, keyFormIncomplete } from './keychain.js'
 import { passkeys } from './passkey.js'
 import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, faucet, registerMaster, revokeAccessKey } from './tempo.js'
 
@@ -280,6 +280,7 @@ export function startSetup(config: SetupConfig) {
   const nowSeconds = () => Math.floor(Date.now() / 1000)
   /** The exact values the passkey will sign, in plain words, kept up to date as the form changes. */
   function showSigns() {
+    if (keyFormIncomplete(form())) return fill('key-signs', '')
     const built = buildAuthorization(form(), keyPage(), nowSeconds())
     fill('key-signs', built.ok ? `You will sign: ${describeAuthorization(built.value, labels)}` : `Check the form: ${built.error}.`)
   }

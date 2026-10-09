@@ -4,7 +4,7 @@
 // sign at all when the server's copy differs (authorizationMismatch). One passkey prompt per action.
 import { $, busy, explainPasskeyError, fill, formatMicros, get, post, shortAddress, show, status } from './dom.js'
 import { treasuryFeeToken } from './fees.js'
-import { type KeyForm, STABLECOIN_DEX, authorizationMismatch, buildAuthorization, describeAuthorization } from './keychain.js'
+import { type KeyForm, STABLECOIN_DEX, authorizationMismatch, buildAuthorization, describeAuthorization, keyFormIncomplete } from './keychain.js'
 import { passkeys } from './passkey.js'
 import { type ChainConfig, type WireAuthorization, authorizeAccessKey, balanceOf, revokeAccessKey } from './tempo.js'
 
@@ -199,6 +199,7 @@ export function startPolicyBudget(config: PolicyBudgetConfig) {
   }
   const nowSeconds = () => Math.floor(Date.now() / 1000)
   function showSigns() {
+    if (keyFormIncomplete(form())) return fill('key-signs', '')
     const built = buildAuthorization(form(), keyPage(), nowSeconds())
     fill('key-signs', built.ok ? `You will sign, for this policy only: ${describeAuthorization(built.value, labels)}` : `Check the form: ${built.error}.`)
   }

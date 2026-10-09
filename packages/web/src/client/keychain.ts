@@ -84,6 +84,9 @@ export const SWAP_EXACT_AMOUNT_OUT = 'swapExactAmountOut(address,address,uint128
 export const STABLECOIN_DEX = Addresses.stablecoinDex.toLowerCase()
 
 export type KeyForm = { limit: string; periodDays: string; validityDays: string; feeBudget?: string }
+
+/** A field still empty: the form is being typed, not wrong. The live "You will sign" line waits; signing still says what is missing. */
+export const keyFormIncomplete = (f: KeyForm) => [f.limit, f.periodDays, f.validityDays, ...(f.feeBudget === undefined ? [] : [f.feeBudget])].some((v) => v.trim() === '')
 /**
  * From the page config: the payout token, and the fee token in fee budget mode (null when sponsored).
  * `swapTokens`: with preferred stablecoins on, the tokens the key may swap into and deliver (from the

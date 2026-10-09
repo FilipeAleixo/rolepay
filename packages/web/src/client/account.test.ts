@@ -281,6 +281,17 @@ describe('the account page (browser code)', () => {
     expect(h.sent).toEqual([{ chain: expect.objectContaining({ sponsorUrl: null, feeToken: ALPHA }), token: ALPHA, to: TO, amount: 1_000_000n }])
     expect(status()).toBe(`Sent 1 AlphaUSD to ${TO}. Transaction: https://explore.tempo.xyz/tx/0xfeed`)
     expect((ids.amount as El).value).toBe('')
+    // The emptied form says nothing, not that "" is not an amount.
+    expect((fields['send-says'] as El).textContent).toBe('')
+  })
+
+  it('says nothing about the amount while only the address is typed', async () => {
+    page(null)
+    await vi.waitFor(() => expect((ids.balances as El).children).toHaveLength(1))
+    type('to', TO)
+    expect((fields['send-says'] as El).textContent).toBe('')
+    type('amount', '0.5')
+    expect((fields['send-says'] as El).textContent).toBe(`You will send 0.5 AlphaUSD to ${TO}.`)
   })
 
   it('sponsored (testnet): the whole balance can go, and the sponsor carries the fee', async () => {

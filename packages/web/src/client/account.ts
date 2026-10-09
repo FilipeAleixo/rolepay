@@ -216,9 +216,9 @@ export function startAccount(config: AccountConfig) {
 
   const checked = () => checkSend({ to: input('to'), amount: input('amount'), from: address ?? '', balance: balances.get(selected()) ?? 0n, sponsored })
 
-  /** What the form would send, in plain words, as it is typed. */
+  /** What the form would send, in plain words, as it is typed: once both fields have something (an amount not typed yet is not a mistake). */
   function describe() {
-    if (!input('to') && !input('amount')) return fill('send-says', '')
+    if (!input('to').trim() || !input('amount').trim()) return fill('send-says', '')
     if (!balances.has(selected())) return fill('send-says', 'Reading your balance...')
     const c = checked()
     fill('send-says', c.ok ? `You will send ${displayMicros(c.value.amount.toString())} ${label(selected())} to ${c.value.to}.` : `Check the form: ${c.error}.`)
