@@ -85,6 +85,14 @@ describe('keyBudget: what the bot may still spend, or why it may spend nothing',
     expect(count(html, 'role="img"')).toBe(1)
   })
 
+  it('says what "spent" counts from: since this key was authorised in its first period (a new key starts at 0), else when the period began', () => {
+    expect(text(keyBudget(ok(key())))).toContain('Counting since this key was authorised, 2026-10-06 12:00 UTC')
+    const later = text(keyBudget(ok(key({ state: { periodEnd: at('2026-12-05T12:00:00Z') } }))))
+    expect(later).toContain('This period began 2026-11-05 12:00 UTC')
+    expect(later).not.toContain('Counting since')
+    expect(text(keyBudget(ok(key({ periodSeconds: null, state: { periodEnd: null } }))))).toContain('Counting since this key was authorised')
+  })
+
   it('spent in full: left is 0 and it says when the bot can pay again', () => {
     const t = text(keyBudget(ok(key({ state: { remaining: 0n } }))))
     expect(t).toMatch(/Left 0 AlphaUSD/)

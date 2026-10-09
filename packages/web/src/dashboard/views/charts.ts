@@ -89,12 +89,21 @@ export function keyBudget(read: ChainRead<KeyStatusView>, words: BudgetWords = B
     : resets && resets < expires
       ? `${clause(`Resets ${when(resets)}`)} · ${clause(`expires ${when(expires)}`)}`
       : `${clause(`Expires ${when(expires)}`)}, before the period resets`
+  // What "spent" counts from. A new key starts at 0: its limit is its own on chain, whatever the key it replaced spent.
+  const start = periodSeconds !== null && state.periodEnd ? new Date((state.periodEnd - periodSeconds) * 1000) : null
+  const firstPeriod = key.authorizedAt !== null && (periodic ? start !== null && key.authorizedAt.getTime() > start.getTime() - 60_000 : true)
+  const since =
+    firstPeriod && key.authorizedAt
+      ? `<p class="quiet">Counting since this key was authorised, ${when(key.authorizedAt)}</p>`
+      : start
+        ? `<p class="quiet">This period began ${when(start)}</p>`
+        : ''
   const empty =
     left === 0n ? `<p class="quiet">${periodic ? 'Nothing left until the period resets: a run waits until then.' : `Nothing left: ${esc(w.renew)}.`}</p>` : ''
   return part(
     `${head}<div class="figures">${figure(periodic ? 'Spent this period' : 'Spent', spent, token)}${figure('Left', left, token, true)}</div>` +
       `${budgetBar({ spent, limit, token, title: w.title })}<p class="budget-limit"><span class="label">Limit</span> ${money(limit, token)}</p>` +
-      `<p class="quiet">${timing}</p>${empty}<p class="caption">${esc(upper(w.spender))} can never spend past that line: the chain enforces it, whatever Rolepay's own code does.</p>`,
+      `${since}<p class="quiet">${timing}</p>${empty}<p class="caption">${esc(upper(w.spender))} can never spend past that line: the chain enforces it, whatever Rolepay's own code does.</p>`,
   )
 }
 
