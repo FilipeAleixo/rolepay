@@ -1,7 +1,8 @@
 /**
  * The product's "ink" design, as the video uses it. Values mirror packages/web/src/views/theme.ts
  * (the --ink, --head, --fg, --soft, --meta tokens and the gold of the mark), so the films and the
- * pages read as one thing. Gold is the only accent; the maroon appears only inside the mark.
+ * pages read as one thing. Gold is the accent (the periwinkle, the pages' second, only marks the
+ * steps and the Discord side in the short cuts); the maroon appears only inside the mark.
  */
 export const FPS = 30
 export const WIDTH = 1920
@@ -18,6 +19,9 @@ export const C = {
   meta: '#94938F',
   muted: '#8A8985',
   gold: '#EDBE5A',
+  // The pages' second accent (--accent-2), the cool one: step numbers and small labels, never on
+  // the same small element as gold.
+  periwinkle: '#8F9CFF',
   maroon: '#4A1B2A',
   // Status colours, for small marks only (a held line's dot), as on the dashboard.
   warn: '#E2B26E',

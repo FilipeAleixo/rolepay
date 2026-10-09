@@ -8,6 +8,9 @@
     "typecheck": "tsc --noEmit",
     "render:pitch": "remotion render src/index.ts PitchVideo out/pitch.mp4",
     "render:demo": "remotion render src/index.ts DemoVideo out/demo.mp4",
+    "render:readme": "remotion render src/index.ts ReadmeLoop out/readme-loop.mp4 --crf=10 --image-format=png --pixel-format=yuv420p",
+    "gif:readme": "ffmpeg -v error -i out/readme-loop.mp4 -vf fps=12,palettegen=max_colors=128:stats_mode=diff -f image2 -y out/readme-palette.png && ffmpeg -v error -i out/readme-loop.mp4 -i out/readme-palette.png -filter_complex '[0:v]fps=12[x];[x][1:v]paletteuse=dither=none:diff_mode=rectangle[out]' -map '[out]' -an -loop 0 -f gif -y out/readme-loop.gif",
+    "render:x": "remotion render src/index.ts XClip out/x-clip.mp4 --crf=16 --image-format=png --pixel-format=yuv420p --enforce-audio-track",
     "stills": "for c in Title:100 Problem:240 TrustModel:410 OwnBudgets:330 PreferredStablecoin:260 Funding:270 FourBeats:235 AiProposal:200 NeverPayTwice:165 Numbers:200 Architecture:220 WhyTempo:220 EndCard:120 Captions:60 LowerThird:90; do remotion still src/index.ts ${c%%:*} out/stills/${c%%:*}.png --frame=${c##*:} || exit 1; done"
   },
   "dependencies": {

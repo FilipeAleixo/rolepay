@@ -2,6 +2,8 @@ import React from 'react'
 import { Composition, Folder } from 'remotion'
 import { CaptionPreview } from './components/Caption'
 import { LowerThirdPreview } from './components/Overlays'
+import { README_FPS, README_LOOP, README_SIZE, X_CLIP } from './cuts'
+import { Cut, cutFrames } from './cuts/Cut'
 import './fonts'
 import { SCENES } from './scenes'
 import { Assembly, type AssemblyProps, fitTimeline, plannedFrames } from './timeline/Assembly'
@@ -24,6 +26,10 @@ export const RemotionRoot: React.FC = () => (
       {Object.values(SCENES).map((s) => (
         <Composition key={s.id} id={s.id} component={s.component} durationInFrames={s.frames} {...frame} />
       ))}
+    </Folder>
+    <Folder name="Cuts">
+      <Composition id="ReadmeLoop" component={Cut} durationInFrames={cutFrames(README_LOOP, README_FPS)} defaultProps={README_LOOP} fps={README_FPS} {...README_SIZE} />
+      <Composition id="XClip" component={Cut} durationInFrames={cutFrames(X_CLIP, FPS)} defaultProps={X_CLIP} {...frame} />
     </Folder>
     <Folder name="Overlays">
       <Composition id="Captions" component={CaptionPreview} durationInFrames={sec(8)} {...frame} />
