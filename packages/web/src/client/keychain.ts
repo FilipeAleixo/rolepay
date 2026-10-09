@@ -1,9 +1,9 @@
 // The bot key's authorisation as one direct call to the Account Keychain precompile, made by the
 // root (the treasurer's passkey). viem's accessKey.authorize instead signs a key authorization
 // and then the transaction that carries it: two passkey prompts for one action. A root may call
-// authorizeKey itself (docs/tempo/protocol_transactions_AccountKeychain.md), and the protocol
-// runs the same function for a signed key authorization, so the result on chain is the same
-// with one signature.
+// authorizeKey itself (https://tempo.xyz/developers/docs/protocol/transactions/AccountKeychain),
+// and the protocol runs the same function for a signed key authorization, so the result on chain
+// is the same with one signature.
 import { Abis, Addresses } from 'viem/tempo'
 import { encodeFunctionData, toFunctionSelector } from 'viem/utils'
 

@@ -13,8 +13,8 @@ import { PAYRUN_CAPTIONS } from './demo'
  * - its voice-over alone (pitch-N-….m4a, .mp3 or .wav), over a voice card that shows what the
  *   camera overlay would (the frame line and the name, or the points), as long as the speech;
  * - otherwise a card with what is said there.
- * A voice-over over a screen recording replaces the recording's sound. SCRIPT.md has the talking
- * points for every slot.
+ * A voice-over over a screen recording replaces the recording's sound. Each slot's `note` says what
+ * it has to land, and its overlays or `card` hold the points shown on screen.
  *
  * The scenes read on their own, silent. A voice-over for one (pitch-vo-*.m4a, .mp3 or .wav in
  * video/assets/) plays over it when it exists, so the presenter's voice can carry through.

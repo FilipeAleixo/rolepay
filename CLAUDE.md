@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Rolepay: Discord-native pay runs on Tempo. A community's own Tempo account holds the funds; the bot holds only a limited access key. Read `docs/ARCHITECTURE.md` before changing anything; `docs/tempo/` has the Tempo and viem docs snapshot.
+Rolepay: Discord-native pay runs on Tempo. A community's own Tempo account holds the funds; the bot holds only a limited access key. Read `docs/ARCHITECTURE.md` before changing anything. Tempo's docs: https://tempo.xyz/developers/docs (page index: https://tempo.xyz/developers/llms.txt); viem's Tempo extension: https://viem.sh/tempo.
 
 ## Commands
 
