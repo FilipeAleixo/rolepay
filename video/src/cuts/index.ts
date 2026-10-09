@@ -40,8 +40,9 @@ export const README_LOOP: CutProps = {
   beats: BEAT_ORDER,
   fade: 0.4,
   loop: true,
-  title: 2.2,
-  end: 2.4,
+  // Long enough to read the title line before the first beat.
+  title: 4.5,
+  end: 3.5,
   endPromise: false,
 }
 
@@ -63,7 +64,7 @@ export const X_CLIP: CutProps = {
   beats: BEAT_ORDER,
   fade: 0.4,
   loop: false,
-  title: 2.2,
-  end: 3.2,
+  title: 3.5,
+  end: 3.5,
   endPromise: true,
 }
