@@ -1,4 +1,12 @@
+import type { CaptionCue } from '../components/Caption'
 import type { Item } from './Assembly'
+
+/** The captions of `demo-2-payrun.mp4`, timed to that take (the pitch borrows it when it has no cut of its own). */
+export const PAYRUN_CAPTIONS: CaptionCue[] = [
+  { at: 0.5, until: 4, text: '`/rolepay new` builds a run for a *role*' },
+  { at: 4.5, until: 8.5, text: 'One tap to *approve*, one batched transaction' },
+  { at: 9, until: 12.5, text: 'One memo per line, and a *DM receipt* for each payee' },
+]
 
 /**
  * The demo (planned 2:56, hard limit 3:00): screen recordings of the live product with captions,
@@ -30,11 +38,7 @@ export const DEMO: Item[] = [
     label: 'A pay run, approved and paid',
     note: '/rolepay new for a role, Approve, the run paid in one transaction with a memo per line, then the DM receipt.',
     seconds: 13,
-    captions: [
-      { at: 0.5, until: 4, text: '`/rolepay new` builds a run for a *role*' },
-      { at: 4.5, until: 8.5, text: 'One tap to *approve*, one batched transaction' },
-      { at: 9, until: 12.5, text: 'One memo per line, and a *DM receipt* for each payee' },
-    ],
+    captions: PAYRUN_CAPTIONS,
   },
   // Why a double click, a retry or a crash cannot pay that run twice.
   { type: 'scene', scene: 'neverPayTwice' },

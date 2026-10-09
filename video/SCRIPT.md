@@ -2,7 +2,7 @@
 
 Two films for Colosseum's Crypto World's Fair (Tempo track), built in Remotion:
 
-- **PitchVideo**, planned 2:34 (limit 3:00): you on camera, with the animated scenes cut in.
+- **PitchVideo**, planned 2:34 (limit 3:00): you on camera, or your voice alone over full-frame cards, with the animated scenes cut in.
 - **DemoVideo**, planned 2:56 (hard limit 3:00): screen recordings of the live product, captioned, with the explainer scenes between them.
 
 Everything animated is done. What is left is your recordings: drop each file into `video/assets/` under the name below and it takes its slot. Do the four steps under "Before recording" first: two of them take a while and one of them changes what the judges' daily run signs with.
@@ -29,6 +29,9 @@ npx remotion render OwnBudgets out/own-budgets.mp4   # any single scene, to cut 
 - **Camera clips** fill the frame and play their sound. **Screen recordings** are fitted whole on the dark ground and play silent (except `pitch-2-demo.mp4`, which keeps its sound in case you narrate it).
 - **Captions** in the demo are timed in seconds from the start of their clip. The click script below is timed to them. If a recording runs differently, change the `at` and `until` numbers in `src/timeline/demo.ts`.
 - **Voice-overs for the pitch's scenes** are optional: record `pitch-vo-trust-model.m4a` (or `.mp3`, `.wav`) and it plays over that scene; a longer voice-over holds the scene's last frame until you finish. The scenes are written to read silent too. The names: `pitch-vo-problem`, `pitch-vo-trust-model`, `pitch-vo-own-budgets`, `pitch-vo-why-tempo`, `pitch-vo-architecture`, `pitch-vo-numbers`.
+- **The pitch works with your voice alone.** For any camera slot, record the audio instead of the video: `pitch-3-why-tempo.m4a` (or `.mp3`, `.wav`) in place of `pitch-3-why-tempo.mp4`. It plays over a voice card, a full-frame scene with what the camera overlay would show (the slot's points, entering one after another across your speech), and the slot lasts as long as you speak. The opening's card shows "Access keys are how you give software a budget it can't exceed" and your name, over `pitch-1-portrait.jpg` (or `.jpeg`, `.png`) if you add one: a still, slowly pushed in and darkened on the left where the text sits, so a landscape photo with your face right of centre suits it best. The honest-status card shows three lines of its own. An `.mp4` always wins over the audio, so one slot on camera and the rest by voice is fine.
+- **The screen slot in the pitch** (`pitch-2-demo`) plays `pitch-2-demo.mp4` if it exists, else the demo film's `demo-2-payrun.mp4` with that take's captions, else a card with its three captions. `pitch-2-demo.m4a` narrates over whichever plays (a recording's own sound is then muted, and if the narration runs longer the recording holds its last frame).
+- **Silence at either end of a voice file is trimmed**, for the scenes' voice-overs and the slots' alike: a voice memo can start a few seconds before you speak and stop a few after (`src/timeline/speech.ts`; pauses between your sentences are kept as recorded). Each item then starts your voice just after its crossfade and ends 0.6 s after your last word.
 - **A sound bed** is optional and off: a file named `pitch-audio.mp3` or `demo-audio.mp3` in `video/assets/` plays quietly under the whole film. Leave it out for no music.
 
 ## Before recording (on the demo, in this order)
@@ -63,6 +66,8 @@ Also check before the session:
 
 ## Recording setup
 
+**Voice (pitch, voice only):** a quiet room, the phone or the microphone a hand's width from your mouth, one file per slot, named after it (Voice Memos or QuickTime's audio recording both give an `.m4a`). Re-record any one file alone: the film follows each file's length. With every voice-over in place at an unhurried pace (about 150 words a minute) the film measured 2:35.
+
 **Camera (pitch):** 1920 by 1080 or 4K, 30 fps, landscape. Sit a little left of centre: the right third carries short text panels in the "why Tempo", "why me", "business" and "go-to-market" slots, and the lower left carries your name in the first slot. A plain, dim background suits the dark films. Record each slot as its own take and name the file after the slot.
 
 **Screen (demo):** record at 1920 by 1080 (a 16:9 window or region), 30 fps, no sound needed. Discord in its dark theme, zoomed to 110 or 125% so text reads on a phone. Turn on Do Not Disturb, close other servers' notifications, and keep real people's private details off screen (use the demo server and your test accounts). In `#payouts`, a run lists the judges it paid: record a day that paid only your test accounts, or blur the names. Cut the waits (passkey prompts, the AI's few seconds, the minute of a veto window, the deposit watcher's up to 30 seconds) in any editor before dropping the file in.
@@ -72,6 +77,8 @@ Also check before the session:
 ## The pitch (PitchVideo)
 
 The frame for the whole pitch: **access keys are how you give software a budget it can't exceed.** Rolepay gives one to a community's bot, and one to each of its standing policies, all authorised by the treasurer's passkey.
+
+Every camera slot below also takes your voice alone, as an audio file of the same name (`pitch-1-problem.m4a` for `pitch-1-problem.mp4`, and so on; see "How a slot works"). The times are the plan; with voice cards each slot is as long as you speak.
 
 | Starts | Item | File | Length |
 | --- | --- | --- | --- |
