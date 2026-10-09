@@ -3,47 +3,57 @@ import { AbsoluteFill } from 'remotion'
 import { Ground } from '../components/Ground'
 import { Mark } from '../components/Mark'
 import { SANS, SERIF } from '../fonts'
-import { enter, progress } from '../motion'
+import { EASE_OUT, mix } from '../motion'
 import { C } from '../theme'
 
-/**
- * The cards around the X cut, at 1920 by 1080: a short, calm title (the lockup and what the
- * recording is), and the end card (the lockup, the promise, where to try it). Each takes the frame
- * from its own start, since the cut places them.
- */
-export const TitleCard: React.FC<{ frame: number }> = ({ frame }) => {
-  const mark = progress(frame, 0, 14)
+/** Fade in while rising a little, from `start` over `duration` seconds. */
+const rise = (t: number, start: number, unit: number, duration = 0.6) => {
+  const p = EASE_OUT(Math.min(1, Math.max(0, (t - start) / duration)))
+  return { opacity: p, transform: `translateY(${mix(p, 12 * unit, 0)}px)` }
+}
+
+const Lockup: React.FC<{ t: number; unit: number; size: number }> = ({ t, unit, size }) => {
+  const mark = EASE_OUT(Math.min(1, Math.max(0, t / 0.5)))
   return (
-    <Ground>
-      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
-            <Mark size={112} tile={mark} outline={1} fill={mark} face={mark} />
-            <span style={{ ...enter(frame, 3, { duration: 18, distance: 10 }), font: `400 104px/1 ${SERIF}`, letterSpacing: '-0.015em', color: C.head }}>Rolepay</span>
-          </div>
-          <div style={{ ...enter(frame, 9, { duration: 18, distance: 10 }), marginTop: 52, font: `400 44px/1.3 ${SANS}`, color: C.fg }}>
-            A real pay run on <span style={{ color: C.gold }}>Tempo mainnet</span>
-          </div>
-        </div>
-      </AbsoluteFill>
-    </Ground>
+    <div style={{ display: 'flex', alignItems: 'center', gap: size * 0.3 }}>
+      <Mark size={size} tile={mark} outline={1} fill={mark} face={mark} />
+      <span style={{ ...rise(t, 0.12, unit), font: `400 ${size * 0.9}px/1 ${SERIF}`, letterSpacing: '-0.015em', color: C.head }}>Rolepay</span>
+    </div>
   )
 }
 
-export const EndCard: React.FC<{ frame: number }> = ({ frame }) => {
-  const mark = progress(frame, 0, 18)
-  return (
-    <Ground>
-      <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 34 }}>
-            <Mark size={128} tile={mark} outline={1} fill={mark} face={mark} />
-            <span style={{ ...enter(frame, 6, { duration: 22, distance: 10 }), font: `400 112px/1 ${SERIF}`, letterSpacing: '-0.015em', color: C.head }}>Rolepay</span>
-          </div>
-          <div style={{ ...enter(frame, 16, { distance: 10 }), marginTop: 60, font: `400 48px/1.3 ${SANS}`, color: C.fg }}>Pay the people who run your community.</div>
-          <div style={{ ...enter(frame, 26, { distance: 10 }), marginTop: 40, font: `500 42px/1 ${SANS}`, color: C.gold, letterSpacing: '0.01em' }}>demo.rolepay.app</div>
+/**
+ * The title card, `t` seconds in, at `unit` (1 for 1920 by 1080): the lockup, the promise, and
+ * what the recording is.
+ */
+export const TitleCard: React.FC<{ t: number; unit: number }> = ({ t, unit }) => (
+  <Ground>
+    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `translateY(${-14 * unit}px)` }}>
+        <Lockup t={t} unit={unit} size={112 * unit} />
+        <div style={{ ...rise(t, 0.35, unit), marginTop: 58 * unit, font: `400 ${48 * unit}px/1.3 ${SANS}`, color: C.fg }}>
+          Pay the people who run your community, <span style={{ color: C.gold }}>from Discord</span>.
         </div>
-      </AbsoluteFill>
-    </Ground>
-  )
-}
+        <div style={{ ...rise(t, 0.6, unit), marginTop: 30 * unit, display: 'flex', alignItems: 'center', gap: 16 * unit }}>
+          <div style={{ width: 30 * unit, height: Math.max(1, 2 * unit), borderRadius: 1, background: C.periwinkle, opacity: 0.85 }} />
+          <span style={{ font: `500 ${22 * unit}px/1 ${SANS}`, letterSpacing: '0.18em', textTransform: 'uppercase', color: C.meta }}>A real pay run on Tempo mainnet</span>
+          <div style={{ width: 30 * unit, height: Math.max(1, 2 * unit), borderRadius: 1, background: C.periwinkle, opacity: 0.85 }} />
+        </div>
+      </div>
+    </AbsoluteFill>
+  </Ground>
+)
+
+/** The end card: the lockup, (on X) the promise again, and where to try it. */
+export const EndCard: React.FC<{ t: number; unit: number; promise: boolean }> = ({ t, unit, promise }) => (
+  <Ground>
+    <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', transform: `translateY(${-10 * unit}px)` }}>
+        <Lockup t={t} unit={unit} size={100 * unit} />
+        {promise ? <div style={{ ...rise(t, 0.3, unit), marginTop: 54 * unit, font: `400 ${46 * unit}px/1.3 ${SANS}`, color: C.fg }}>Pay the people who run your community.</div> : null}
+        <div style={{ ...rise(t, promise ? 0.55 : 0.3, unit), marginTop: (promise ? 46 : 58) * unit, font: `400 ${34 * unit}px/1.3 ${SANS}`, color: C.soft }}>Try it on the demo</div>
+        <div style={{ ...rise(t, promise ? 0.7 : 0.45, unit), marginTop: 14 * unit, font: `500 ${52 * unit}px/1.1 ${SANS}`, letterSpacing: '0.005em', color: C.gold }}>demo.rolepay.app</div>
+      </div>
+    </AbsoluteFill>
+  </Ground>
+)
