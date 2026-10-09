@@ -1,6 +1,6 @@
 import type { CaptionCue } from '../components/Caption'
 import type { Item } from './Assembly'
-import { PAYRUN_CAPTIONS } from './demo'
+import { PAYRUN_CAPTIONS, PAYRUN_SLOW_CAPTIONS } from './demo'
 
 /**
  * The pitch (planned 2:08 silent, limit 3:00), framed around one line: a Safe keeps the money
@@ -24,12 +24,8 @@ import { PAYRUN_CAPTIONS } from './demo'
  * The scenes read on their own, silent. A voice-over for one (in video/assets/, .m4a, .mp3 or
  * .wav) plays over it when it exists, and the scene lasts at least as long as the speech.
  */
-/** The captions of `pitch-2-demo.mp4`, the slower cut of the first mainnet pay run, one per beat. */
-const DEMO_CAPTIONS: CaptionCue[] = [
-  { at: 0.4, until: 6.6, text: '`/rolepay new` builds a run' },
-  { at: 7.4, until: 15.6, text: 'A Treasurer approves in *#treasury*, and the money lands' },
-  { at: 16.4, until: 24.4, text: 'A *receipt* by DM, and the transaction on *Tempo mainnet*' },
-]
+/** The captions of `pitch-2-demo.mp4`, the slow cut of the first mainnet pay run (the demo film plays it too). */
+const DEMO_CAPTIONS: CaptionCue[] = PAYRUN_SLOW_CAPTIONS
 
 export const PITCH: Item[] = [
   // One slide: what it is, why it matters, who it is for, the proof. The voice-over is the opening's.
