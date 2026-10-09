@@ -24,10 +24,11 @@ import { PAYRUN_CAPTIONS } from './demo'
  * The scenes read on their own, silent. A voice-over for one (in video/assets/, .m4a, .mp3 or
  * .wav) plays over it when it exists, and the scene lasts at least as long as the speech.
  */
+/** The captions of `pitch-2-demo.mp4`, the slower cut of the first mainnet pay run, one per beat. */
 const DEMO_CAPTIONS: CaptionCue[] = [
-  { at: 0.5, until: 4.5, text: '`/rolepay new` builds a run for a *role*' },
-  { at: 5, until: 8.5, text: 'One tap to *approve*, one batched transaction' },
-  { at: 9, until: 12.5, text: 'Every payee gets a *DM receipt*' },
+  { at: 0.4, until: 6.6, text: '`/rolepay new` builds a run' },
+  { at: 7.4, until: 15.6, text: 'A Treasurer approves in *#treasury*, and the money lands' },
+  { at: 16.4, until: 24.4, text: 'A *receipt* by DM, and the transaction on *Tempo mainnet*' },
 ]
 
 export const PITCH: Item[] = [
@@ -38,8 +39,8 @@ export const PITCH: Item[] = [
     file: 'pitch-2-demo.mp4',
     kind: 'screen',
     label: 'The demo, short',
-    note: 'A short cut of the demo, about 13 s: a pay run approved in Discord, paid in one transaction, the DM receipt.',
-    seconds: 13,
+    note: "The first mainnet pay run, slowed to narrate over (about 25 s): /rolepay new and the run, the Treasurer's approval in #treasury with the payee's balance arriving, the DM receipt, the transaction on Tempo mainnet.",
+    seconds: 25,
     audible: true,
     captions: DEMO_CAPTIONS,
     voice: 'pitch-2-demo',
