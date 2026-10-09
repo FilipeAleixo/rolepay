@@ -111,5 +111,5 @@ export const PITCH: Item[] = [
     },
   },
   { type: 'scene', scene: 'numbers', voice: 'pitch-vo-numbers' },
-  { type: 'scene', scene: 'endCard' },
+  { type: 'scene', scene: 'endCard', voice: 'pitch-8-close' },
 ]

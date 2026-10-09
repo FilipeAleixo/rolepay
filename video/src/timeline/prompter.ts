@@ -13,22 +13,24 @@ export type PrompterLine = string | readonly PrompterCue[]
 
 export const PROMPTER_LINES: Record<string, PrompterLine> = {
   'pitch-1-problem':
-    "Hey there, I'm Filipe. I built Rolepay for the World's Fair: it pays the people who run a Discord community, in stablecoins on Tempo. Today, that's a spreadsheet, then a multisig, once enough signers are online. With Rolepay, the list comes from Discord, one approval pays everyone, and regular pay runs itself. It's live on mainnet.",
+    "Hey there, I'm Filipe. I built Rolepay for the World's Fair, to let a Discord community pay the people who run it, in stablecoins on Tempo. Today, that usually means a spreadsheet and waiting for enough multisig signers. With Rolepay, the list comes straight from Discord, and one approval pays everyone. It's already live on mainnet.",
   // Timed to the slow cut's three beats (pitch-2-demo.mp4: 0, 7.2 and 16.2 s), so the words land on what they describe.
   'pitch-2-demo': [
-    { at: 0, text: 'Here it is, on mainnet. One command builds a pay run.' },
-    { at: 7.2, text: 'A treasurer approves it in the treasury channel, and the money lands.' },
-    { at: 16.2, text: 'Everyone paid gets a receipt by DM, with the transaction on Tempo mainnet.' },
+    { at: 0, text: "Here's a real payment on mainnet. With one command, you create a pay run." },
+    { at: 7.2, text: 'Then a treasurer approves it in the treasury channel, and the person gets paid right away.' },
+    { at: 16.2, text: "Everyone who's paid gets a receipt by DM, with a link to the transaction on Tempo." },
   ],
   'pitch-vo-trust-model':
-    "The treasury is the community's own account, and its root key is the treasurer's passkey. On Tempo, the bot's spending key is part of that account: it expires, it's capped, and it can make one kind of transfer. Inside the cap, a batch pays everyone. Over it, the chain refuses the whole batch. So one passkey and a capped bot give a small community a multisig's guardrails.",
-  'pitch-vo-why-tempo': "Everything here is in Tempo's protocol, from the access keys to the stablecoin exchange.",
+    "The money stays in the community's own account, which only the treasurer's passkey controls. On Tempo, the bot gets its own key inside that account, with an expiry, a spending limit, and just one kind of transfer allowed. If a batch goes over the limit, the chain rejects all of it. So even a small community gets a multisig's guardrails, with one passkey and a capped bot.",
+  'pitch-vo-why-tempo': "And all of this is part of Tempo's protocol, from the access keys to the stablecoin exchange.",
   'pitch-4-why-me':
-    "About me: I'm from Lisbon, a software engineer. From 2021 to 2025 I worked on DeFi protocols: Olympus DAO, Concave Finance, and Fjord Foundry. Now I'm the founder of Soulform, an AI startup. In 2021 I also won two hackathon prizes: a Gitcoin prize for Discord and Ethereum authentication, and an Enzyme Finance prize at ETHOnline. The code for both is on my GitHub.",
-  'pitch-5-business': 'The core is open source: anyone can audit it or run their own. The business is the hosted bot, one per community.',
-  'pitch-6-go-to-market': 'Crypto communities first: they already hold stablecoins and pay contributors every month. Then creators, then gaming. I start with the builders here.',
+    "A bit about me: I'm a software engineer from Lisbon. From 2021 to 2025 I worked on DeFi protocols, at Olympus DAO, Concave Finance and Fjord Foundry, and now I'm the founder of Soulform, an AI startup. In 2021 I also won two hackathon prizes, from Gitcoin and from Enzyme Finance at ETHOnline, and the code for both is on my GitHub.",
+  'pitch-5-business': 'The core is open source, so anyone can audit it or run it themselves, and the business is the hosted bot, one per community.',
+  'pitch-6-go-to-market':
+    "I'll start with crypto communities, since they already hold stablecoins and pay contributors every month, beginning with the builders in this hackathon, and then move on to creators and gaming.",
   'pitch-7-status':
-    'The testnet demo runs all of it. On mainnet, a pilot I set up made its first real pay run on 8 October, for a fee well under a cent. Still open: a second RPC, the setup page on its own origin, and a separate signer.',
+    'The testnet demo runs every feature, and on mainnet, a pilot I set up made its first real pay run on October 8th, for a fee well under a cent.',
+  'pitch-8-close': "Thanks for watching. You can try it yourself at demo.rolepay.app, and you'll get paid at the next daily run.",
 }
 
 /** A calm reading pace (slower than the film's 2.5 words a second), and a breath after the last word. */
