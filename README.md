@@ -9,7 +9,7 @@
   <a href="https://github.com/FilipeAleixo/rolepay/actions/workflows/ci.yml"><img src="https://github.com/FilipeAleixo/rolepay/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
-Rolepay pays the people who run a Discord community (moderators, staff, bounty winners) in stablecoins on [Tempo](https://tempo.xyz), from Discord. Today that often means one wallet send at a time, a spreadsheet to reconcile, recipients who need gas, and no clean record. With Rolepay, an admin starts a pay run for a role or a list of people, a treasurer approves it with one button, and one transaction pays everyone, with a memo on every line and a CSV for every run. Recipients sign up with a passkey (no wallet, no seed phrase, no gas) or with a wallet they already have on Tempo. The money stays in the community's own Tempo account. The bot holds only a key that the chain itself limits.
+Rolepay pays the people who run a Discord community (moderators, staff, bounty winners) in stablecoins on [Tempo](https://tempo.xyz), from Discord. Today that usually means working out who did what by hand in a spreadsheet, then a multisig batch outside Discord once enough signers are online, and recipients who need a wallet and gas. With Rolepay, an admin starts a pay run for a role or a list of people, a treasurer approves it with one button, and one transaction pays everyone, with a memo on every line and a CSV for every run. Recipients sign up with a passkey (no wallet, no seed phrase, no gas) or with a wallet they already have on Tempo. The money stays in the community's own Tempo account. The bot holds only a key that the chain itself limits.
 
 <!-- DEMO GIF: docs/img/rolepay-demo.gif -->
 

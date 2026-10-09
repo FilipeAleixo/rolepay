@@ -125,10 +125,10 @@ describe('the home page (/)', () => {
     // What it replaces: today, and with Rolepay, row by row (screen readers hear which column each line is).
     expect(html).toContain('<h2 id="contrast-title" class="sr">Paying people today, and with Rolepay</h2>')
     for (const [was, now] of [
-      ['One wallet send at a time', 'One approval, one transaction for everyone'],
-      ['A spreadsheet to reconcile', 'A receipt for every person, and a CSV for every run'],
+      ['Working out who did what by hand, from Discord into a spreadsheet', 'A role, a reaction or plain words: Rolepay finds the people'],
+      ['A multisig batch outside Discord, once enough signers are online', 'One approval in Discord, one transaction, a receipt for every person'],
       ['Every recipient needs a wallet and gas', 'Recipients need only a passkey, or the wallet they already have'],
-      ['Whoever holds the keys holds all the money', 'The bot can spend only what the chain allows'],
+      ['Regular pay needs someone online to sign it', 'Regular pay runs on its own, within its budget, with time to veto'],
     ]) expect(html).toContain(`<li><p class="was"><span class="sr">Today: </span>${was}</p><p class="now"><span class="sr">With Rolepay: </span>${now}</p></li>`)
     expect(html).toContain('<h2 id="how-title">')
     expect(html).toContain('<h2 id="how-title">How a pay run works</h2>')

@@ -150,10 +150,10 @@ const TRUST: ReadonlyArray<{ icon: IconName; bold: string; muted: string }> = [
  * claims below it have something to answer. Every "with" line is something the product does now.
  */
 const CONTRAST: ReadonlyArray<{ was: string; now: string }> = [
-  { was: 'One wallet send at a time', now: 'One approval, one transaction for everyone' },
-  { was: 'A spreadsheet to reconcile', now: 'A receipt for every person, and a CSV for every run' },
+  { was: 'Working out who did what by hand, from Discord into a spreadsheet', now: 'A role, a reaction or plain words: Rolepay finds the people' },
+  { was: 'A multisig batch outside Discord, once enough signers are online', now: 'One approval in Discord, one transaction, a receipt for every person' },
   { was: 'Every recipient needs a wallet and gas', now: 'Recipients need only a passkey, or the wallet they already have' },
-  { was: 'Whoever holds the keys holds all the money', now: 'The bot can spend only what the chain allows' },
+  { was: 'Regular pay needs someone online to sign it', now: 'Regular pay runs on its own, within its budget, with time to veto' },
 ]
 
 /** The payouts in the product shot. Made-up people. */
