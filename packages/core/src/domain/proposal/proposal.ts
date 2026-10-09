@@ -7,7 +7,7 @@ import { AmountPlanSchema, MetricsSchema, splitPool } from './amounts.js'
 import { CriteriaSchema } from './criteria.js'
 import { amountsIn, parseLooseAmount } from './numbers.js'
 import type { RawMessageProposal } from './raw.js'
-import { type MessageTokenMap, own } from './sources.js'
+import { type MessageTokenMap, detokenize, own } from './sources.js'
 
 /**
  * A pay run proposal: a draft the AI helped write, never a run. Code decides every line from the
@@ -161,6 +161,16 @@ const clean = (text: string, max: number) => {
   return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
 
+/** Why a name typed as plain text ("@Albert", not picked from the list) is not in the proposal, and what to do. */
+export const NAMED_IN_TEXT = "Named in text, not mentioned, so Rolepay can't tell which member this is. Edit the message so they're mentioned (picked from the @ list), then draft again."
+
+/**
+ * "@Albert" with no mention behind it: Discord gave Rolepay no member, only the text. Not a token
+ * ("@U3"), "@role" (a role mention, already replaced), "@everyone" or "@here", and no person
+ * token anywhere in it (then the model's own words say more).
+ */
+const plainName = (text: string) => /^["'“‘]?@(?!(?:U[1-9]\d*|role|everyone|here)\b)[^\s@<>]/.test(text.trim()) && !/(?<!\w)U[1-9]\d*(?!\w)/.test(text)
+
 export type ResolvedMessageProposal = {
   candidates: ProposalLine[]
   held: HeldLine[]
@@ -177,8 +187,9 @@ export type ResolvedMessageProposal = {
  * held when its only source is the recipient's own message, when a source tried to instruct the
  * AI, when no message backs it, when its amount is not stated where the model says it is, or when
  * the person is listed twice. A "split" total must be in the instruction, and code computes the
- * equal split itself (the pool rounding rule). The model's words are cut and stripped of control
- * characters; the view escapes them.
+ * equal split itself (the pool rounding rule). The model's words name people and messages again
+ * (its tokens mapped back, `detokenize`), are cut and stripped of control characters; the view
+ * escapes them.
  */
 export function resolveMessageProposal(
   raw: RawMessageProposal,
@@ -186,16 +197,17 @@ export function resolveMessageProposal(
 ): ResolvedMessageProposal {
   const stated = new Set(amountsIn(ctx.instruction))
   const messageOf = (ref: string) => own(ctx.map.messages, ref.trim())
+  const words = (text: string, max: number) => clean(detokenize(text, ctx.map), max)
   const suspicious: Suspicious[] = []
   const suspiciousRefs = new Set<string>()
   for (const s of raw.ignoredInstructions) {
     const m = messageOf(s.message)
     if (!m || suspiciousRefs.has(m.messageId)) continue
     suspiciousRefs.add(m.messageId)
-    suspicious.push({ channelId: m.channelId, messageId: m.messageId, authorId: m.authorId, summary: clean(s.summary, 300) })
+    suspicious.push({ channelId: m.channelId, messageId: m.messageId, authorId: m.authorId, summary: words(s.summary, 300) })
   }
 
-  const unresolved: Unresolved[] = raw.unresolved.map((u) => ({ text: clean(u.text, 200), why: clean(u.why, 300) }))
+  const unresolved: Unresolved[] = raw.unresolved.map((u) => ({ text: words(u.text, 200), why: plainName(u.text) ? NAMED_IN_TEXT : words(u.why, 300) }))
   const candidates: (ProposalLine & { holds: HoldReason[]; split: boolean; rawAmount: Micros | null })[] = []
   const seen = new Set<string>()
   // Bots and webhooks are never paid, so they are never in a proposal at all (not even as left out).
@@ -204,7 +216,7 @@ export function resolveMessageProposal(
   for (const line of raw.lines) {
     const userId = own(ctx.map.users, line.user.trim().replace(/^@/, ''))
     if (!userId) {
-      unresolved.push({ text: clean(line.reason || line.user, 200), why: 'The AI named someone who is not in the messages.' })
+      unresolved.push({ text: words(line.reason || line.user, 200), why: 'The AI named someone who is not in the messages.' })
       continue
     }
     if (bots.has(userId)) continue
@@ -230,7 +242,7 @@ export function resolveMessageProposal(
       discordUserId: userId,
       amount: amount ?? 0n,
       rawAmount: amount,
-      reason: clean(line.reason, 200) || null,
+      reason: words(line.reason, 200) || null,
       metrics: null,
       sources: sources.map(({ channelId, messageId }) => ({ channelId, messageId })),
       flags,
@@ -262,9 +274,9 @@ export function resolveMessageProposal(
     held: [],
     unregistered,
     unresolved: unresolved.slice(0, 20),
-    assumptions: raw.assumptions.map((a) => clean(a, 300)).filter(Boolean).slice(0, 10),
+    assumptions: raw.assumptions.map((a) => words(a, 300)).filter(Boolean).slice(0, 10),
     suspicious: suspicious.slice(0, 20),
-    note: raw.note ? clean(raw.note, MAX_NOTE_LENGTH) || null : null,
+    note: raw.note ? words(raw.note, MAX_NOTE_LENGTH) || null : null,
   }
   for (const { holds, split: _s, rawAmount, ...line } of candidates) {
     if (holds.length || line.amount <= 0n) out.held.push({ ...line, amount: holds.length ? rawAmount : line.amount, holds: holds.length ? holds : ['amount_unreadable'] })

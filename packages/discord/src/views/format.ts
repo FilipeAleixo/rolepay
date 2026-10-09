@@ -30,3 +30,15 @@ export const COLORS = { pending: 0xf0b232, working: 0x5865f2, paid: 0x23a55a, fa
  * mention, a spoiler or a clickable URL delivered by the bot.
  */
 export const escapeMarkdown = (text: string) => text.replace(/[\\*_~`|>#[\]()<@:-]/g, '\\$&')
+
+/**
+ * The AI's words (reasons, notes, assumptions), escaped like a note except for whole mentions of
+ * a person, a role or a channel. Core put those there in place of the model's tokens, and lets
+ * through only the request's own (`detokenize`); they read as names, and with `NO_PINGS` (and
+ * inside an embed) they ping nobody. Anything else, a partial mention or `@everyone`, is escaped.
+ */
+export const escapeAiText = (text: string) =>
+  text
+    .split(/(<(?:@&?|#)\d{17,20}>)/)
+    .map((part, i) => (i % 2 ? part : escapeMarkdown(part)))
+    .join('')

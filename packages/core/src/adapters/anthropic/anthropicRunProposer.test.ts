@@ -210,6 +210,23 @@ describe('AnthropicRunProposer: the request', () => {
     expect(system).toMatch(/schedule is set apart.*never a filter/)
   })
 
+  // Code maps the tokens back to names (`detokenize`); the prompt keeps the model from explaining them in the first place.
+  it('both modes: the model knows its words are shown to people, names everyone by token, and never talks about tokens', async () => {
+    for (const [answer, call] of [
+      ['message-valid.json', (p: AnthropicRunProposer) => p.fromMessages(MESSAGES)],
+      ['criteria-valid.json', (p: AnthropicRunProposer) => p.fromCriteria(CRITERIA)],
+    ] as const) {
+      const { proposer, sent } = proposerWith(() => json(fixture(answer)))
+      await call(proposer)
+      const system = systemText(sent[0]?.body as Record<string, unknown>)
+      expect(system).toMatch(/shown to the people in the server/)
+      expect(system).toMatch(/Rolepay replaces them with names before anyone reads them\. Never call them tokens or explain this notation\./)
+    }
+    const { proposer, sent } = proposerWith(() => json(fixture('message-valid.json')))
+    await proposer.fromMessages(MESSAGES)
+    expect(systemText(sent[0]?.body as Record<string, unknown>)).toMatch(/plain text \("@Albert".*is not a mention: say in why that it is named in text, not mentioned/)
+  })
+
   it('the union counter counts what the API counts (type arrays, anyOf, oneOf, nested)', () => {
     const nullable = { anyOf: [{ type: 'string' }, { type: 'null' }] }
     const schema = {

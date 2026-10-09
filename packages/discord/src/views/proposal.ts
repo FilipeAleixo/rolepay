@@ -16,7 +16,7 @@ import {
 } from '@rolepay/core'
 import { type ActionRow, type Button, ButtonStyle, ComponentType, type Embed, type Message, type Modal, TextInputStyle } from '../api.js'
 import { type ProposalAction, encodeProposalId, encodeProposalModalId } from '../components/customId.js'
-import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'
+import { COLORS, NO_PINGS, count, escapeAiText, escapeMarkdown, mention, money, relativeTime, roleMention } from './format.js'
 
 /**
  * The proposal, for the person who asked (an ephemeral message): what the AI understood, one
@@ -69,9 +69,9 @@ function metricsText(l: Pick<ProposalLine, 'metrics'>): string | null {
   return parts.length ? parts.join(', ') : null
 }
 
-/** Why this person: the AI's words (message mode, escaped) or the counts (criteria mode), and a link to the source. */
+/** Why this person: the AI's words (message mode, escaped, people as mentions) or the counts (criteria mode), and a link to the source. */
 function why(p: Proposal, l: Pick<ProposalLine, 'reason' | 'metrics' | 'sources'>): string {
-  const reason = l.reason ? escapeMarkdown(l.reason) : metricsText(l)
+  const reason = l.reason ? escapeAiText(l.reason) : metricsText(l)
   const source = l.sources[0] ? `[source](${messageLink(p.communityId, l.sources[0].channelId, l.sources[0].messageId)})` : null
   return [reason, source].filter(Boolean).join(' · ')
 }
@@ -147,7 +147,7 @@ function header(p: Proposal): string[] {
     out.push(`**From:** ${what} in <#${p.source.channelId}>.`)
   }
   out.push(`**Instruction:** ${escapeMarkdown(clip(p.instruction, 300))}`)
-  if (p.note) out.push(`**Note on the run:** ${escapeMarkdown(p.note)}`)
+  if (p.note) out.push(`**Note on the run:** ${escapeAiText(p.note)}`)
   // Many exclusions or overrides could make the criteria long: each part has a bound.
   return out.map((x) => clip(x, 900))
 }
@@ -194,12 +194,12 @@ function fields(p: Proposal): NonNullable<Embed['fields']> {
     p.unregistered.map((u) => `${mention(u.discordUserId)}${u.amount !== null && u.amount > 0n ? ` (${money(u.amount, p.token)})` : ''}${metricsText(u) ? `: ${metricsText(u)}` : ''}`),
     'They register with `/payee link`, then propose again.',
   )
-  list('Could not resolve', p.unresolved.map((u) => `"${escapeMarkdown(u.text)}": ${escapeMarkdown(u.why)}`))
+  list('Could not resolve', p.unresolved.map((u) => `"${escapeAiText(u.text)}": ${escapeAiText(u.why)}`))
   list(
     'Ignored instructions in messages',
-    p.suspicious.map((s) => `[A message](${messageLink(p.communityId, s.channelId, s.messageId)}) by ${mention(s.authorId)}: ${escapeMarkdown(s.summary)}`),
+    p.suspicious.map((s) => `[A message](${messageLink(p.communityId, s.channelId, s.messageId)}) by ${mention(s.authorId)}: ${escapeAiText(s.summary)}`),
   )
-  list('Assumptions', p.assumptions.map((a) => `• ${escapeMarkdown(a)}`))
+  list('Assumptions', p.assumptions.map((a) => `• ${escapeAiText(a)}`))
   // With only self-sourced lines the description says what to do instead of "Edit adds people".
   const problems = onlySelfSourced(p) ? p.problems.filter((x) => x !== 'no_lines') : p.problems
   list('Check before creating', problems.map((x) => `${blockingProblems({ problems: [x] }).length ? '⛔' : '⚠️'} ${PROBLEMS[x]}`))

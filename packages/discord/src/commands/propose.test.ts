@@ -107,6 +107,34 @@ describe('Apps > Draft pay run with AI (the message command)', () => {
     expect(body(d5).data?.content).toMatch(/no Anthropic API key/)
   })
 
+  it('winners typed as plain text ("@Albert", not mentions): the proposal says so in plain words, never in the AI\'s tokens', async () => {
+    const a = await ready()
+    const post = wireMessage({ channelId: CHANNEL, authorId: TREASURER, at: ago(3), content: 'Winners this week: @Albert (docs search), @Trimtab (onboarding guide)' })
+    // What the model answered on the testnet demo, word for word.
+    const why = 'Named as a winner in M1 by name only, not by a U token, so it cannot be matched to a person.'
+    a.proposer.onMessages = () => ({
+      lines: [],
+      splitTotal: null,
+      note: null,
+      unresolved: [
+        { text: '@Albert', why },
+        { text: '@Trimtab', why },
+      ],
+      assumptions: ['The winners are the two people named in M1, but neither has a U token so no payment lines were drafted.', 'Two payments of 20 AlphaUSD would total 40, within the 50 AlphaUSD limit.'],
+      ignoredInstructions: [],
+    })
+    await a.send(messageCommand(SCOPE, 'Draft pay run with AI', post, treasurer))
+    await a.send(modalSubmit(SCOPE, `proposal-modal:instruct:${post.id}`, { instruction: 'pay each of the winners 20 AlphaUSD' }, treasurer, { token: 'tok-plain' }))
+    const shown = a.rest.lastEdit('tok-plain')
+    const fields = Object.fromEntries((shown?.embeds?.[0]?.fields ?? []).map((f) => [f.name, f.value]))
+    const fix = "Named in text, not mentioned, so Rolepay can't tell which member this is. Edit the message so they're mentioned \\(picked from the \\@ list\\), then draft again."
+    expect(fields['Could not resolve']).toBe([`"\\@Albert": ${fix}`, `"\\@Trimtab": ${fix}`].join('\n'))
+    expect(fields.Assumptions).toBe(
+      ['• The winners are the two people named in the message, but neither has a mention so no payment lines were drafted.', '• Two payments of 20 AlphaUSD would total 40, within the 50 AlphaUSD limit.'].join('\n'),
+    )
+    expect(text(shown)).not.toMatch(/\b[UM]\d+\b|U token/)
+  })
+
   it('a message without text is refused before the modal', async () => {
     const a = await ready()
     const d = await a.send(messageCommand(SCOPE, 'Draft pay run with AI', { ...WINNERS, content: '' }, treasurer))

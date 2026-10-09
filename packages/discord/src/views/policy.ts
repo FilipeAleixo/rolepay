@@ -13,7 +13,7 @@ import {
 } from '@rolepay/core'
 import { type ActionRow, ButtonStyle, ComponentType, type Embed, type Message, MessageFlags } from '../api.js'
 import { encodePolicyButton } from '../components/customId.js'
-import { COLORS, NO_PINGS, count, escapeMarkdown, mention, money, roleMention } from './format.js'
+import { COLORS, NO_PINGS, count, escapeAiText, escapeMarkdown, mention, money, roleMention } from './format.js'
 
 export type PolicyViewContext = {
   /** The community's payout token, for amounts. */
@@ -170,7 +170,7 @@ export function policyMessage(p: Policy, ctx: PolicyViewContext & { preview?: Po
     fields.push({ name: 'The next run so far', value: `${money(pv.total, ctx.token)} for ${count(payable.length, 'person', 'people')} so far, counting since <t:${unix(pv.window.start)}:f>. ${left}` })
     if (pv.problems.length) fields.push({ name: 'Look first', value: cut(pv.problems.map((x) => `• ${PROBLEM_WORDS[x] ?? x}`).join('\n')) })
   } else if (ctx.previewProblem) fields.push({ name: 'Who it applies to right now', value: cut(ctx.previewProblem) })
-  if (p.compiled.assumptions.length) fields.push({ name: 'The AI assumed', value: cut(p.compiled.assumptions.map((a) => `• ${escapeMarkdown(a)}`).join('\n')) })
+  if (p.compiled.assumptions.length) fields.push({ name: 'The AI assumed', value: cut(p.compiled.assumptions.map((a) => `• ${escapeAiText(a)}`).join('\n')) })
   if (ctx.budget) fields.push({ name: 'Budget', value: budgetLine(ctx.budget, ctx.token) })
   fields.push({ name: 'Status', value: statusLine(p, ctx) })
   const embed: Embed = {
