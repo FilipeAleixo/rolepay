@@ -9,9 +9,11 @@ on:
 permissions:
   contents: read
 
+# Other branches cancel a run a newer push replaces; every commit on main runs to the end, so the
+# README's badge reflects a finished run, never a cancelled one.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.sha || 'latest' }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   test:
