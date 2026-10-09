@@ -1,40 +1,26 @@
 import React from 'react'
-import { AbsoluteFill, Img, staticFile, useCurrentFrame, useVideoConfig } from 'remotion'
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from 'remotion'
 import { SANS, SERIF } from '../fonts'
-import { EASE_IN, enter, mix, progress } from '../motion'
-import { C, SAFE, sec, white } from '../theme'
-import { Ground } from './Ground'
-import { LowerThird } from './Overlays'
+import { enter } from '../motion'
+import { C, sec, white } from '../theme'
 import { RichText } from './RichText'
 import { Scene } from './Scene'
-import { hasAsset } from './Slot'
 
 /**
- * What a camera slot shows when only its voice-over was recorded: the opening (the frame line and
- * the name, over a still portrait when there is one), or the points its camera overlay carries.
- * Lines use RichText: *words* in gold, `words` in monospace.
+ * What a camera slot shows when only its voice-over was recorded: the points its camera overlay
+ * carries, under its title. Lines use RichText: *words* in gold, `words` in monospace.
  */
-export type VoiceCardContent =
-  | {
-      kind: 'opening'
-      line: string
-      /** A still in video/assets/ under this base name (".jpg", ".jpeg" or ".png"), shown behind the text. */
-      portrait?: string
-    }
-  | { kind: 'points'; title: string; points: readonly string[] }
-
-const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png'] as const
-
-/** The portrait's file, if one of its extensions is in video/assets/. */
-const imageFile = (base: string | undefined) => (base ? (IMAGE_EXTENSIONS.map((e) => base + e).find(hasAsset) ?? null) : null)
+export type VoiceCardContent = { kind: 'points'; title: string; points: readonly string[] }
 
 /**
  * A full-frame card for the length of the voice-over (the slot is as long as the speech). The
  * points arrive one after another across the speech, so each lands about when it is said, and the
- * card fades out over its last frames like every scene.
+ * text clears just before the card ends, so the cut to the next item never shows both.
  */
-export const VoiceCard: React.FC<{ content: VoiceCardContent }> = ({ content }) =>
-  content.kind === 'opening' ? <Opening line={content.line} portrait={imageFile(content.portrait)} /> : <Points title={content.title} points={content.points} />
+export const VoiceCard: React.FC<{ content: VoiceCardContent }> = ({ content }) => <Points title={content.title} points={content.points} />
+
+/** The card's text is gone this long before its end, so the crossfade into the next item is clean. */
+export const CLEAR_BY = 8
 
 /** When each of `count` points arrives in a card `duration` frames long: evenly over the speech, the last one well before the end. */
 const arrivals = (count: number, duration: number) => {
@@ -49,7 +35,7 @@ const Points: React.FC<{ title: string; points: readonly string[] }> = ({ title,
   const { durationInFrames } = useVideoConfig()
   const at = arrivals(points.length, durationInFrames)
   return (
-    <Scene kicker={title}>
+    <Scene kicker={title} exitFrames={14} clearBy={CLEAR_BY}>
       <AbsoluteFill style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 1320 }}>
           {points.map((p, i) => (
@@ -75,64 +61,5 @@ const Points: React.FC<{ title: string; points: readonly string[] }> = ({ title,
         </div>
       </AbsoluteFill>
     </Scene>
-  )
-}
-
-/**
- * The opening: the frame line, large, on the left, and the name lower third once the speech has
- * started. Behind them the ink ground, or the portrait, slowly pushed in and darkened on the left
- * where the text sits.
- */
-const Opening: React.FC<{ line: string; portrait: string | null }> = ({ line, portrait }) => {
-  const frame = useCurrentFrame()
-  const { durationInFrames } = useVideoConfig()
-  const out = 1 - progress(frame, durationInFrames - 12, 12, EASE_IN)
-  const nameAt = Math.min(sec(3.5), Math.max(sec(1.2), Math.round(durationInFrames * 0.22)))
-  return (
-    <AbsoluteFill style={{ backgroundColor: C.ink }}>
-      {portrait ? <Portrait file={portrait} /> : <Ground />}
-      <AbsoluteFill style={{ opacity: out }}>
-        <div style={{ position: 'absolute', left: SAFE.x, top: 0, bottom: 300, width: 1320, display: 'flex', alignItems: 'center' }}>
-          <div
-            style={{
-              ...enter(frame, sec(0.5), { duration: 28, distance: 16 }),
-              font: `400 84px/1.18 ${SERIF}`,
-              color: C.head,
-              letterSpacing: '-0.014em',
-              textWrap: 'balance',
-              textShadow: portrait ? '0 2px 28px rgba(0,0,0,0.55)' : 'none',
-            }}
-          >
-            <RichText text={line} />
-          </div>
-        </div>
-        <LowerThird from={nameAt} to={durationInFrames + 24} />
-      </AbsoluteFill>
-    </AbsoluteFill>
-  )
-}
-
-/** A still, pushed in a little over the card's length, and darkened so the text always reads. */
-const Portrait: React.FC<{ file: string }> = ({ file }) => {
-  const frame = useCurrentFrame()
-  const { durationInFrames } = useVideoConfig()
-  const t = progress(frame, 0, durationInFrames, (x) => x)
-  return (
-    <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: C.ink }}>
-      <Img
-        src={staticFile(file)}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'cover',
-          objectPosition: 'center 35%',
-          transform: `scale(${mix(t, 1.04, 1.12)}) translateX(${mix(t, 0, -14)}px)`,
-          filter: 'saturate(0.82)',
-        }}
-      />
-      <AbsoluteFill style={{ background: 'rgba(8, 9, 11, 0.42)' }} />
-      <AbsoluteFill style={{ background: 'linear-gradient(90deg, rgba(8,9,11,0.90) 0%, rgba(8,9,11,0.70) 42%, rgba(8,9,11,0.20) 100%)' }} />
-      <AbsoluteFill style={{ background: 'linear-gradient(0deg, rgba(8,9,11,0.55) 0%, transparent 40%)' }} />
-    </AbsoluteFill>
   )
 }
