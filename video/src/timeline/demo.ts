@@ -23,11 +23,12 @@ export const DEMO: Item[] = [
     kind: 'screen',
     label: 'Setup and the treasury passkey',
     note: '/rolepay setup, then the setup page: the treasury created with a passkey, funded, the bot key authorised.',
-    seconds: 12,
+    seconds: 12.5,
     captions: [
-      { at: 0.5, until: 4, text: '`/rolepay setup` names the approver role' },
-      { at: 4.5, until: 8, text: 'The treasurer creates the *treasury* with a passkey' },
-      { at: 8.5, until: 11.5, text: 'The bot gets an *access key*: an expiry, a limit, one call' },
+      { at: 0.3, until: 2.2, text: 'Add Rolepay to *your server*' },
+      { at: 2.45, until: 5.6, text: '`/rolepay setup` names the approver role' },
+      { at: 5.9, until: 8.85, text: 'The treasurer creates the *treasury* with a passkey' },
+      { at: 9.1, until: 12.1, text: 'The bot gets an *access key*: an expiry, a limit, one call' },
     ],
   },
   // What that access key can and cannot do.
