@@ -121,11 +121,11 @@ export const DEMO: Item[] = [
     file: 'demo-8-funding.mp4',
     kind: 'screen',
     label: 'Funding',
-    note: '/rolepay fund new for a source, its deposit address, then a deposit arriving on the dashboard\'s Funding page under that source.',
+    note: "/rolepay fund new and its deposit address, a payee's account sending 1 AlphaUSD to it, then the dashboard's Funding page: the month's total and the deposit under its source.",
     seconds: 10,
     captions: [
-      { at: 0.5, until: 4.5, text: '`/rolepay fund new`: a *deposit address* for each source' },
-      { at: 5, until: 9.5, text: 'A deposit lands in the treasury, *attributed* to its source' },
+      { at: 0.3, until: 2.85, text: '`/rolepay fund new`: a *deposit address* for each source' },
+      { at: 3.2, until: 9.7, text: 'A deposit lands in the treasury, *attributed* to its source' },
     ],
   },
   {
