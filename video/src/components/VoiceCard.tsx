@@ -36,17 +36,17 @@ export const VoiceCard: React.FC<{ content: VoiceCardContent }> = ({ content }) 
     <Points title={content.title} points={content.points} photo={content.photo && hasAsset(content.photo) ? content.photo : null} links={content.links ?? []} />
   )
 
-/** A chapter card: the step, a large title, the line, and where the recording that follows was made. */
+/** A chapter card: the step, a large title, the line, and where the recording that follows was made. Its text waits for the crossfade in to end, so it never sits over the clip before it. */
 const Chapter: React.FC<{ step: number; of: number; title: string; line: string; where: string }> = ({ step, of, title, line, where }) => {
   const frame = useCurrentFrame()
   return (
     <Scene kicker={`Step ${step} of ${of}`} exitFrames={12} clearBy={CLEAR_BY}>
       <AbsoluteFill style={{ justifyContent: 'center', paddingLeft: 230, paddingRight: 230 }}>
-        <div style={{ ...enter(frame, 4, { duration: 22, distance: 16 }), font: `400 92px/1.1 ${SERIF}`, color: C.head, letterSpacing: '-0.015em' }}>{title}</div>
-        <div style={{ ...enter(frame, 12, { duration: 22, distance: 12 }), marginTop: 34, maxWidth: 1300, font: `400 40px/1.45 ${SANS}`, color: C.soft, textWrap: 'pretty' }}>
+        <div style={{ ...enter(frame, 12, { duration: 22, distance: 16 }), font: `400 92px/1.1 ${SERIF}`, color: C.head, letterSpacing: '-0.015em' }}>{title}</div>
+        <div style={{ ...enter(frame, 20, { duration: 22, distance: 12 }), marginTop: 34, maxWidth: 1300, font: `400 40px/1.45 ${SANS}`, color: C.soft, textWrap: 'pretty' }}>
           <RichText text={line} />
         </div>
-        <div style={{ ...enter(frame, 20, { duration: 22, distance: 10 }), marginTop: 44, font: `500 24px/1 ${SANS}`, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.periwinkle }}>
+        <div style={{ ...enter(frame, 28, { duration: 22, distance: 10 }), marginTop: 44, font: `500 24px/1 ${SANS}`, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.periwinkle }}>
           {where}
         </div>
       </AbsoluteFill>
