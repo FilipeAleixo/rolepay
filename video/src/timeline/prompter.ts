@@ -13,7 +13,7 @@ export type PrompterLine = string | readonly PrompterCue[]
 
 export const PROMPTER_LINES: Record<string, PrompterLine> = {
   'pitch-1-problem':
-    "I'm Filipe. Rolepay pays the people who run a Discord community, in stablecoins on Tempo. Today, that's a spreadsheet, then a multisig, once enough signers are online. With Rolepay, the list comes from Discord, one approval pays everyone, and regular pay runs itself. It's live on mainnet.",
+    "Hey there, I'm Filipe. I built Rolepay for the World's Fair: it pays the people who run a Discord community, in stablecoins on Tempo. Today, that's a spreadsheet, then a multisig, once enough signers are online. With Rolepay, the list comes from Discord, one approval pays everyone, and regular pay runs itself. It's live on mainnet.",
   // Timed to the slow cut's three beats (pitch-2-demo.mp4: 0, 7.2 and 16.2 s), so the words land on what they describe.
   'pitch-2-demo': [
     { at: 0, text: 'Here it is, on mainnet. One command builds a pay run.' },
@@ -24,7 +24,7 @@ export const PROMPTER_LINES: Record<string, PrompterLine> = {
     "The treasury is the community's own account, and its root key is the treasurer's passkey. On Tempo, the bot's spending key is part of that account: it expires, it's capped, and it can make one kind of transfer. Inside the cap, a batch pays everyone. Over it, the chain refuses the whole batch. So one passkey and a capped bot give a small community a multisig's guardrails.",
   'pitch-vo-why-tempo': "Everything here is in Tempo's protocol, from the access keys to the stablecoin exchange.",
   'pitch-4-why-me':
-    "About me: I'm from Lisbon, a software engineer, and the founder of Soulform, an AI startup. I've been building in crypto since 2021, and won two hackathon prizes with it: a Gitcoin prize for Discord and Ethereum authentication, and second place for Enzyme's prize at ETHOnline. The money was never the hard part. Knowing who did the work was, and Rolepay builds that list from Discord.",
+    "About me: I'm from Lisbon, a software engineer. From 2021 to 2025 I worked on DeFi protocols: Olympus DAO, Concave Finance, and Fjord Foundry. Now I'm the founder of Soulform, an AI startup. In 2021 I also won two hackathon prizes: a Gitcoin prize for Discord and Ethereum authentication, and an Enzyme Finance prize at ETHOnline. The code for both is on my GitHub.",
   'pitch-5-business': 'The core is open source: anyone can audit it or run their own. The business is the hosted bot, one per community.',
   'pitch-6-go-to-market': 'Crypto communities first: they already hold stablecoins and pay contributors every month. Then creators, then gaming. I start with the builders here.',
   'pitch-7-status':
