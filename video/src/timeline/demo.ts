@@ -93,11 +93,11 @@ export const DEMO: Item[] = [
     file: 'demo-6-policy-budget.mp4',
     kind: 'screen',
     label: "The policy's own budget",
-    note: "Give the Judges policy its own budget on the treasury page (one passkey prompt), then the policy's dashboard page with its budget bar.",
+    note: "/rolepay policy show's Budget (shared), Give this policy its own budget, the treasury page's limits and one passkey prompt, then the same field reading Own budget, chain-enforced.",
     seconds: 10,
     captions: [
-      { at: 0.5, until: 4.5, text: 'Give the Judges policy *its own budget*: one passkey prompt' },
-      { at: 5, until: 9.5, text: 'Its page draws that budget *from the chain*' },
+      { at: 0.3, until: 5.95, text: 'Give a policy *its own budget*: one passkey prompt' },
+      { at: 6.35, until: 9.7, text: 'Its limit is enforced *by the chain*, not by the bot' },
     ],
   },
   // What a key per policy buys: the chain caps each one on its own.
