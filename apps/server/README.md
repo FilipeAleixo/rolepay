@@ -156,7 +156,7 @@ On the hosted testnet demo (`https://demo.rolepay.app`, `fly.demo.toml`) one sta
    > **Welcome, judges.** Rolepay pays the people who run a Discord community, in stablecoins on Tempo. Try it as a recipient, here on the testnet (test dollars only). It takes about two minutes, and you are paid at the next daily run:
    >
    > 1. Type `/payee link` in this channel. Only you see the reply.
-   > 2. Open the link and press **Create my passkey**. That is your Tempo account: no wallet, no seed phrase, no gas.
+   > 2. Open the link and press **Create my passkey**. That is your Tempo account: no wallet, no seed phrase, and nothing to pay on the demo.
    > 3. React ✅ to this message.
    >
    > Every day at 16:00 UTC a standing policy pays 1 AlphaUSD to everyone who has done all three and has never been paid here, in one batched transaction, posted in #payouts. Nobody needs to be online: the rule was written once, approved by a person, and runs as code within the bot key's on-chain limit. You get a DM receipt with the transaction if your privacy settings for this server allow direct messages from server members; the payment lands either way. You are paid once.

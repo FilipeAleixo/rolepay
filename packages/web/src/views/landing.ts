@@ -52,7 +52,7 @@ const icon = (name: IconName, size: number) =>
 const STEPS: ReadonlyArray<{ title: string; line: string }> = [
   { title: 'The community opens its own account', line: 'A treasurer creates it on Tempo with a passkey. The money stays there; Rolepay never holds it.' },
   { title: 'The bot gets an allowance', line: 'You choose how much it may spend each month, and until when. Tempo holds it to that, whatever happens to the bot.' },
-  { title: 'You say who to pay', line: 'Pick a role or a list of people, or describe them in plain words. You see every name and amount before anything moves.' },
+  { title: 'You say who to pay', line: 'Pick a role or a list of people, or describe them in plain words to the AI. You see every name and amount before anything moves.' },
   { title: 'One approval pays everyone', line: 'One transaction, a memo on every line, a receipt in Discord for each person. Regular pay can run on its own, with time to stop each run.' },
 ]
 
@@ -226,7 +226,7 @@ export function landingPage(opts: { testnet: boolean; discordAppId?: string | un
 <main class="home">
 <section class="hero" aria-labelledby="hero-title"><div class="copy">${opts.testnet ? '<p class="badge"><span class="testnet">Testnet demo</span></p>' : ''}
 <h1 id="hero-title">Pay the people who run your community.</h1>
-<p class="sub">Pick a role, name the people, or describe them in plain words. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.</p>
+<p class="sub">Pick a role, name the people, or describe them in plain words to the AI. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.</p>
 ${invite ? `<p class="actions pair">${hero}</p>${hint}<p class="down"><a class="more" href="#how">How it works</a></p>` : `<p class="actions">${hero}<a class="more" href="#how">How it works</a></p>`}</div>
 ${productShot()}</section>
 <section class="contrast" aria-labelledby="contrast-title"><h2 id="contrast-title" class="sr">Paying people today, and with Rolepay</h2><p class="cols" aria-hidden="true"><span>Today</span><span>With Rolepay</span></p><ul>${CONTRAST.map((r) => `<li><p class="was"><span class="sr">Today: </span>${esc(r.was)}</p><p class="now"><span class="sr">With Rolepay: </span>${esc(r.now)}</p></li>`).join('')}</ul></section>

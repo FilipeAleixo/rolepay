@@ -30,7 +30,7 @@ const items = (html: string) => [...html.matchAll(/<li>([\s\S]*?)<\/li>/g)].map(
 const STEPS = [
   ['The community opens its own account', 'A treasurer creates it on Tempo with a passkey. The money stays there; Rolepay never holds it.'],
   ['The bot gets an allowance', 'You choose how much it may spend each month, and until when. Tempo holds it to that, whatever happens to the bot.'],
-  ['You say who to pay', 'Pick a role or a list of people, or describe them in plain words. You see every name and amount before anything moves.'],
+  ['You say who to pay', 'Pick a role or a list of people, or describe them in plain words to the AI. You see every name and amount before anything moves.'],
   ['One approval pays everyone', 'One transaction, a memo on every line, a receipt in Discord for each person. Regular pay can run on its own, with time to stop each run.'],
 ] as const
 
@@ -82,7 +82,7 @@ describe('the home page (/)', () => {
     const html = await res.text()
     const t = text(html)
     expect(html).toContain('<h1 id="hero-title">Pay the people who run your community.</h1>')
-    expect(t).toContain("Pick a role, name the people, or describe them in plain words. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.")
+    expect(t).toContain("Pick a role, name the people, or describe them in plain words to the AI. A treasurer approves, and one transaction on Tempo pays them all from your community's own account.")
     expect(html).toContain('<meta name="description" content="Pay the people who run your community, from Discord, in stablecoins on Tempo.">')
     // The product shot: one image to assistive tech. The three ways to say who to pay, the run in Discord, paid, and the allowance on the dashboard with its on-chain limit.
     expect(hero(html)).toContain('<div class="shot" role="img" aria-label="The three ways to say who to pay: a role, people you pick, or plain words that Rolepay\'s AI drafts into a list; the pay run in Discord, paid in one transaction; and on the dashboard, the bot\'s allowance for the month with its on-chain limit">')
