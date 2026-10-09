@@ -80,12 +80,12 @@ export const DEMO: Item[] = [
     file: 'demo-5-policy.mp4',
     kind: 'screen',
     label: 'A policy on autopilot',
-    note: '/rolepay policy new, the preview of who it applies to, Approve, autopilot with the veto window, then paid.',
+    note: '/rolepay policy new and its draft, who it applies to and Approve policy in #treasury, autopilot with a one-minute veto window, then the same run paid a minute later.',
     seconds: 13,
     captions: [
-      { at: 0.5, until: 4, text: 'A standing rule in plain words: `/rolepay policy new`' },
-      { at: 4.5, until: 8, text: 'It shows *who it applies to* before anyone approves' },
-      { at: 8.5, until: 12.5, text: 'On autopilot: a *veto window*, then it pays itself' },
+      { at: 0.3, until: 3.75, text: 'A standing rule in plain words: `/rolepay policy new`' },
+      { at: 4.1, until: 6.55, text: 'It shows *who it applies to* before anyone approves' },
+      { at: 6.9, until: 12.65, text: 'On autopilot: a *veto window*, then it pays itself' },
     ],
   },
   {
