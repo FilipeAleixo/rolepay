@@ -25,7 +25,6 @@ packages/core        @rolepay/core: domain, ports, services, adapters
 packages/discord     @rolepay/discord: the Discord adapter over HTTP interactions
 packages/web         @rolepay/web: the claim and treasurer setup pages, WebAuthn ceremonies, the client bundle, the web dashboard
 apps/server          @rolepay/server: Hono on Node, the composition root (README: how to run it)
-docs/tempo           Tempo and viem docs snapshot from the spike
 docs/ARCHITECTURE.md this file
 docs/THREAT-MODEL.md assets, actors, trust boundaries, threats and mitigations
 ```
@@ -344,7 +343,7 @@ Error codes: `policy_not_found`, `not_permitted`, `community_not_found`, `policy
 
 ## Funding with attribution (deposit addresses)
 
-**Every funder gets its own address; the money lands in the treasury itself.** Tempo's T3 upgrade added virtual addresses for TIP-20 (TIP-1022, snapshot in `docs/tempo/tip-1022.md`, guide and overview beside it). An account registers once as a *master* and gets a 4-byte masterId. Any address of the form `[masterId][fdfdfdfdfdfdfdfdfdfd][6-byte userTag]` is then a deposit address of that account: a TIP-20 transfer (or mint) to it is credited by the token precompile to the master, inside the same call, and the virtual address never holds a balance. There is no sweep transaction and no account state per address. Rolepay registers the treasury once and derives one deposit address per named funding source off chain ("Q4 bounty sponsor: Acme DAO", "Judges pool"). It is off by default: a community that never sets it up has no master, and the watcher reads nothing for it.
+**Every funder gets its own address; the money lands in the treasury itself.** Tempo's T3 upgrade added virtual addresses for TIP-20 ([TIP-1022](https://tempo.xyz/developers/docs/protocol/tips/tip-1022), with Tempo's [guide](https://tempo.xyz/developers/docs/guide/payments/virtual-addresses) and [overview](https://tempo.xyz/developers/docs/protocol/tip20/virtual-addresses)). An account registers once as a *master* and gets a 4-byte masterId. Any address of the form `[masterId][fdfdfdfdfdfdfdfdfdfd][6-byte userTag]` is then a deposit address of that account: a TIP-20 transfer (or mint) to it is credited by the token precompile to the master, inside the same call, and the virtual address never holds a balance. There is no sweep transaction and no account state per address. Rolepay registers the treasury once and derives one deposit address per named funding source off chain ("Q4 bounty sponsor: Acme DAO", "Judges pool"). It is off by default: a community that never sets it up has no master, and the watcher reads nothing for it.
 
 **Registration, on the treasury page, one passkey prompt.** The registry precompile (`0xfdc0...`) computes `keccak256(treasury || salt)` and accepts a salt only if the first 4 bytes are zero (a 32-bit proof of work, so nobody can cheaply land on someone else's masterId); bytes 4 to 8 are the masterId. The page:
 

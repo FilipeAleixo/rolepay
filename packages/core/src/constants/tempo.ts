@@ -24,7 +24,7 @@ export type NetworkName = keyof typeof NETWORKS
 export const NETWORK_NAMES = Object.keys(NETWORKS) as NetworkName[]
 export type Network = (typeof NETWORKS)[NetworkName]
 
-/** Testnet stablecoins the Moderato faucet funds (docs/tempo/quickstart_faucet.md). 6 decimals. */
+/** Testnet stablecoins the Moderato faucet funds (https://tempo.xyz/developers/docs/quickstart/faucet). 6 decimals. */
 export const TESTNET_TOKENS = {
   path_usd: '0x20c0000000000000000000000000000000000000',
   alpha_usd: '0x20c0000000000000000000000000000000000001',
@@ -91,7 +91,7 @@ export const KEYCHAIN_ADDRESS = '0xaaaaaaaa00000000000000000000000000000000'
 
 /**
  * TIP-1022 virtual addresses (T3): the registry precompile, lowercase, and the 10-byte marker that
- * fills bytes 4 to 14 of every virtual address (docs/tempo/tip-1022.md).
+ * fills bytes 4 to 14 of every virtual address (https://tempo.xyz/developers/docs/protocol/tips/tip-1022).
  */
 export const ADDRESS_REGISTRY = '0xfdc0000000000000000000000000000000000000'
 export const VIRTUAL_MAGIC = 'fdfdfdfdfdfdfdfdfdfd'

@@ -11,8 +11,9 @@ export const PAYRUN_CAPTIONS: CaptionCue[] = [
 /**
  * The demo (planned 2:56, hard limit 3:00): screen recordings of the live product with captions,
  * and the explainer scenes where they explain what the recording shows. Captions are timed in
- * seconds from the start of their clip; SCRIPT.md says what to click so they line up. The slots are
- * tight: trim each recording to its planned length, or the studio's corner warning appears.
+ * seconds from the start of their clip; each slot's `note` says what its recording shows, so time
+ * the clicks to its captions (or move `at` and `until` to fit the take). The slots are tight: trim
+ * each recording to its planned length, or the studio's corner warning appears.
  */
 export const DEMO: Item[] = [
   { type: 'scene', scene: 'title' },
