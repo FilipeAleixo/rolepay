@@ -11,7 +11,8 @@ import { hasAsset } from './Slot'
  * What a camera slot shows when only its voice-over was recorded: the points its camera overlay
  * carries, under its title. Lines use RichText: *words* in gold, `words` in monospace.
  */
-export type VoiceCardContent = {
+export type VoiceCardContent =
+  | {
   kind: 'points'
   title: string
   points: readonly string[]
@@ -20,15 +21,38 @@ export type VoiceCardContent = {
   /** Short lines under the photo, such as profile addresses. */
   links?: readonly string[]
 }
+  /** A chapter of the demo: which step it is, its title, one line on what follows, and where it was recorded. */
+  | { kind: 'chapter'; step: number; of: number; title: string; line: string; where: string }
 
 /**
  * A full-frame card for the length of the voice-over (the slot is as long as the speech). The
  * points arrive one after another across the speech, so each lands about when it is said, and the
  * text clears just before the card ends, so the cut to the next item never shows both.
  */
-export const VoiceCard: React.FC<{ content: VoiceCardContent }> = ({ content }) => (
-  <Points title={content.title} points={content.points} photo={content.photo && hasAsset(content.photo) ? content.photo : null} links={content.links ?? []} />
-)
+export const VoiceCard: React.FC<{ content: VoiceCardContent }> = ({ content }) =>
+  content.kind === 'chapter' ? (
+    <Chapter {...content} />
+  ) : (
+    <Points title={content.title} points={content.points} photo={content.photo && hasAsset(content.photo) ? content.photo : null} links={content.links ?? []} />
+  )
+
+/** A chapter card: the step, a large title, the line, and where the recording that follows was made. */
+const Chapter: React.FC<{ step: number; of: number; title: string; line: string; where: string }> = ({ step, of, title, line, where }) => {
+  const frame = useCurrentFrame()
+  return (
+    <Scene kicker={`Step ${step} of ${of}`} exitFrames={12} clearBy={CLEAR_BY}>
+      <AbsoluteFill style={{ justifyContent: 'center', paddingLeft: 230, paddingRight: 230 }}>
+        <div style={{ ...enter(frame, 4, { duration: 22, distance: 16 }), font: `400 92px/1.1 ${SERIF}`, color: C.head, letterSpacing: '-0.015em' }}>{title}</div>
+        <div style={{ ...enter(frame, 12, { duration: 22, distance: 12 }), marginTop: 34, maxWidth: 1300, font: `400 40px/1.45 ${SANS}`, color: C.soft, textWrap: 'pretty' }}>
+          <RichText text={line} />
+        </div>
+        <div style={{ ...enter(frame, 20, { duration: 22, distance: 10 }), marginTop: 44, font: `500 24px/1 ${SANS}`, letterSpacing: '0.14em', textTransform: 'uppercase', color: C.periwinkle }}>
+          {where}
+        </div>
+      </AbsoluteFill>
+    </Scene>
+  )
+}
 
 /** The card's text is gone this long before its end, so the crossfade into the next item is clean. */
 export const CLEAR_BY = 8

@@ -26,6 +26,15 @@ export const DEMO: Item[] = [
   // The community's own account and a capped bot key: what every run below stands on.
   {
     type: 'slot',
+    file: 'demo-chapter-1.mp4',
+    kind: 'screen',
+    label: 'Step 1: Set up in a minute',
+    note: 'A chapter card before the recording.',
+    seconds: 4,
+    card: { kind: 'chapter', step: 1, of: 5, title: 'Set up in a minute', line: "The community's own Tempo account, made with a passkey, and a bot with a *capped key*.", where: 'Recorded on the testnet demo' },
+  },
+  {
+    type: 'slot',
     file: 'demo-1-setup.mp4',
     kind: 'screen',
     label: 'Setup and the treasury passkey',
@@ -39,6 +48,15 @@ export const DEMO: Item[] = [
     ],
   },
   // "A role, a reaction or plain words: Rolepay finds the people"
+  {
+    type: 'slot',
+    file: 'demo-chapter-2.mp4',
+    kind: 'screen',
+    label: 'Step 2: Find who to pay',
+    note: 'A chapter card before the recording.',
+    seconds: 4,
+    card: { kind: 'chapter', step: 2, of: 5, title: 'Find who to pay', line: 'Right-click a message to pay its author, or let the AI draft a run from a *winners post*.', where: 'Recorded on the testnet demo' },
+  },
   {
     type: 'slot',
     file: 'demo-3-right-click.mp4',
@@ -56,6 +74,15 @@ export const DEMO: Item[] = [
   // "One approval in Discord, one transaction, a receipt for every person"
   {
     type: 'slot',
+    file: 'demo-chapter-3.mp4',
+    kind: 'screen',
+    label: 'Step 3: Approve once, pay everyone',
+    note: 'A chapter card before the recording.',
+    seconds: 4,
+    card: { kind: 'chapter', step: 3, of: 5, title: 'Approve once, pay everyone', line: 'One approval in Discord, one transaction, and a *receipt* for each person.', where: 'Recorded on Tempo mainnet' },
+  },
+  {
+    type: 'slot',
     file: 'pitch-2-demo.mp4',
     kind: 'screen',
     label: 'A pay run, approved and paid',
@@ -65,6 +92,15 @@ export const DEMO: Item[] = [
     fallback: { file: 'demo-2-payrun.mp4', captions: PAYRUN_CAPTIONS },
   },
   // "Recipients need only a passkey"
+  {
+    type: 'slot',
+    file: 'demo-chapter-4.mp4',
+    kind: 'screen',
+    label: 'Step 4: Recipients need only a passkey',
+    note: 'A chapter card before the recording.',
+    seconds: 4,
+    card: { kind: 'chapter', step: 4, of: 5, title: 'Recipients need only a passkey', line: 'Judges sign up with a passkey and get paid at the *next daily run*.', where: 'Recorded on the testnet demo' },
+  },
   {
     type: 'slot',
     file: 'demo-9-judge.mp4',
@@ -78,6 +114,15 @@ export const DEMO: Item[] = [
     ],
   },
   // "Regular pay runs on its own, within its budget, with time to veto"
+  {
+    type: 'slot',
+    file: 'demo-chapter-5.mp4',
+    kind: 'screen',
+    label: 'Step 5: Pay that runs on its own',
+    note: 'A chapter card before the recording.',
+    seconds: 4,
+    card: { kind: 'chapter', step: 5, of: 5, title: 'Pay that runs on its own', line: 'A rule in plain words, approved once, paying on *autopilot* after a veto window.', where: 'Recorded on the testnet demo' },
+  },
   {
     type: 'slot',
     file: 'demo-5-policy.mp4',
